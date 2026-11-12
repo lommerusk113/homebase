@@ -1396,6 +1396,7 @@ const STATIC = {
     '/list.js': ['list.js', JS],
     '/chat.js': ['chat.js', JS],
     '/milestone.js': ['milestone.js', JS],
+    '/keys.js': ['keys.js', JS],
     '/icon.svg': ['icon.svg', 'image/svg+xml']
 };
 

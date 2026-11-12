@@ -11,6 +11,7 @@ function renderItems() {
     const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).sort((a, b) => b.updated - a.updated);
     const table = list => {
         const t = el('table', 'rows');
+        t.setAttribute('role', 'grid');
         t.append(...list.flatMap(x => {
             const tr = el('tr', state.selected === x.key ? 'sel' : '');
             tr.dataset.key = x.key;
@@ -55,8 +56,10 @@ function renderItems() {
         fold.append(sum, table(merged));
         groups.push(fold);
     }
+    const hadFocus = $('masters').contains(document.activeElement); // replaceChildren drops it; keys.js puts it back
     $('masters').replaceChildren(...(items.length ? [yourMoveLine(items)] : []), ...groups);
     if (!groups.length) $('masters').append(el('div', 'welcome', 'Nothing in flight.'));
+    hooks.rendered?.(hadFocus);
 }
 
 // "Your move: merge !1 · address comments on !2 · +2 more"; ranks come from the server's yourMove().

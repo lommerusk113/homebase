@@ -1,4 +1,4 @@
-// Left column: work items grouped by what they wait on, the "Your move" line, and attention transitions.
+// Left column: work items grouped by what they wait on, and attention transitions.
 import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prLabel, prChip, plain, foldable, waButton, tooltip } from './core.js';
 import { chatSession, bindChat, sendText } from './chat.js';
 import { milestoneTag } from './milestone.js';
@@ -67,36 +67,8 @@ function renderItems() {
         fold.append(sum, table(merged));
         groups.push(fold);
     }
-    $('masters').replaceChildren(...(items.length ? [yourMoveLine(items)] : []), ...groups);
+    $('masters').replaceChildren(...groups);
     if (!groups.length) $('masters').append(el('div', 'welcome', 'Nothing in flight.'));
-}
-
-// "Your move: merge !1 · address comments on !2 · +2 more"; ranks come from the server's yourMove().
-function yourMoveLine(items) {
-    const moves = items.filter(x => x.move).sort((a, b) => a.move.rank - b.move.rank || b.updated - a.updated);
-    const line = el('div', 'move');
-    if (!moves.length) {
-        const doing = items.filter(x => x.column === 'doing').length;
-        line.classList.add('muted');
-        line.textContent = `Nothing waiting on you — ${items.filter(x => x.column === 'review').length} in review, ${doing} agent${doing === 1 ? '' : 's'} working`;
-        return line;
-    }
-    const SHOW = 3;
-    line.append(el('b', null, 'Your move:'), ' ');
-    moves.slice(0, SHOW).forEach((x, i) => {
-        if (i) line.append(el('span', 'sep-dot', '·'));
-        const chip = el('button', x.pr ? 'chip mono' : 'chip', x.pr ? prLabel(x.pr) : x.title);
-        chip.title = x.title;
-        chip.onclick = () => goTo(x);
-        line.append(el('b', null, x.move.action), ' ', chip);
-    });
-    if (moves.length > SHOW) line.append(el('span', 'sep-dot', '·'), el('span', 'muted', `+${moves.length - SHOW} more`));
-    return line;
-}
-// Expand the item's row (without toggling it shut) and bring it into view.
-function goTo(x) {
-    if (state.selected !== x.key) select(x);
-    document.querySelector(`tr[data-key="${CSS.escape(x.key)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
 // The row's one-click command (label and message from the server's rowAction): binds the chat to the item's session and sends there.

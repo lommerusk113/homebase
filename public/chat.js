@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, setOffline } from './core.js';
 import { renderBoard } from './list.js';
 
 // only sessions in the selected project(s); falls back to the most recent one there
@@ -83,13 +83,16 @@ export async function refreshChat() {
     const next = following && state.sessions.find(x => x.clearedFrom === following);
     if (next) { following = null; state.chat = next.id; store.set('chat', next.id); renderBoard(); }
     const s = chatSession(), feed = $('feed');
-    if (!s) { chatKey = null; state.asking = null; updateTitle(); setStatus(null); return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
+    if (!s) { chatKey = null; state.asking = null; updateTitle(); setStatus(state.offline ? { error: true } : null); return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
     let data;
     try {
         const r = await api(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}`);
         if (!r.ok) throw new Error(await r.text());
         data = await r.json();
-    } catch { return; }
+    } catch {
+        setOffline(true);
+        return setStatus({ error: true });
+    }
     if (chatSession()?.id !== s.id) return; // switched while loading
     setStatus(data);
     $('ask').hidden = !data.asking;

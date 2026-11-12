@@ -422,3 +422,11 @@ import { findClearedSuccessor, tmuxFor } from './server.mjs';
     assert.equal(tmuxFor('abcdef0123', aliases), 'cc-abcdef01');
 }
 console.log('ok clear');
+
+import { clearState } from './public/chat.js';
+assert.deepEqual(clearState(null), { at: 0, fresh: false });
+assert.deepEqual(clearState(''), { at: 0, fresh: false }); // "Show" resets the key to ''
+assert.deepEqual(clearState('1700000000000'), { at: 1700000000000, fresh: false }); // Clear view, old format
+assert.deepEqual(clearState('{"at":1700000000000,"mode":"new"}'), { at: 1700000000000, fresh: true }); // New conversation
+assert.deepEqual(clearState('junk'), { at: 0, fresh: false });
+console.log('ok clear state');

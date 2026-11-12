@@ -373,3 +373,11 @@ assert.deepEqual(activeMilestones([
     { state: 'open', target: 'supplier-automation' }, { state: 'open', milestone: { title: 'Closed one' } }
 ], msList), ['Supplier automation', 'Reports']);
 console.log('ok milestones');
+
+import { chatStatus } from './public/core.js';
+assert.equal(chatStatus(null).kind, 'idle');
+assert.equal(chatStatus({ working: true, asking: 'Pick one?', items: [] }).kind, 'asking'); // asking wins
+const askedAt = new Date(now - 125 * 60_000).toISOString();
+assert.equal(chatStatus({ working: true, items: [{ role: 'user', at: askedAt }, { role: 'user', at: new Date(now).toISOString(), pending: true }] }, now).text, 'Claude is working… · 2h5m');
+assert.equal(chatStatus({ working: true, items: [] }, now).text, 'Claude is working…');
+console.log('ok chat status');

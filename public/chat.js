@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip } from './core.js';
+import { $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus } from './core.js';
 import { renderBoard } from './list.js';
 
 // only sessions in the selected project(s); falls back to the most recent one there
@@ -52,11 +52,17 @@ function addShowMore(feed) {
     }
 }
 
+// Fixed-height bar at the top of the column: changing it never resizes the feed, so the scroll position stays put.
+function setStatus(data) {
+    const { kind, text } = chatStatus(data);
+    $('status').className = `c-status ${kind}`; $('status-text').textContent = text;
+}
+
 // same unwrap as the server's unwrapPasted, plus whitespace collapsed, for matching sent text to transcript text
 const norm = t => (t || '').replace(/<pasted_content id="([^"]*)">([\s\S]*?)<\/pasted_content(?: id="\1")?>/g, '$2').replace(/\s+/g, ' ').trim();
 export async function refreshChat() {
     const s = chatSession(), feed = $('feed');
-    if (!s) { chatKey = null; state.asking = null; updateTitle(); return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
+    if (!s) { chatKey = null; state.asking = null; updateTitle(); setStatus(null); return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
     let data;
     try {
         const r = await fetch(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}`);
@@ -64,7 +70,7 @@ export async function refreshChat() {
         data = await r.json();
     } catch { return; }
     if (chatSession()?.id !== s.id) return; // switched while loading
-    $('working').hidden = !data.working;
+    setStatus(data);
     $('ask').hidden = !data.asking;
     state.asking = data.asking; updateTitle();
     // ponytail: options are read-only; the docs don't pin down a keypress that picks option N, so answering stays in the terminal

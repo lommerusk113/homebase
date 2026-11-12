@@ -8,6 +8,13 @@ let chatKey = null;
 let stick = false; // set by a send: the next render scrolls to the bottom even if the user had scrolled up
 let following = null; // session id a /clear was sent to: the chat moves to its successor once the server has mapped it
 
+// cleared:<id> holds a timestamp (Clear view) or {"at","mode":"new"} (New conversation: the same cut, but not a "hidden" one)
+export function clearState(raw) {
+    let v;
+    try { v = JSON.parse(raw); } catch { return { at: 0, fresh: false }; }
+    return v && typeof v === 'object' ? { at: Number(v.at) || 0, fresh: v.mode === 'new' } : { at: Number(v) || 0, fresh: false };
+}
+
 export function bindChat(id) {
     state.chat = id; store.set('chat', id);
     renderBoard(); refreshChat();
@@ -95,18 +102,19 @@ export async function refreshChat() {
         items.splice(i < 0 ? items.length : i, 0, o);
     }
     // Clear view: items up to the stored cut-off stay hidden in Homebase only
-    const cut = Number(store.get(`cleared:${s.id}`)) || 0, hidden = items.findLastIndex(i => i.at && Date.parse(i.at) <= cut) + 1;
+    const cut = clearState(store.get(`cleared:${s.id}`)), hidden = items.findLastIndex(i => i.at && Date.parse(i.at) <= cut.at) + 1;
     items.splice(0, hidden);
+    const fresh = cut.fresh || !!s.clearedFrom; // a New conversation, before or after the successor is bound
     const key = s.id + JSON.stringify([items, data.asking, data.working, hidden]);
     if (key === chatKey) return;
-    const fresh = !chatKey?.startsWith(s.id), atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40, top = feed.scrollTop;
+    const first = !chatKey?.startsWith(s.id), atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40, top = feed.scrollTop;
     chatKey = key;
     feed.replaceChildren(...items.map(i => bubble(i, s.id)));
-    if (hidden) {
+    if (hidden && !cut.fresh) {
         const line = el('div', 'c-hidden', 'Earlier messages hidden · '), btn = el('button', 'show', 'Show');
         btn.onclick = () => { store.set(`cleared:${s.id}`, ''); refreshChat(); };
         line.append(btn); feed.prepend(line);
-    } else if (!items.length) feed.append(el('div', 'welcome', 'No messages yet.'));
+    } else if (!items.length) feed.append(el('div', 'welcome', fresh ? 'New conversation — say something to Claude' : 'No messages yet.'));
     // Quick replies under Claude's newest message when it ends with a question; an outbox bubble after it hides them.
     const last = items.at(-1);
     if (last?.replies?.length && !data.asking && !data.working) {
@@ -115,7 +123,7 @@ export async function refreshChat() {
         feed.append(row);
     }
     addShowMore(feed);
-    feed.scrollTop = fresh || atBottom || stick ? feed.scrollHeight : top;
+    feed.scrollTop = first || atBottom || stick ? feed.scrollHeight : top;
     stick = false;
 }
 
@@ -178,6 +186,8 @@ export function initChat() {
             const r = await fetch(`/api/clear?id=${encodeURIComponent(s.id)}`, { method: 'POST', headers: { 'x-codetool': '1' } });
             if (!r.ok) throw new Error(await r.text());
             following = s.id;
+            store.set(`cleared:${s.id}`, JSON.stringify({ at: Date.now(), mode: 'new' }));
+            refreshChat();
         } catch (err) { $('c-err').textContent = err.message; }
     };
     $('ask-copy').onclick = () => navigator.clipboard.writeText($('ask-cmd').textContent).then(() => { $('ask-copy').textContent = 'Copied'; setTimeout(() => { $('ask-copy').textContent = 'Copy'; }, 1500); });

@@ -32,7 +32,12 @@
 </header>
 <div class="main">
   <div class="left">
-    <div class="masters" id="masters"></div>
+    <nav class="tabs" id="tabs" role="tablist">
+      <button role="tab" data-tab="work" aria-selected="true" title="Work items (1)">Work</button>
+      <button role="tab" data-tab="issues" aria-selected="false" title="Milestone issues by person (2)">Issues <span class="count hot" id="tab-free" hidden></span></button>
+    </nav>
+    <div class="masters" id="masters" role="tabpanel"></div>
+    <div class="masters issues" id="issues" role="tabpanel" hidden></div>
     <div class="limits" id="limits" hidden></div>
   </div>
   <aside id="chat">

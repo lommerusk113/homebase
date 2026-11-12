@@ -1087,17 +1087,32 @@ async function pages(repo, path) {
 // Only issues whose own milestone is the selected one; the API's milestone filter is not trusted on its own.
 export const keepMilestone = (issues, id) => issues.filter(i => i.milestone === id);
 
+// { name, username } of a GitLab user or a GitHub login (GitHub's issue payload has no display name).
+const person = u => ({ name: u.name ?? u.login, username: u.username ?? u.login });
+
+// Plain-text start of an issue description, about max chars, for the expanded card: markdown marks, links and headings dropped.
+export function excerpt(md, max = 300) {
+
+    const t = (md || '').replace(/<!--[\s\S]*?-->/g, '').replace(/```[\s\S]*?```/g, ' ').replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+        .replace(/^(#+\s|\|).*$/gm, ' ').replace(/[*`>#]+|__/g, '').replace(/\s+/g, ' ').trim();
+    if (t.length <= max) {
+        return t;
+    }
+
+    return t.slice(0, max).replace(/\s+\S*$/, '') + '…';
+}
+
 async function fetchIssues(repo, ms) {
 
     if (isGitLab(repo)) {
         const p = encodeURIComponent(repo.path);
         // a project milestone by id; a group milestone has no project-scoped endpoint, so by title, then filtered by id
         const path = ms.group ? `projects/${p}/issues?milestone=${encodeURIComponent(ms.title)}&state=all` : `projects/${p}/milestones/${ms.id}/issues`;
-        const list = (await pages(repo, path)).map(i => ({ iid: i.iid, title: i.title, state: i.state === 'closed' ? 'closed' : 'open', assignees: (i.assignees ?? []).map(a => a.name), url: i.web_url, milestone: i.milestone?.id }));
+        const list = (await pages(repo, path)).map(i => ({ iid: i.iid, title: i.title, state: i.state === 'closed' ? 'closed' : 'open', assignees: (i.assignees ?? []).map(person), url: i.web_url, milestone: i.milestone?.id, desc: excerpt(i.description), updated: i.updated_at }));
         return keepMilestone(list, ms.id);
     }
     const list = (await pages(repo, `repos/${repo.path}/issues?milestone=${ms.id}&state=all`)).filter(i => !i.pull_request)
-        .map(i => ({ iid: i.number, title: i.title, state: i.state, assignees: (i.assignees ?? []).map(a => a.login), url: i.html_url, milestone: i.milestone?.number }));
+        .map(i => ({ iid: i.number, title: i.title, state: i.state, assignees: (i.assignees ?? []).map(person), url: i.html_url, milestone: i.milestone?.number, desc: excerpt(i.body), updated: i.updated_at }));
 
     return keepMilestone(list, ms.id);
 }
@@ -1111,7 +1126,11 @@ async function fetchLinks(repo, iid) {
 
     const list = await api(repo, `projects/${encodeURIComponent(repo.path)}/issues/${iid}/related_merge_requests`);
 
-    return list.filter(m => worksOn(m, iid)).map(m => ({ iid: m.iid, url: m.web_url, state: { opened: 'open' }[m.state] ?? m.state }));
+    // the author is who works on it, for in-progress issues nobody is assigned to; the payload carries the pipeline too
+    return list.filter(m => worksOn(m, iid)).map(m => ({
+        iid: m.iid, url: m.web_url, state: { opened: 'open' }[m.state] ?? m.state,
+        author: m.author ? person(m.author) : null, pipeline: pipelineOf(m.head_pipeline ?? m.pipeline)
+    }));
 }
 
 // Issues of a milestone in the order the user acts on them. links: iid -> [{ state: open|merged|closed }] for open issues.
@@ -1183,7 +1202,10 @@ async function milestones(project, pick) {
     const detected = activeMilestones(mrs, list);
     const ms = pick === 'none' ? null : list.find(m => String(m.id) === pick || m.title === pick) ?? list.find(m => m.id === detected[0]);
 
-    return { project, milestones: list, detected, selected: ms ? await milestoneIssues(project, repo, ms) : null };
+    // the signed-in user, for the Issues tab's "you" lane; a failed lookup only loses the mark
+    const me = await cached(`me:${repo.host}`, 24 * 3600_000, () => api(repo, 'user').then(person)).catch(() => null);
+
+    return { project, milestones: list, detected, me, selected: ms ? await milestoneIssues(project, repo, ms) : null };
 }
 
 // HOMEBASE_STATUSLINE_DIR lets a test server read sample dumps instead of the real folder.
@@ -1483,6 +1505,7 @@ const STATIC = {
     '/list.js': ['list.js', JS],
     '/chat.js': ['chat.js', JS],
     '/milestone.js': ['milestone.js', JS],
+    '/issues.js': ['issues.js', JS],
     '/keys.js': ['keys.js', JS],
     '/icon.svg': ['icon.svg', 'image/svg+xml']
 };

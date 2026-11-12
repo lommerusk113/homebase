@@ -409,6 +409,39 @@ assert.equal(inMilestone(row(null, null), { id: 7 }), true); // an agent without
 assert.equal(inMilestone(row('u', null), null), true); // no milestone selected
 console.log('ok milestones');
 
+import { excerpt } from './server.mjs';
+import { pillLabel } from './public/milestone.js';
+import { issueCards, buildLanes, closedBy, chatMessage, shortTitle, owners } from './public/issues.js';
+assert.equal(excerpt('## Problem\n\nThe **row** only shows after a [reload](http://x).\n\n```js\ncode()\n```\nDone.'), 'The row only shows after a reload. Done.');
+assert.equal(excerpt('word '.repeat(100), 20), 'word word word word…');
+assert.equal(excerpt(null), '');
+const P = (name, username) => ({ name, username });
+const me = P('Joakim Landsverk', 'jo'), bo = P('Børre Gaup', 'bo'), ann = P('Ann Ek', 'ann');
+const isu = (iid, assignees = [], mrs = []) => ({ iid, title: `Supplier automation: I${iid}`, assignees, mrs });
+const groups = {
+    doing: [isu(1, [me], [{ iid: 11, state: 'open', author: me }]), isu(2, [], [{ iid: 12, state: 'open', author: bo }])],
+    closable: [isu(3, [ann], [{ iid: 13, state: 'merged', author: ann }])],
+    assigned: [isu(4, [bo, me])], unassigned: [isu(5), isu(6)],
+    done: [isu(7, [me]), isu(8, [bo]), isu(9), isu(10, [P('Zed Old', 'zed')])]
+};
+const cards = issueCards(groups);
+assert.deepEqual(cards.map(c => [c.iid, c.st]), [[1, 'doing'], [2, 'doing'], [3, 'closable'], [4, 'todo'], [5, 'free'], [6, 'free']]);
+assert.deepEqual(owners(cards[1]), [bo]); // in progress, nobody assigned: the MR's author
+const lanes = buildLanes(cards, groups.done, me);
+// you first, then by name, then Unassigned; a closed-only person gets no lane
+assert.deepEqual(lanes.map(l => [l.who?.username ?? null, l.me, l.list.map(c => c.iid), l.closed]),
+    [['jo', true, [1, 4], 1], ['ann', false, [3], 0], ['bo', false, [2, 4], 1], [null, false, [5, 6], 1]]);
+assert.deepEqual(buildLanes([], [], null).map(l => l.who), [null]); // Unassigned is always there
+assert.deepEqual(closedBy(groups.done), [['Børre Gaup', 1], ['Joakim Landsverk', 1], ['Zed Old', 1], ['unassigned', 1]]);
+assert.equal(chatMessage(cards[3]), 'Implement #4');
+assert.equal(chatMessage(cards[0]), 'Check on #1 and !11');
+assert.equal(chatMessage({ iid: 5, mrs: [{ iid: 20, state: 'merged' }, { iid: 21, state: 'open' }] }), 'Check on #5 and !21');
+assert.equal(shortTitle('Supplier automation v2: undo misses pastes', 'Supplier automation'), 'undo misses pastes');
+assert.equal(shortTitle('Fix: undo', 'Supplier automation'), 'Fix: undo');
+const msel = { title: 'Supplier automation', total: 59, closed: 48, due: null, groups: { doing: [1, 2, 3], closable: [], assigned: [1, 2, 3], unassigned: [1, 2, 3, 4, 5] } };
+assert.deepEqual(pillLabel(msel), { text: '11 open', tip: 'Supplier automation: 11 open of 59 (3 in progress, 3 not started, 5 unassigned), 48 closed · no due date' });
+console.log('ok issues');
+
 import { chatStatus } from './public/core.js';
 assert.equal(chatStatus(null).kind, 'idle');
 assert.equal(chatStatus({ working: true, asking: 'Pick one?', items: [] }).kind, 'asking'); // asking wins

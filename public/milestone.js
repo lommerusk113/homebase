@@ -51,10 +51,21 @@ export function milestoneTag(item) {
     return t;
 }
 
-// The header pill for one project: "⚑ Supplier automation · 48/59" with a mini bar; its menu switches milestones.
+// Pill text and tooltip for a selected milestone (groups from the server's groupIssues): "11 open", the full breakdown in the tooltip.
+export function pillLabel(ms) {
+
+    const g = ms.groups, open = ms.total - ms.closed;
+    const parts = [[g.doing, 'in progress'], [g.closable, 'can be closed'], [g.assigned, 'not started'], [g.unassigned, 'unassigned']]
+        .filter(([l]) => l.length).map(([l, label]) => `${l.length} ${label}`);
+
+    return { text: `${open} open`, tip: `${ms.title}: ${open} open of ${ms.total}${parts.length ? ` (${parts.join(', ')})` : ''}, ${ms.closed} closed · ${due(ms.due)}` };
+}
+
+// The header pill for one project: "⚑ Supplier automation · 11 open" with a mini bar; its menu switches milestones.
 // The element polls /api/milestones itself while it is in the page and stops once removed.
 // onChange({ id, title } | null) runs when the selected milestone is known or changes. The choice is kept per project.
-export function milestoneSelector(project, { onChange } = {}) {
+// onData(response) runs with every changed /api/milestones response (the Issues tab draws from it).
+export function milestoneSelector(project, { onChange, onData } = {}) {
     if (!styled) { document.head.append(el('style', null, CSS)); styled = true; }
     const key = `milestone:${project}`, pick = el('details', 'ms-pick'), summary = el('summary'), menu = el('div', 'ms-menu');
     pick.append(summary, menu);
@@ -75,8 +86,9 @@ export function milestoneSelector(project, { onChange } = {}) {
             const bar = el('span', 'ms-bar'), fill = el('b');
             fill.style.width = `${ms.total ? Math.round(100 * ms.closed / ms.total) : 0}%`;
             bar.append(fill);
-            summary.append(el('span', 'n', `${ms.closed}/${ms.total}`), bar);
-            summary.title = `${ms.title}: ${ms.closed} of ${ms.total} issues closed, ${due(ms.due)}`;
+            const { text, tip } = pillLabel(ms);
+            summary.append(el('span', 'n', `· ${text}`), bar);
+            summary.title = tip;
         } else {
             summary.title = 'Show only work items of a milestone';
         }
@@ -127,6 +139,7 @@ export function milestoneSelector(project, { onChange } = {}) {
                 json = text;
                 const data = JSON.parse(text);
                 render(data);
+                onData?.(data);
                 const sel = data.selected ? { id: data.selected.id, title: data.selected.title } : null;
                 if (sel?.id !== selectedId) { selectedId = sel?.id; onChange?.(sel); }
             }

@@ -559,6 +559,15 @@ for (const p of [
 }
 console.log('ok vendor');
 
+// Every request from the page goes through core.js's api(), which adds the token; a missing import fails silently in a try/catch.
+import { readdirSync, readFileSync as readSrc } from 'node:fs';
+for (const f of readdirSync(new URL('./public', import.meta.url)).filter(f => f.endsWith('.js') && f !== 'core.js')) {
+    const src = readSrc(new URL(`./public/${f}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(src, /\bfetch\(/, `${f} uses fetch() instead of api()`);
+    if (/\bapi\(/.test(src)) assert.match(src, /import \{[^}]*\bapi\b[^}]*\} from '\.\/core\.js'/, `${f} calls api() without importing it`);
+}
+console.log('ok api wrapper');
+
 import { localHosts, lanHosts, isPrivateIp, allowedHost, allowedOrigin, tokenOk, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode } from './server.mjs';
 {
     const local = localHosts(4321);

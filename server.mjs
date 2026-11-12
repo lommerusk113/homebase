@@ -701,6 +701,11 @@ export function rowAction(pr, prState, agent, title) {
 
 // One item per PR/MR (deduped across sessions and agents), plus running or stopped agents with no MR yet.
 // Agents whose description names a known MR (!123) count as work on it; finished agents without an MR are dropped.
+// A report that merely quotes another repo's MR (e.g. a Homebase agent citing a pracsys MR) isn't work on this project.
+export function sameRepo(url, project) {
+    return url.match(/^https:\/\/[^/]+\/(.+?)(?:\/-)?\/(?:merge_requests|pull)\//)?.[1].split('/').pop() === project;
+}
+
 export function workItems(sessions, prOf = () => null) {
 
     const byUrl = new Map();
@@ -720,7 +725,7 @@ export function workItems(sessions, prOf = () => null) {
             }
         }
         for (const a of s.agents ?? []) {
-            for (const url of a.prs ?? []) {
+            for (const url of (a.prs ?? []).filter(u => sameRepo(u, s.project))) {
                 add(url, s.project);
             }
         }
@@ -731,7 +736,7 @@ export function workItems(sessions, prOf = () => null) {
     for (const s of sessions) {
         for (const a of s.agents ?? []) {
             const own = { ...a, sessionId: s.id };
-            const refs = new Set((a.prs ?? []).map(u => byUrl.get(u)));
+            const refs = new Set((a.prs ?? []).filter(u => sameRepo(u, s.project)).map(u => byUrl.get(u)).filter(Boolean));
             for (const m of (a.description ?? '').matchAll(/!(\d+)/g)) {
                 const it = byRef.get(`${s.project}!${m[1]}`);
                 if (it) {

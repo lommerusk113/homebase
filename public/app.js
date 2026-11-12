@@ -1,5 +1,5 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago, limitLeft, hooks } from './core.js';
+import { $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat } from './chat.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
@@ -113,22 +113,30 @@ async function refresh() {
     refreshChat(); refreshLimits();
 }
 
-// "5h 70% left · 1h20m · week 63% left · 4d22h", as Contado's footer shows it; hidden without a dump.
+// "Session ▬ 70%   Week ▬ 63%"; reset times live in each item's tooltip. Hidden without a dump.
 const leftColor = left => (left >= 50 ? 'var(--c-ready)' : left >= 10 ? 'var(--c-warn)' : 'var(--c-danger)');
 async function refreshLimits() {
     let l = null;
     try { l = await fetch('/api/limits').then(r => r.json()); } catch {}
-    const box = $('limits'), wins = [['5h', l?.fiveHour], ['week', l?.sevenDay]].filter(([, w]) => w);
+    const box = $('limits'), wins = [l?.fiveHour, l?.sevenDay].map((w, week) => w && limitView(week, w)).filter(Boolean);
+    const a = l?.updated && ago(l.updated), updated = !a ? '' : a === 'now' ? 'Updated just now' : `Updated ${a} ago`;
     box.hidden = !wins.length;
-    box.replaceChildren(...wins.flatMap(([label, w], i) => {
-        const { left, until } = limitLeft(w), s = el('span'), bar = el('i'), fill = el('b');
-        fill.style.width = `${left}%`; fill.style.background = leftColor(left); bar.append(fill);
-        s.title = `${Math.round(w.used)}% used · resets ${new Date(w.resetsAt).toLocaleString()}`;
-        s.append(label, bar, `${left}% left · ${until}`);
-        return i ? [el('span', 'muted', '·'), s] : [s];
-    }));
-    // text only, so an open tooltip survives the 3s refresh
-    if (l?.updated) { const a = ago(l.updated); $('limits-tip').textContent = a === 'now' ? 'Updated just now' : `Updated ${a} ago`; }
+    // rebuild only when the set of windows changes, then update in place so an open tooltip survives the 3s refresh
+    const key = wins.map(v => v.label).join();
+    if (box.dataset.key !== key) {
+        box.dataset.key = key;
+        box.replaceChildren(...wins.flatMap(() => {
+            const s = el('span', 'limit'), bar = el('i');
+            bar.append(el('b')); s.append(el('span', 'limit-label'), bar, el('span'));
+            return [s, tooltip(s, '')];
+        }));
+    }
+    box.querySelectorAll('.limit').forEach((s, i) => {
+        const v = wins[i], [name, bar, val] = s.children;
+        name.textContent = v.label; val.textContent = v.text;
+        bar.firstChild.style.width = `${v.left}%`; bar.firstChild.style.background = leftColor(v.left);
+        s.nextElementSibling.replaceChildren(v.tip, ...(updated ? [el('br'), updated] : []));
+    });
 }
 
 const project = $('project');

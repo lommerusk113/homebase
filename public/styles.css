@@ -213,10 +213,11 @@ wa-details.group::part(icon) { color:var(--muted); font-size:12px; }
 .stage .bar i.now { animation:pulse 1.2s ease-in-out infinite; }
 .stage small { font-size:11px; color:var(--muted); line-height:1.2; }
 .rows .meta { display:block; font-size:11px; color:var(--muted); line-height:1.2; margin-top:2px; overflow:hidden; text-overflow:ellipsis; }
-.limits { display:flex; align-items:center; gap:8px; padding:6px 24px; border-top:1px solid var(--line); background:var(--bg); font-size:11.5px; color:var(--muted); }
+.limits { display:flex; align-items:center; gap:16px; padding:6px 24px; border-top:1px solid var(--line); background:var(--bg); font-size:11.5px; color:var(--muted); }
 .limits span { display:inline-flex; align-items:center; gap:5px; }
 .limits i { width:40px; height:4px; border-radius:2px; background:var(--line-soft); overflow:hidden; }
 .limits i b { display:block; height:100%; }
+.limits .limit-label { color:var(--fg); }
 
 @media (max-width: 640px) {
   header.top { padding-left:16px; padding-right:16px; }

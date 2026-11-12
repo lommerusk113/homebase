@@ -54,9 +54,10 @@
   .welcome { margin:auto; text-align:center; color:var(--muted); max-width:360px; }
   .welcome h2 { color:var(--fg); font-size:18px; margin:0 0 6px; }
   .welcome .btn { margin:14px auto 0; }
-  .live { margin-left:auto; display:flex; align-items:center; gap:6px; color:var(--muted); font-size:12px; white-space:nowrap; }
-  .live i { width:7px; height:7px; border-radius:50%; background:var(--c-ready); box-shadow:0 0 0 3px color-mix(in srgb, var(--c-ready) 25%, transparent); }
-  .live.off i { background:var(--c-needs); }
+  .quiet { appearance:none; border:0; background:none; color:var(--muted); font:inherit; font-size:18px; line-height:1; padding:2px 6px; border-radius:6px; cursor:pointer; }
+  .quiet:hover { color:var(--fg); background:var(--hover); }
+  .quiet:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  .offline { margin-left:auto; color:var(--c-needs); font-size:12px; }
 
   .chip { display:inline-flex; align-items:center; gap:4px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:1px 8px; border-radius:99px; background:var(--chip); color:var(--fg); font-size:11.5px; line-height:18px; }
   a.chip { text-decoration:none; color:var(--accent); background:var(--accent-bg); }
@@ -164,7 +165,7 @@
 
   @media (max-width: 640px) {
     header.top { padding-left:16px; padding-right:16px; }
-    .live, .sep { display:none; }
+    .sep { display:none; }
   }
 </style>
 </head>
@@ -173,8 +174,8 @@
   <div class="brand"><img src="/icon.svg" width="26" height="26" alt="">Homebase</div>
   <span class="sep">/</span>
   <label class="select"><select id="project" aria-label="Project"></select></label>
-  <button class="ghost" id="manage">Projects…</button>
-  <div class="live" id="live"><i></i><span id="stamp">live</span></div>
+  <button class="quiet" id="manage" title="Manage projects" aria-label="Manage projects">⋯</button>
+  <span class="offline" id="offline" hidden>Offline</span>
 </header>
 <div class="main">
   <div class="left">
@@ -246,16 +247,22 @@
   const prLabel = url => { const m = url.match(/merge_requests\/(\d+)/) || url.match(/pull\/(\d+)/); return m ? (url.includes('merge_requests') ? '!' : '#') + m[1] : 'PR'; };
   const prChip = s => { const a = el('a', 'chip mono', `${prLabel(s.pr)}${s.prState ? ' · ' + s.prState.state : ''}`); a.href = s.pr; a.target = '_blank'; a.onclick = e => e.stopPropagation(); return a; };
 
+  // Rebuild options only when they changed, and never while the select has focus: touching an open native picker closes it.
+  function fillSelect(sel, opts, value) {
+    if (document.activeElement === sel) return;
+    if (!(sel.options.length === opts.length && [...sel.options].every((o, i) => o.value === opts[i][0] && o.text === opts[i][1]))) {
+      sel.replaceChildren(...opts.map(([v, t]) => { const o = el('option', null, t); o.value = v; return o; }));
+    }
+    if (sel.value !== value) sel.value = value;
+  }
+
   const counts = () => { const c = {}; for (const s of state.sessions) c[s.project] = (c[s.project] || 0) + 1; return c; };
 
   function renderProjects() {
     if (state.project !== 'all' && !state.tracked.includes(state.project)) state.project = 'all';
     const names = [...state.tracked].sort((a, b) => a.localeCompare(b));
     const opts = [['all', 'All my projects'], ...names.map(n => [n, n])];
-    const sel = $('project');
-    if (sel.options.length === opts.length && [...sel.options].every((o, i) => o.value === opts[i][0] && o.text === opts[i][1])) return;
-    sel.replaceChildren(...opts.map(([v, t]) => { const o = el('option', null, t); o.value = v; return o; }));
-    sel.value = state.project;
+    fillSelect($('project'), opts, state.project);
   }
 
   function renderDialog() {
@@ -392,15 +399,14 @@
   async function refresh() {
     try {
       const text = await fetch('/api/sessions').then(r => r.text());
-      $('live').classList.remove('off');
-      $('stamp').textContent = `live · ${new Date().toLocaleTimeString()}`;
+      $('offline').hidden = true;
       // ponytail: skip identical re-renders so text in an open detail stays selectable; re-render each minute for the ages
       if (text !== lastSessions || Date.now() - lastRender > 60_000) {
         state.sessions = JSON.parse(text);
         lastSessions = text; lastRender = Date.now();
         renderProjects(); renderBoard(); renderChatPick();
       }
-    } catch { $('live').classList.add('off'); $('stamp').textContent = 'offline'; }
+    } catch { $('offline').hidden = false; }
     refreshChat();
   }
 
@@ -418,13 +424,12 @@
     const cur = chatSession();
     const list = visibleSessions();
     const opts = list.map(s => [s.id, `${s.title || plain(s.lastPrompt).slice(0, 60) || s.id} · ${s.project}`]);
-    const sel = $('chat-pick');
-    if (!(sel.options.length === opts.length && [...sel.options].every((o, i) => o.value === opts[i][0] && o.text === opts[i][1]))) {
-      sel.replaceChildren(...opts.map(([v, t]) => { const o = el('option', null, t); o.value = v; return o; }));
-    }
-    sel.value = cur?.id ?? '';
+    fillSelect($('chat-pick'), opts, cur?.id ?? '');
   }
   $('chat-pick').onchange = e => bindChat(e.target.value);
+  // catch up on updates skipped while a select had focus
+  $('project').onblur = renderProjects;
+  $('chat-pick').onblur = renderChatPick;
 
   function bubble(i, sid) {
     if (i.role === 'tools') return el('div', 'tools', i.text);

@@ -89,6 +89,20 @@ const chat = chatItems([
 assert.deepEqual(chat.map(i => [i.role, i.text, i.tldr]), [
     ['user', 'do it', undefined], ['assistant', 'On it.', null], ['tools', 'Ran 1 command · read 1 file', undefined], ['assistant', 'Done.', 'shipped']
 ]);
+// Two replies with only an agent message / task notification between them stay separate bubbles, each with its own TLDR.
+const twoTurns = chatItems([
+    { type: 'user', message: { content: 'security issues?' } },
+    say('The main risk: X.\n\n**TLDR:** **A website can drive it.**'),
+    { type: 'queue-operation', operation: 'enqueue', content: '<task-notification>…' },
+    { type: 'user', isMeta: true, message: { content: 'Another Claude session sent a message: <agent-message from="a1">done</agent-message>' } },
+    { type: 'assistant', message: { content: [{ type: 'thinking', thinking: '…' }] } },
+    say('Design B is in.\n\n**TLDR:** **Design B is done.**'),
+    { type: 'user', message: { content: '<task-notification>\n<task-id>a1</task-id>\n</task-notification>' } },
+    say('Design A is in.\n\nTLDR: Design A is done.')
+]);
+assert.deepEqual(twoTurns.map(i => [i.role, i.tldr]), [
+    ['user', undefined], ['assistant', '**A website can drive it.**'], ['assistant', '**Design B is done.**'], ['assistant', 'Design A is done.']
+]);
 const q = tu('AskUserQuestion', { id: 'q1', input: { questions: [{ question: 'Which?' }] } });
 assert.equal(pendingQuestion([q]), 'Which?');
 assert.equal(pendingQuestion([q, { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'q1' }] } }]), null);

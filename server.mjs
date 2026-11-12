@@ -331,6 +331,8 @@ export function chatItems(entries, max = 60) {
 
     // ponytail: replays the queue in the tail; a dequeue whose enqueue fell out of the tail shifts the wrong item
     const queue = [];
+    // A non-tool-result user entry (agent message, task notification, reminder) starts a new turn, so the next reply gets its own bubble.
+    let newTurn = false;
 
     for (const e of entries) {
         if (e.isSidechain) {
@@ -370,6 +372,9 @@ export function chatItems(entries, max = 60) {
             items.push({ role: 'user', text: unwrapPasted(typeof a.prompt === 'string' ? a.prompt : textOf({ message: { content: a.prompt } })), at: e.timestamp });
             continue;
         }
+        if (e.type === 'user' && !(Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result'))) {
+            newTurn = true;
+        }
         if (e.type !== 'assistant') {
             continue;
         }
@@ -378,11 +383,12 @@ export function chatItems(entries, max = 60) {
         if (text) {
             flush();
             const prev = items.at(-1);
-            if (prev?.role === 'assistant') {
+            if (prev?.role === 'assistant' && !newTurn) {
                 prev.text += '\n\n' + text;
             } else {
                 items.push({ role: 'assistant', text, at: e.timestamp });
             }
+            newTurn = false;
         }
         if (Array.isArray(e.message?.content)) {
             uses.push(...e.message.content.filter(b => b.type === 'tool_use'));

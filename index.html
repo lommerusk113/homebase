@@ -121,33 +121,30 @@
   .body a { color:var(--accent); }
 
   .masters { flex:1; overflow:auto; padding:16px 24px 40px; display:flex; flex-direction:column; gap:16px; }
-  .master { background:var(--bg); border:1px solid var(--line); border-radius:10px; overflow:hidden; flex-shrink:0; }
-  .m-head { display:flex; align-items:center; gap:10px; padding:12px 16px; flex-wrap:wrap; }
-  .m-head .ghost { font-size:12px; padding:2px 10px; }
-  .m-head .ghost:disabled { color:var(--accent); border-color:color-mix(in srgb, var(--accent) 40%, var(--line)); cursor:default; background:var(--accent-bg); }
-  .m-head h3 { margin:0; font-size:15px; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .m-sum { display:flex; gap:6px; margin-left:auto; align-items:center; flex-wrap:wrap; }
-  .m-sum .n { display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--muted); }
+  .group { background:var(--bg); border:1px solid var(--line); border-radius:10px; overflow:hidden; flex-shrink:0; }
+  .g-head { display:flex; align-items:center; gap:8px; margin:0; padding:9px 16px; font-size:11.5px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  summary.g-head { cursor:pointer; }
   .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--c); flex-shrink:0; }
   .dot.live { animation:pulse 1.2s ease-in-out infinite; }
-  .m-note { padding:0 16px 12px; color:var(--muted); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .rows { width:100%; border-collapse:collapse; table-layout:fixed; border-top:1px solid var(--line); }
   .rows td { padding:8px 12px; border-top:1px solid var(--line-soft); vertical-align:middle; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
   .rows tr:first-child td { border-top:0; }
   .rows tr { cursor:pointer; }
   .rows tr:hover { background:var(--hover); }
   .rows tr.sel { background:var(--accent-bg); }
-  .rows .st { width:130px; padding-left:16px; }
-  .rows .st span { display:inline-flex; align-items:center; gap:7px; font-weight:500; font-size:12px; color:var(--c); }
+  .rows .what { padding-left:16px; }
+  .rows .what b, .rows .what .next { display:block; overflow:hidden; text-overflow:ellipsis; }
   .rows .what b { font-weight:500; }
-  .rows .what small { color:var(--muted); margin-left:8px; font-size:12px; }
+  .rows .what .next { color:var(--muted); font-size:12px; }
   .rows .pr { width:140px; } .rows .br { width:22%; } .rows .when { width:60px; text-align:right; color:var(--muted); font-size:12px; padding-right:16px; }
-  .more { appearance:none; width:100%; border:0; border-top:1px solid var(--line-soft); background:none; color:var(--muted); font:inherit; font-size:12px; padding:7px; cursor:pointer; }
-  .more:hover { color:var(--fg); background:var(--hover); }
   .rows tr.detail, .rows tr.detail:hover { background:var(--bg); cursor:default; }
-  .rows tr.detail td { border-top:0; white-space:normal; overflow:visible; padding:0 16px 4px 44px; }
-  @container (max-width: 1000px) { .rows .br { display:none; } }
-  @container (max-width: 700px) { .rows .what small, .rows .pr { display:none; } }
+  .rows tr.detail td { border-top:0; white-space:normal; overflow:visible; padding:0 16px 4px 16px; }
+  .activity { list-style:none; margin:0; padding:0; font-size:12.5px; }
+  .activity li { padding:3px 0; color:var(--muted); }
+  .activity b { font-weight:500; color:var(--fg); }
+  /* zero width, not display:none, so the detail row's colspan still matches the columns */
+  @container (max-width: 1000px) { .rows .br { width:0; padding:0; } }
+  @container (max-width: 700px) { .rows .pr { width:0; padding:0; } }
   @media (max-width: 900px) {
     .main { flex-direction:column; overflow:auto; }
     .left { flex:none; min-height:60vh; }
@@ -226,13 +223,13 @@
   }
   const rich = (text, inline) => { const d = el('div', inline ? 'lead' : 'body'); d.innerHTML = DOMPurify.sanitize(inline ? marked.parseInline(text) : marked.parse(text || '')); return enrich(d); };
   const COLUMNS = [
-    { key: 'doing', label: 'Doing', color: '--c-doing' },
     { key: 'needs-you', label: 'Needs you', color: '--c-needs' },
+    { key: 'doing', label: 'Doing', color: '--c-doing' },
     { key: 'review', label: 'In review', color: '--c-review' },
     { key: 'ready', label: 'Ready to merge', color: '--c-ready' },
-    { key: 'done', label: 'Done', color: '--c-done' },
-    { key: 'idle', label: 'Idle', color: '--c-idle' }
+    { key: 'done', label: 'Merged', color: '--c-done' }
   ];
+  const LIFECYCLE = ['Implement', 'Verify', 'Review', 'Approved', 'Merged'];
   const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
   const parse = v => { try { return JSON.parse(v) || []; } catch { return []; } };
   // ponytail: tracked list lives in this browser's localStorage; move to a projects.json if you want it across browsers
@@ -287,53 +284,45 @@
   const COL = Object.fromEntries(COLUMNS.map(c => [c.key, c]));
   const visibleSessions = () => state.sessions.filter(s => state.tracked.includes(s.project) && (state.project === 'all' || s.project === state.project));
   const dot = key => { const d = el('span', 'dot' + (key === 'doing' ? ' live' : '')); d.style.setProperty('--c', `var(${COL[key].color})`); return d; };
-  state.expanded = new Set();
-
-  function renderMasters() {
-    $('masters').replaceChildren(...visibleSessions().map(s => {
-      const box = el('section', 'master'), head = el('div', 'm-head');
-      const own = el('span', 'chip'); own.append(dot(s.column), COL[s.column].label);
-      head.append(el('h3', null, s.title || plain(s.lastPrompt) || s.id), el('span', 'chip', s.project), own);
-      const sum = el('div', 'm-sum'), byCol = {};
-      for (const a of s.agents) byCol[a.column] = (byCol[a.column] || 0) + 1;
-      for (const c of COLUMNS) if (byCol[c.key]) { const n = el('span', 'n'); n.append(dot(c.key), `${byCol[c.key]} ${c.label.toLowerCase()}`); sum.append(n); }
-      sum.append(el('span', 'n', ago(s.updated)));
-      const here = el('button', 'ghost', chatSession()?.id === s.id ? 'In chat' : 'Chat here');
-      here.disabled = chatSession()?.id === s.id;
-      here.onclick = () => bindChat(s.id);
-      head.append(sum, here);
-      box.append(head);
-      if (s.lastReply && !s.agents.length) box.append(el('div', 'm-note', plain(s.lastReply)));
-      if (s.agents.length) {
-        const open = state.expanded.has(s.id);
-        const items = s.agents;
-        const shown = open ? items : items.filter(a => a.column !== 'done');
-        const table = el('table', 'rows');
-        table.append(...shown.flatMap(a => {
-          const tr = el('tr', state.selected === a.id ? 'sel' : '');
-          const st = el('td', 'st'), lbl = el('span'); lbl.style.setProperty('--c', `var(${COL[a.column].color})`); lbl.append(dot(a.column), COL[a.column].label); st.append(lbl);
-          const what = el('td', 'what'); what.append(el('b', null, a.description), el('small', null, plain(a.tldr || a.report).replace(/https?:\/\/\S+/g, '')));
-          const prog = el('td', 'prog'); prog.append(stageBar(a));
-          const pr = el('td', 'pr'); if (a.pr) pr.append(prChip(a));
-          const br = el('td', 'br'); if (a.branch) br.append(el('span', 'chip mono', a.branch));
-          tr.append(st, what, prog, pr, br, el('td', 'when', ago(a.updated)));
-          tr.onclick = () => select(a);
-          if (state.selected !== a.id) return [tr];
-          const more = el('tr', 'detail'), td = el('td');
-          td.colSpan = 6; td.append(detail(a)); more.append(td);
-          return [tr, more];
-        }));
-        if (shown.length) box.append(table);
-        const hidden = items.length - shown.length;
-        if (hidden || open) {
-          const b = el('button', 'more', open ? 'Hide finished' : `Show ${hidden} finished`);
-          b.onclick = () => { open ? state.expanded.delete(s.id) : state.expanded.add(s.id); renderBoard(); };
-          box.append(b);
-        }
-      }
-      return box;
-    }));
-    if (!$('masters').children.length) $('masters').append(el('div', 'welcome', 'No sessions match.'));
+  // Work items (one per MR, plus running/stopped agents without one), grouped by what they wait on; merged ones folded at the bottom.
+  function renderItems() {
+    const items = visibleSessions().flatMap(s => s.items || []).sort((a, b) => b.updated - a.updated);
+    const table = list => {
+      const t = el('table', 'rows');
+      t.append(...list.flatMap(x => {
+        const tr = el('tr', state.selected === x.key ? 'sel' : '');
+        const what = el('td', 'what');
+        what.append(el('b', null, x.title), el('small', 'next', `Next: ${x.next}`));
+        const prog = el('td', 'prog'); prog.append(stageBar(x));
+        const pr = el('td', 'pr'); if (x.pr) pr.append(prChip(x));
+        const br = el('td', 'br'); if (x.branch) br.append(el('span', 'chip mono', x.branch));
+        tr.append(what, prog, pr, br, el('td', 'when', ago(x.updated)));
+        tr.onclick = () => select(x);
+        if (state.selected !== x.key) return [tr];
+        const more = el('tr', 'detail'), td = el('td');
+        td.colSpan = 5; td.append(detail(x)); more.append(td);
+        return [tr, more];
+      }));
+      return t;
+    };
+    const groups = COLUMNS.filter(c => c.key !== 'done').map(c => {
+      const list = items.filter(x => x.column === c.key);
+      if (!list.length) return null;
+      const h = el('h2', 'g-head'); h.append(dot(c.key), `${c.label} · ${list.length}`);
+      const sec = el('section', 'group'); sec.append(h, table(list));
+      return sec;
+    }).filter(Boolean);
+    const merged = items.filter(x => x.column === 'done');
+    if (merged.length) {
+      const fold = el('details', 'group merged'), sum = el('summary', 'g-head');
+      sum.append(dot('done'), `Merged (${merged.length})`);
+      fold.open = !!state.showMerged;
+      fold.ontoggle = () => { state.showMerged = fold.open; };
+      fold.append(sum, table(merged));
+      groups.push(fold);
+    }
+    $('masters').replaceChildren(...groups);
+    if (!groups.length) $('masters').append(el('div', 'welcome', 'Nothing in flight.'));
   }
 
   // First sentence of a message without a TLDR, capped near 200 chars, with dangling ** or ` closed.
@@ -359,11 +348,19 @@
     return [top, body, btn];
   }
 
-  // Click toggles an inline detail: TLDR with Show more for the full report, edited files.
-  function select(x) { state.selected = state.selected === x.id ? null : x.id; renderBoard(); }
+  // Click toggles an inline detail (TLDR with Show more, other agents on the item, edited files) and binds the chat to the item's session.
+  function select(x) {
+    state.selected = state.selected === x.key ? null : x.key;
+    if (x.sessionId && x.sessionId !== chatSession()?.id) bindChat(x.sessionId); else renderBoard();
+  }
   function detail(x) {
     const d = el('div', 'detail');
-    if (x.tldr || x.body) d.append(...foldable(x.tldr, x.body, `agent:${x.id}`));
+    if (x.tldr || x.body) d.append(...foldable(x.tldr, x.body, `item:${x.key}`));
+    if (x.activity?.length) {
+      const ul = el('ul', 'activity');
+      ul.append(...x.activity.map(a => { const li = el('li'); li.append(el('span', 'chip', a.status), ' ', el('b', null, a.description), a.tldr ? ` — ${plain(a.tldr)}` : ''); return li; }));
+      d.append(el('h4', null, `Earlier agents · ${x.activity.length}`), ul);
+    }
     if (x.files?.length) {
       const ul = el('ul', 'files');
       ul.append(...x.files.map(f => { const li = el('li'), i = f.lastIndexOf('/'); li.title = f; li.append(f.slice(0, i + 1), el('b', null, f.slice(i + 1))); return li; }));
@@ -373,12 +370,12 @@
     d.onclick = e => e.stopPropagation();
     return d;
   }
-  // 5-segment progress from the server's stage guess; the current segment pulses while the agent runs.
-  function stageBar(a) {
+  // Lifecycle Implement → Verify → Review → Approved → Merged; the current segment pulses while an agent runs.
+  function stageBar(x) {
     const w = el('div', 'stage'), bar = el('div', 'bar');
-    w.style.setProperty('--c', `var(${a.status === 'stopped' ? '--c-needs' : COL[a.column].color})`);
-    for (let i = 0; i < 5; i++) bar.append(el('i', i < a.stage ? 'on' : i === a.stage ? (a.status === 'running' ? 'on now' : 'on') : ''));
-    w.append(bar, el('small', null, a.stageLabel));
+    w.style.setProperty('--c', `var(${COL[x.column].color})`);
+    LIFECYCLE.forEach((name, i) => { const s = el('i', i < x.stage ? 'on' : i === x.stage ? (x.agentStatus === 'running' ? 'on now' : 'on') : ''); s.title = name; bar.append(s); });
+    w.append(bar, el('small', null, x.stageLabel));
     return w;
   }
 
@@ -389,7 +386,7 @@
       b.onclick = openDialog;
       return $('masters').replaceChildren(w);
     }
-    renderMasters();
+    renderItems();
   }
 
   let lastSessions = '', lastRender = 0;

@@ -37,12 +37,7 @@ assert.deepEqual(filesTouched([
 ], '/r'), ['a.js', 'b.js']);
 console.log('ok files');
 
-import { agentColumn, summarizeAgent } from './server.mjs';
-assert.equal(agentColumn('running', true, { state: 'merged' }), 'doing');
-assert.equal(agentColumn('done', true, { state: 'open', ready: true }), 'ready');
-assert.equal(agentColumn('done', true, null), 'review');
-assert.equal(agentColumn('done', false, null), 'done');
-assert.equal(agentColumn('stopped', false, null), 'needs-you');
+import { summarizeAgent } from './server.mjs';
 const a = summarizeAgent({ description: 'Implement #1', finished: true }, [
     { type: 'assistant', gitBranch: 'b1', message: { content: [{ type: 'tool_use', name: 'SubagentHandback', input: { message: 'MR open: https://gitlab.com/x/y/-/merge_requests/7.' } }] } }
 ], 999_999);
@@ -153,3 +148,36 @@ const dup = chatItems([
 ]);
 assert.deepEqual(dup.map(i => [i.text, i.at]), [['ship it', T('00.000')], ['ship it', '2026-11-12T23:00:00.000Z']]);
 console.log('ok pasted + dedupe');
+import { nextStep, workItems } from './server.mjs';
+const open = extra => ({ state: 'open', reviewers: [], ...extra });
+assert.equal(nextStep({ state: 'merged' }, { status: 'running', stage: 1 }), 'Merged');
+assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebase !7' }), 'Rebase !7 is verifying…');
+assert.equal(nextStep(null, { status: 'stopped' }), 'Agent stopped — check the chat');
+assert.equal(nextStep(open({ changes: true, reviewers: ['Ann'] }), null), 'Address review comments from Ann');
+assert.equal(nextStep(open({ changes: true, reviewers: ['Ann'], changesBy: ['bob'] }), null), 'Address review comments from bob');
+assert.equal(nextStep(open({ reviewers: ['Ann', 'Bo'] }), { status: 'done' }), 'Waiting for review by Ann, Bo');
+assert.equal(nextStep(open(), null), 'Needs a reviewer');
+assert.equal(nextStep(open({ ready: true }), null), 'Approved — merge it');
+assert.equal(nextStep(open({ ci: 'failing' }), null), 'Pipeline failing');
+assert.equal(nextStep(open({ ci: 'running' }), null), 'Pipeline running');
+console.log('ok next');
+
+const mr = n => `https://gitlab.com/g/p/-/merge_requests/${n}`;
+const agent = (id, updated, extra) => ({ id, updated, status: 'done', stage: 4, prs: [], description: id, ...extra });
+const items = workItems([
+    { id: 's1', project: 'p', prs: [{ url: mr(1), at: 10 }, { url: mr(2), at: 20 }], agents: [
+        agent('impl1', 5, { prs: [mr(1)], tldr: 'old' }),
+        agent('fix1', 30, { description: 'Address comments on !1', tldr: 'new' }),
+        agent('sim', 40, { description: 'Simulate accountant' }),
+        agent('wip', 50, { status: 'running', stage: 1, description: 'Implement #9' })
+    ] },
+    { id: 's2', project: 'p', prs: [{ url: mr(2), at: 25 }], agents: [] }
+], url => (url === mr(1) ? { state: 'merged', title: 'One' } : open({ reviewers: ['Ann'] })));
+assert.deepEqual(items.map(i => [i.key, i.sessionId, i.column, i.stageLabel, i.updated]), [
+    [mr(1), 's1', 'done', 'Merged', 30],
+    [mr(2), 's2', 'review', 'Review', 25],
+    ['wip', 's1', 'doing', 'Implement', 50]
+]);
+assert.deepEqual([items[0].title, items[0].tldr, items[0].activity.map(x => x.id)], ['One', 'new', ['impl1']]);
+assert.equal(items[1].next, 'Waiting for review by Ann');
+console.log('ok items');

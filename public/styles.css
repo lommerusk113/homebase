@@ -80,7 +80,7 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .welcome wa-button { margin-top:14px; }
 
 /* compact library buttons: rows, chat notes, reply chips, dialog rows */
-wa-button[size="small"] { --wa-form-control-height:26px; --wa-form-control-padding-inline:10px; font-size:12px; }
+wa-button[size="s"] { --wa-form-control-height:26px; --wa-form-control-padding-inline:10px; font-size:12px; }
 wa-button.act-btn::part(base) { color:var(--muted); }
 wa-button.act-btn:hover:not([disabled])::part(base) { color:var(--fg); }
 wa-badge { font-size:11px; font-weight:500; }

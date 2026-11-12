@@ -142,7 +142,7 @@ function stageBar(x) {
 
 export function renderBoard() {
     if (!state.tracked.length) {
-        const w = el('div', 'welcome'), b = waButton('+ Add projects', null, { variant: 'success', appearance: 'accent', size: 'medium' });
+        const w = el('div', 'welcome'), b = waButton('+ Add projects', null, { variant: 'success', appearance: 'accent', size: 'm' });
         w.append(el('h2', null, 'No projects on your board'), el('div', null, 'Pick the projects you want to follow. Sessions from other projects stay hidden.'), b);
         b.onclick = () => $('manage').click();
         return $('masters').replaceChildren(w);

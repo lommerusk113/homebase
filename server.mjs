@@ -26,6 +26,7 @@ const AGENT_RUNNING_MS = 2 * 60_000;
 const cache = new Map(); // path -> { mtimeMs, entries }
 const projects = new Map(); // cwd -> repo name
 const prs = new Map(); // url -> { at, value, pending }
+const repoPaths = new Map(); // repo name -> { host, path }, from the origin URL
 
 // Main repo name, so worktrees group under their repo. Read-only git call.
 export function repoName(url) {
@@ -38,6 +39,14 @@ export function repoName(url) {
     return name;
 }
 
+// Host and full project path of an origin URL: git@gitlab.com:tritt/accounting/pracsys.git -> { host: 'gitlab.com', path: 'tritt/accounting/pracsys' }.
+export function repoPath(url) {
+
+    const m = url.trim().replace(/\.git$/, '').replace(/\/$/, '').match(/^(?:[a-z+]+:\/\/)?(?:[^@/]+@)?([^/:]+)(?::\d+)?[:/](.+)$/);
+
+    return m ? { host: m[1], path: m[2] } : null;
+}
+
 async function projectOf(cwd) {
 
     if (!cwd) {
@@ -46,7 +55,15 @@ async function projectOf(cwd) {
     if (!projects.has(cwd)) {
         // repo name from origin (so a folder named differently still shows the real repo), else the main checkout's folder
         projects.set(cwd, run('git', ['-C', cwd, 'remote', 'get-url', 'origin'])
-            .then(({ stdout }) => repoName(stdout))
+            .then(({ stdout }) => {
+                const name = repoName(stdout);
+                const repo = repoPath(stdout);
+                if (repo) {
+                    repoPaths.set(name, repo);
+                }
+
+                return name;
+            })
             .catch(() => run('git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'])
                 .then(({ stdout }) => basename(dirname(stdout.trim()))))
             .catch(() => basename(cwd.replace(/\/\.(claude\/)?worktrees\/.*$/, ''))));
@@ -75,11 +92,13 @@ async function fetchPr(url) {
             changes: status === 'requested_changes' || status === 'discussions_not_resolved',
             changesBy: [],
             draft: !!mr.draft,
-            ci: { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? null
+            ci: { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? null,
+            milestone: mr.milestone ? { id: mr.milestone.id, title: mr.milestone.title, due_date: mr.milestone.due_date } : null,
+            target: mr.target_branch
         };
     }
 
-    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,title,reviewDecision,isDraft,headRefName,reviewRequests,latestReviews']);
+    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,title,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews']);
     const pr = JSON.parse(stdout);
     const reviews = pr.latestReviews ?? [];
 
@@ -92,7 +111,9 @@ async function fetchPr(url) {
         changes: pr.reviewDecision === 'CHANGES_REQUESTED',
         changesBy: reviews.filter(r => r.state === 'CHANGES_REQUESTED').map(r => r.author?.login).filter(Boolean),
         draft: pr.isDraft,
-        ci: null // ponytail: GitHub checks need statusCheckRollup; add it if failing pipelines matter there
+        ci: null, // ponytail: GitHub checks need statusCheckRollup; add it if failing pipelines matter there
+        milestone: pr.milestone ? { id: pr.milestone.number, title: pr.milestone.title, due_date: pr.milestone.dueOn?.slice(0, 10) ?? null } : null,
+        target: pr.baseRefName
     };
 }
 
@@ -670,6 +691,10 @@ async function sessions() {
     const urls = new Set(out.flatMap(s => [...s.prs.map(p => p.url), ...s.agents.flatMap(a => a.prs)]));
     const states = new Map(await Promise.all([...urls].map(async u => [u, await prState(u)])));
     const items = workItems(out, u => states.get(u) ?? null);
+    for (const it of items) {
+        // only an already fetched milestone list; /api/milestones fills it for the projects on the board
+        it.milestone = milestoneOf(it.prState, swr.get(`ms:${it.project}`)?.value ?? []);
+    }
     for (const s of out) {
         s.items = items.filter(i => i.sessionId === s.id);
         delete s.agents; // folded into items
@@ -899,6 +924,140 @@ export function workItems(sessions, prOf = () => null, now = Date.now()) {
     });
 }
 
+// Milestones: read-only glab/gh calls, cached per project, per milestone's issue list and per open issue's linked MRs.
+const MS_LIST_TTL_MS = 5 * 60_000;
+const MS_ISSUES_TTL_MS = 90_000;
+const MS_LINKS_TTL_MS = 5 * 60_000;
+const MS_PARALLEL = 8;
+const swr = new Map(); // key -> { at, value, pending, error }
+
+// Stale-while-revalidate like prState, for any key. Only the first load waits; a failed first load throws.
+async function cached(key, ttl, fn) {
+
+    let hit = swr.get(key);
+    if (!hit) {
+        hit = { at: 0, value: null };
+        swr.set(key, hit);
+    }
+    if (Date.now() - hit.at > ttl && !hit.pending) {
+        hit.pending = fn()
+            .then(v => { hit.value = v; hit.error = null; })
+            .catch(e => { hit.error = e; })
+            .finally(() => { hit.at = Date.now(); hit.pending = null; });
+    }
+    if (hit.value === null) {
+        await hit.pending;
+    }
+    if (hit.value === null && hit.error) {
+        throw hit.error;
+    }
+
+    return hit.value;
+}
+
+const isGitLab = repo => repo.host.includes('gitlab');
+const api = (repo, path) => run(isGitLab(repo) ? 'glab' : 'gh', ['api', path]).then(({ stdout }) => JSON.parse(stdout));
+export const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+async function fetchMilestones(repo) {
+
+    if (isGitLab(repo)) {
+        const list = await api(repo, `projects/${encodeURIComponent(repo.path)}/milestones?state=active&include_ancestors=true&per_page=100`);
+        return list.map(m => ({ id: m.id, title: m.title, due: m.due_date ?? null, url: m.web_url }));
+    }
+    const list = await api(repo, `repos/${repo.path}/milestones?state=open&per_page=100`);
+
+    return list.map(m => ({ id: m.number, title: m.title, due: m.due_on?.slice(0, 10) ?? null, url: m.html_url }));
+}
+
+// ponytail: one page of 100 issues; add --paginate if a milestone outgrows it
+async function fetchIssues(repo, ms) {
+
+    if (isGitLab(repo)) {
+        const list = await api(repo, `projects/${encodeURIComponent(repo.path)}/issues?milestone=${encodeURIComponent(ms.title)}&per_page=100`);
+        return list.map(i => ({ iid: i.iid, title: i.title, state: i.state === 'closed' ? 'closed' : 'open', assignees: (i.assignees ?? []).map(a => a.name), url: i.web_url }));
+    }
+    const list = await api(repo, `repos/${repo.path}/issues?milestone=${ms.id}&state=all&per_page=100`);
+
+    return list.filter(i => !i.pull_request).map(i => ({ iid: i.number, title: i.title, state: i.state, assignees: (i.assignees ?? []).map(a => a.login), url: i.html_url }));
+}
+
+// ponytail: related MRs include ones that only mention the issue; GitHub's linked PRs need GraphQL, so GitHub issues are never "in progress" or "can be closed"
+async function fetchLinks(repo, iid) {
+
+    const list = await api(repo, `projects/${encodeURIComponent(repo.path)}/issues/${iid}/related_merge_requests`);
+
+    return list.map(m => ({ iid: m.iid, url: m.web_url, state: { opened: 'open' }[m.state] ?? m.state }));
+}
+
+// Issues of a milestone in the order the user acts on them. links: iid -> [{ state: open|merged|closed }] for open issues.
+// An open MR wins over a merged one: a follow-up still in review means the issue isn't done.
+export function groupIssues(issues, links = {}) {
+
+    const groups = { closable: [], doing: [], assigned: [], unassigned: [], done: [] };
+    for (const i of issues) {
+        const mrs = links[i.iid] ?? [];
+        const key = i.state === 'closed' ? 'done'
+            : mrs.some(m => m.state === 'open') ? 'doing'
+            : mrs.some(m => m.state === 'merged') ? 'closable'
+            : i.assignees.length ? 'assigned' : 'unassigned';
+        groups[key].push({ ...i, mrs });
+    }
+
+    return { total: issues.length, closed: groups.done.length, groups };
+}
+
+// Milestone title of an MR: its own milestone, else the milestone whose slug is its target branch (supplier-automation).
+export function milestoneOf(pr, list) {
+    return pr ? pr.milestone?.title ?? list.find(m => slug(m.title) === pr.target)?.title ?? null : null;
+}
+
+// Listed milestones that the board's MRs belong to, open MRs weighing most.
+export function activeMilestones(mrs, list) {
+
+    const score = new Map();
+    for (const mr of mrs) {
+        const t = milestoneOf(mr, list);
+        if (list.some(m => m.title === t)) {
+            score.set(t, (score.get(t) ?? 0) + (mr.state === 'open' ? 10 : 1));
+        }
+    }
+
+    return [...score].sort((a, b) => b[1] - a[1]).map(([t]) => t);
+}
+
+async function milestoneIssues(project, repo, ms) {
+
+    const issues = await cached(`issues:${project}:${ms.title}`, MS_ISSUES_TTL_MS, () => fetchIssues(repo, ms));
+    const links = {};
+    if (isGitLab(repo)) {
+        const open = issues.filter(i => i.state === 'open');
+        for (let i = 0; i < open.length; i += MS_PARALLEL) {
+            await Promise.all(open.slice(i, i + MS_PARALLEL).map(async ({ iid }) => {
+                links[iid] = await cached(`links:${project}:${iid}`, MS_LINKS_TTL_MS, () => fetchLinks(repo, iid)).catch(() => []);
+            }));
+        }
+    }
+
+    return { ...ms, ...groupIssues(issues, links) };
+}
+
+// A project's open milestones, the ones its MRs point at, and the issue groups of the chosen (else the most active) one.
+async function milestones(project, title) {
+
+    const repo = repoPaths.get(project);
+    if (!repo) {
+        throw Object.assign(new Error('unknown project'), { status: 404 });
+    }
+
+    const list = await cached(`ms:${project}`, MS_LIST_TTL_MS, () => fetchMilestones(repo));
+    const mrs = [...prs].filter(([url, hit]) => hit.value && sameRepo(url, project)).map(([, hit]) => hit.value);
+    const detected = activeMilestones(mrs, list);
+    const pick = list.find(m => m.title === title) ?? list.find(m => m.title === detected[0]);
+
+    return { project, milestones: list, detected, selected: pick ? await milestoneIssues(project, repo, pick) : null };
+}
+
 // HOMEBASE_STATUSLINE_DIR lets a test server read sample dumps instead of the real folder.
 const STATUS_DIR = process.env.HOMEBASE_STATUSLINE_DIR ?? join(homedir(), '.claude', 'homebase', 'statusline');
 
@@ -1056,6 +1215,9 @@ async function readBody(req, max) {
     return data;
 }
 
+// Fixed allow-list of static modules; nothing else under public/ is served.
+const PUBLIC = new Map([['/milestone.js', './public/milestone.js']]);
+
 if (import.meta.url === `file://${process.argv[1]}`) {
     const html = await readFile(new URL('./index.html', import.meta.url));
     const icon = await readFile(new URL('./icon.svg', import.meta.url));
@@ -1079,6 +1241,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             if (url.pathname === '/api/interrupt' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
                 await interrupt(url.searchParams.get('id'));
                 return res.end('ok');
+            }
+            if (url.pathname === '/api/milestones') {
+                res.setHeader('content-type', 'application/json');
+                return res.end(JSON.stringify(await milestones(url.searchParams.get('project'), url.searchParams.get('milestone'))));
+            }
+            if (PUBLIC.has(url.pathname)) {
+                res.setHeader('content-type', 'text/javascript; charset=utf-8');
+                return res.end(await readFile(new URL(PUBLIC.get(url.pathname), import.meta.url)));
             }
             if (url.pathname === '/api/limits') {
                 res.setHeader('content-type', 'application/json');

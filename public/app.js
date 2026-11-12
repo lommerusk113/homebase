@@ -3,6 +3,7 @@ import { $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton
 import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat } from './chat.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
+import { initKeys } from './keys.js';
 
 // One milestone pill for the selected project (none for "All"); it filters the list. Rebuilt only when the project changes.
 let pillFor = null, milestone = null;
@@ -146,11 +147,7 @@ project.addEventListener('change', () => {
     if (!project.value || project.value === state.project) return;
     state.project = project.value; store.set('project', state.project); renderMilestone(); renderBoard(); refreshChat();
 });
-document.addEventListener('keydown', e => {
-    // Escape that closed the select or the dialog isn't a "deselect the row"
-    if (e.key === 'Escape' && state.selected && !e.composedPath().some(n => n.localName === 'wa-select' || n.localName === 'wa-dialog')) { state.selected = null; renderBoard(); }
-});
-
+initKeys(); // includes Esc collapsing the expanded row
 initChat();
 fetch('/api/editors').then(r => r.json()).then(e => { state.editors = e; renderBoard(); }).catch(() => {});
 refresh(); setInterval(refresh, 3000);

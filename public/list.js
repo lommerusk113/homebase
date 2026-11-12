@@ -1,5 +1,5 @@
 // Left column: work items grouped by what they wait on, and attention transitions.
-import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip } from './core.js';
+import { api, $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip } from './core.js';
 import { chatSession, bindChat, sendText } from './chat.js';
 import { milestoneTag } from './milestone.js';
 
@@ -97,7 +97,7 @@ function openButton(x) {
     const eds = state.editors ?? [];
     if (!x.folder || !eds.length) return [];
     const last = store.get('editor'), ordered = [...eds.filter(e => e.id === last), ...eds.filter(e => e.id !== last)];
-    const open = ed => { store.set('editor', ed.id); fetch(`/api/open?item=${encodeURIComponent(x.key)}&editor=${ed.id}`, { method: 'POST', headers: { 'x-codetool': '1' } }); };
+    const open = ed => { store.set('editor', ed.id); api(`/api/open?item=${encodeURIComponent(x.key)}&editor=${ed.id}`, { method: 'POST' }); };
     const b = waButton('', 'open-btn', { appearance: 'plain', 'aria-label': ordered.length > 1 ? 'Open in editor' : `Open in ${ordered[0].name}` });
     b.innerHTML = CODE_ICON;
     const tip = tooltip(b, b.getAttribute('aria-label'));

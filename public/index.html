@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Homebase</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/vendor/fonts/fonts.css">
 <!-- Web Awesome theme only (no native.css, which would restyle every native element) -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@awesome.me/webawesome@3.14.0/dist-cdn/styles/themes/default.css">
+<link rel="stylesheet" href="/vendor/webawesome/styles/themes/default.css">
 <link rel="stylesheet" href="/styles.css">
-<script type="module" src="https://cdn.jsdelivr.net/npm/@awesome.me/webawesome@3.14.0/dist-cdn/webawesome.loader.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
+<!-- Vendored copies, see public/vendor/VENDOR.md. data-webawesome is the loader's base path for lazy-loaded components. -->
+<script type="module" src="/vendor/webawesome/webawesome.loader.js" data-webawesome="/vendor/webawesome"></script>
+<script src="/vendor/marked/marked.min.js"></script>
+<script src="/vendor/dompurify/purify.min.js"></script>
 <script type="module" src="/app.js"></script>
 </head>
 <body>

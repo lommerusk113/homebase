@@ -278,6 +278,19 @@ assert.deepEqual(quickReplies(null, ''), []);
 assert.deepEqual(chatItems([say('Done.\n\nShip it?')]).at(-1).replies, YN);
 assert.equal(chatItems([say('Ship it?'), { type: 'user', message: { content: 'yes' } }])[0].replies, undefined);
 assert.equal(chatItems([say('Ship it?'), tu('Bash')])[0].replies, undefined);
+const you = (text, at) => ({ type: 'user', message: { content: text }, timestamp: at });
+const tagged = chatItems([say('Fix A or B?'), you('Do both', 't1')]); // chip answer
+assert.deepEqual(tagged.map(i => [i.role, i.answer, i.replies]), [['assistant', { text: 'Do both', at: 't1' }, undefined]]);
+assert.deepEqual(chatItems([say('Ship it?'), you('yes')]).map(i => [i.role, i.answer?.text]), [['assistant', 'yes']]); // typed
+assert.deepEqual(chatItems([say('Ship it?'), you('Go ahead!')])[0].answer.text, 'Go ahead!');
+assert.deepEqual(chatItems([say('Ship it?'), you('yes, but also do X')]).map(i => [i.role, i.answer]), [['assistant', undefined], ['user', undefined]]);
+assert.deepEqual(chatItems([say('Done.'), you('yes')]).map(i => i.role), ['assistant', 'user']); // not after a question
+assert.deepEqual(chatItems([you('yes')]).map(i => i.role), ['user']);
+// an answer to an older question: Claude said more after asking, so "yes" is a bubble
+assert.deepEqual(chatItems([say('Ship it?'), tu('Bash'), say('Also cleaned up.'), you('yes')]).map(i => [i.role, i.answer]),
+    [['assistant', undefined], ['tools', undefined], ['assistant', undefined], ['user', undefined]]);
+assert.deepEqual(chatItems([say('Ship it?'), you('yes'), you('no')]).map(i => i.role), ['assistant', 'user']); // one answer per question
+assert.deepEqual(chatItems([say('Ship it?'), { type: 'queue-operation', operation: 'enqueue', content: 'Yes', timestamp: 't2' }])[0].answer, { text: 'Yes', at: 't2', queued: true });
 const ask2 = tu('AskUserQuestion', { id: 'q2', input: { questions: [{ question: 'Which DB?', options: [{ label: 'Postgres', description: 'x' }, { label: 'SQLite' }] }] } });
 assert.deepEqual(pendingAsk([ask2]), [{ question: 'Which DB?', options: ['Postgres', 'SQLite'] }]);
 assert.equal(pendingAsk([ask2, { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'q2' }] } }]), null);

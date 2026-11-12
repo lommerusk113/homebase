@@ -56,6 +56,10 @@ assert.deepEqual(splitTldr('Long text.\n\n**TLDR:** It works.'), { tldr: 'It wor
 assert.equal(splitTldr('a\n**TLDR**: fixed **now**').tldr, 'fixed **now**');
 assert.equal(splitTldr('**TL;DR: shipped**').tldr, 'shipped');
 assert.equal(splitTldr('we use tldraw here').tldr, null);
+assert.equal(splitTldr('a\nTLDR: plain').tldr, 'plain');
+assert.equal(splitTldr('a\ntldr: lower').tldr, 'lower');
+assert.equal(splitTldr('a\n**TLDR:** bold label').tldr, 'bold label');
+assert.deepEqual(splitTldr('Intro.\n\nTLDR: first\n\nTLDR: last\n\nTrailing note.'), { tldr: 'last', text: 'Intro.\n\nTLDR: first\n\n\n\nTrailing note.' });
 assert.equal(toolSummary([
     { name: 'Bash' }, { name: 'Bash' }, { name: 'Bash' },
     { name: 'Edit', input: { file_path: '/a' } }, { name: 'Edit', input: { file_path: '/a' } }, { name: 'Write', input: { file_path: '/b' } },

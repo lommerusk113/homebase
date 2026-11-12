@@ -17,6 +17,20 @@ const parse = v => { try { return JSON.parse(v) || []; } catch { return []; } };
 export const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [], nudged: new Set() };
 export const saveTracked = () => { store.set('tracked', JSON.stringify(state.tracked)); };
 
+// Every API call goes through here: the per-start token from index.html's meta tag, plus x-codetool on POSTs.
+// A 401 means the server restarted with a new token, so reload once to pick it up; the 30s guard stops a reload loop.
+export async function api(path, opts = {}) {
+    const token = document.querySelector('meta[name="homebase-token"]')?.content;
+    const headers = { ...opts.headers, 'x-homebase-token': token, ...(opts.method === 'POST' && { 'x-codetool': '1' }) };
+    const r = await fetch(path, { ...opts, headers });
+    if (r.status === 401) {
+        let last = 0;
+        try { last = Number(sessionStorage.getItem('reloadedAt')) || 0; sessionStorage.setItem('reloadedAt', Date.now()); } catch {}
+        if (Date.now() - last > 30_000) location.reload();
+    }
+    return r;
+}
+
 export const $ = id => document.getElementById(id);
 export const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 // Web Awesome button; attributes rather than properties so it works before the element is upgraded.

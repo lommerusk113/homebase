@@ -121,7 +121,7 @@ export function milestoneSelector(project, { onChange } = {}) {
         if (pending || (want === asked && Date.now() - at < FETCH_MS)) return;
         pending = true;
         try {
-            const r = await fetch(`/api/milestones?project=${encodeURIComponent(project)}&milestone=${encodeURIComponent(want)}`);
+            const r = await api(`/api/milestones?project=${encodeURIComponent(project)}&milestone=${encodeURIComponent(want)}`);
             const text = r.ok ? await r.text() : '';
             if (text && text !== json) { // redraw only on change, so an open menu stays put
                 json = text;

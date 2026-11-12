@@ -1,5 +1,5 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks } from './core.js';
+import { api, $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat } from './chat.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
@@ -96,7 +96,7 @@ if (window.Notification) renderBell();
 let lastSessions = '', lastRender = 0;
 async function refresh() {
     try {
-        const text = await fetch('/api/sessions').then(r => r.text());
+        const text = await api('/api/sessions').then(r => r.text());
         $('offline').hidden = true;
         // ponytail: skip identical re-renders so text in an open detail stays selectable; re-render each minute for the ages
         if (text !== lastSessions || Date.now() - lastRender > 60_000) {
@@ -118,7 +118,7 @@ async function refresh() {
 const leftColor = left => (left >= 50 ? 'var(--c-ready)' : left >= 10 ? 'var(--c-warn)' : 'var(--c-danger)');
 async function refreshLimits() {
     let l = null;
-    try { l = await fetch('/api/limits').then(r => r.json()); } catch {}
+    try { l = await api('/api/limits').then(r => r.json()); } catch {}
     const box = $('limits'), wins = [l?.fiveHour, l?.sevenDay].map((w, week) => w && limitView(week, w)).filter(Boolean);
     const a = l?.updated && ago(l.updated), updated = !a ? '' : a === 'now' ? 'Updated just now' : `Updated ${a} ago`;
     box.hidden = !wins.length;
@@ -149,5 +149,5 @@ project.addEventListener('change', () => {
 });
 initKeys(); // includes Esc collapsing the expanded row
 initChat();
-fetch('/api/editors').then(r => r.json()).then(e => { state.editors = e; renderBoard(); }).catch(() => {});
+api('/api/editors').then(r => r.json()).then(e => { state.editors = e; renderBoard(); }).catch(() => {});
 refresh(); setInterval(refresh, 3000);

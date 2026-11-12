@@ -512,3 +512,137 @@ assert.equal(stepKey(['a', 'b', 'c'], null, 1), 'a');
 assert.equal(stepKey(['a', 'b', 'c'], 'gone', -1), 'c');
 assert.equal(stepKey([], 'a', 1), null);
 console.log('ok keys');
+
+import { localHosts, lanHosts, isPrivateIp, allowedHost, allowedOrigin, tokenOk, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode } from './server.mjs';
+{
+    const local = localHosts(4321);
+    assert.ok(allowedHost('localhost:4321', local));
+    assert.ok(allowedHost('127.0.0.1:4321', local));
+    assert.ok(allowedHost('[::1]:4321', local));
+    assert.ok(!allowedHost('evil.com', local));
+    assert.ok(!allowedHost('localhost:4322', local));
+    assert.ok(!allowedHost('localhost', local));
+    assert.ok(!allowedHost(undefined, local));
+    assert.ok(allowedOrigin(undefined, local));
+    assert.ok(allowedOrigin('http://localhost:4321', local));
+    assert.ok(allowedOrigin('http://127.0.0.1:4321', local));
+    assert.ok(!allowedOrigin('http://evil.com', local));
+    assert.ok(!allowedOrigin('null', local));
+    assert.ok(!allowedOrigin('https://localhost:4321', local));
+    assert.ok(tokenOk('abc', 'abc'));
+    assert.ok(!tokenOk('abd', 'abc'));
+    assert.ok(!tokenOk('ab', 'abc'));
+    assert.ok(!tokenOk(undefined, 'abc'));
+    assert.ok(!tokenOk('abc', undefined));
+    assert.ok(cookieOk('a=1; homebase_session=s3cret; b=2', 's3cret'));
+    assert.ok(!cookieOk('homebase_session=nope', 's3cret'));
+    assert.ok(!cookieOk(undefined, 's3cret'));
+    assert.ok(!cookieOk('homebase_session=', undefined));
+    assert.ok(isLoopback('127.0.0.1') && isLoopback('::1') && !isLoopback('192.168.1.5'));
+    assert.ok(bindOk('127.0.0.1', false) && !bindOk('0.0.0.0', false) && bindOk('0.0.0.0', true) && !bindOk('192.168.1.5', true));
+    for (const ip of ['10.0.0.1', '172.16.0.1', '172.31.255.255', '192.168.1.5']) assert.ok(isPrivateIp(ip), ip);
+    for (const ip of ['172.15.0.1', '172.32.0.1', '8.8.8.8', '127.0.0.1', 'fe80::1', undefined]) assert.ok(!isPrivateIp(ip), ip);
+    const ifaces = { lo0: [{ address: '127.0.0.1' }], en0: [{ address: 'fe80::1' }, { address: '192.168.1.5' }], utun: [{ address: '100.64.0.1' }] };
+    assert.deepEqual(lanHosts(4321, 'Mac', ifaces), [...local, 'mac.local:4321', '192.168.1.5:4321']);
+    assert.deepEqual(lanHosts(4321, 'Mac.local', {}), [...local, 'mac.local:4321']);
+    const hit = rateLimiter(5, 60_000, 900_000);
+    for (let i = 0; i < 5; i++) assert.ok(hit('a', 1000));
+    assert.ok(!hit('a', 1000)); // 6th try locks out
+    assert.ok(hit('b', 1000)); // per key
+    assert.ok(!hit('a', 70_000)); // still locked after the window
+    assert.ok(hit('a', 1000 + 900_001)); // lock expired
+    const hit2 = rateLimiter(2, 60_000, 900_000);
+    assert.ok(hit2('c', 0) && hit2('c', 0) && hit2('c', 61_000)); // window resets
+    assert.match(pairingCode(), /^[A-HJ-NP-Z2-9]{8}$/);
+}
+console.log('ok access checks');
+
+// Integration: real server on a random port, against a temp data dir and a tmux socket nobody uses. Only GETs and rejected POSTs.
+import { spawn } from 'node:child_process';
+import { request } from 'node:http';
+import { createServer as netServer } from 'node:net';
+import { readFileSync as readSync, rmSync, statSync } from 'node:fs';
+import { join as pjoin } from 'node:path';
+{
+    const freePort = () => new Promise(r => { const s = netServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
+    const call = (port, { host, path = '/', method = 'GET', headers = {}, body, addr = '127.0.0.1' } = {}) => new Promise((ok, fail) => {
+        const r = request({ host: addr, port, path, method, headers: { host: host ?? `localhost:${port}`, ...headers } }, res => {
+            let data = '';
+            res.on('data', c => { data += c; });
+            res.on('end', () => ok({ status: res.statusCode, headers: res.headers, body: data }));
+        });
+        r.on('error', fail);
+        r.end(body);
+    });
+    async function start(env) {
+        const port = await freePort(), dir = mkdtempSync(pjoin(tmpdir(), 'homebase-test-'));
+        const child = spawn(process.execPath, ['server.mjs'], { cwd: new URL('.', import.meta.url).pathname, env: { ...process.env, PORT: String(port), HOMEBASE_DIR: dir, HOMEBASE_STATUSLINE_DIR: dir, HOMEBASE_TMUX_SOCKET: 'homebase-test-none', ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
+        let out = '';
+        await new Promise((ok, fail) => { child.stdout.on('data', c => { out += c; if (out.includes('Homebase on')) ok(); }); child.on('exit', fail); });
+        return { port, dir, out, stop: () => { child.kill(); rmSync(dir, { recursive: true, force: true }); } };
+    }
+    const meta = body => body.match(/name="homebase-token" content="([0-9a-f]{64})"/)?.[1];
+
+    const s = await start({});
+    try {
+        assert.equal((await call(s.port, { host: 'evil.com' })).status, 403);
+        assert.equal((await call(s.port, { host: 'evil.com', path: '/api/limits' })).status, 403);
+        assert.equal((await call(s.port, { headers: { origin: 'http://evil.com' } })).status, 403);
+        assert.equal((await call(s.port, { path: '/api/limits' })).status, 401);
+        assert.equal((await call(s.port, { path: '/api/limits', headers: { 'x-homebase-token': 'f'.repeat(64) } })).status, 401);
+        const page = await call(s.port);
+        assert.equal(page.status, 200);
+        assert.equal(page.headers['x-content-type-options'], 'nosniff');
+        assert.equal(page.headers['x-frame-options'], 'DENY');
+        assert.equal(page.headers['referrer-policy'], 'no-referrer');
+        const token = meta(page.body);
+        assert.ok(token, 'page carries the token');
+        const ok = await call(s.port, { path: '/api/limits', headers: { 'x-homebase-token': token, origin: `http://localhost:${s.port}` } });
+        assert.equal(ok.status, 200);
+        // POST rejection paths only: none of these reach a session.
+        assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-codetool': '1' }, body: 'hi' })).status, 401);
+        assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token, 'sec-fetch-site': 'cross-site' }, body: 'hi' })).status, 403);
+        assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token, origin: 'http://evil.com' }, body: 'hi' })).status, 403);
+        assert.equal((await call(s.port, { path: '/pair', method: 'POST', body: 'code=x' })).status, 404); // no pairing outside LAN mode
+    } finally { s.stop(); }
+    console.log('ok server access');
+
+    // LAN mode: a non-loopback client must reach us on a private address of this machine; skip without one.
+    const lanIp = lanHosts(0).map(h => h.replace(/:0$/, '')).find(isPrivateIp);
+    if (!lanIp) {
+        console.log('skip LAN mode test: no private IPv4 address');
+    } else {
+        const l = await start({ HOMEBASE_LAN: '1' });
+        try {
+            const code = readSync(pjoin(l.dir, 'pairing-code'), 'utf8').trim();
+            assert.match(l.out, new RegExp(`pairing code ${code}`));
+            assert.equal(statSync(pjoin(l.dir, 'pairing-code')).mode & 0o777, 0o600);
+            assert.equal(statSync(pjoin(l.dir, 'session-secret')).mode & 0o777, 0o600);
+            const host = `${lanIp}:${l.port}`, lan = { addr: lanIp, host };
+            assert.equal((await call(l.port, { ...lan, host: 'evil.com' })).status, 403);
+            const pairing = await call(l.port, lan);
+            assert.equal(pairing.status, 200);
+            assert.match(pairing.body, /Pair this device/);
+            assert.equal(meta(pairing.body), undefined);
+            assert.equal((await call(l.port, { ...lan, path: '/app.js' })).status, 401);
+            assert.equal((await call(l.port, { ...lan, path: '/api/limits' })).status, 401);
+            const form = { 'content-type': 'application/x-www-form-urlencoded', origin: `http://${host}` };
+            assert.equal((await call(l.port, { ...lan, path: '/pair', method: 'POST', headers: form, body: 'code=WRONG123' })).status, 403);
+            const paired = await call(l.port, { ...lan, path: '/pair', method: 'POST', headers: form, body: `code=${code.toLowerCase()}` });
+            assert.equal(paired.status, 303);
+            const cookie = paired.headers['set-cookie'][0];
+            assert.match(cookie, /HttpOnly; SameSite=Strict/);
+            const jar = cookie.split(';')[0];
+            const app = await call(l.port, { ...lan, headers: { cookie: jar } });
+            assert.equal(app.status, 200);
+            const token = meta(app.body);
+            assert.ok(token, 'paired device gets the token');
+            assert.equal((await call(l.port, { ...lan, path: '/api/limits', headers: { cookie: jar, 'x-homebase-token': token } })).status, 200);
+            assert.equal((await call(l.port, { ...lan, path: '/api/limits', headers: { 'x-homebase-token': token } })).status, 401); // token alone isn't enough off-machine
+            assert.ok(meta((await call(l.port)).body), 'loopback needs no pairing');
+            for (let i = 0; i < 3; i++) assert.equal((await call(l.port, { ...lan, path: '/pair', method: 'POST', headers: form, body: 'code=WRONG123' })).status, 403);
+            assert.equal((await call(l.port, { ...lan, path: '/pair', method: 'POST', headers: form, body: `code=${code}` })).status, 429); // 6th try: locked out, even with the right code
+        } finally { l.stop(); }
+        console.log('ok LAN pairing');
+    }
+}

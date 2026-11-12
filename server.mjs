@@ -1,11 +1,12 @@
-// Dashboard over Claude Code transcripts in ~/.claude/projects. Never writes files; only types into its own tmux sessions.
+// Dashboard over Claude Code transcripts in ~/.claude/projects. Only types into its own tmux sessions; writes files only in LAN mode (pairing code, session secret).
 import { createServer } from 'node:http';
 import { readdir, stat, open, readFile, access } from 'node:fs/promises';
-import { existsSync, constants } from 'node:fs';
-import { homedir } from 'node:os';
+import { existsSync, constants, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
+import { homedir, hostname, networkInterfaces } from 'node:os';
 import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 
 const run = promisify(execFile);
 // HOMEBASE_TMUX_SOCKET points every tmux call at a separate server (tmux -L), so tests never touch real sessions.
@@ -1474,6 +1475,107 @@ async function readBody(req, max) {
 
 // The page's files. A fixed map, so no request path ever reaches the file system.
 const JS = 'text/javascript; charset=utf-8';
+// Who may talk to the server. POSTs type into sessions that run shell commands, so every request must come from our own page:
+// Host stops DNS rebinding, Origin stops other sites, the per-start token stops other local programs,
+// and in LAN mode a paired-device cookie stops other machines on the network.
+export const localHosts = port => ['localhost', '127.0.0.1', '[::1]'].map(h => `${h}:${port}`);
+export function isPrivateIp(ip) {
+
+    const m = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(ip ?? '');
+    if (!m) {
+        return false;
+    }
+
+    const a = Number(m[1]), b = Number(m[2]);
+
+    return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+// LAN mode: localhost, <hostname>.local and the current private IPv4 addresses, each with the port.
+export function lanHosts(port, name = hostname(), ifaces = networkInterfaces()) {
+
+    const local = name.toLowerCase().endsWith('.local') ? name.toLowerCase() : `${name.toLowerCase()}.local`;
+    const ips = Object.values(ifaces).flat().filter(i => i && isPrivateIp(i.address)).map(i => i.address);
+
+    return [...localHosts(port), ...[local, ...ips].map(h => `${h}:${port}`)];
+}
+export const allowedHost = (host, hosts) => hosts.includes(host);
+export const allowedOrigin = (origin, hosts) => origin === undefined || hosts.some(h => origin === `http://${h}`);
+export function tokenOk(given, expected) {
+
+    if (typeof given !== 'string' || typeof expected !== 'string') {
+        return false;
+    }
+
+    const a = Buffer.from(given), b = Buffer.from(expected);
+
+    return a.length === b.length && timingSafeEqual(a, b);
+}
+const COOKIE = 'homebase_session';
+export const cookieOk = (header, secret) => tokenOk((header ?? '').split(/;\s*/).find(c => c.startsWith(`${COOKIE}=`))?.slice(COOKIE.length + 1), secret);
+export const isLoopback = addr => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr);
+export const bindOk = (addr, lan) => addr === '127.0.0.1' || (lan && addr === '0.0.0.0');
+// max tries per key per window, then locked out for lockMs.
+// ponytail: one map entry per client IP that ever tried, never pruned; fine on a home network
+export function rateLimiter(max = 5, windowMs = 60_000, lockMs = 15 * 60_000) {
+
+    const seen = new Map();
+
+    return (key, now = Date.now()) => {
+
+        let e = seen.get(key);
+        if (!e || (now - e.start > windowMs && now >= e.lockedUntil)) {
+            e = { start: now, count: 0, lockedUntil: 0 };
+            seen.set(key, e);
+        }
+        if (now < e.lockedUntil) {
+            return false;
+        }
+        if (++e.count > max) {
+            e.lockedUntil = now + lockMs;
+            return false;
+        }
+
+        return true;
+    };
+}
+// 8 chars from 32 unambiguous letters and digits (40 bits); 256 % 32 == 0, so no modulo bias.
+export const pairingCode = () => [...randomBytes(8)].map(b => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('');
+const pairPage = msg => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Pair with Homebase</title>
+<style>body{font:16px system-ui,sans-serif;max-width:24rem;margin:4rem auto;padding:0 16px}input,button{font:inherit;padding:.4rem .6rem}input{text-transform:uppercase;letter-spacing:.1em}</style></head>
+<body><h1>Pair this device</h1><p>Enter the pairing code shown in the terminal running Homebase, or run <code>cat ~/.claude/homebase/pairing-code</code> on that machine.</p>
+${msg ? `<p><strong>${msg}</strong></p>` : ''}<form method="post" action="/pair"><input name="code" autocomplete="off" autofocus required maxlength="16"> <button>Pair</button></form></body></html>`;
+
+const LAN = process.env.HOMEBASE_LAN === '1';
+const BIND = LAN ? '0.0.0.0' : '127.0.0.1';
+const DATA_DIR = process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase');
+const TOKEN = randomBytes(32).toString('hex');
+const SECURITY_HEADERS = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY' };
+const pairLimit = rateLimiter();
+
+function writeSecret(name, value) {
+
+    const path = join(DATA_DIR, name);
+    mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+    writeFileSync(path, value + '\n', { mode: 0o600 });
+    chmodSync(path, 0o600); // mode only applies when the file is created
+
+    return value;
+}
+// LAN mode only: a fresh pairing code per start, and a session secret that survives restarts until its file is deleted.
+function lanSecrets() {
+
+    if (!LAN) {
+        return {};
+    }
+
+    let session;
+    try {
+        session = readFileSync(join(DATA_DIR, 'session-secret'), 'utf8').trim();
+    } catch {}
+
+    return { code: writeSecret('pairing-code', pairingCode()), session: session || writeSecret('session-secret', randomBytes(32).toString('hex')) };
+}
+
 const STATIC = {
     '/': ['index.html', 'text/html; charset=utf-8'],
     '/index.html': ['index.html', 'text/html; charset=utf-8'],
@@ -1488,14 +1590,65 @@ const STATIC = {
 };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+    if (!bindOk(BIND, LAN)) {
+        throw new Error(`refusing to listen on ${BIND}: Homebase binds to 127.0.0.1 unless HOMEBASE_LAN=1`);
+    }
+    const { code: PAIR_CODE, session: SESSION } = lanSecrets();
+    if (LAN) {
+        console.log(`LAN mode: pairing code ${PAIR_CODE} (also in ${join(DATA_DIR, 'pairing-code')})`);
+    }
     editors();
     createServer(async (req, res) => {
         const url = new URL(req.url, 'http://x');
+        for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+        const deny = (code, msg) => { res.statusCode = code; res.end(msg); };
+        const hosts = LAN ? lanHosts(PORT) : localHosts(PORT);
+        if (!allowedHost(req.headers.host, hosts) || !allowedOrigin(req.headers.origin, hosts)) {
+            return deny(403, 'forbidden');
+        }
+        const site = req.headers['sec-fetch-site'];
+        if (req.method === 'POST' && site !== undefined && site !== 'same-origin') {
+            return deny(403, 'forbidden');
+        }
+        // Other machines (LAN mode only) pair once with the code; until then they get the pairing page and nothing else.
+        if (!isLoopback(req.socket.remoteAddress) && !cookieOk(req.headers.cookie, SESSION)) {
+            res.setHeader('cache-control', 'no-store');
+            if (url.pathname === '/pair' && req.method === 'POST') {
+                if (!pairLimit(req.socket.remoteAddress)) {
+                    return deny(429, 'too many tries, wait 15 minutes');
+                }
+                let code = '';
+                try {
+                    code = new URLSearchParams(await readBody(req, 200)).get('code')?.trim().toUpperCase() ?? '';
+                } catch {}
+                if (!tokenOk(code, PAIR_CODE)) {
+                    res.setHeader('content-type', 'text/html; charset=utf-8');
+                    return deny(403, pairPage('Wrong code.'));
+                }
+                res.setHeader('set-cookie', `${COOKIE}=${SESSION}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000`);
+                res.setHeader('location', '/');
+                return deny(303, '');
+            }
+            if (url.pathname === '/' || url.pathname === '/index.html') {
+                res.setHeader('content-type', 'text/html; charset=utf-8');
+                return res.end(pairPage(''));
+            }
+            return deny(401, 'unauthorized');
+        }
+        if (url.pathname.startsWith('/api/') && !tokenOk(req.headers['x-homebase-token'], TOKEN)) {
+            return deny(401, 'unauthorized');
+        }
         try {
             const file = Object.hasOwn(STATIC, url.pathname) && STATIC[url.pathname]; // not __proto__ and friends
             if (file) {
                 res.setHeader('content-type', file[1]);
-                return res.end(await readFile(new URL(`./public/${file[0]}`, import.meta.url)));
+                const body = await readFile(new URL(`./public/${file[0]}`, import.meta.url));
+                if (file[0] !== 'index.html') {
+                    return res.end(body);
+                }
+                // The token reaches only a page served to a request that passed the Host, Origin and pairing checks above.
+                res.setHeader('cache-control', 'no-store');
+                return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN));
             }
             if (url.pathname === '/api/sessions') {
                 res.setHeader('content-type', 'application/json');
@@ -1540,5 +1693,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             res.statusCode = e.status ?? 500;
             res.end(String(e.message));
         }
-    }).listen(PORT, '127.0.0.1', () => console.log(`Homebase on http://localhost:${PORT}`));
+    }).listen(PORT, BIND, () => console.log(`Homebase on http://localhost:${PORT}`));
 }

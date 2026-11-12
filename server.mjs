@@ -349,11 +349,37 @@ export function chatItems(entries, max = 60) {
         return true;
     });
 
-    return unique.slice(-max).map(i => (i.role === 'assistant' ? { ...i, ...splitTldr(i.text) } : i));
+    const out = unique.slice(-max).map(i => (i.role === 'assistant' ? { ...i, ...splitTldr(i.text) } : i));
+    const last = out.at(-1);
+    if (last?.role === 'assistant') {
+        last.replies = quickReplies(last.tldr, last.text); // only the newest item, so any later user message hides them
+    }
+
+    return out;
 }
 
-// The question text of an AskUserQuestion that has no tool_result yet, else null.
-export function pendingQuestion(entries) {
+const NOT_AN_OPTION = /\bor (?:not|no|so|something|anything|otherwise|later)\b/i;
+
+// Reply chips for a Claude message that ends by asking the user something: its TLDR or its last paragraph ends in "?".
+// Only the ending counts, so rhetorical or quoted questions earlier in the body don't; quotes, code and lists of questions are skipped.
+export function quickReplies(tldr, text) {
+
+    const lastParagraph = (text ?? '').trim().split(/\n\s*\n/).at(-1) ?? '';
+    const ask = [tldr ?? '', lastParagraph]
+        .map(s => s.trim().replace(/[*_\s]+$/, ''))
+        .find(s => s.endsWith('?') && !/^(>|```|\|)/.test(s) && s.split('\n').filter(l => /\?[*_\s]*$/.test(l)).length === 1);
+    if (!ask) {
+        return [];
+    }
+
+    const question = ask.match(/[^.!?\n]*\?$/)[0];
+    const twoOptions = /\bor\b/i.test(question) && !NOT_AN_OPTION.test(question);
+
+    return twoOptions ? ['Yes', 'Do both', 'No'] : ['Yes', 'No'];
+}
+
+// The questions of an AskUserQuestion that has no tool_result yet, as [{ question, options: [label] }], else null.
+export function pendingAsk(entries) {
 
     const ask = entries
         .filter(e => e.type === 'assistant' && !e.isSidechain && Array.isArray(e.message?.content))
@@ -366,7 +392,15 @@ export function pendingQuestion(entries) {
     const answered = entries.some(e => e.type === 'user' && Array.isArray(e.message?.content)
         && e.message.content.some(b => b.type === 'tool_result' && b.tool_use_id === ask.id));
 
-    return answered ? null : ask.input?.questions?.[0]?.question ?? 'Claude asked a question.';
+    return answered ? null : (ask.input?.questions ?? []).map(q => ({ question: q.question ?? '', options: (q.options ?? []).map(o => o.label).filter(Boolean) }));
+}
+
+// The question text of a pending AskUserQuestion, else null.
+export function pendingQuestion(entries) {
+
+    const questions = pendingAsk(entries);
+
+    return questions && (questions[0]?.question || 'Claude asked a question.');
 }
 
 // Background subagents a master session started (depth 1 only; their own helpers are noise).
@@ -795,7 +829,7 @@ async function transcript(dir, id) {
     const st = await stat(path);
     const entries = await tailOf(path, st);
 
-    return { items: chatItems(entries), asking: pendingQuestion(entries), working: Date.now() - st.mtimeMs < WORKING_MS };
+    return { items: chatItems(entries), asking: pendingQuestion(entries), questions: pendingAsk(entries), working: Date.now() - st.mtimeMs < WORKING_MS };
 }
 
 // Only known sessions, only their recorded cwd.

@@ -86,8 +86,15 @@
   .tools::before { content:'⚙ '; }
   .c-note { margin:0 12px 8px; padding:8px 10px; border-radius:8px; font-size:12.5px; display:flex; gap:8px; align-items:center; }
   .c-ask { background:color-mix(in srgb, var(--c-needs) 14%, var(--bg)); border:1px solid color-mix(in srgb, var(--c-needs) 40%, transparent); }
-  .c-ask > span { flex:1; }
+  .c-ask { align-items:flex-start; }
+  .c-ask > div { flex:1; min-width:0; }
   .c-ask code { background:var(--chip); padding:1px 5px; border-radius:4px; white-space:nowrap; }
+  .c-ask ol { margin:4px 0 6px; padding-left:20px; }
+  .c-ask ol li { font-weight:500; }
+  .c-ask p { margin:2px 0 0; }
+  .replies { display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0; margin-top:-4px; }
+  .replies button { appearance:none; font:inherit; font-size:12.5px; font-weight:500; color:var(--accent); background:var(--accent-bg); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius:99px; padding:2px 12px; cursor:pointer; }
+  .replies button:hover { border-color:var(--accent); }
   .c-working { margin-top:8px; color:var(--muted); }
   .c-input { position:relative; display:flex; padding:10px 12px 12px; border-top:1px solid var(--line); }
   .c-input textarea { flex:1; field-sizing:content; min-height:38px; max-height:180px; resize:none; font:inherit; font-size:13.5px; color:var(--fg); background:var(--canvas); border:1px solid var(--line); border-radius:8px; padding:8px 44px 8px 10px; outline:none; }
@@ -197,7 +204,7 @@
   <aside id="chat">
     <div class="c-feed" id="feed"></div>
     <div class="c-note c-working" id="working" hidden><span class="pulse"></span>Claude is working…</div>
-    <div class="c-note c-ask" id="ask" hidden><span><b>Claude is asking:</b> <span id="ask-q"></span> Answer from any terminal: <code class="mono" id="ask-cmd"></code></span><button class="ghost" id="ask-copy">Copy</button></div>
+    <div class="c-note c-ask" id="ask" hidden><div><b>Claude is asking:</b> <div id="ask-q"></div>Answer from any terminal: <code class="mono" id="ask-cmd"></code></div><button class="ghost" id="ask-copy">Copy</button></div>
     <div class="error" id="c-err"></div>
     <form class="c-input" id="send"><textarea id="msg" rows="1" placeholder="Message Claude…"></textarea><button class="c-send" id="send-btn" type="submit" aria-label="Send" title="Send" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
   </aside>
@@ -594,7 +601,11 @@
     $('working').hidden = !data.working;
     $('ask').hidden = !data.asking;
     state.asking = data.asking; updateTitle();
-    $('ask-q').textContent = data.asking || '';
+    // ponytail: options are read-only; the docs don't pin down a keypress that picks option N, so answering stays in the terminal
+    $('ask-q').replaceChildren(...(data.questions?.length ? data.questions : [{ question: data.asking || '', options: [] }]).flatMap(q => {
+      const ol = el('ol'); ol.append(...q.options.map(o => el('li', null, o)));
+      return [el('p', null, q.question), ...(q.options.length ? [ol] : [])];
+    }));
     $('ask-cmd').textContent = `tmux attach -t cc-${s.id.slice(0, 8)}`;
     // Optimistic bubbles go once any user/queued/pending item has the same text (sent no earlier than 10s before),
     // or 30s after the send succeeded: the transcript is the source of truth.
@@ -608,12 +619,19 @@
       const i = items.findIndex(x => Date.parse(x.at) > Date.parse(o.at));
       items.splice(i < 0 ? items.length : i, 0, o);
     }
-    const key = s.id + JSON.stringify(items);
+    const key = s.id + JSON.stringify([items, data.asking, data.working]);
     if (key === chatKey) return;
     const fresh = !chatKey?.startsWith(s.id), atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40, top = feed.scrollTop;
     chatKey = key;
     feed.replaceChildren(...items.map(i => bubble(i, s.id)));
     if (!items.length) feed.append(el('div', 'welcome', 'No messages yet.'));
+    // Quick replies under Claude's newest message when it ends with a question; an outbox bubble after it hides them.
+    const last = items.at(-1);
+    if (last?.replies?.length && !data.asking && !data.working) {
+      const row = el('div', 'replies');
+      row.append(...last.replies.map(t => { const b = el('button', null, t); b.onclick = () => sendReply(t); return b; }));
+      feed.append(row);
+    }
     addShowMore(feed);
     feed.scrollTop = fresh || atBottom ? feed.scrollHeight : top;
   }
@@ -655,7 +673,12 @@
     ta.value = ''; syncSend(); // clear at once; the "sending…" bubble shows progress
     if (!await sendText(s.id, text) && !ta.value) { ta.value = text; syncSend(); } // give the text back so it isn't lost
   };
-  $('msg').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('send').requestSubmit(); } };
+  // Through the input's own submit path (outbox, errors); the draft is put back since submit reads the value synchronously.
+  function sendReply(text) {
+    const ta = $('msg'), draft = ta.value;
+    ta.value = text; $('send').requestSubmit(); ta.value = draft;
+  }
+  $('msg').onkeydown =e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('send').requestSubmit(); } };
 
   $('ask-copy').onclick = () => navigator.clipboard.writeText($('ask-cmd').textContent).then(() => { $('ask-copy').textContent = 'Copied'; setTimeout(() => { $('ask-copy').textContent = 'Copy'; }, 1500); });
 

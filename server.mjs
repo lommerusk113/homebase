@@ -624,6 +624,32 @@ export function nextStep(prState, agent) {
     return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
 }
 
+// The user's own action on a work item for the "Your move" line, ranked by urgency (lower is sooner), else null.
+// Items an agent is working on, or that are merged, wait on nobody.
+export function yourMove(column, prState, agentStatus) {
+
+    if (column === 'doing' || column === 'done') {
+        return null;
+    }
+    if (column === 'ready') {
+        return { rank: 1, action: 'merge' };
+    }
+    if (prState?.changes) {
+        return { rank: 2, action: 'address comments on' };
+    }
+    if (prState?.ci === 'failing') {
+        return { rank: 3, action: 'fix pipeline on' };
+    }
+    if (agentStatus === 'stopped') {
+        return { rank: 4, action: 'check stopped agent' };
+    }
+    if (prState?.state === 'open' && !prState.draft && !prState.reviewers?.length) {
+        return { rank: 5, action: 'assign a reviewer on' };
+    }
+
+    return null;
+}
+
 // One item per PR/MR (deduped across sessions and agents), plus running or stopped agents with no MR yet.
 // Agents whose description names a known MR (!123) count as work on it; finished agents without an MR are dropped.
 export function workItems(sessions, prOf = () => null) {
@@ -678,6 +704,7 @@ export function workItems(sessions, prOf = () => null) {
         const agent = agents[0] ?? null;
         const prState = it.pr ? prOf(it.pr) : null;
         const stage = lifecycle(it.pr, prState, agent);
+        const col = itemColumn(prState, agent, !!it.pr);
 
         return {
             key: it.key,
@@ -686,7 +713,8 @@ export function workItems(sessions, prOf = () => null) {
             title: prState?.title ?? agent?.description ?? it.pr,
             pr: it.pr,
             prState,
-            column: itemColumn(prState, agent, !!it.pr),
+            column: col,
+            move: yourMove(col, prState, agent?.status),
             stage,
             stageLabel: prState?.state === 'closed' ? 'Closed' : LIFECYCLE[stage],
             agentStatus: agent?.status ?? null,

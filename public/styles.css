@@ -98,8 +98,8 @@ a.chip:hover { text-decoration:underline; }
 .main { flex:1; display:flex; min-height:0; }
 .left { flex:1; min-width:0; display:flex; flex-direction:column; container-type:inline-size; }
 #chat { position:relative; width:420px; flex-shrink:0; background:var(--bg); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
-/* wa-dropdown is display:contents, so the trigger itself is placed: top-right in the status bar's reserved right padding */
-.c-menu > .quiet { position:absolute; top:6px; right:8px; z-index:1; }
+/* slim header row for the chat menu (wa-dropdown is display:contents, so the trigger is the flex item) */
+.c-head { flex-shrink:0; height:30px; display:flex; align-items:center; justify-content:flex-end; padding:0 8px; border-bottom:1px solid var(--line-soft); }
 .c-hidden { align-self:center; flex-shrink:0; font-size:12px; color:var(--muted); }
 .c-hidden .show { padding:0; }
 .c-feed { flex:1; overflow:auto; padding:14px 12px; display:flex; flex-direction:column; gap:10px; background:var(--canvas); }
@@ -131,18 +131,22 @@ a.chip:hover { text-decoration:underline; }
 .c-ask p { margin:2px 0 0; }
 .replies { display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0; margin-top:-4px; }
 .replies wa-button { font-size:12.5px; }
-/* status bar: fixed height so toggling it never moves the feed; right padding leaves room for the chat menu button */
-.c-status { --c:var(--c-idle); flex-shrink:0; height:34px; display:flex; align-items:center; gap:8px; padding:0 48px 0 14px; font-size:12.5px; font-weight:500; white-space:nowrap; overflow:hidden; color:var(--muted); background:var(--bg); border-bottom:2px solid var(--line-soft); }
-.c-status .pulse { flex-shrink:0; background:var(--c); animation:none; }
-.c-status.working { --c:var(--c-doing); color:var(--c-doing); background:var(--accent-bg); border-bottom-color:var(--c-doing); }
-.c-status.asking { --c:var(--c-warn); color:var(--c-warn); background:color-mix(in srgb, var(--c-warn) 12%, var(--bg)); border-bottom-color:var(--c-warn); }
-.c-status.error { --c:var(--c-danger); color:var(--c-danger); background:color-mix(in srgb, var(--c-danger) 12%, var(--bg)); border-bottom-color:var(--c-danger); }
+/* Input dock: a fixed height (26px status line + 56px one-row input) that never changes, so the feed's height never does.
+   Its column is bottom-aligned, so anything taller (a growing textarea, the error, the ask note) overflows upward over the feed. */
+.c-input { position:relative; z-index:1; flex-shrink:0; height:82px; display:flex; flex-direction:column; justify-content:flex-end; }
+.c-input > * { flex-shrink:0; }
+.c-status { --c:var(--c-idle); height:26px; display:flex; align-items:center; gap:7px; padding:0 14px; font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; color:var(--muted); background:var(--bg); border-top:1px solid var(--line); }
+#status-text { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.c-status .pulse { flex-shrink:0; width:6px; height:6px; background:var(--c); animation:none; }
+.c-status.working { --c:var(--c-doing); color:var(--c-doing); background:var(--accent-bg); border-top-color:var(--c-doing); }
+.c-status.asking { --c:var(--c-warn); color:var(--c-warn); background:color-mix(in srgb, var(--c-warn) 12%, var(--bg)); border-top-color:var(--c-warn); }
+.c-status.error { --c:var(--c-danger); color:var(--c-danger); background:color-mix(in srgb, var(--c-danger) 12%, var(--bg)); border-top-color:var(--c-danger); }
 .stale-note { display:none; padding:4px 14px; font-size:12px; color:var(--c-danger); }
 .disconnected .stale-note { display:block; }
 .disconnected .masters { opacity:.5; }
 .c-status:not(.idle) .pulse { animation:pulse 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .pulse, .dot.live, .stage .bar i.now { animation:none !important; } }
-.c-input { position:relative; display:flex; padding:10px 12px 12px; border-top:1px solid var(--line); }
+.c-row { position:relative; display:flex; padding:4px 12px 12px; background:var(--bg); }
 #msg { flex:1; font-size:13.5px; --wa-form-control-padding-block:8px; --wa-form-control-padding-inline:10px; --wa-form-control-border-radius:8px; }
 #msg::part(textarea) { min-height:38px; max-height:180px; padding-right:44px; overflow:auto; }
 .c-send { position:absolute; right:17px; bottom:17px; width:28px; height:28px; border-radius:50%; border:0; display:grid; place-items:center; background:var(--accent); color:#fff; cursor:pointer; padding:0; }
@@ -152,8 +156,8 @@ a.chip:hover { text-decoration:underline; }
 .send-now { margin-left:6px; --wa-form-control-height:20px; --wa-form-control-padding-inline:8px; font-size:11px; }
 .send-now::part(base) { color:var(--accent); }
 #c-err:empty { display:none; }
-/* overlays the feed's bottom edge instead of pushing it up */
-#c-err { position:absolute; left:12px; right:12px; bottom:100%; margin:0 0 6px; padding:6px 10px; border-radius:8px; background:color-mix(in srgb, var(--c-needs) 10%, var(--bg)); border:1px solid color-mix(in srgb, var(--c-needs) 40%, transparent); box-shadow:var(--shadow); }
+/* in the dock's upward overflow, so it overlays the feed's bottom edge instead of pushing it up */
+#c-err { margin:0 12px 6px; padding:6px 10px; border-radius:8px; background:color-mix(in srgb, var(--c-needs) 10%, var(--bg)); border:1px solid color-mix(in srgb, var(--c-needs) 40%, transparent); box-shadow:var(--shadow); }
 .detail { padding:2px 4px 12px; cursor:default; }
 .detail h4 { margin:12px 0 4px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; }
 .files { list-style:none; margin:0; padding:0; }

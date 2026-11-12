@@ -349,7 +349,8 @@ assert.deepEqual(limitLeft({ used: 104, resetsAt: now - 1 }, now), { left: 0, un
 assert.deepEqual(limitLeft({ used: 0, resetsAt: now + 2 * 1440 * 60_000 }, now), { left: 100, until: '2d' });
 console.log('ok limit peaks');
 
-import { repoPath, groupIssues, milestoneOf, activeMilestones } from './server.mjs';
+import { repoPath, groupIssues, milestoneOf, activeMilestones, keepMilestone, worksOn } from './server.mjs';
+import { inMilestone } from './public/milestone.js';
 assert.deepEqual(repoPath('git@gitlab.com:tritt/accounting/pracsys.git\n'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
 assert.deepEqual(repoPath('https://gitlab.com/tritt/accounting/pracsys.git'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
 assert.deepEqual(repoPath('ssh://git@gitlab.example.com:2222/g/sub/p.git'), { host: 'gitlab.example.com', path: 'g/sub/p' });
@@ -365,13 +366,26 @@ assert.deepEqual(Object.fromEntries(Object.entries(g.groups).map(([k, v]) => [k,
     { closable: [2], doing: [4], assigned: [3, 5], unassigned: [6], done: [1] });
 assert.deepEqual([g.total, g.closed, g.groups.assigned[0].assignees], [6, 1, ['Børre']]);
 const msList = [{ id: 7, title: 'Supplier automation' }, { id: 8, title: 'Reports' }];
-assert.equal(milestoneOf({ milestone: { id: 9, title: 'Old' }, target: 'supplier-automation' }, msList), 'Old');
-assert.equal(milestoneOf({ milestone: null, target: 'supplier-automation' }, msList), 'Supplier automation');
+assert.deepEqual(milestoneOf({ milestone: { id: 9, title: 'Old', due_date: null }, target: 'supplier-automation' }, msList), { id: 9, title: 'Old' });
+assert.deepEqual(milestoneOf({ milestone: null, target: 'supplier-automation' }, msList), { id: 7, title: 'Supplier automation' });
 assert.equal(milestoneOf({ milestone: null, target: 'main' }, msList), null);
 assert.deepEqual(activeMilestones([
-    { state: 'merged', milestone: { title: 'Reports' } }, { state: 'merged', milestone: { title: 'Reports' } },
-    { state: 'open', target: 'supplier-automation' }, { state: 'open', milestone: { title: 'Closed one' } }
-], msList), ['Supplier automation', 'Reports']);
+    { state: 'merged', milestone: { id: 8, title: 'Reports' } }, { state: 'merged', milestone: { id: 8, title: 'Reports' } },
+    { state: 'open', target: 'supplier-automation' }, { state: 'open', milestone: { id: 99, title: 'Closed one' } }
+], msList), [7, 8]);
+// an issue whose own milestone isn't the selected one is dropped, even if the API returned it (same-titled group milestone)
+assert.deepEqual(keepMilestone([{ iid: 1, milestone: 7 }, { iid: 2, milestone: 70 }, { iid: 3 }], 7).map(i => i.iid), [1]);
+// related MRs that only mention the issue don't count as work on it
+assert.equal(worksOn({ title: '#2223 - Fix VAT', source_branch: 'x' }, 2223), true);
+assert.equal(worksOn({ title: 'Fix VAT', source_branch: '2223-fix-vat' }, 2223), true);
+assert.equal(worksOn({ title: '#2216 - Don\'t apply VAT code', source_branch: '2216-vat' }, 2223), false);
+assert.equal(worksOn({ title: '#22230 - Other', source_branch: 'x' }, 2223), false);
+const row = (pr, milestone) => ({ pr, milestone });
+assert.equal(inMilestone(row('u', { id: 7, title: 'S' }), { id: 7 }), true);
+assert.equal(inMilestone(row('u', { id: 8, title: 'R' }), { id: 7 }), false);
+assert.equal(inMilestone(row('u', null), { id: 7 }), false);
+assert.equal(inMilestone(row(null, null), { id: 7 }), true); // an agent without an MR stays
+assert.equal(inMilestone(row('u', null), null), true); // no milestone selected
 console.log('ok milestones');
 
 import { chatStatus } from './public/core.js';

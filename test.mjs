@@ -512,3 +512,16 @@ assert.equal(stepKey(['a', 'b', 'c'], null, 1), 'a');
 assert.equal(stepKey(['a', 'b', 'c'], 'gone', -1), 'c');
 assert.equal(stepKey([], 'a', 1), null);
 console.log('ok keys');
+
+import { vendorPath } from './server.mjs';
+assert.equal(vendorPath('/vendor/webawesome/webawesome.loader.js'), 'webawesome/webawesome.loader.js');
+assert.equal(vendorPath('/vendor/fonts/inter-latin-400-normal.woff2'), 'fonts/inter-latin-400-normal.woff2');
+assert.equal(vendorPath('/vendor/a%20b.css'), 'a b.css');
+for (const p of [
+    '/vendor/../server.mjs', '/vendor/%2e%2e/server.mjs', '/vendor/%2E%2E%2Fserver.mjs', '/vendor/a/..%2f..%2fserver.mjs',
+    '/vendor/..%5c..%5cserver.js', '/vendor/a%00.js', '/vendor/%E0%A4%A.js', '/vendor//etc/x.js', '/vendor/.hidden.js',
+    '/vendor/VENDOR.md', '/vendor/x.html', '/vendor/', '/vendor', '/vendorx/a.js', '/server.mjs', null
+]) {
+    assert.equal(vendorPath(p), null, p);
+}
+console.log('ok vendor');

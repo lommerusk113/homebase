@@ -1,0 +1,7 @@
+/* Latin subsets from @fontsource/inter and @fontsource/jetbrains-mono 5.3.0 (see ../VENDOR.md). Other scripts fall back per glyph. */
+@font-face { font-family:Inter; font-style:normal; font-display:swap; font-weight:400; src:url(inter-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family:Inter; font-style:normal; font-display:swap; font-weight:500; src:url(inter-latin-500-normal.woff2) format('woff2'); }
+@font-face { font-family:Inter; font-style:normal; font-display:swap; font-weight:600; src:url(inter-latin-600-normal.woff2) format('woff2'); }
+@font-face { font-family:Inter; font-style:normal; font-display:swap; font-weight:700; src:url(inter-latin-700-normal.woff2) format('woff2'); }
+@font-face { font-family:'JetBrains Mono'; font-style:normal; font-display:swap; font-weight:400; src:url(jetbrains-mono-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family:'JetBrains Mono'; font-style:normal; font-display:swap; font-weight:500; src:url(jetbrains-mono-latin-500-normal.woff2) format('woff2'); }

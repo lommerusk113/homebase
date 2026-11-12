@@ -71,7 +71,7 @@ function addShowMore(feed) {
     }
 }
 
-// Fixed-height bar at the top of the column: changing it never resizes the feed, so the scroll position stays put.
+// Fixed-height line above the input (in the fixed-height dock): changing it never resizes the feed, so the scroll position stays put.
 function setStatus(data) {
     const { kind, text } = chatStatus(data);
     $('status').className = `c-status ${kind}`; $('status-text').textContent = text;

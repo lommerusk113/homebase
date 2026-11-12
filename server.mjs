@@ -1005,35 +1005,64 @@ const isGitLab = repo => repo.host.includes('gitlab');
 const api = (repo, path) => run(isGitLab(repo) ? 'glab' : 'gh', ['api', path]).then(({ stdout }) => JSON.parse(stdout));
 export const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+// Open milestones with their issue counts (closed/total) for the selector menu.
 async function fetchMilestones(repo) {
 
     if (isGitLab(repo)) {
-        const list = await api(repo, `projects/${encodeURIComponent(repo.path)}/milestones?state=active&include_ancestors=true&per_page=100`);
-        return list.map(m => ({ id: m.id, title: m.title, due: m.due_date ?? null, url: m.web_url }));
+        const p = encodeURIComponent(repo.path);
+        const list = await api(repo, `projects/${p}/milestones?state=active&include_ancestors=true&per_page=100`);
+        // ponytail: counts by title, so a same-titled group milestone would add to them; exact counts need each milestone's issue list
+        return Promise.all(list.map(async m => {
+            const c = (await api(repo, `projects/${p}/issues_statistics?milestone=${encodeURIComponent(m.title)}`).catch(() => null))?.statistics?.counts;
+            return { id: m.id, title: m.title, due: m.due_date ?? null, url: m.web_url, group: !!m.group_id, closed: c?.closed ?? null, total: c?.all ?? null };
+        }));
     }
     const list = await api(repo, `repos/${repo.path}/milestones?state=open&per_page=100`);
 
-    return list.map(m => ({ id: m.number, title: m.title, due: m.due_on?.slice(0, 10) ?? null, url: m.html_url }));
+    return list.map(m => ({ id: m.number, title: m.title, due: m.due_on?.slice(0, 10) ?? null, url: m.html_url, closed: m.closed_issues, total: m.open_issues + m.closed_issues }));
 }
 
-// ponytail: one page of 100 issues; add --paginate if a milestone outgrows it
+// Every page of a list endpoint, 100 per page.
+async function pages(repo, path) {
+
+    const out = [];
+    for (let page = 1; ; page++) {
+        const list = await api(repo, `${path}${path.includes('?') ? '&' : '?'}per_page=100&page=${page}`);
+        out.push(...list);
+        if (list.length < 100) {
+            return out;
+        }
+    }
+}
+
+// Only issues whose own milestone is the selected one; the API's milestone filter is not trusted on its own.
+export const keepMilestone = (issues, id) => issues.filter(i => i.milestone === id);
+
 async function fetchIssues(repo, ms) {
 
     if (isGitLab(repo)) {
-        const list = await api(repo, `projects/${encodeURIComponent(repo.path)}/issues?milestone=${encodeURIComponent(ms.title)}&per_page=100`);
-        return list.map(i => ({ iid: i.iid, title: i.title, state: i.state === 'closed' ? 'closed' : 'open', assignees: (i.assignees ?? []).map(a => a.name), url: i.web_url }));
+        const p = encodeURIComponent(repo.path);
+        // a project milestone by id; a group milestone has no project-scoped endpoint, so by title, then filtered by id
+        const path = ms.group ? `projects/${p}/issues?milestone=${encodeURIComponent(ms.title)}&state=all` : `projects/${p}/milestones/${ms.id}/issues`;
+        const list = (await pages(repo, path)).map(i => ({ iid: i.iid, title: i.title, state: i.state === 'closed' ? 'closed' : 'open', assignees: (i.assignees ?? []).map(a => a.name), url: i.web_url, milestone: i.milestone?.id }));
+        return keepMilestone(list, ms.id);
     }
-    const list = await api(repo, `repos/${repo.path}/issues?milestone=${ms.id}&state=all&per_page=100`);
+    const list = (await pages(repo, `repos/${repo.path}/issues?milestone=${ms.id}&state=all`)).filter(i => !i.pull_request)
+        .map(i => ({ iid: i.number, title: i.title, state: i.state, assignees: (i.assignees ?? []).map(a => a.login), url: i.html_url, milestone: i.milestone?.number }));
 
-    return list.filter(i => !i.pull_request).map(i => ({ iid: i.number, title: i.title, state: i.state, assignees: (i.assignees ?? []).map(a => a.login), url: i.html_url }));
+    return keepMilestone(list, ms.id);
 }
 
-// ponytail: related MRs include ones that only mention the issue; GitHub's linked PRs need GraphQL, so GitHub issues are never "in progress" or "can be closed"
+// An MR works on an issue when its title or source branch names the issue number ("#2223 - …", "2223-fix-…").
+// related_merge_requests also returns MRs that only mention the issue in a description or comment.
+export const worksOn = (mr, iid) => new RegExp(`(^|\\D)${iid}(\\D|$)`).test(`${mr.title} ${mr.source_branch}`);
+
+// ponytail: GitHub's linked PRs need GraphQL, so GitHub issues are never "in progress" or "can be closed"
 async function fetchLinks(repo, iid) {
 
     const list = await api(repo, `projects/${encodeURIComponent(repo.path)}/issues/${iid}/related_merge_requests`);
 
-    return list.map(m => ({ iid: m.iid, url: m.web_url, state: { opened: 'open' }[m.state] ?? m.state }));
+    return list.filter(m => worksOn(m, iid)).map(m => ({ iid: m.iid, url: m.web_url, state: { opened: 'open' }[m.state] ?? m.state }));
 }
 
 // Issues of a milestone in the order the user acts on them. links: iid -> [{ state: open|merged|closed }] for open issues.
@@ -1053,28 +1082,31 @@ export function groupIssues(issues, links = {}) {
     return { total: issues.length, closed: groups.done.length, groups };
 }
 
-// Milestone title of an MR: its own milestone, else the milestone whose slug is its target branch (supplier-automation).
+// Milestone { id, title } of an MR: its own milestone, else the listed one whose slug is its target branch (supplier-automation).
 export function milestoneOf(pr, list) {
-    return pr ? pr.milestone?.title ?? list.find(m => slug(m.title) === pr.target)?.title ?? null : null;
+
+    const m = pr && (pr.milestone ?? list.find(m => slug(m.title) === pr.target));
+
+    return m ? { id: m.id, title: m.title } : null;
 }
 
-// Listed milestones that the board's MRs belong to, open MRs weighing most.
+// Ids of listed milestones that the board's MRs belong to, open MRs weighing most.
 export function activeMilestones(mrs, list) {
 
     const score = new Map();
     for (const mr of mrs) {
-        const t = milestoneOf(mr, list);
-        if (list.some(m => m.title === t)) {
-            score.set(t, (score.get(t) ?? 0) + (mr.state === 'open' ? 10 : 1));
+        const id = milestoneOf(mr, list)?.id;
+        if (list.some(m => m.id === id)) {
+            score.set(id, (score.get(id) ?? 0) + (mr.state === 'open' ? 10 : 1));
         }
     }
 
-    return [...score].sort((a, b) => b[1] - a[1]).map(([t]) => t);
+    return [...score].sort((a, b) => b[1] - a[1]).map(([id]) => id);
 }
 
 async function milestoneIssues(project, repo, ms) {
 
-    const issues = await cached(`issues:${project}:${ms.title}`, MS_ISSUES_TTL_MS, () => fetchIssues(repo, ms));
+    const issues = await cached(`issues:${project}:${ms.id}`, MS_ISSUES_TTL_MS, () => fetchIssues(repo, ms));
     const links = {};
     if (isGitLab(repo)) {
         const open = issues.filter(i => i.state === 'open');
@@ -1088,8 +1120,9 @@ async function milestoneIssues(project, repo, ms) {
     return { ...ms, ...groupIssues(issues, links) };
 }
 
-// A project's open milestones, the ones its MRs point at, and the issue groups of the chosen (else the most active) one.
-async function milestones(project, title) {
+// A project's open milestones, the ids its MRs point at, and the issue groups of the chosen one.
+// pick: a milestone id (or a title, as older saved choices hold), "none" for no milestone, empty for the most active one.
+async function milestones(project, pick) {
 
     const repo = repoPaths.get(project);
     if (!repo) {
@@ -1099,9 +1132,9 @@ async function milestones(project, title) {
     const list = await cached(`ms:${project}`, MS_LIST_TTL_MS, () => fetchMilestones(repo));
     const mrs = [...prs].filter(([url, hit]) => hit.value && sameRepo(url, project)).map(([, hit]) => hit.value);
     const detected = activeMilestones(mrs, list);
-    const pick = list.find(m => m.title === title) ?? list.find(m => m.title === detected[0]);
+    const ms = pick === 'none' ? null : list.find(m => String(m.id) === pick || m.title === pick) ?? list.find(m => m.id === detected[0]);
 
-    return { project, milestones: list, detected, selected: pick ? await milestoneIssues(project, repo, pick) : null };
+    return { project, milestones: list, detected, selected: ms ? await milestoneIssues(project, repo, ms) : null };
 }
 
 // HOMEBASE_STATUSLINE_DIR lets a test server read sample dumps instead of the real folder.

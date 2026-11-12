@@ -1,7 +1,17 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago } from './core.js';
+import { $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago, hooks } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat } from './chat.js';
+import { milestoneSelector, inMilestone } from './milestone.js';
+
+// One milestone pill for the selected project (none for "All"); it filters the list. Rebuilt only when the project changes.
+let pillFor = null, milestone = null;
+hooks.inMilestone = x => inMilestone(x, milestone);
+function renderMilestone() {
+    if (pillFor === state.project) return;
+    pillFor = state.project; milestone = null;
+    $('milestone-slot').replaceChildren(...(pillFor === 'all' ? [] : [milestoneSelector(pillFor, { onChange: m => { milestone = m; renderBoard(); } })]));
+}
 
 // Web Awesome's dark theme is a class; follow the OS like the rest of the page does.
 const dark = matchMedia('(prefers-color-scheme: dark)');
@@ -24,6 +34,7 @@ function renderProjects() {
     if (state.project !== 'all' && !state.tracked.includes(state.project)) state.project = 'all';
     const names = [...state.tracked].sort((a, b) => a.localeCompare(b));
     fillSelect($('project'), [['all', 'All my projects'], ...names.map(n => [n, n])], state.project);
+    renderMilestone();
 }
 
 function renderDialog() {
@@ -125,7 +136,7 @@ const project = $('project');
 project.addEventListener('wa-after-hide', e => { if (e.target === project) renderProjects(); });
 project.addEventListener('change', () => {
     if (!project.value || project.value === state.project) return;
-    state.project = project.value; store.set('project', state.project); renderBoard(); refreshChat();
+    state.project = project.value; store.set('project', state.project); renderMilestone(); renderBoard(); refreshChat();
 });
 document.addEventListener('keydown', e => {
     // Escape that closed the select or the dialog isn't a "deselect the row"

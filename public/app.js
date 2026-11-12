@@ -2,6 +2,7 @@
 import { $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat } from './chat.js';
+import { mountMilestones } from './milestone.js';
 
 // Web Awesome's dark theme is a class; follow the OS like the rest of the page does.
 const dark = matchMedia('(prefers-color-scheme: dark)');
@@ -133,4 +134,5 @@ document.addEventListener('keydown', e => {
 });
 
 initChat();
+mountMilestones($('milestones'), () => state);
 refresh(); setInterval(refresh, 3000);

@@ -44,6 +44,23 @@ const a = summarizeAgent({ description: 'Implement #1', finished: true }, [
 assert.deepEqual([a.status, a.pr, a.branch], ['done', 'https://gitlab.com/x/y/-/merge_requests/7', 'b1']);
 assert.equal(summarizeAgent({ finished: false }, [], 1_000).status, 'running');
 assert.equal(summarizeAgent({ finished: false }, [], 600_000).status, 'stopped');
+import { agentStatus } from './server.mjs';
+const MIN = 60_000;
+const call = (...ids) => ({ type: 'assistant', message: { content: ids.map(id => ({ type: 'tool_use', id, name: 'Bash' })) } });
+const result = id => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id }] } });
+const ended = { type: 'assistant', message: { content: [{ type: 'text', text: 'Done here.' }] } };
+const noise = { type: 'api-request', message: { content: [{ type: 'tool_use', id: 'x' }] } };
+const st = (entries, ageMs, meta = {}) => agentStatus(meta, entries, ageMs);
+assert.deepEqual(st([ended], 99 * MIN, { finished: true }), { status: 'done' });
+assert.equal(st([call('a')], 25 * MIN).status, 'running'); // long Bash
+assert.equal(st([call('a'), noise], 31 * MIN).status, 'stopped'); // pending call capped; non-turn entries ignored
+assert.equal(st([call('a', 'b'), result('a')], 25 * MIN).status, 'running'); // parallel call b still pending
+assert.equal(st([call('a'), result('a')], 9 * MIN).status, 'running'); // thinking
+assert.equal(st([call('a'), result('a')], 11 * MIN).status, 'stopped');
+assert.equal(st([call('a'), result('a'), ended], 1 * MIN).status, 'running');
+assert.equal(st([call('a'), result('a'), ended], 3 * MIN).status, 'stopped'); // ended its turn without handing back
+assert.equal(st([call('old'), result('x'), ended], 3 * MIN).status, 'stopped'); // an unanswered call from an earlier turn is not pending
+assert.deepEqual(st([call('a'), result('a'), { type: 'assistant', isApiErrorMessage: true, message: { content: [{ type: 'text', text: 'API Error' }] } }], 1_000), { status: 'stopped', stopReason: 'api-error' });
 console.log('ok agents');
 
 import { splitTldr, toolSummary, chatItems, pendingQuestion, sendSteps } from './server.mjs';
@@ -153,6 +170,7 @@ const open = extra => ({ state: 'open', reviewers: [], ...extra });
 assert.equal(nextStep({ state: 'merged' }, { status: 'running', stage: 1 }), 'Merged');
 assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebase !7' }), 'Rebase !7 is verifying…');
 assert.equal(nextStep(null, { status: 'stopped' }), 'Agent stopped — check the chat');
+assert.equal(nextStep(null, { status: 'stopped', stopReason: 'api-error' }), 'Agent hit an API error — continue it');
 assert.equal(nextStep(open({ changes: true, reviewers: ['Ann'] }), null), 'Address review comments from Ann');
 assert.equal(nextStep(open({ changes: true, reviewers: ['Ann'], changesBy: ['bob'] }), null), 'Address review comments from bob');
 assert.equal(nextStep(open({ reviewers: ['Ann', 'Bo'] }), { status: 'done' }), 'Waiting for review by Ann, Bo');

@@ -14,7 +14,7 @@ const tmux = args => run('tmux', tmuxArgs(args));
 const ROOT = join(homedir(), '.claude', 'projects');
 const PORT = Number(process.env.PORT ?? 4321);
 const MAX_AGE_MS = Number(process.env.MAX_AGE_DAYS ?? 3) * 864e5;
-// ponytail: only the tail is parsed (transcripts reach 70+ MB); token totals would need a full scan, add with an offset cache if wanted
+// ponytail: only the tail is parsed (transcripts reach 70+ MB); subagent token totals use the offset reader below
 const TAIL_BYTES = 512 * 1024;
 const WORKING_MS = 10_000;
 const WAITING_MS = 30 * 60_000;
@@ -471,6 +471,79 @@ export function summarizeAgent(meta, entries, ageMs, id) {
     };
 }
 
+const usageCache = new Map(); // subagent transcript path -> { offset, byId, first, last, totals }
+const USAGE_KEYS = { input: 'input_tokens', output: 'output_tokens', cacheRead: 'cache_read_input_tokens', cacheWrite: 'cache_creation_input_tokens' };
+
+// Folds complete JSONL lines into u. Streamed chunks repeat a message id with the same usage, so the last one per id wins.
+export function addUsage(u, text) {
+
+    for (const line of text.split('\n')) {
+        let e;
+        try {
+            e = JSON.parse(line);
+        } catch {
+            continue;
+        }
+        const t = Date.parse(e.timestamp);
+        if (t) {
+            u.first = Math.min(u.first ?? t, t);
+            u.last = Math.max(u.last ?? t, t);
+        }
+        if (e.type === 'assistant' && e.message?.usage) {
+            u.byId.set(e.message.id ?? Symbol(), e.message.usage);
+        }
+    }
+
+    u.totals = Object.fromEntries(Object.entries(USAGE_KEYS).map(([k, f]) => [k, [...u.byId.values()].reduce((n, x) => n + (x[f] ?? 0), 0)]));
+
+    return u;
+}
+
+// Token totals and first/last timestamp of a transcript, reading only the bytes appended since the last call.
+export async function readUsage(path, size) {
+
+    size ??= (await stat(path)).size;
+    let u = usageCache.get(path);
+    if (!u || size < u.offset) {
+        u = { offset: 0, byId: new Map(), first: null, last: null, totals: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+        usageCache.set(path, u);
+    }
+
+    if (size > u.offset) {
+        const fh = await open(path, 'r');
+        try {
+            const buf = Buffer.alloc(size - u.offset);
+            const { bytesRead } = await fh.read(buf, 0, buf.length, u.offset);
+            // ponytail: a partial trailing line isn't buffered; the offset stops before it and the line is re-read once complete
+            const end = buf.lastIndexOf(10, bytesRead - 1) + 1;
+            if (end) {
+                addUsage(u, buf.toString('utf8', 0, end));
+                u.offset += end;
+            }
+        } finally {
+            await fh.close();
+        }
+    }
+
+    return { ...u.totals, first: u.first, last: u.last };
+}
+
+// "14m", "1h 05m"
+export function formatDuration(ms) {
+
+    const m = Math.round(ms / 60_000);
+
+    return m < 1 ? '<1m' : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+}
+
+// "1.2M tok"
+export function formatTokens(n) {
+
+    const [d, unit] = n >= 1e6 ? [1e6, 'M'] : n >= 1e3 ? [1e3, 'k'] : [1, ''];
+
+    return `${+(n / d).toFixed(n >= 10 * d || d === 1 ? 0 : 1)}${unit} tok`;
+}
+
 async function agents(sessionDir, now) {
 
     let names;
@@ -509,7 +582,7 @@ async function agents(sessionDir, now) {
             hit.meta = JSON.parse(await readFile(join(sessionDir, name), 'utf8'));
         }
 
-        out.push({ id, started: st.birthtimeMs, updated: st.mtimeMs, ...summarizeAgent(hit.meta, hit.entries, now - st.mtimeMs, id) });
+        out.push({ id, started: st.birthtimeMs, updated: st.mtimeMs, usage: await readUsage(path, st.size), ...summarizeAgent(hit.meta, hit.entries, now - st.mtimeMs, id) });
     }
 
     const rank = { running: 0, stopped: 1, done: 2 };
@@ -740,7 +813,7 @@ export function sameRepo(url, project) {
     return url.match(/^https:\/\/[^/]+\/(.+?)(?:\/-)?\/(?:merge_requests|pull)\//)?.[1].split('/').pop() === project;
 }
 
-export function workItems(sessions, prOf = () => null) {
+export function workItems(sessions, prOf = () => null, now = Date.now()) {
 
     const byUrl = new Map();
     const add = (url, project) => {
@@ -794,6 +867,10 @@ export function workItems(sessions, prOf = () => null) {
         const stage = lifecycle(it.pr, prState, agent);
         const col = itemColumn(prState, agent, !!it.pr);
         const title = prState?.title ?? agent?.description ?? it.pr;
+        const tokens = Object.fromEntries(Object.keys(USAGE_KEYS).map(k => [k, agents.reduce((n, a) => n + (a.usage?.[k] ?? 0), 0)]));
+        const total = Object.values(tokens).reduce((a, b) => a + b, 0);
+        // summed per agent, so idle gaps between agents don't count; a running agent counts up to now
+        const timeMs = agents.reduce((n, a) => n + (a.usage?.first != null ? (a.status === 'running' ? now : a.usage.last) - a.usage.first : 0), 0);
 
         return {
             key: it.key,
@@ -814,9 +891,48 @@ export function workItems(sessions, prOf = () => null) {
             files: agent?.files ?? [],
             activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             next: nextStep(prState, agent),
-            action: rowAction(it.pr, prState, agent, title)
+            action: rowAction(it.pr, prState, agent, title),
+            tokens: total ? formatTokens(total) : null,
+            tokensTitle: total ? `input ${tokens.input.toLocaleString('en')} · output ${tokens.output.toLocaleString('en')} · cache read ${tokens.cacheRead.toLocaleString('en')} · cache write ${tokens.cacheWrite.toLocaleString('en')}` : null,
+            time: timeMs > 0 ? formatDuration(timeMs) : null
         };
     });
+}
+
+// HOMEBASE_STATUSLINE_DIR lets a test server read sample dumps instead of the real folder.
+const STATUS_DIR = process.env.HOMEBASE_STATUSLINE_DIR ?? join(homedir(), '.claude', 'homebase', 'statusline');
+
+// Status-line JSON -> { fiveHour, sevenDay: { used, resetsAt } }; windows past their reset are dropped, as Claude Code does.
+export function limitsOf(j, now = Date.now()) {
+
+    const win = w => (typeof w?.used_percentage === 'number' && w.resets_at * 1000 > now ? { used: w.used_percentage, resetsAt: w.resets_at * 1000 } : null);
+    const out = { fiveHour: win(j?.rate_limits?.five_hour), sevenDay: win(j?.rate_limits?.seven_day) };
+
+    return out.fiveHour || out.sevenDay ? out : null;
+}
+
+// Newest status-line dump (written by scripts/statusline.sh) that carries rate limits, else null.
+// ponytail: one file per session accumulates in STATUS_DIR; prune old ones if the folder ever gets big
+async function limits() {
+
+    let names;
+    try {
+        names = await readdir(STATUS_DIR);
+    } catch {
+        return null;
+    }
+
+    const files = await Promise.all(names.filter(n => n.endsWith('.json')).map(async n => ({ n, t: (await stat(join(STATUS_DIR, n)).catch(() => ({ mtimeMs: 0 }))).mtimeMs })));
+    for (const { n } of files.sort((a, b) => b.t - a.t)) {
+        try {
+            const l = limitsOf(JSON.parse(await readFile(join(STATUS_DIR, n), 'utf8')));
+            if (l) {
+                return l;
+            }
+        } catch {}
+    }
+
+    return null;
 }
 
 async function transcript(dir, id) {
@@ -963,6 +1079,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             if (url.pathname === '/api/interrupt' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
                 await interrupt(url.searchParams.get('id'));
                 return res.end('ok');
+            }
+            if (url.pathname === '/api/limits') {
+                res.setHeader('content-type', 'application/json');
+                return res.end(JSON.stringify(await limits()));
             }
             if (url.pathname === '/api/transcript') {
                 res.setHeader('content-type', 'application/json');

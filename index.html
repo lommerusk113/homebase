@@ -69,7 +69,6 @@
   .main { flex:1; display:flex; min-height:0; }
   .left { flex:1; min-width:0; display:flex; flex-direction:column; container-type:inline-size; }
   #chat { width:420px; flex-shrink:0; background:var(--bg); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
-  .c-head { padding:8px 12px; border-bottom:1px solid var(--line); font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .c-feed { flex:1; overflow:auto; padding:14px 12px; display:flex; flex-direction:column; gap:10px; background:var(--canvas); }
   .bubble { flex-shrink:0; max-width:92%; border-radius:12px; padding:2px 12px; font-size:13.5px; line-height:1.6; overflow-wrap:anywhere; }
   .bubble.assistant { align-self:flex-start; background:var(--bg); border:1px solid var(--line); border-bottom-left-radius:4px; }
@@ -89,8 +88,14 @@
   .c-ask > span { flex:1; }
   .c-ask code { background:var(--chip); padding:1px 5px; border-radius:4px; white-space:nowrap; }
   .c-working { margin-top:8px; color:var(--muted); }
-  .c-input { display:flex; gap:8px; align-items:flex-end; padding:10px 12px 12px; border-top:1px solid var(--line); }
-  .c-input textarea { flex:1; field-sizing:content; min-height:38px; max-height:180px; resize:none; font:inherit; font-size:13.5px; color:var(--fg); background:var(--canvas); border:1px solid var(--line); border-radius:8px; padding:8px 10px; outline:none; }
+  .c-input { position:relative; display:flex; padding:10px 12px 12px; border-top:1px solid var(--line); }
+  .c-input textarea { flex:1; field-sizing:content; min-height:38px; max-height:180px; resize:none; font:inherit; font-size:13.5px; color:var(--fg); background:var(--canvas); border:1px solid var(--line); border-radius:8px; padding:8px 44px 8px 10px; outline:none; }
+  .c-send { position:absolute; right:17px; bottom:17px; width:28px; height:28px; border-radius:50%; border:0; display:grid; place-items:center; background:var(--accent); color:#fff; cursor:pointer; padding:0; }
+  .c-send:hover:not(:disabled) { filter:brightness(1.1); }
+  .c-send:disabled { opacity:.35; cursor:default; }
+  .c-send:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .send-now { appearance:none; margin-left:6px; border:1px solid var(--line); background:var(--bg); color:var(--accent); font:inherit; font-size:11px; font-weight:500; border-radius:99px; padding:0 8px; cursor:pointer; }
+  .send-now:hover { background:var(--hover); }
   .c-input textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
   .c-input textarea:read-only { opacity:.6; }
   #c-err:empty { display:none; }
@@ -178,12 +183,11 @@
     <div class="masters" id="masters"></div>
   </div>
   <aside id="chat">
-    <div class="c-head" id="chat-head"></div>
     <div class="c-feed" id="feed"></div>
     <div class="c-note c-working" id="working" hidden><span class="pulse"></span>Claude is working…</div>
     <div class="c-note c-ask" id="ask" hidden><span><b>Claude is asking:</b> <span id="ask-q"></span> Answer from any terminal: <code class="mono" id="ask-cmd"></code></span><button class="ghost" id="ask-copy">Copy</button></div>
     <div class="error" id="c-err"></div>
-    <form class="c-input" id="send"><textarea id="msg" rows="1" placeholder="Message Claude…"></textarea></form>
+    <form class="c-input" id="send"><textarea id="msg" rows="1" placeholder="Message Claude…"></textarea><button class="c-send" id="send-btn" type="submit" aria-label="Send" title="Send" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
   </aside>
 </div>
 <dialog id="dlg">
@@ -233,7 +237,7 @@
   const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
   const parse = v => { try { return JSON.parse(v) || []; } catch { return []; } };
   // ponytail: tracked list lives in this browser's localStorage; move to a projects.json if you want it across browsers
-  const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [] };
+  const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [], nudged: new Set() };
   const saveTracked = () => { store.set('tracked', JSON.stringify(state.tracked)); };
   const $ = id => document.getElementById(id);
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -398,7 +402,7 @@
       if (text !== lastSessions || Date.now() - lastRender > 60_000) {
         state.sessions = JSON.parse(text);
         lastSessions = text; lastRender = Date.now();
-        renderProjects(); renderBoard(); renderChatHead();
+        renderProjects(); renderBoard();
       }
     } catch { $('offline').hidden = false; }
     refreshChat();
@@ -411,14 +415,9 @@
 
   function bindChat(id) {
     state.chat = id; store.set('chat', id);
-    renderBoard(); renderChatHead(); refreshChat();
+    renderBoard(); refreshChat();
   }
 
-  // Which chat this is; switch via the project picker or a session on the left.
-  function renderChatHead() {
-    const s = chatSession(), t = s ? `${s.title || plain(s.lastPrompt) || s.id} · ${s.project}` : '';
-    $('chat-head').textContent = t; $('chat-head').title = t;
-  }
   // catch up on updates skipped while the project select had focus
   $('project').onblur = renderProjects;
 
@@ -433,7 +432,16 @@
       b.append(body);
     }
     const note = i.error ? 'Not sent' : i.sending ? 'sending…' : i.pending ? 'queued' : null;
-    if (note) b.append(el('div', 'b-note', note));
+    if (note) {
+      const n = el('div', 'b-note', note);
+      if (i.pending && !i.sending) {
+        const btn = el('button', 'send-now', 'Send now');
+        btn.title = "Interrupts Claude's current step so your message is handled now";
+        btn.onclick = () => sendNow(sid, key);
+        n.append(btn);
+      }
+      b.append(n);
+    }
     b.dataset.key = key;
     return b;
   }
@@ -473,7 +481,9 @@
     const landed = o => data.items.some(i => i.role === 'user' && norm(i.text) === norm(o.text) && !(Date.parse(i.at) < Date.parse(o.at) - 10_000));
     state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !(landed(o) || Date.now() - o.okAt > 30_000));
     // placed by send time, so one sent before a queued message stays above it
-    const items = [...data.items];
+    // a queued item whose Send now was clicked shows "sending…" until the queue entry resolves
+    state.nudged = new Set(data.items.filter(i => i.pending).map(i => `${s.id}:${i.at}`).filter(k => state.nudged.has(k)));
+    const items = data.items.map(i => (i.pending && state.nudged.has(`${s.id}:${i.at}`) ? { ...i, sending: true } : i));
     for (const o of state.outbox.filter(o => o.sid === s.id)) {
       const i = items.findIndex(x => Date.parse(x.at) > Date.parse(o.at));
       items.splice(i < 0 ? items.length : i, 0, o);
@@ -488,11 +498,23 @@
     feed.scrollTop = fresh || atBottom ? feed.scrollHeight : top;
   }
 
+  async function sendNow(sid, key) {
+    state.nudged.add(key); $('c-err').textContent = ''; refreshChat();
+    try {
+      const r = await fetch(`/api/interrupt?id=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'x-codetool': '1' } });
+      if (!r.ok) throw new Error(await r.text());
+    } catch (err) {
+      state.nudged.delete(key); $('c-err').textContent = err.message; refreshChat();
+    }
+  }
+
+  const syncSend = () => { $('send-btn').disabled = !$('msg').value.trim(); };
+  $('msg').oninput = syncSend;
   $('send').onsubmit = async e => {
     e.preventDefault();
     const s = chatSession(), ta = $('msg'), text = ta.value.trim();
     if (!s || !text) return;
-    ta.value = ''; $('c-err').textContent = ''; // clear at once; the "sending…" bubble shows progress
+    ta.value = ''; syncSend(); $('c-err').textContent = ''; // clear at once; the "sending…" bubble shows progress
     const out = { role: 'user', text, sid: s.id, at: new Date().toISOString(), sending: true };
     state.outbox = [...state.outbox.filter(o => !o.error), out];
     refreshChat();
@@ -503,14 +525,14 @@
       setTimeout(refreshChat, 1000);
     } catch (err) {
       $('c-err').textContent = err.message; out.error = err.message; refreshChat();
-      if (!ta.value) ta.value = text; // give the text back so it isn't lost
+      if (!ta.value) { ta.value = text; syncSend(); } // give the text back so it isn't lost
     }
   };
   $('msg').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('send').requestSubmit(); } };
 
   $('ask-copy').onclick = () => navigator.clipboard.writeText($('ask-cmd').textContent).then(() => { $('ask-copy').textContent = 'Copied'; setTimeout(() => { $('ask-copy').textContent = 'Copy'; }, 1500); });
 
-  $('project').onchange = e => { state.project = e.target.value; store.set('project', state.project); renderBoard(); renderChatHead(); refreshChat(); };
+  $('project').onchange = e => { state.project = e.target.value; store.set('project', state.project); renderBoard(); refreshChat(); };
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && state.selected) { state.selected = null; renderBoard(); }
   });

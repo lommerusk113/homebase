@@ -181,3 +181,8 @@ assert.deepEqual(items.map(i => [i.key, i.sessionId, i.column, i.stageLabel, i.u
 assert.deepEqual([items[0].title, items[0].tldr, items[0].activity.map(x => x.id)], ['One', 'new', ['impl1']]);
 assert.equal(items[1].next, 'Waiting for review by Ann');
 console.log('ok items');
+
+import { tmuxArgs } from './server.mjs';
+assert.deepEqual(tmuxArgs(['send-keys', '-t', 'cc-1', 'Escape'], undefined), ['send-keys', '-t', 'cc-1', 'Escape']);
+assert.deepEqual(tmuxArgs(['has-session'], 'hbtest'), ['-L', 'hbtest', 'has-session']);
+console.log('ok tmux socket');

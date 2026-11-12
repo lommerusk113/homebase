@@ -7,6 +7,9 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
+// HOMEBASE_TMUX_SOCKET points every tmux call at a separate server (tmux -L), so tests never touch real sessions.
+export const tmuxArgs = (args, socket = process.env.HOMEBASE_TMUX_SOCKET) => (socket ? ['-L', socket, ...args] : args);
+const tmux = args => run('tmux', tmuxArgs(args));
 
 const ROOT = join(homedir(), '.claude', 'projects');
 const PORT = Number(process.env.PORT ?? 4321);
@@ -778,10 +781,10 @@ async function send(id, text) {
     const steps = sendSteps(name, text);
 
     try {
-        await run('tmux', ['has-session', '-t', `=${name}`]);
+        await tmux(['has-session', '-t', `=${name}`]);
     } catch {
         refuseIfLiveElsewhere(Date.now() - s.updated);
-        await run('tmux', ['new-session', '-d', ...tmuxSession(id, s.cwd)]);
+        await tmux(['new-session', '-d', ...tmuxSession(id, s.cwd)]);
         await sleep(5000); // ponytail: fixed wait for claude to boot; poll capture-pane for its prompt if this proves flaky
     }
 
@@ -789,8 +792,23 @@ async function send(id, text) {
         if (args.at(-1) === 'Enter') {
             await sleep(300); // a separate, later Enter so Claude doesn't treat it as part of the typed/pasted text
         }
-        await run('tmux', args);
+        await tmux(args);
     }
+}
+
+// Escape interrupts Claude's turn, so queued messages are handled right away. Only in our own tmux session.
+async function interrupt(id) {
+
+    await resumable(id);
+    const name = tmuxName(id);
+
+    try {
+        await tmux(['has-session', '-t', `=${name}`]);
+    } catch {
+        throw Object.assign(new Error("Session isn't running in Homebase's tmux"), { status: 409 });
+    }
+
+    await tmux(['send-keys', '-t', name, 'Escape']);
 }
 
 async function readBody(req, max) {
@@ -825,6 +843,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             // POST + custom header: a cross-origin page can't send this without a preflight we never answer
             if (url.pathname === '/api/send' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
                 await send(url.searchParams.get('id'), await readBody(req, MAX_SEND));
+                return res.end('ok');
+            }
+            if (url.pathname === '/api/interrupt' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
+                await interrupt(url.searchParams.get('id'));
                 return res.end('ok');
             }
             if (url.pathname === '/api/transcript') {

@@ -422,3 +422,25 @@ import { findClearedSuccessor, tmuxFor } from './server.mjs';
     assert.equal(tmuxFor('abcdef0123', aliases), 'cc-abcdef01');
 }
 console.log('ok clear');
+
+import { pipelineOf, ciOf } from './server.mjs';
+{
+    const gl = { status: 'success', web_url: 'https://gl/p/1', finished_at: '2026-11-12T10:00:00Z', updated_at: '2026-11-12T10:01:00Z' };
+    assert.deepEqual(pipelineOf(gl), { status: 'success', url: 'https://gl/p/1', at: '2026-11-12T10:00:00Z' });
+    assert.deepEqual(pipelineOf({ status: 'running', web_url: 'u', updated_at: 't' }), { status: 'running', url: 'u', at: 't' });
+    assert.equal(pipelineOf(undefined), null); // MR without a pipeline
+    assert.equal(pipelineOf(null, [], 'pr'), null); // PR without checks
+    const ok = { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SUCCESS', completedAt: '2026-11-12T09:00:00Z' };
+    const skip = { __typename: 'CheckRun', status: 'COMPLETED', conclusion: 'SKIPPED', completedAt: '2026-11-12T09:30:00Z' };
+    const run = { __typename: 'CheckRun', status: 'IN_PROGRESS', conclusion: '', startedAt: '2026-11-12T09:10:00Z' };
+    const ctxFail = { __typename: 'StatusContext', state: 'FAILURE', startedAt: '2026-11-12T08:00:00Z' };
+    assert.deepEqual(pipelineOf(null, [ok, skip], 'https://gh/pull/1'), { status: 'success', url: 'https://gh/pull/1/checks', at: '2026-11-12T09:30:00Z' });
+    assert.equal(pipelineOf(null, [ok, run], 'p').status, 'running');
+    assert.equal(pipelineOf(null, [ok, run, ctxFail], 'p').status, 'failed');
+    assert.equal(pipelineOf(null, [{ __typename: 'StatusContext', state: 'PENDING' }], 'p').status, 'running');
+    assert.equal(ciOf({ status: 'failed' }), 'failing');
+    assert.equal(ciOf({ status: 'pending' }), 'running');
+    assert.equal(ciOf({ status: 'success' }), null);
+    assert.equal(ciOf(null), null);
+}
+console.log('ok pipeline');

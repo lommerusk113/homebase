@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus } from './core.js';
 import { renderBoard } from './list.js';
 
 // only sessions in the selected project(s); falls back to the most recent one there
@@ -86,7 +86,7 @@ export async function refreshChat() {
     if (!s) { chatKey = null; state.asking = null; updateTitle(); setStatus(null); return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
     let data;
     try {
-        const r = await fetch(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}`);
+        const r = await api(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}`);
         if (!r.ok) throw new Error(await r.text());
         data = await r.json();
     } catch { return; }
@@ -148,7 +148,7 @@ export async function refreshChat() {
 async function sendNow(sid, key) {
     state.nudged.add(key); $('c-err').textContent = ''; refreshChat();
     try {
-        const r = await fetch(`/api/interrupt?id=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'x-codetool': '1' } });
+        const r = await api(`/api/interrupt?id=${encodeURIComponent(sid)}`, { method: 'POST' });
         if (!r.ok) throw new Error(await r.text());
     } catch (err) {
         state.nudged.delete(key); $('c-err').textContent = err.message; refreshChat();
@@ -165,7 +165,7 @@ export async function sendText(sid, text, answerTo) {
     stick = true;
     refreshChat();
     try {
-        const r = await fetch(`/api/send?id=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'x-codetool': '1', 'content-type': 'text/plain' }, body: text });
+        const r = await api(`/api/send?id=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: text });
         if (!r.ok) throw new Error(await r.text());
         out.okAt = Date.now();
         setTimeout(refreshChat, 1000);
@@ -196,7 +196,7 @@ export function initChat() {
         $('clear-dlg').open = false; $('c-err').textContent = '';
         if (!s) return;
         try {
-            const r = await fetch(`/api/clear?id=${encodeURIComponent(s.id)}`, { method: 'POST', headers: { 'x-codetool': '1' } });
+            const r = await api(`/api/clear?id=${encodeURIComponent(s.id)}`, { method: 'POST' });
             if (!r.ok) throw new Error(await r.text());
             following = s.id;
             store.set(`cleared:${s.id}`, JSON.stringify({ at: Date.now(), mode: 'new' }));

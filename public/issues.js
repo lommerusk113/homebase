@@ -72,29 +72,55 @@ export function showTab(tab) {
 }
 export const activeTab = () => ($('issues').hidden ? 'work' : 'issues');
 
+// Grey placeholder lanes while the issues load: three lanes of a few cards.
+function skeleton() {
+    return [0, 1, 2].map(n => {
+        const sec = el('section', 'lane skel'), side = el('div', 'who'), strip = el('div', 'strip');
+        side.append(el('i', 'bone'), el('i', 'bone short'));
+        strip.append(...Array.from({ length: 3 - n }, () => el('i', 'bone card')));
+        sec.append(side, strip);
+        return sec;
+    });
+}
+
+const NO_GROUPS = { closable: [], doing: [], assigned: [], unassigned: [], done: [] };
+
 // d: an /api/milestones response, null for "All my projects", undefined while the project's first response loads.
+// A selected milestone without groups is still loading its issues (the counts are already there).
 export function renderIssues(d = data) {
     data = d;
-    const badge = $('tab-free'), free = d?.selected?.groups.unassigned.length ?? 0;
+    const badge = $('tab-free'), free = d?.selected?.groups?.unassigned.length ?? 0;
     badge.hidden = !free; badge.textContent = `${free} unassigned`;
     const pane = $('issues'), hadFocus = pane.contains(document.activeElement);
     const ms = d?.selected;
-    if (!ms) {
+    if (d === undefined || ms?.loading) {
+        pane.replaceChildren(...(ms ? [head({ ...ms, groups: NO_GROUPS }, 'Loading issues…')] : []), ...skeleton());
+        pane.setAttribute('aria-busy', 'true');
+        return;
+    }
+    pane.removeAttribute('aria-busy');
+    if (!ms?.groups) {
         pane.replaceChildren(el('div', 'welcome', d === null ? 'Pick a project in the header to see its milestone issues.'
-            : d ? 'Pick a milestone in the header pill to see its issues.' : 'Loading issues…'));
+            : ms?.error ? `Could not load the issues: ${ms.error}` : 'Pick a milestone in the header pill to see its issues.'));
         return;
     }
     const cards = issueCards(ms.groups);
-    pane.replaceChildren(head(ms), ...buildLanes(cards, ms.groups.done, d.me).map((l, n) => lane(l, n, ms)), closedLine(ms.groups.done),
+    pane.replaceChildren(head(ms, d.updating && 'Updating…'), ...buildLanes(cards, ms.groups.done, d.me).map((l, n) => lane(l, n, ms)), closedLine(ms.groups.done),
         el('div', 'is-note', 'Read-only: Homebase never writes to GitLab. "Send to chat" only types into the chat on the right.'));
     hooks.rendered?.(hadFocus);
 }
 
-function head(ms) {
+// hint: "Loading issues…" or "Updating…" next to the title, with a spinner.
+function head(ms, hint) {
     const g = ms.groups, open = ms.total - ms.closed, h = el('div', 'is-head');
     const title = el('div', 'is-title'), gl = el('a', null, 'GitLab ↗');
     gl.href = ms.url; gl.target = '_blank'; gl.rel = 'noopener';
     title.append(el('b', null, `⚑ ${ms.title}`), gl);
+    if (hint) {
+        const s = el('span', 'is-hint');
+        s.append(el('wa-spinner'), hint);
+        title.append(s);
+    }
     const big = el('div', 'is-big', `${open} open `);
     big.append(el('small', null, `of ${ms.total}`));
     const segs = [[ms.closed, '--c-ready', 'closed'], [g.closable.length, '--c-ready', 'can be closed'], [g.doing.length, '--c-doing', 'in progress'],

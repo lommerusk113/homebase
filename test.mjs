@@ -347,6 +347,14 @@ assert.deepEqual(limitLeft({ used: 37, resetsAt: now + (4 * 1440 + 22 * 60 + 30)
 assert.deepEqual(limitLeft({ used: 30.5, resetsAt: now + 45 * 60_000 }, now), { left: 70, until: '45m' }); // rounds what is left, like Contado
 assert.deepEqual(limitLeft({ used: 104, resetsAt: now - 1 }, now), { left: 0, until: '0m' });
 assert.deepEqual(limitLeft({ used: 0, resetsAt: now + 2 * 1440 * 60_000 }, now), { left: 100, until: '2d' });
+import { limitView } from './public/core.js';
+const thu = new Date(2026, 10, 12, 23, 43).getTime(); // local time, so the reset clock reads the same in any zone
+assert.deepEqual(limitView(false, { used: 30, resetsAt: thu + 97 * 60_000 }, thu),
+    { label: 'Session', left: 70, text: '70%', tip: '70% left of your 5-hour limit · resets in 1h37m (01:20)' });
+assert.deepEqual(limitView(true, { used: 37, resetsAt: new Date(2026, 10, 17, 19, 0).getTime() }, thu),
+    { label: 'Week', left: 63, text: '63%', tip: '63% left of your weekly limit · resets in 4d19h (Tue 19:00)' });
+assert.equal(limitView(false, { used: 81, resetsAt: thu + 97 * 60_000 }, thu).text, '19% · resets 1h37m'); // countdown inline only under 20%
+assert.equal(limitView(false, { used: 80, resetsAt: thu + 97 * 60_000 }, thu).text, '20%');
 console.log('ok limit peaks');
 
 import { repoPath, groupIssues, milestoneOf, activeMilestones, keepMilestone, worksOn } from './server.mjs';

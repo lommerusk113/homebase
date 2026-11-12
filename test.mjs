@@ -1,0 +1,128 @@
+import assert from 'node:assert/strict';
+import { status, summarize, column } from './server.mjs';
+
+assert.equal(column('working', { state: 'merged' }, true), 'doing');
+assert.equal(column('idle', { state: 'merged' }, true), 'done');
+assert.equal(column('idle', { state: 'open', ready: true }, true), 'ready');
+assert.equal(column('idle', { state: 'open', changes: true }, true), 'needs-you');
+assert.equal(column('waiting', null, true), 'review');
+assert.equal(column('waiting', null, false), 'needs-you');
+assert.equal(column('idle', null, false), 'idle');
+
+assert.equal(status({ type: 'assistant' }, 1_000), 'working');
+assert.equal(status({ type: 'assistant' }, 60_000), 'waiting');
+assert.equal(status({ type: 'user' }, 60_000), 'idle');
+assert.equal(status({ type: 'assistant' }, 3_600_000), 'idle');
+
+const s = summarize([
+    { type: 'user', cwd: '/r', gitBranch: 'b', sessionId: 'x', message: { content: 'fix it' } },
+    { type: 'user', isMeta: true, message: { content: 'meta' } },
+    { type: 'user', message: { content: [{ type: 'tool_result', content: 'r' }] } },
+    { type: 'ai-title', aiTitle: 'Fix' },
+    { type: 'pr-link', prUrl: 'https://pr/1' },
+    { type: 'assistant', message: { model: 'm', content: [{ type: 'text', text: 'done' }] } }
+], 60_000);
+assert.deepEqual(
+    [s.id, s.branch, s.title, s.pr, s.model, s.status, s.lastPrompt, s.lastReply],
+    ['x', 'b', 'Fix', 'https://pr/1', 'm', 'waiting', 'fix it', 'done']
+);
+
+console.log('ok');
+
+import { filesTouched } from './server.mjs';
+assert.deepEqual(filesTouched([
+    { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/r/a.js' } }] } },
+    { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path: '/r/x.js' } }, { type: 'tool_use', name: 'Write', input: { file_path: '/r/b.js' } }] } },
+    { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Edit', input: { file_path: '/r/a.js' } }] } }
+], '/r'), ['a.js', 'b.js']);
+console.log('ok files');
+
+import { agentColumn, summarizeAgent } from './server.mjs';
+assert.equal(agentColumn('running', true, { state: 'merged' }), 'doing');
+assert.equal(agentColumn('done', true, { state: 'open', ready: true }), 'ready');
+assert.equal(agentColumn('done', true, null), 'review');
+assert.equal(agentColumn('done', false, null), 'done');
+assert.equal(agentColumn('stopped', false, null), 'needs-you');
+const a = summarizeAgent({ description: 'Implement #1', finished: true }, [
+    { type: 'assistant', gitBranch: 'b1', message: { content: [{ type: 'tool_use', name: 'SubagentHandback', input: { message: 'MR open: https://gitlab.com/x/y/-/merge_requests/7.' } }] } }
+], 999_999);
+assert.deepEqual([a.status, a.pr, a.branch], ['done', 'https://gitlab.com/x/y/-/merge_requests/7', 'b1']);
+assert.equal(summarizeAgent({ finished: false }, [], 1_000).status, 'running');
+assert.equal(summarizeAgent({ finished: false }, [], 600_000).status, 'stopped');
+console.log('ok agents');
+
+import { splitTldr, toolSummary, chatItems, pendingQuestion, sendSteps } from './server.mjs';
+assert.deepEqual(splitTldr('Long text.\n\n**TLDR:** It works.'), { tldr: 'It works.', text: 'Long text.' });
+assert.equal(splitTldr('a\n**TLDR**: fixed **now**').tldr, 'fixed **now**');
+assert.equal(splitTldr('**TL;DR: shipped**').tldr, 'shipped');
+assert.equal(splitTldr('we use tldraw here').tldr, null);
+assert.equal(toolSummary([
+    { name: 'Bash' }, { name: 'Bash' }, { name: 'Bash' },
+    { name: 'Edit', input: { file_path: '/a' } }, { name: 'Edit', input: { file_path: '/a' } }, { name: 'Write', input: { file_path: '/b' } },
+    { name: 'Agent' }, { name: 'Agent' }, { name: 'TodoWrite' }
+]), 'Ran 3 commands · edited 2 files · started 2 agents · used 1 other tool');
+const tu = (name, extra) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name, ...extra }] } });
+const say = text => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
+const chat = chatItems([
+    { type: 'user', message: { content: 'do it' } },
+    say('On it.'), tu('Bash'), tu('Read'),
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'x', content: 'r' }] } },
+    say('Done.'), say('TLDR: shipped'),
+    { type: 'assistant', isSidechain: true, message: { content: [{ type: 'text', text: 'side' }] } }
+]);
+assert.deepEqual(chat.map(i => [i.role, i.text, i.tldr]), [
+    ['user', 'do it', undefined], ['assistant', 'On it.', null], ['tools', 'Ran 1 command · read 1 file', undefined], ['assistant', 'Done.', 'shipped']
+]);
+const q = tu('AskUserQuestion', { id: 'q1', input: { questions: [{ question: 'Which?' }] } });
+assert.equal(pendingQuestion([q]), 'Which?');
+assert.equal(pendingQuestion([q, { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'q1' }] } }]), null);
+assert.deepEqual(sendSteps('cc-1', ' hi\x1b \r\n'), [['send-keys', '-t', 'cc-1', '-l', '--', 'hi'], ['send-keys', '-t', 'cc-1', 'Enter']]);
+assert.equal(sendSteps('cc-1', 'a\r\nb')[0].at(-1), 'a\nb');
+assert.throws(() => sendSteps('cc-1', ' \n '));
+console.log('ok chat');
+
+import { agentStage } from './server.mjs';
+const bash = command => ({ name: 'Bash', input: { command } });
+assert.equal(agentStage([{ name: 'Read' }, bash('ls')], '', false), 0);
+assert.equal(agentStage([{ name: 'Edit' }], '', false), 1);
+assert.equal(agentStage([{ name: 'Edit' }, bash('./gradlew check')], '', false), 2);
+assert.equal(agentStage([bash('npm run typecheck')], '', false), 2);
+assert.equal(agentStage([bash('git push -u origin x'), bash('npx vitest run')], '', false), 3);
+assert.equal(agentStage([], 'MR: https://gitlab.com/a/b/-/merge_requests/3', false), 3);
+assert.equal(agentStage([], '', true), 4);
+assert.equal(summarizeAgent({ finished: false }, [tu('Write')], 1_000).stageLabel, 'Implement');
+assert.equal(agentStage([bash('cd /r && git push')], '', false), 3);
+assert.equal(agentStage([bash('npm run build; npm test')], '', false), 2);
+assert.equal(agentStage([bash('cat > t.sh <<\'EOF\'\ngit push origin x\nEOF')], '', false), 0);
+assert.equal(agentStage([bash('node -e "assert(run(\'git push\'))"')], '', false), 0);
+assert.equal(agentStage([bash('echo git push')], '', false), 0);
+assert.equal(agentStage([bash('git commit -m "$(cat <<\'EOF\'\nadd test, then git push\nEOF\n)"')], '', false), 0);
+assert.equal(summarizeAgent({ finished: false }, [tu('Edit')], 1_000, 'agent-peak').stage, 1);
+assert.equal(summarizeAgent({ finished: false }, [tu('Read')], 1_000, 'agent-peak').stage, 1); // edit fell out of the tail
+assert.equal(summarizeAgent({ finished: false }, [tu('Read')], 1_000, 'agent-other').stage, 0);
+console.log('ok stage');
+
+import { refuseIfLiveElsewhere } from './server.mjs';
+assert.throws(() => refuseIfLiveElsewhere(60_000), { status: 409, message: /open in another terminal/ });
+assert.doesNotThrow(() => refuseIfLiveElsewhere(180_000));
+console.log('ok send guard');
+
+const queued = chatItems([
+    { type: 'user', message: { content: 'start' }, timestamp: 't0' },
+    { type: 'queue-operation', operation: 'enqueue', content: 'also do B', timestamp: 't1' },
+    { type: 'queue-operation', operation: 'remove', reason: 'absorbed_mid_turn', content: 'also do B', commandUuid: 'c1', timestamp: 't2' },
+    { type: 'attachment', timestamp: 't2', attachment: { type: 'queued_command', prompt: 'also do B', origin: { kind: 'human' }, humanTurn: true, source_uuid: 'c1' } },
+    { type: 'attachment', timestamp: 't2', attachment: { type: 'queued_command', prompt: '<task-notification>', origin: { kind: 'task-notification' } } },
+    say('Did A and B.'),
+    { type: 'queue-operation', operation: 'enqueue', content: '<task-notification>x', timestamp: 't3' },
+    { type: 'queue-operation', operation: 'enqueue', content: 'now C', timestamp: 't4' }
+]);
+assert.deepEqual(queued.map(i => [i.role, i.text, i.at, i.pending]), [
+    ['user', 'start', 't0', undefined], ['user', 'also do B', 't2', undefined], ['assistant', 'Did A and B.', undefined, undefined], ['user', 'now C', 't4', true]
+]);
+assert.equal(chatItems([
+    { type: 'queue-operation', operation: 'enqueue', content: 'x', timestamp: 't1' },
+    { type: 'queue-operation', operation: 'dequeue', timestamp: 't2' },
+    { type: 'user', message: { content: 'x' }, timestamp: 't2' }
+]).length, 1);
+console.log('ok queued');

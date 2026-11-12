@@ -1,0 +1,708 @@
+// Dashboard over Claude Code transcripts in ~/.claude/projects. Never writes files; only types into its own tmux sessions.
+import { createServer } from 'node:http';
+import { readdir, stat, open, readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { join, basename, dirname } from 'node:path';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const run = promisify(execFile);
+
+const ROOT = join(homedir(), '.claude', 'projects');
+const PORT = Number(process.env.PORT ?? 4321);
+const MAX_AGE_MS = Number(process.env.MAX_AGE_DAYS ?? 3) * 864e5;
+// ponytail: only the tail is parsed (transcripts reach 70+ MB); token totals would need a full scan, add with an offset cache if wanted
+const TAIL_BYTES = 512 * 1024;
+const WORKING_MS = 10_000;
+const WAITING_MS = 30 * 60_000;
+
+const PR_TTL_MS = 60_000;
+const AGENT_TAIL_BYTES = 128 * 1024;
+const AGENT_RUNNING_MS = 2 * 60_000;
+
+const cache = new Map(); // path -> { mtimeMs, entries }
+const projects = new Map(); // cwd -> repo name
+const prs = new Map(); // url -> { at, value, pending }
+
+// Main repo name, so worktrees group under their repo. Read-only git call.
+async function projectOf(cwd) {
+
+    if (!cwd) {
+        return '—';
+    }
+    if (!projects.has(cwd)) {
+        projects.set(cwd, run('git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'])
+            .then(({ stdout }) => basename(dirname(stdout.trim())))
+            .catch(() => basename(cwd.replace(/\/\.(claude\/)?worktrees\/.*$/, ''))));
+    }
+
+    return projects.get(cwd);
+}
+
+// Read-only PR/MR lookup via gh/glab. Returns { state: open|merged|closed, ready, changes } or null.
+async function fetchPr(url) {
+
+    const gl = url.match(/^https:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)/);
+    if (gl) {
+        const { stdout } = await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}`]);
+        const mr = JSON.parse(stdout);
+        const state = { opened: 'open', merged: 'merged' }[mr.state] ?? 'closed';
+
+        return { state, branch: mr.source_branch, ready: mr.detailed_merge_status === 'mergeable', changes: mr.detailed_merge_status === 'requested_changes' };
+    }
+
+    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,reviewDecision,isDraft,headRefName']);
+    const pr = JSON.parse(stdout);
+
+    return {
+        state: pr.state.toLowerCase(),
+        branch: pr.headRefName,
+        ready: pr.reviewDecision === 'APPROVED' && !pr.isDraft,
+        changes: pr.reviewDecision === 'CHANGES_REQUESTED'
+    };
+}
+
+// Stale-while-revalidate so a slow CLI call never blocks the board after the first load.
+async function prState(url) {
+
+    if (!url) {
+        return null;
+    }
+
+    let hit = prs.get(url);
+    if (!hit) {
+        hit = { at: 0, value: null };
+        prs.set(url, hit);
+    }
+    if (Date.now() - hit.at > PR_TTL_MS && !hit.pending) {
+        hit.pending = fetchPr(url)
+            .then(v => { hit.value = v; })
+            .catch(() => {})
+            .finally(() => { hit.at = Date.now(); hit.pending = null; });
+    }
+    if (!hit.at) {
+        await hit.pending;
+    }
+
+    return hit.value;
+}
+
+export function column(status, pr, hasPr) {
+
+    if (status === 'working') {
+        return 'doing';
+    }
+    if (pr?.state === 'merged' || pr?.state === 'closed') {
+        return 'done';
+    }
+    if (pr?.changes) {
+        return 'needs-you';
+    }
+    if (pr?.ready) {
+        return 'ready';
+    }
+    if (hasPr) {
+        return 'review';
+    }
+
+    return status === 'waiting' ? 'needs-you' : 'idle';
+}
+
+async function readTail(path, size, max = TAIL_BYTES) {
+
+    const fh = await open(path, 'r');
+    try {
+        const len = Math.min(size, max);
+        const buf = Buffer.alloc(len);
+        await fh.read(buf, 0, len, size - len);
+        const lines = buf.toString('utf8').split('\n');
+        if (len < size) {
+            lines.shift(); // partial first line
+        }
+
+        return lines.flatMap(l => {
+            try {
+                return l ? [JSON.parse(l)] : [];
+            } catch {
+                return [];
+            }
+        });
+    } finally {
+        await fh.close();
+    }
+}
+
+async function tailOf(path, st) {
+
+    let hit = cache.get(path);
+    if (!hit || hit.mtimeMs !== st.mtimeMs) {
+        hit = { mtimeMs: st.mtimeMs, entries: await readTail(path, st.size) };
+        cache.set(path, hit);
+    }
+
+    return hit.entries;
+}
+
+function textOf(entry) {
+
+    const c = entry?.message?.content;
+    if (typeof c === 'string') {
+        return c;
+    }
+
+    return Array.isArray(c) ? c.filter(b => b.type === 'text').map(b => b.text).join('\n') : '';
+}
+
+function isHumanPrompt(e) {
+    return e.type === 'user' && !e.isMeta && !e.isSidechain && textOf(e) && !textOf(e).startsWith('<');
+}
+
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
+// Files Claude edited, newest first, from tool calls in the parsed tail.
+export function filesTouched(entries, cwd) {
+
+    const paths = entries
+        .filter(e => e.type === 'assistant' && Array.isArray(e.message?.content))
+        .flatMap(e => e.message.content)
+        .filter(b => b.type === 'tool_use' && EDIT_TOOLS.has(b.name))
+        .map(b => b.input?.file_path ?? b.input?.notebook_path)
+        .filter(Boolean)
+        .map(f => (cwd && f.startsWith(cwd + '/') ? f.slice(cwd.length + 1) : f));
+
+    return [...new Set(paths.reverse())].slice(0, 20);
+}
+
+const PR_URL = /https:\/\/[^\s)>\]`'"]+?\/(?:-\/merge_requests|pull)\/\d+/g;
+const TLDR = /^[ \t>*_]*TL;?DR\b[*_]*:?[*_]*[ \t]*(.+)$/gim;
+
+// Pulls the last "TLDR: ..." line out of a message so the page can show it as a callout.
+export function splitTldr(text) {
+
+    const m = [...text.matchAll(TLDR)].at(-1);
+    if (!m) {
+        return { tldr: null, text };
+    }
+
+    let tldr = m[1].trim();
+    if ((tldr.match(/\*\*/g)?.length ?? 0) % 2) {
+        tldr = tldr.replace(/\*\*$/, '').trim(); // "**TLDR: x**" leaves a dangling **
+    }
+
+    return { tldr, text: (text.slice(0, m.index) + text.slice(m.index + m[0].length)).trim() };
+}
+
+const TOOL_KIND = { Bash: 'cmd', Edit: 'edit', Write: 'edit', MultiEdit: 'edit', NotebookEdit: 'edit', Read: 'read', Grep: 'search', Glob: 'search', Agent: 'agent', Task: 'agent', WebFetch: 'web', WebSearch: 'web' };
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const PHRASES = {
+    cmd: n => `ran ${plural(n, 'command')}`,
+    edit: n => `edited ${plural(n, 'file')}`,
+    read: n => `read ${plural(n, 'file')}`,
+    search: n => `searched ${plural(n, 'time')}`,
+    agent: n => `started ${plural(n, 'agent')}`,
+    web: n => plural(n, 'web lookup'),
+    other: n => `used ${plural(n, 'other tool')}`
+};
+
+// "Ran 3 commands · edited 2 files · started 2 agents"
+export function toolSummary(uses) {
+
+    const counts = {};
+    const edited = new Set();
+    for (const u of uses) {
+        const kind = TOOL_KIND[u.name] ?? 'other';
+        if (kind === 'edit') {
+            edited.add(u.input?.file_path ?? u.input?.notebook_path);
+        } else {
+            counts[kind] = (counts[kind] ?? 0) + 1;
+        }
+    }
+    counts.edit = edited.size;
+
+    const text = Object.keys(PHRASES).filter(k => counts[k]).map(k => PHRASES[k](counts[k])).join(' · ');
+
+    return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// Master chat as bubbles: human prompts, Claude's text (consecutive chunks merged), and one activity line per run of tool calls.
+export function chatItems(entries, max = 60) {
+
+    const items = [];
+    let uses = [];
+    const flush = () => {
+        if (uses.length) {
+            items.push({ role: 'tools', text: toolSummary(uses) });
+            uses = [];
+        }
+    };
+
+    // ponytail: replays the queue in the tail; a dequeue whose enqueue fell out of the tail shifts the wrong item
+    const queue = [];
+
+    for (const e of entries) {
+        if (e.isSidechain) {
+            continue;
+        }
+        if (isHumanPrompt(e)) {
+            flush();
+            items.push({ role: 'user', text: textOf(e), at: e.timestamp });
+            continue;
+        }
+        // Messages typed while Claude works: queued first, then absorbed into the running turn as an attachment.
+        if (e.type === 'queue-operation') {
+            if (e.operation === 'enqueue') {
+                queue.push({ text: e.content, at: e.timestamp });
+            } else if (e.operation === 'dequeue') {
+                queue.shift();
+            } else if (e.operation === 'remove') {
+                const i = queue.findIndex(q => q.text === e.content);
+                if (i >= 0) {
+                    queue.splice(i, 1);
+                }
+            }
+            continue;
+        }
+        const a = e.type === 'attachment' ? e.attachment : null;
+        if (a?.type === 'queued_command' && a.origin?.kind === 'human') {
+            flush();
+            items.push({ role: 'user', text: typeof a.prompt === 'string' ? a.prompt : textOf({ message: { content: a.prompt } }), at: e.timestamp });
+            continue;
+        }
+        if (e.type !== 'assistant') {
+            continue;
+        }
+
+        const text = textOf(e);
+        if (text) {
+            flush();
+            const prev = items.at(-1);
+            if (prev?.role === 'assistant') {
+                prev.text += '\n\n' + text;
+            } else {
+                items.push({ role: 'assistant', text, at: e.timestamp });
+            }
+        }
+        if (Array.isArray(e.message?.content)) {
+            uses.push(...e.message.content.filter(b => b.type === 'tool_use'));
+        }
+    }
+    flush();
+
+    const shown = new Set(items.filter(i => i.role === 'user').map(i => i.text));
+    for (const q of queue) {
+        if (typeof q.text === 'string' && q.text.trim() && !q.text.startsWith('<') && !shown.has(q.text)) {
+            items.push({ role: 'user', text: q.text, at: q.at, pending: true });
+        }
+    }
+
+    return items.slice(-max).map(i => (i.role === 'assistant' ? { ...i, ...splitTldr(i.text) } : i));
+}
+
+// The question text of an AskUserQuestion that has no tool_result yet, else null.
+export function pendingQuestion(entries) {
+
+    const ask = entries
+        .filter(e => e.type === 'assistant' && !e.isSidechain && Array.isArray(e.message?.content))
+        .flatMap(e => e.message.content)
+        .findLast(b => b.type === 'tool_use' && b.name === 'AskUserQuestion');
+    if (!ask) {
+        return null;
+    }
+
+    const answered = entries.some(e => e.type === 'user' && Array.isArray(e.message?.content)
+        && e.message.content.some(b => b.type === 'tool_result' && b.tool_use_id === ask.id));
+
+    return answered ? null : ask.input?.questions?.[0]?.question ?? 'Claude asked a question.';
+}
+
+export function agentColumn(status, hasPr, pr) {
+
+    if (status === 'running') {
+        return 'doing';
+    }
+    if (hasPr) {
+        return column('idle', pr, true);
+    }
+
+    return status === 'done' ? 'done' : 'needs-you';
+}
+
+// Background subagents a master session started (depth 1 only; their own helpers are noise).
+export const STAGES = ['Explore', 'Implement', 'Verify', 'Ship', 'Done'];
+// Matched against each command of a Bash call, so they are anchored to its start.
+const VERIFY_CMD = /^(?:\S*gradlew?\b.*\b(?:check|test)\b|(?:npx |pnpm |yarn |bunx? )?(?:vitest|jest|tsc|eslint)\b|(?:npm|pnpm|yarn|bun) (?:run )?(?:test|check|lint|typecheck)\b|node (?:--test|\S*test)|mvn\b.*\b(?:test|verify)\b)/;
+const SHIP_CMD = /^(?:git push|glab mr create|gh pr create)\b/;
+const stagePeak = new Map(); // agent id -> highest stage seen, since old edits fall out of the tail
+
+// ponytail: heredoc bodies and quoted strings are dropped, then split on && ; | and newlines; $(...) and backslash-continued lines are not parsed
+export function runs(cmd, re) {
+
+    const code = cmd
+        .replace(/<<-?\s*['"]?(\w+)['"]?[\s\S]*?\n\s*\1\b/g, '')
+        .replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''");
+
+    return code.split(/&&|\|\|?|;|\n/).some(c => re.test(c.trim()));
+}
+
+// ponytail: stage is guessed from tool calls in the tail (subagents rarely keep todo lists)
+export function agentStage(uses, report, done) {
+
+    if (done) {
+        return 4;
+    }
+
+    let stage = report.match(PR_URL) ? 3 : 0;
+    for (const u of uses) {
+        const cmd = u.name === 'Bash' ? u.input?.command ?? '' : '';
+        if (runs(cmd, SHIP_CMD)) {
+            stage = 3;
+        } else if (runs(cmd, VERIFY_CMD)) {
+            stage = Math.max(stage, 2);
+        } else if (EDIT_TOOLS.has(u.name)) {
+            stage = Math.max(stage, 1);
+        }
+    }
+
+    return stage;
+}
+
+export function summarizeAgent(meta, entries, ageMs, id) {
+
+    const uses = entries.flatMap(e => (e.type === 'assistant' && Array.isArray(e.message?.content) ? e.message.content : []))
+        .filter(b => b.type === 'tool_use');
+    const handback = uses.findLast(b => b.name === 'SubagentHandback')?.input?.message;
+    const report = handback ?? textOf(entries.findLast(e => e.type === 'assistant' && textOf(e))) ?? '';
+    const status = meta.finished ? 'done' : ageMs < AGENT_RUNNING_MS ? 'running' : 'stopped';
+    const { tldr, text: body } = splitTldr(report);
+    const stage = Math.max(agentStage(uses, report, status === 'done'), stagePeak.get(id) ?? 0);
+    if (id) {
+        stagePeak.set(id, stage);
+    }
+
+    return {
+        description: meta.description ?? meta.agentType,
+        status,
+        stage,
+        stageLabel: STAGES[stage],
+        report,
+        tldr,
+        body,
+        pr: report.match(PR_URL)?.at(-1) ?? null,
+        branch: entries.findLast(e => e.gitBranch)?.gitBranch ?? meta.worktreeBranch ?? null,
+        model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? meta.pickedEffortModel ?? null,
+        files: filesTouched(entries, meta.worktreePath ?? entries.findLast(e => e.cwd)?.cwd)
+    };
+}
+
+async function agents(sessionDir, now) {
+
+    let names;
+    try {
+        names = (await readdir(sessionDir)).filter(f => f.endsWith('.meta.json'));
+    } catch {
+        return [];
+    }
+
+    const out = [];
+    for (const name of names) {
+        const id = name.replace('.meta.json', '');
+        const path = join(sessionDir, `${id}.jsonl`);
+        let st;
+        try {
+            st = await stat(path);
+        } catch {
+            continue;
+        }
+        if (now - st.mtimeMs > MAX_AGE_MS) {
+            continue;
+        }
+
+        let hit = cache.get(path);
+        if (!hit || hit.mtimeMs !== st.mtimeMs) {
+            const meta = JSON.parse(await readFile(join(sessionDir, name), 'utf8'));
+            hit = { mtimeMs: st.mtimeMs, meta, entries: (meta.spawnDepth ?? 1) > 1 ? [] : await readTail(path, st.size, AGENT_TAIL_BYTES) };
+            cache.set(path, hit);
+        }
+        if ((hit.meta.spawnDepth ?? 1) > 1) {
+            continue;
+        }
+
+        // meta.finished flips after the last transcript write, so re-read it while the agent isn't done
+        if (!hit.meta.finished) {
+            hit.meta = JSON.parse(await readFile(join(sessionDir, name), 'utf8'));
+        }
+
+        out.push({ id, started: st.birthtimeMs, updated: st.mtimeMs, ...summarizeAgent(hit.meta, hit.entries, now - st.mtimeMs, id) });
+    }
+
+    const rank = { running: 0, stopped: 1, done: 2 };
+
+    return out.sort((a, b) => rank[a.status] - rank[b.status] || b.updated - a.updated);
+}
+
+export function status(lastTurn, ageMs) {
+
+    if (ageMs < WORKING_MS) {
+        return 'working';
+    }
+    if (lastTurn?.type === 'assistant' && ageMs < WAITING_MS) {
+        return 'waiting';
+    }
+
+    return 'idle';
+}
+
+export function summarize(entries, ageMs) {
+
+    const last = type => entries.findLast(e => e.type === type);
+    const turns = entries.filter(e => (e.type === 'user' || e.type === 'assistant') && !e.isSidechain);
+    const meta = entries.findLast(e => e.cwd) ?? {};
+    const lastTurn = turns.at(-1);
+
+    return {
+        id: meta.sessionId,
+        cwd: meta.cwd,
+        branch: meta.gitBranch,
+        title: last('custom-title')?.customTitle ?? last('ai-title')?.aiTitle ?? null,
+        pr: last('pr-link')?.prUrl ?? null,
+        model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? null,
+        status: status(lastTurn, ageMs),
+        lastPrompt: textOf(entries.findLast(isHumanPrompt)),
+        lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
+        files: filesTouched(entries, meta.cwd)
+    };
+}
+
+async function sessions() {
+
+    const now = Date.now();
+    const out = [];
+
+    for (const dir of await readdir(ROOT)) {
+        let files;
+        try {
+            files = (await readdir(join(ROOT, dir))).filter(f => f.endsWith('.jsonl'));
+        } catch {
+            continue;
+        }
+
+        for (const f of files) {
+            const path = join(ROOT, dir, f);
+            const st = await stat(path);
+            if (now - st.mtimeMs > MAX_AGE_MS) {
+                continue;
+            }
+
+            const s = summarize(await tailOf(path, st), now - st.mtimeMs);
+            const id = s.id ?? f.replace('.jsonl', '');
+            out.push({ ...s, id, dir, updated: st.mtimeMs, agents: await agents(join(ROOT, dir, id, 'subagents'), now) });
+        }
+    }
+
+    await Promise.all(out.map(async s => {
+        s.project = await projectOf(s.cwd);
+        s.prState = await prState(s.pr);
+        s.column = column(s.status, s.prState, !!s.pr);
+        await Promise.all(s.agents.map(async a => {
+            a.prState = await prState(a.pr);
+            a.branch = a.prState?.branch ?? a.branch; // transcript gitBranch is unreliable inside worktrees
+            a.column = agentColumn(a.status, !!a.pr, a.prState);
+        }));
+    }));
+
+    return out.sort((a, b) => b.updated - a.updated);
+}
+
+async function transcript(dir, id) {
+
+    const path = join(ROOT, dir, `${id}.jsonl`);
+    if (!path.startsWith(ROOT + '/') || dir.includes('/') || id.includes('/')) {
+        throw new Error('bad path');
+    }
+
+    const st = await stat(path);
+    const entries = await tailOf(path, st);
+
+    return { items: chatItems(entries), asking: pendingQuestion(entries), working: Date.now() - st.mtimeMs < WORKING_MS };
+}
+
+// Only known sessions, only their recorded cwd.
+async function resumable(id) {
+
+    if (!/^[0-9a-f-]{36}$/.test(id ?? '')) {
+        throw new Error('bad id');
+    }
+
+    const s = (await sessions()).find(x => x.id === id);
+    if (!s?.cwd) {
+        throw new Error('unknown session');
+    }
+    try {
+        await stat(s.cwd);
+    } catch {
+        throw new Error(`folder is gone: ${s.cwd}`);
+    }
+
+    return s;
+}
+
+// ponytail: login+interactive zsh so PATH matches your terminal; id is validated, cwd is passed as its own arg
+const claudeCmd = id => ['/bin/zsh', '-lic', `claude --resume ${id}`];
+
+async function resume(id) {
+
+    const s = await resumable(id);
+    await run('open', ['-na', 'Ghostty', '--args', `--working-directory=${s.cwd}`, '-e', ...claudeCmd(id)]);
+}
+
+// Browser terminal: one ttyd per session, attached to a tmux session so Claude keeps running when the tab closes.
+// tmux uses the same name as Ghostty would see, so `tmux attach -t cc-<id8>` works from any terminal too.
+const terms = new Map(); // id -> port
+const procs = new Set();
+let nextPort = 7700;
+const tmuxName = id => `cc-${id.slice(0, 8)}`;
+const tmuxSession = (id, cwd) => ['-s', tmuxName(id), '-c', cwd, ...claudeCmd(id)];
+
+async function terminal(id) {
+
+    const s = await resumable(id);
+    if (terms.has(id)) {
+        return terms.get(id);
+    }
+
+    const port = nextPort++;
+    const proc = spawn('ttyd', [
+        '-p', String(port), '-i', 'lo0', '-W', '-O',
+        '-t', 'fontSize=13', '-t', 'theme={"background":"#0d1117"}',
+        'tmux', 'new-session', '-A', ...tmuxSession(id, s.cwd),
+        ';', 'set-option', 'mouse', 'on'
+    ], { stdio: 'ignore' });
+    proc.on('exit', () => { terms.delete(id); procs.delete(proc); });
+    terms.set(id, port);
+    procs.add(proc);
+
+    for (let i = 0; i < 40; i++) {
+        try {
+            await fetch(`http://localhost:${port}/`);
+            return port;
+        } catch {
+            await new Promise(r => setTimeout(r, 50));
+        }
+    }
+
+    throw new Error('ttyd did not start');
+}
+
+const MAX_SEND = 20 * 1024;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// tmux argument lists that type `text` into session `name` and submit it. Multi-line text goes in as one
+// bracketed paste, since a literal newline would submit the first line on its own.
+export function sendSteps(name, text) {
+
+    const clean = text.replace(/\r\n?/g, '\n').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '').trim();
+    if (!clean) {
+        throw new Error('empty message');
+    }
+
+    const enter = ['send-keys', '-t', name, 'Enter'];
+    if (!clean.includes('\n')) {
+        return [['send-keys', '-t', name, '-l', '--', clean], enter];
+    }
+
+    return [['set-buffer', '-b', name, '--', clean], ['paste-buffer', '-p', '-d', '-b', name, '-t', name], enter];
+}
+
+const LIVE_ELSEWHERE_MS = 2 * 60_000;
+
+// A recently written transcript without our tmux session means Claude runs in another terminal; a second one would share the transcript.
+export function refuseIfLiveElsewhere(ageMs) {
+
+    if (ageMs < LIVE_ELSEWHERE_MS) {
+        throw Object.assign(new Error('This session is open in another terminal. Close it there first, or use Open in Ghostty.'), { status: 409 });
+    }
+}
+
+async function send(id, text) {
+
+    const s = await resumable(id);
+    const name = tmuxName(id);
+    const steps = sendSteps(name, text);
+
+    try {
+        await run('tmux', ['has-session', '-t', `=${name}`]);
+    } catch {
+        refuseIfLiveElsewhere(Date.now() - s.updated);
+        await run('tmux', ['new-session', '-d', ...tmuxSession(id, s.cwd)]);
+        await sleep(5000); // ponytail: fixed wait for claude to boot; poll capture-pane for its prompt if this proves flaky
+    }
+
+    for (const args of steps) {
+        if (args.at(-1) === 'Enter') {
+            await sleep(300); // a separate, later Enter so Claude doesn't treat it as part of the typed/pasted text
+        }
+        await run('tmux', args);
+    }
+}
+
+async function readBody(req, max) {
+
+    let data = '';
+    req.setEncoding('utf8');
+    for await (const chunk of req) {
+        data += chunk;
+        if (data.length > max) {
+            throw new Error('message too long');
+        }
+    }
+
+    return data;
+}
+
+for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => {
+        procs.forEach(p => p.kill()); // tmux sessions (and Claude) survive on purpose
+        process.exit(0);
+    });
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+    const html = await readFile(new URL('./index.html', import.meta.url));
+    const icon = await readFile(new URL('./icon.svg', import.meta.url));
+
+    createServer(async (req, res) => {
+        const url = new URL(req.url, 'http://x');
+        try {
+            if (url.pathname === '/icon.svg') {
+                res.setHeader('content-type', 'image/svg+xml');
+                return res.end(icon);
+            }
+            if (url.pathname === '/api/sessions') {
+                res.setHeader('content-type', 'application/json');
+                return res.end(JSON.stringify(await sessions()));
+            }
+            // POST + custom header: a cross-origin page can't send this without a preflight we never answer
+            if (url.pathname === '/api/resume' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
+                await resume(url.searchParams.get('id'));
+                return res.end('ok');
+            }
+            if (url.pathname === '/api/terminal' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
+                res.setHeader('content-type', 'application/json');
+                return res.end(JSON.stringify({ port: await terminal(url.searchParams.get('id')) }));
+            }
+            if (url.pathname === '/api/send' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
+                await send(url.searchParams.get('id'), await readBody(req, MAX_SEND));
+                return res.end('ok');
+            }
+            if (url.pathname === '/api/transcript') {
+                res.setHeader('content-type', 'application/json');
+                return res.end(JSON.stringify(await transcript(url.searchParams.get('dir'), url.searchParams.get('id'))));
+            }
+            res.setHeader('content-type', 'text/html');
+            res.end(html);
+        } catch (e) {
+            res.statusCode = e.status ?? 500;
+            res.end(String(e.message));
+        }
+    }).listen(PORT, '127.0.0.1', () => console.log(`Homebase on http://localhost:${PORT}`));
+}

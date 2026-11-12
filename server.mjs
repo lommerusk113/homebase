@@ -382,10 +382,31 @@ export function chatItems(entries, max = 60) {
         return true;
     });
 
-    const out = unique.slice(-max).map(i => (i.role === 'assistant' ? { ...i, ...splitTldr(i.text) } : i));
+    const out = pairAnswers(unique.map(i => (i.role === 'assistant' ? { ...i, ...splitTldr(i.text) } : i))).slice(-max);
     const last = out.at(-1);
-    if (last?.role === 'assistant') {
+    if (last?.role === 'assistant' && !last.answer) {
         last.replies = quickReplies(last.tldr, last.text); // only the newest item, so any later user message hides them
+    }
+
+    return out;
+}
+
+const SHORT_ANSWER = /^(?:yes|yeah|yep|sure|ok|okay|no|nope|do it|go ahead|do both)(?: please)?[.!]*$/i;
+
+// A short reply right after a Claude message that asked something becomes its answer tag instead of a bubble:
+// a chip label offered on it, or a tiny approval like "ok" / "go ahead". Only the item directly before counts.
+export function pairAnswers(items) {
+
+    const out = [];
+    for (const i of items) {
+        const prev = out.at(-1);
+        const text = i.role === 'user' ? i.text.trim() : '';
+        const asked = prev?.role === 'assistant' && !prev.answer && quickReplies(prev.tldr, prev.text);
+        if (asked?.length && (asked.includes(text) || SHORT_ANSWER.test(text))) {
+            out[out.length - 1] = { ...prev, answer: { text, at: i.at, ...(i.pending && { queued: true }) } };
+            continue;
+        }
+        out.push(i);
     }
 
     return out;

@@ -624,6 +624,39 @@ export function nextStep(prState, agent) {
     return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
 }
 
+// The one-click command for a work item's row, as { label, message } typed into its session, or null when nothing is on you.
+export function rowAction(pr, prState, agent, title) {
+
+    if (agent?.status === 'running') {
+        return null;
+    }
+    if (!pr) {
+        return agent?.status === 'stopped'
+            ? { label: 'Continue', message: `The subagent '${title}' stopped — check why and continue it.` }
+            : null;
+    }
+    if (prState?.state !== 'open') {
+        return null;
+    }
+
+    const n = pr.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
+    const ref = `${pr.includes('/pull/') ? '#' : '!'}${n} (${pr})`;
+    if (prState.changes) {
+        return { label: 'Fix & reply', message: `Address the review comments on ${ref}, push, and reply in each thread.` };
+    }
+    if (prState.ci === 'failing') {
+        return { label: 'Fix pipeline', message: `The pipeline on ${ref} is failing — find out why and fix it.` };
+    }
+    if (prState.ready) {
+        return { label: 'Merge + close issue', message: `Merge ${ref} and close its issue.` };
+    }
+    if (!prState.reviewers?.length && !prState.draft) {
+        return { label: 'Request review', message: `Assign a reviewer to ${ref} — suggest who.` };
+    }
+
+    return null;
+}
+
 // One item per PR/MR (deduped across sessions and agents), plus running or stopped agents with no MR yet.
 // Agents whose description names a known MR (!123) count as work on it; finished agents without an MR are dropped.
 export function workItems(sessions, prOf = () => null) {
@@ -678,12 +711,13 @@ export function workItems(sessions, prOf = () => null) {
         const agent = agents[0] ?? null;
         const prState = it.pr ? prOf(it.pr) : null;
         const stage = lifecycle(it.pr, prState, agent);
+        const title = prState?.title ?? agent?.description ?? it.pr;
 
         return {
             key: it.key,
             project: it.project,
             sessionId: agent?.sessionId ?? it.linkSession,
-            title: prState?.title ?? agent?.description ?? it.pr,
+            title,
             pr: it.pr,
             prState,
             column: itemColumn(prState, agent, !!it.pr),
@@ -696,7 +730,8 @@ export function workItems(sessions, prOf = () => null) {
             body: agent?.body ?? '',
             files: agent?.files ?? [],
             activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
-            next: nextStep(prState, agent)
+            next: nextStep(prState, agent),
+            action: rowAction(it.pr, prState, agent, title)
         };
     });
 }

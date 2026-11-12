@@ -181,3 +181,20 @@ assert.deepEqual(items.map(i => [i.key, i.sessionId, i.column, i.stageLabel, i.u
 assert.deepEqual([items[0].title, items[0].tldr, items[0].activity.map(x => x.id)], ['One', 'new', ['impl1']]);
 assert.equal(items[1].next, 'Waiting for review by Ann');
 console.log('ok items');
+
+import { rowAction } from './server.mjs';
+const act = (prState, agent, url = mr(4)) => rowAction(url, prState, agent, 'T');
+assert.deepEqual(act(open({ ready: true, reviewers: ['Ann'] }), null), { label: 'Merge + close issue', message: `Merge !4 (${mr(4)}) and close its issue.` });
+assert.deepEqual(act(open({ changes: true, reviewers: ['Ann'] }), { status: 'stopped' }), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
+assert.deepEqual(act(open({ ci: 'failing', reviewers: ['Ann'] }), null), { label: 'Fix pipeline', message: `The pipeline on !4 (${mr(4)}) is failing — find out why and fix it.` });
+assert.deepEqual(act(open(), { status: 'done' }), { label: 'Request review', message: `Assign a reviewer to !4 (${mr(4)}) — suggest who.` });
+assert.equal(act(open(), null, 'https://github.com/o/r/pull/9').message, 'Assign a reviewer to #9 (https://github.com/o/r/pull/9) — suggest who.');
+assert.deepEqual(rowAction(null, null, { status: 'stopped' }, 'Implement #9'), { label: 'Continue', message: "The subagent 'Implement #9' stopped — check why and continue it." });
+assert.equal(rowAction(null, null, { status: 'running' }, 'x'), null); // doing
+assert.equal(act(open({ ready: true }), { status: 'running' }), null); // doing
+assert.equal(act(open({ reviewers: ['Ann'] }), null), null); // waiting on review
+assert.equal(act({ state: 'merged' }, null), null);
+assert.equal(act(open({ draft: true }), null), null);
+assert.equal(act(null, null), null); // state unknown
+assert.equal(items[1].action, null);
+console.log('ok actions');

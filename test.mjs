@@ -192,3 +192,17 @@ assert.equal(repoName('github-personal:lommerusk113/homebase.git\n'), 'homebase'
 assert.equal(repoName('git@gitlab.com:tritt/accounting/pracsys.git'), 'pracsys');
 assert.equal(repoName('https://github.com/contaas/portal-frontend'), 'portal-frontend');
 console.log('ok repo name');
+import { yourMove } from './server.mjs';
+const act = (...a) => yourMove(...a)?.action ?? null;
+assert.equal(act('ready', open({ ready: true, reviewers: ['Ann'] }), null), 'merge');
+assert.equal(act('needs-you', open({ changes: true, ci: 'failing' }), 'stopped'), 'address comments on');
+assert.equal(act('review', open({ ci: 'failing', reviewers: ['Ann'] }), null), 'fix pipeline on');
+assert.equal(act('needs-you', null, 'stopped'), 'check stopped agent');
+assert.equal(act('review', open(), 'done'), 'assign a reviewer on');
+assert.equal(act('review', open({ reviewers: ['Ann'] }), null), null);
+assert.equal(act('review', open({ draft: true }), null), null);
+assert.equal(act('doing', open({ changes: true }), 'running'), null);
+assert.equal(act('done', { state: 'merged' }, null), null);
+assert.deepEqual(items.map(i => i.move), [null, null, null]);
+assert.deepEqual(['ready', 'needs-you', 'review'].map(c => yourMove(c, open({ ready: c === 'ready', changes: c === 'needs-you' }), null).rank), [1, 2, 5]);
+console.log('ok your move');

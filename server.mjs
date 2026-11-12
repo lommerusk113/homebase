@@ -726,7 +726,7 @@ async function sessions() {
 
             const s = summarize(await tailOf(path, st), now - st.mtimeMs);
             const id = s.id ?? f.replace('.jsonl', '');
-            out.push({ ...s, id, dir, updated: st.mtimeMs, agents: await agents(join(ROOT, dir, id, 'subagents'), now) });
+            out.push({ ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, agents: await agents(join(ROOT, dir, id, 'subagents'), now) });
         }
     }
 
@@ -744,6 +744,23 @@ async function sessions() {
     for (const s of out) {
         s.items = items.filter(i => i.sessionId === s.id);
         delete s.agents; // folded into items
+    }
+
+    // /clear sent from Homebase: the new transcript keeps typing into the old tmux session
+    for (const c of clears.splice(0)) {
+        const next = findClearedSuccessor(out, c);
+        if (next) {
+            aliases.set(next.id, { tmux: c.tmux, from: c.from });
+        } else if (now - c.clearedAt < CLEAR_WAIT_MS) {
+            clears.push(c);
+        }
+    }
+    for (const s of out) {
+        const a = aliases.get(s.id);
+        s.tmux = tmuxFor(s.id);
+        if (a) {
+            s.clearedFrom = a.from;
+        }
     }
 
     return out.sort((a, b) => b.updated - a.updated);
@@ -1216,6 +1233,23 @@ const claudeCmd = id => ['/bin/zsh', '-lic', `claude --resume ${id}`];
 
 // tmux keeps Claude running between messages; `tmux attach -t cc-<id8>` reaches it from any terminal.
 const tmuxName = id => `cc-${id.slice(0, 8)}`;
+
+// /clear starts a new session id in the same process, so the new id keeps the old tmux name.
+// ponytail: in memory; after a server restart a cleared session gets its own tmux on the next send
+const aliases = new Map(); // new session id -> { tmux, from }
+const clears = []; // pending { from, tmux, cwd, clearedAt }, until the new transcript shows up
+const CLEAR_WAIT_MS = 60_000;
+
+export const tmuxFor = (id, map = aliases) => map.get(id)?.tmux ?? tmuxName(id);
+
+// The newest transcript in the same cwd created after a /clear (within CLEAR_WAIT_MS): the cleared session's successor.
+// ponytail: a session started by hand in the same folder within that minute could be mistaken for it
+export function findClearedSuccessor(sessions, { from, cwd, clearedAt }) {
+
+    const hits = sessions.filter(s => s.id !== from && s.cwd === cwd && s.created >= clearedAt && s.created - clearedAt < CLEAR_WAIT_MS);
+
+    return hits.sort((a, b) => b.created - a.created)[0] ?? null;
+}
 const tmuxSession = (id, cwd) => ['-s', tmuxName(id), '-c', cwd, ...claudeCmd(id)];
 
 const MAX_SEND = 20 * 1024;
@@ -1248,15 +1282,18 @@ export function refuseIfLiveElsewhere(ageMs) {
     }
 }
 
-async function send(id, text) {
+async function send(id, text, s = null) {
 
-    const s = await resumable(id);
-    const name = tmuxName(id);
-    const steps = sendSteps(name, text);
+    s ??= await resumable(id);
+    let name = tmuxFor(id);
+    let steps = sendSteps(name, text);
 
     try {
         await tmux(['has-session', '-t', `=${name}`]);
     } catch {
+        aliases.delete(id); // the aliased tmux session is gone: start one of its own
+        name = tmuxName(id);
+        steps = sendSteps(name, text);
         refuseIfLiveElsewhere(Date.now() - s.updated);
         await tmux(['new-session', '-d', ...tmuxSession(id, s.cwd)]);
         await sleep(5000); // ponytail: fixed wait for claude to boot; poll capture-pane for its prompt if this proves flaky
@@ -1268,13 +1305,15 @@ async function send(id, text) {
         }
         await tmux(args);
     }
+
+    return name;
 }
 
 // Escape interrupts Claude's turn, so queued messages are handled right away. Only in our own tmux session.
 async function interrupt(id) {
 
     await resumable(id);
-    const name = tmuxName(id);
+    const name = tmuxFor(id);
 
     try {
         await tmux(['has-session', '-t', `=${name}`]);
@@ -1283,6 +1322,20 @@ async function interrupt(id) {
     }
 
     await tmux(['send-keys', '-t', name, 'Escape']);
+}
+
+// Types /clear (same checks as send) and remembers it, so the next session list maps the new transcript to this tmux session.
+async function clearChat(id) {
+
+    const s = await resumable(id);
+    const c = { from: id, tmux: tmuxFor(id), cwd: s.cwd, clearedAt: Date.now() };
+    clears.push(c);
+    try {
+        c.tmux = await send(id, '/clear', s); // send may have replaced a dead aliased tmux session
+    } catch (e) {
+        clears.splice(clears.indexOf(c), 1);
+        throw e;
+    }
 }
 
 async function readBody(req, max) {
@@ -1329,6 +1382,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             // POST + custom header: a cross-origin page can't send this without a preflight we never answer
             if (url.pathname === '/api/send' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
                 await send(url.searchParams.get('id'), await readBody(req, MAX_SEND));
+                return res.end('ok');
+            }
+            if (url.pathname === '/api/clear' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
+                await clearChat(url.searchParams.get('id'));
                 return res.end('ok');
             }
             if (url.pathname === '/api/interrupt' && req.method === 'POST' && req.headers['x-codetool'] === '1') {

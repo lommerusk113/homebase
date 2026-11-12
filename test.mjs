@@ -222,3 +222,9 @@ assert.equal(act(open({ draft: true }), null), null);
 assert.equal(act(null, null), null); // state unknown
 assert.equal(items[1].action, null);
 console.log('ok actions');
+
+import { sameRepo } from './server.mjs';
+assert.equal(sameRepo('https://gitlab.com/tritt/accounting/pracsys/-/merge_requests/1590', 'pracsys'), true);
+assert.equal(sameRepo('https://gitlab.com/tritt/accounting/pracsys/-/merge_requests/1590', 'homebase'), false);
+assert.equal(sameRepo('https://github.com/lommerusk113/homebase/pull/3', 'homebase'), true);
+console.log('ok same repo');

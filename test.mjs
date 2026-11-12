@@ -181,3 +181,18 @@ assert.deepEqual(items.map(i => [i.key, i.sessionId, i.column, i.stageLabel, i.u
 assert.deepEqual([items[0].title, items[0].tldr, items[0].activity.map(x => x.id)], ['One', 'new', ['impl1']]);
 assert.equal(items[1].next, 'Waiting for review by Ann');
 console.log('ok items');
+
+import { yourMove } from './server.mjs';
+const act = (...a) => yourMove(...a)?.action ?? null;
+assert.equal(act('ready', open({ ready: true, reviewers: ['Ann'] }), null), 'merge');
+assert.equal(act('needs-you', open({ changes: true, ci: 'failing' }), 'stopped'), 'address comments on');
+assert.equal(act('review', open({ ci: 'failing', reviewers: ['Ann'] }), null), 'fix pipeline on');
+assert.equal(act('needs-you', null, 'stopped'), 'check stopped agent');
+assert.equal(act('review', open(), 'done'), 'assign a reviewer on');
+assert.equal(act('review', open({ reviewers: ['Ann'] }), null), null);
+assert.equal(act('review', open({ draft: true }), null), null);
+assert.equal(act('doing', open({ changes: true }), 'running'), null);
+assert.equal(act('done', { state: 'merged' }, null), null);
+assert.deepEqual(items.map(i => i.move), [null, null, null]);
+assert.deepEqual(['ready', 'needs-you', 'review'].map(c => yourMove(c, open({ ready: c === 'ready', changes: c === 'needs-you' }), null).rank), [1, 2, 5]);
+console.log('ok your move');

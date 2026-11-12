@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Homebase</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#ffffff; --canvas:#f6f8fa; --fg:#1f2328; --muted:#59636e; --line:#d1d9e0; --line-soft:#e6ebf1;
+    --hover:#f3f5f8; --accent:#0969da; --accent-bg:#ddf4ff; --chip:#eff2f5; --strong:#000;
+    --c-doing:#0969da; --c-needs:#bc4c00; --c-review:#8250df; --c-ready:#1a7f37; --c-done:#59636e; --c-idle:#8c959f;
+    --shadow:0 8px 24px rgba(140,149,159,.2); --card-shadow:0 1px 0 rgba(31,35,40,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0d1117; --canvas:#010409; --fg:#e6edf3; --muted:#9198a1; --line:#30363d; --line-soft:#21262d;
+      --hover:#151b23; --accent:#4493f8; --accent-bg:#121d2f; --chip:#212830; --strong:#fff;
+      --c-doing:#4493f8; --c-needs:#db6d28; --c-review:#ab7df8; --c-ready:#3fb950; --c-done:#9198a1; --c-idle:#656c76;
+      --shadow:0 8px 24px rgba(1,4,9,.75); --card-shadow:none;
+    }
+  }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  html, body { height:100%; }
+  body { margin:0; font:14px/1.5 Inter, -apple-system, system-ui, sans-serif; background:var(--canvas); color:var(--fg); -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; }
+  .mono { font-family:'JetBrains Mono', ui-monospace, monospace; font-size:11.5px; }
+  .muted { color:var(--muted); }
+
+  header.top { background:var(--bg); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:12px; padding:12px 24px; flex-wrap:wrap; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:600; font-size:15px; }
+  .sep { color:var(--line); font-size:20px; font-weight:300; }
+  .select { position:relative; }
+  .select select { appearance:none; font:inherit; font-weight:600; color:var(--fg); background:var(--canvas); border:1px solid var(--line); border-radius:6px; padding:5px 30px 5px 12px; cursor:pointer; outline:none; }
+  .select select:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .select::after { content:''; position:absolute; right:12px; top:50%; width:6px; height:6px; border-right:1.5px solid var(--muted); border-bottom:1.5px solid var(--muted); transform:translateY(-70%) rotate(45deg); pointer-events:none; }
+  .ghost { white-space:nowrap; appearance:none; font:inherit; font-size:13px; font-weight:500; color:var(--fg); background:var(--canvas); border:1px solid var(--line); border-radius:6px; padding:5px 12px; cursor:pointer; }
+  .ghost:hover { background:var(--hover); }
+  dialog { border:1px solid var(--line); border-radius:12px; background:var(--bg); color:var(--fg); padding:0; width:min(420px, calc(100vw - 32px)); box-shadow:var(--shadow); }
+  dialog::backdrop { background:rgba(1,4,9,.4); }
+  .d-head { display:flex; align-items:center; padding:14px 16px; border-bottom:1px solid var(--line); font-weight:600; }
+  .d-body { max-height:60vh; overflow:auto; padding:8px 0; }
+  .d-body h4 { margin:8px 16px 4px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; }
+  .p-row { display:flex; align-items:center; gap:10px; padding:6px 16px; }
+  .p-row:hover { background:var(--hover); }
+  .p-row span { flex:1; }
+  .p-row small { color:var(--muted); }
+  .p-row button { appearance:none; border:1px solid var(--line); background:var(--canvas); color:var(--fg); border-radius:6px; font:inherit; font-size:12px; padding:2px 10px; cursor:pointer; }
+  .p-row button.add { color:var(--c-ready); }
+  .p-row button.rm { color:var(--c-needs); }
+  .d-empty { padding:6px 16px; color:var(--muted); font-size:12.5px; }
+  .welcome { margin:auto; text-align:center; color:var(--muted); max-width:360px; }
+  .welcome h2 { color:var(--fg); font-size:18px; margin:0 0 6px; }
+  .welcome .btn { margin:14px auto 0; }
+  .search { flex:1; min-width:180px; max-width:360px; margin-left:auto; position:relative; }
+  .search input { width:100%; padding:5px 12px 5px 32px; border:1px solid var(--line); border-radius:6px; background:var(--canvas); color:var(--fg); font:inherit; outline:none; }
+  .search input:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .search svg { position:absolute; left:10px; top:50%; transform:translateY(-50%); color:var(--muted); }
+  .live { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:12px; white-space:nowrap; }
+  .live i { width:7px; height:7px; border-radius:50%; background:var(--c-ready); box-shadow:0 0 0 3px color-mix(in srgb, var(--c-ready) 25%, transparent); }
+  .live.off i { background:var(--c-needs); }
+
+  .board { flex:1; display:flex; gap:12px; padding:16px 24px; overflow-x:auto; align-items:stretch; min-height:0; }
+  .col { flex:1 1 0; min-width:230px; display:flex; flex-direction:column; background:var(--bg); border:1px solid var(--line); border-radius:10px; min-height:0; }
+  .col-head { display:flex; align-items:center; gap:8px; padding:12px 14px 8px; }
+  .col-head .dot { width:12px; height:12px; border-radius:50%; border:2px solid var(--c); background:color-mix(in srgb, var(--c) 20%, transparent); }
+  .col-head b { font-weight:600; }
+  .col-head .count { background:var(--chip); border-radius:99px; padding:0 8px; font-size:12px; color:var(--muted); font-weight:500; }
+  .col-desc { padding:0 14px 8px; font-size:12px; color:var(--muted); }
+  .cards { flex:1; overflow-y:auto; padding:4px 8px 8px; display:flex; flex-direction:column; gap:8px; }
+  .col.idle { opacity:.8; }
+  .empty-col { margin:4px; padding:16px; text-align:center; color:var(--muted); font-size:12px; border:1px dashed var(--line); border-radius:8px; }
+
+  .card { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px 12px; cursor:pointer; box-shadow:var(--card-shadow); transition:border-color .12s, transform .12s; }
+  .card:hover { border-color:color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  .card.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .card-top { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .card-top .proj { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .card-top .when { margin-left:auto; white-space:nowrap; }
+  .card h3 { margin:0; font-size:14px; font-weight:600; line-height:1.35; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .card p { margin:4px 0 0; font-size:12.5px; color:var(--muted); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .tags { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; align-items:center; }
+  .chip { display:inline-flex; align-items:center; gap:4px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:1px 8px; border-radius:99px; background:var(--chip); color:var(--fg); font-size:11.5px; line-height:18px; }
+  a.chip { text-decoration:none; color:var(--accent); background:var(--accent-bg); }
+  a.chip:hover { text-decoration:underline; }
+  .pulse { width:7px; height:7px; border-radius:50%; background:var(--c-doing); animation:pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity:.25; } }
+
+  .main { flex:1; display:flex; min-height:0; }
+  .left { flex:1; min-width:0; display:flex; flex-direction:column; container-type:inline-size; }
+  #chat { width:420px; flex-shrink:0; background:var(--bg); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
+  #chat.wide { width:min(760px, 55vw); }
+  .c-head { display:flex; gap:8px; align-items:center; padding:10px 12px; border-bottom:1px solid var(--line); }
+  .c-head .select { flex:1; min-width:0; }
+  .c-head select { width:100%; text-overflow:ellipsis; font-size:13px; }
+  .c-feed { flex:1; overflow:auto; padding:14px 12px; display:flex; flex-direction:column; gap:10px; background:var(--canvas); }
+  .bubble { flex-shrink:0; max-width:92%; border-radius:12px; padding:2px 12px; font-size:13.5px; line-height:1.6; overflow-wrap:anywhere; }
+  .bubble.assistant { align-self:flex-start; background:var(--bg); border:1px solid var(--line); border-bottom-left-radius:4px; }
+  .bubble.user { align-self:flex-end; max-width:85%; background:var(--accent-bg); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-bottom-right-radius:4px; }
+  .bubble .body.fold { max-height:9.6em; overflow:hidden; -webkit-mask-image:linear-gradient(#000 60%, transparent); mask-image:linear-gradient(#000 60%, transparent); }
+  .bubble .b-note { font-size:11px; color:var(--muted); margin:-6px 0 6px; }
+  .bubble.failed { border-color:var(--c-needs); }
+  .bubble.failed .b-note { color:var(--c-needs); }
+  .bubble .show { appearance:none; border:0; background:none; color:var(--accent); font:inherit; font-size:12px; font-weight:500; padding:0 0 8px; cursor:pointer; }
+  .tldr { margin:10px 0 4px; padding:7px 10px; border-radius:8px; background:color-mix(in srgb, #d4a72c 18%, var(--bg)); border-left:3px solid #d4a72c; font-size:13.5px; line-height:1.5; }
+  .tldr::before { content:'TLDR'; display:block; font-size:10.5px; font-weight:700; letter-spacing:.08em; color:color-mix(in srgb, #d4a72c 70%, var(--fg)); }
+  .tools { align-self:flex-start; flex-shrink:0; font-size:12px; color:var(--muted); padding:0 4px; }
+  .tools::before { content:'⚙ '; }
+  .c-note { margin:0 12px 8px; padding:8px 10px; border-radius:8px; font-size:12.5px; display:flex; gap:8px; align-items:center; }
+  .c-ask { background:color-mix(in srgb, var(--c-needs) 14%, var(--bg)); border:1px solid color-mix(in srgb, var(--c-needs) 40%, transparent); }
+  .c-ask span { flex:1; }
+  .c-working { margin-top:8px; color:var(--muted); }
+  .c-input { display:flex; gap:8px; align-items:flex-end; padding:10px 12px 12px; border-top:1px solid var(--line); }
+  .c-input textarea { flex:1; field-sizing:content; min-height:38px; max-height:180px; resize:none; font:inherit; font-size:13.5px; color:var(--fg); background:var(--canvas); border:1px solid var(--line); border-radius:8px; padding:8px 10px; outline:none; }
+  .c-input textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .c-input .btn { margin:0; padding:8px 14px; }
+  #c-err:empty { display:none; }
+  #c-err { margin:0 12px 8px; }
+  .detail { padding:2px 4px 12px; cursor:default; }
+  .detail h4 { margin:12px 0 4px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; }
+  .files { list-style:none; margin:0; padding:0; }
+  .files li { font-family:'JetBrains Mono', ui-monospace, monospace; font-size:12px; padding:3px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
+  .files li b { color:var(--fg); font-weight:500; }
+  .btn { margin-left:auto; appearance:none; display:inline-flex; align-items:center; gap:6px; border:1px solid color-mix(in srgb, var(--c-ready) 60%, black); background:var(--c-ready); color:#fff; font:inherit; font-weight:600; font-size:13px; border-radius:6px; padding:5px 12px; cursor:pointer; white-space:nowrap; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn:disabled { opacity:.6; cursor:default; }
+  #term { flex:1; border:0; width:100%; background:#0d1117; }
+  .error { color:var(--c-needs); font-size:12px; margin-top:6px; }
+  .x { appearance:none; border:1px solid var(--line); background:var(--canvas); color:var(--muted); border-radius:6px; width:30px; height:30px; cursor:pointer; font-size:16px; flex-shrink:0; }
+  .x:hover { color:var(--fg); }
+  .body { font-size:13.5px; line-height:1.6; overflow-wrap:anywhere; }
+  .body strong { font-weight:700; color:var(--strong); }
+  .body .chip { vertical-align:baseline; }
+  .body p, .body ul, .body ol, .body pre, .body table, .body blockquote { margin:10px 0; }
+  .body ul, .body ol { padding-left:22px; }
+  .body h1, .body h2, .body h3, .body h4 { font-size:14px; margin:14px 0 6px; }
+  .body code { font-family:'JetBrains Mono', ui-monospace, monospace; font-size:12px; background:var(--chip); padding:1px 5px; border-radius:4px; }
+  .body pre { background:var(--canvas); border:1px solid var(--line); border-radius:6px; padding:10px 12px; overflow:auto; }
+  .body pre code { background:none; padding:0; }
+  .body table { border-collapse:collapse; font-size:12.5px; }
+  .body th, .body td { border:1px solid var(--line); padding:4px 8px; text-align:left; }
+  .body blockquote { border-left:3px solid var(--line); padding-left:10px; color:var(--muted); }
+  .body a { color:var(--accent); }
+
+  .seg { display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
+  .seg button { appearance:none; border:0; background:var(--canvas); color:var(--muted); font:inherit; font-size:13px; font-weight:500; padding:5px 12px; cursor:pointer; }
+  .seg button + button { border-left:1px solid var(--line); }
+  .seg button.on { background:var(--bg); color:var(--fg); box-shadow:inset 0 -2px 0 #fd8c73; }
+  .masters { flex:1; overflow:auto; padding:16px 24px 40px; display:flex; flex-direction:column; gap:16px; }
+  .master { background:var(--bg); border:1px solid var(--line); border-radius:10px; overflow:hidden; flex-shrink:0; }
+  .m-head { display:flex; align-items:center; gap:10px; padding:12px 16px; flex-wrap:wrap; }
+  .m-head .ghost { font-size:12px; padding:2px 10px; }
+  .m-head .ghost:disabled { color:var(--accent); border-color:color-mix(in srgb, var(--accent) 40%, var(--line)); cursor:default; background:var(--accent-bg); }
+  .m-head h3 { margin:0; font-size:15px; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .m-sum { display:flex; gap:6px; margin-left:auto; align-items:center; flex-wrap:wrap; }
+  .m-sum .n { display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--muted); }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--c); flex-shrink:0; }
+  .dot.live { animation:pulse 1.2s ease-in-out infinite; }
+  .m-note { padding:0 16px 12px; color:var(--muted); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rows { width:100%; border-collapse:collapse; table-layout:fixed; border-top:1px solid var(--line); }
+  .rows td { padding:8px 12px; border-top:1px solid var(--line-soft); vertical-align:middle; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+  .rows tr:first-child td { border-top:0; }
+  .rows tr { cursor:pointer; }
+  .rows tr:hover { background:var(--hover); }
+  .rows tr.sel { background:var(--accent-bg); }
+  .rows .st { width:130px; padding-left:16px; }
+  .rows .st span { display:inline-flex; align-items:center; gap:7px; font-weight:500; font-size:12px; color:var(--c); }
+  .rows .what b { font-weight:500; }
+  .rows .what small { color:var(--muted); margin-left:8px; font-size:12px; }
+  .rows .pr { width:140px; } .rows .br { width:22%; } .rows .when { width:60px; text-align:right; color:var(--muted); font-size:12px; padding-right:16px; }
+  .more { appearance:none; width:100%; border:0; border-top:1px solid var(--line-soft); background:none; color:var(--muted); font:inherit; font-size:12px; padding:7px; cursor:pointer; }
+  .more:hover { color:var(--fg); background:var(--hover); }
+  .rows tr.detail, .rows tr.detail:hover { background:var(--bg); cursor:default; }
+  .rows tr.detail td { border-top:0; white-space:normal; overflow:visible; padding:0 16px 4px 44px; }
+  .card .detail { margin-top:8px; border-top:1px solid var(--line-soft); padding-top:4px; }
+  @container (max-width: 1000px) { .rows .br { display:none; } }
+  @container (max-width: 700px) { .rows .what small, .rows .pr { display:none; } }
+  @media (max-width: 900px) {
+    .main { flex-direction:column; overflow:auto; }
+    .left { flex:none; min-height:60vh; }
+    #chat, #chat.wide { width:auto; height:80vh; flex-shrink:0; border-left:0; border-top:1px solid var(--line); }
+  }
+
+  .rows .prog { width:150px; }
+  .stage { display:flex; flex-direction:column; gap:3px; }
+  .card .stage { margin-top:8px; }
+  .stage .bar { display:flex; gap:3px; }
+  .stage .bar i { flex:1; height:5px; border-radius:3px; background:var(--line-soft); }
+  .stage .bar i.on { background:var(--c); }
+  .stage .bar i.now { animation:pulse 1.2s ease-in-out infinite; }
+  .stage small { font-size:11px; color:var(--muted); line-height:1.2; }
+
+  @media (max-width: 640px) {
+    header.top, .board { padding-left:16px; padding-right:16px; }
+    .board { flex-direction:column; overflow-x:hidden; }
+    .col { flex:none; }
+    .live, .sep { display:none; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><img src="/icon.svg" width="26" height="26" alt="">Homebase</div>
+  <span class="sep">/</span>
+  <label class="select"><select id="project" aria-label="Project"></select></label>
+  <button class="ghost" id="manage">Projects…</button>
+  <div class="seg" id="views"><button data-v="sessions">Sessions</button><button data-v="board">Board</button></div>
+  <label class="search">
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M10.68 11.74a6 6 0 1 1 1.06-1.06l3.04 3.04a.75.75 0 1 1-1.06 1.06ZM11.5 7a4.5 4.5 0 1 0-9 0 4.5 4.5 0 0 0 9 0Z"/></svg>
+    <input id="q" placeholder="Filter cards…  ( / )" autocomplete="off">
+  </label>
+  <div class="live" id="live"><i></i><span id="stamp">live</span></div>
+</header>
+<div class="main">
+  <div class="left">
+    <div class="masters" id="masters"></div>
+    <div class="board" id="board"></div>
+  </div>
+  <aside id="chat">
+    <div class="c-head">
+      <label class="select"><select id="chat-pick" aria-label="Session shown in chat"></select></label>
+      <div class="seg"><button id="t-chat" class="on">Chat</button><button id="t-terminal" title="Raw terminal (T)">Terminal</button></div>
+      <button class="ghost" id="resume" title="claude --resume in Ghostty">Ghostty</button>
+    </div>
+    <div class="c-feed" id="feed"></div>
+    <div class="c-note c-working" id="working" hidden><span class="pulse"></span>Claude is working…</div>
+    <div class="c-note c-ask" id="ask" hidden><span><b>Claude is asking:</b> <span id="ask-q"></span> Answer it in the terminal.</span><button class="btn" id="ask-go">Open terminal</button></div>
+    <iframe id="term" hidden title="Terminal"></iframe>
+    <div class="error" id="c-err"></div>
+    <form class="c-input" id="send"><textarea id="msg" rows="1" placeholder="Message Claude…  (Shift+Enter for newline)"></textarea><button class="btn">Send</button></form>
+  </aside>
+</div>
+<dialog id="dlg">
+  <div class="d-head">Projects on your board<button class="x" style="margin-left:auto" onclick="this.closest('dialog').close()">×</button></div>
+  <div class="d-body" id="dlg-body"></div>
+</dialog>
+<script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
+<script>
+  const plain = t => (t || '').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim();
+  const md = t => DOMPurify.sanitize(marked.parse(t || ''));
+  // Scan aids on rendered markdown: PR/MR links become chips, !123/#123 become chips, file paths become inline code.
+  const PR_HREF = /^https:\/\/\S+?\/(?:-\/merge_requests|pull)\/\d+\/?$/;
+  const TOKEN = /(^|[\s(\[])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+\/?|[\w.@+-]+(?:\/[\w.@+-]+)+\.[a-z]\w{0,5}|[!#]\d+\b)/gi;
+  function enrich(root) {
+    for (const a of root.querySelectorAll('a')) {
+      a.target = '_blank'; a.rel = 'noopener';
+      if (PR_HREF.test(a.href) && a.textContent.startsWith('http')) { a.textContent = prLabel(a.href); a.className = 'chip mono'; a.title = a.href; }
+    }
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement.closest('a, code, pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    const nodes = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode);
+    for (const n of nodes) {
+      const t = n.textContent;
+      if (!t.match(TOKEN)) continue;
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      for (const m of t.matchAll(TOKEN)) {
+        const start = m.index + m[1].length, tok = m[2].replace(/[.,:;]+$/, '');
+        frag.append(t.slice(last, start), /^[!#]/.test(tok) ? el('span', 'chip mono', tok) : el('code', null, tok));
+        last = start + tok.length;
+      }
+      frag.append(t.slice(last));
+      n.replaceWith(frag);
+    }
+    return root;
+  }
+  const rich = (text, inline) => { const d = el('div', inline ? 'tldr' : 'body'); d.innerHTML = DOMPurify.sanitize(inline ? marked.parseInline(text) : marked.parse(text || '')); return enrich(d); };
+  const COLUMNS = [
+    { key: 'doing', label: 'Doing', desc: 'Claude is working', color: '--c-doing' },
+    { key: 'needs-you', label: 'Needs you', desc: 'Waiting for input or changes requested', color: '--c-needs' },
+    { key: 'review', label: 'In review', desc: 'PR open, awaiting review', color: '--c-review' },
+    { key: 'ready', label: 'Ready to merge', desc: 'Approved and mergeable', color: '--c-ready' },
+    { key: 'done', label: 'Done', desc: 'Merged or closed', color: '--c-done' },
+    { key: 'idle', label: 'Idle', desc: 'No PR, not active', color: '--c-idle' }
+  ];
+  const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+  const parse = v => { try { return JSON.parse(v) || []; } catch { return []; } };
+  // ponytail: tracked list lives in this browser's localStorage; move to a projects.json if you want it across browsers
+  const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', q: '', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [] };
+  const saveTracked = () => { store.set('tracked', JSON.stringify(state.tracked)); };
+  const $ = id => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const ago = ms => { const s = (Date.now() - ms) / 1000; return s < 60 ? 'now' : s < 3600 ? `${s / 60 | 0}m` : s < 86400 ? `${s / 3600 | 0}h` : `${s / 86400 | 0}d`; };
+  const prLabel = url => { const m = url.match(/merge_requests\/(\d+)/) || url.match(/pull\/(\d+)/); return m ? (url.includes('merge_requests') ? '!' : '#') + m[1] : 'PR'; };
+  const model = m => { const x = (m || '').match(/claude-(\w+)-(\d+)-(\d+)/); return x ? `${x[1][0].toUpperCase()}${x[1].slice(1)} ${x[2]}.${x[3]}` : m; };
+  const prChip = s => { const a = el('a', 'chip mono', `${prLabel(s.pr)}${s.prState ? ' · ' + s.prState.state : ''}`); a.href = s.pr; a.target = '_blank'; a.onclick = e => e.stopPropagation(); return a; };
+
+  function tags(s) {
+    const t = [];
+    if (s.status === 'working' || s.status === 'running') { const c = el('span', 'chip'); c.append(el('span', 'pulse'), 'working'); t.push(c); }
+    if (s.branch && s.branch !== 'HEAD') t.push(el('span', 'chip mono', s.branch));
+    if (s.pr) t.push(prChip(s));
+    if (s.model) t.push(el('span', 'chip', model(s.model)));
+    return t;
+  }
+
+  const counts = () => { const c = {}; for (const s of state.sessions) c[s.project] = (c[s.project] || 0) + 1; return c; };
+
+  function renderProjects() {
+    const c = counts();
+    if (state.project !== 'all' && !state.tracked.includes(state.project)) state.project = 'all';
+    const names = [...state.tracked].sort((a, b) => a.localeCompare(b));
+    const total = names.reduce((n, p) => n + (c[p] || 0), 0);
+    const opts = [['all', `All my projects (${total})`], ...names.map(n => [n, `${n} (${c[n] || 0})`])];
+    const sel = $('project');
+    if (sel.options.length === opts.length && [...sel.options].every((o, i) => o.value === opts[i][0] && o.text === opts[i][1])) return;
+    sel.replaceChildren(...opts.map(([v, t]) => { const o = el('option', null, t); o.value = v; return o; }));
+    sel.value = state.project;
+  }
+
+  function renderDialog() {
+    const c = counts(), body = $('dlg-body');
+    const row = (name, kind) => {
+      const r = el('div', 'p-row'), b = el('button', kind, kind === 'add' ? '+ Add' : 'Remove');
+      r.append(el('span', null, name), el('small', null, `${c[name] || 0} sessions`), b);
+      b.onclick = () => {
+        state.tracked = kind === 'add' ? [...state.tracked, name] : state.tracked.filter(p => p !== name);
+        saveTracked(); renderDialog(); renderProjects(); renderBoard();
+      };
+      return r;
+    };
+    const others = Object.keys(c).filter(p => !state.tracked.includes(p)).sort((a, b) => c[b] - c[a]);
+    body.replaceChildren(
+      el('h4', null, 'On board'),
+      ...(state.tracked.length ? [...state.tracked].sort().map(p => row(p, 'rm')) : [el('div', 'd-empty', 'None yet.')]),
+      el('h4', null, 'Seen in recent sessions'),
+      ...(others.length ? others.map(p => row(p, 'add')) : [el('div', 'd-empty', 'Nothing else found.')])
+    );
+  }
+  const openDialog = () => { renderDialog(); $('dlg').showModal(); };
+  $('manage').onclick = openDialog;
+
+  const COL = Object.fromEntries(COLUMNS.map(c => [c.key, c]));
+  const visibleSessions = () => {
+    const q = state.q.toLowerCase();
+    return state.sessions.filter(s => state.tracked.includes(s.project) && (state.project === 'all' || s.project === state.project)
+      && (!q || [s.title, s.lastPrompt, s.project, s.branch, s.pr, ...s.agents.map(a => a.description)].some(v => (v || '').toLowerCase().includes(q))));
+  };
+  // Subagents as work items, carrying their master session.
+  const agentItem = (a, s) => ({ ...a, kind: 'agent', title: a.description, lastReply: a.report, lastPrompt: null, project: s.project, master: s });
+  const dot = key => { const d = el('span', 'dot' + (key === 'doing' ? ' live' : '')); d.style.setProperty('--c', `var(${COL[key].color})`); return d; };
+  state.view = store.get('view') || 'sessions';
+  state.expanded = new Set();
+
+  function renderMasters() {
+    $('masters').replaceChildren(...visibleSessions().map(s => {
+      const box = el('section', 'master'), head = el('div', 'm-head');
+      const own = el('span', 'chip'); own.append(dot(s.column), COL[s.column].label);
+      head.append(el('h3', null, s.title || plain(s.lastPrompt) || s.id), el('span', 'chip', s.project), own);
+      const sum = el('div', 'm-sum'), byCol = {};
+      for (const a of s.agents) byCol[a.column] = (byCol[a.column] || 0) + 1;
+      for (const c of COLUMNS) if (byCol[c.key]) { const n = el('span', 'n'); n.append(dot(c.key), `${byCol[c.key]} ${c.label.toLowerCase()}`); sum.append(n); }
+      sum.append(el('span', 'n', ago(s.updated)));
+      const here = el('button', 'ghost', chatSession()?.id === s.id ? 'In chat' : 'Chat here');
+      here.disabled = chatSession()?.id === s.id;
+      here.onclick = () => bindChat(s.id);
+      head.append(sum, here);
+      box.append(head);
+      if (s.lastReply && !s.agents.length) box.append(el('div', 'm-note', plain(s.lastReply)));
+      if (s.agents.length) {
+        const open = state.expanded.has(s.id);
+        const items = s.agents.map(a => agentItem(a, s));
+        const shown = open ? items : items.filter(a => a.column !== 'done');
+        const table = el('table', 'rows');
+        table.append(...shown.flatMap(a => {
+          const tr = el('tr', state.selected === a.id ? 'sel' : '');
+          const st = el('td', 'st'), lbl = el('span'); lbl.style.setProperty('--c', `var(${COL[a.column].color})`); lbl.append(dot(a.column), COL[a.column].label); st.append(lbl);
+          const what = el('td', 'what'); what.append(el('b', null, a.description), el('small', null, plain(a.tldr || a.report).replace(/https?:\/\/\S+/g, '')));
+          const prog = el('td', 'prog'); prog.append(stageBar(a));
+          const pr = el('td', 'pr'); if (a.pr) pr.append(prChip(a));
+          const br = el('td', 'br'); if (a.branch) br.append(el('span', 'chip mono', a.branch));
+          tr.append(st, what, prog, pr, br, el('td', 'when', ago(a.updated)));
+          tr.onclick = () => select(a);
+          if (state.selected !== a.id) return [tr];
+          const more = el('tr', 'detail'), td = el('td');
+          td.colSpan = 6; td.append(detail(a)); more.append(td);
+          return [tr, more];
+        }));
+        if (shown.length) box.append(table);
+        const hidden = items.length - shown.length;
+        if (hidden || open) {
+          const b = el('button', 'more', open ? 'Hide finished' : `Show ${hidden} finished`);
+          b.onclick = () => { open ? state.expanded.delete(s.id) : state.expanded.add(s.id); renderBoard(); };
+          box.append(b);
+        }
+      }
+      return box;
+    }));
+    if (!$('masters').children.length) $('masters').append(el('div', 'welcome', 'No sessions match.'));
+  }
+
+  // Click toggles an inline detail: TLDR callout, full report, edited files.
+  function select(x) { state.selected = state.selected === x.id ? null : x.id; renderBoard(); }
+  function detail(x) {
+    const d = el('div', 'detail');
+    if (x.tldr) d.append(rich(x.tldr, true));
+    if (x.body ?? x.lastReply) d.append(rich(x.body ?? x.lastReply));
+    if (x.files?.length) {
+      const ul = el('ul', 'files');
+      ul.append(...x.files.map(f => { const li = el('li'), i = f.lastIndexOf('/'); li.title = f; li.append(f.slice(0, i + 1), el('b', null, f.slice(i + 1))); return li; }));
+      d.append(el('h4', null, `Files edited · ${x.files.length}`), ul);
+    }
+    if (!d.children.length) d.append(el('p', 'muted', 'Nothing to show yet.'));
+    d.onclick = e => e.stopPropagation();
+    return d;
+  }
+  // 5-segment progress from the server's stage guess; the current segment pulses while the agent runs.
+  function stageBar(a) {
+    const w = el('div', 'stage'), bar = el('div', 'bar');
+    w.style.setProperty('--c', `var(${a.status === 'stopped' ? '--c-needs' : COL[a.column].color})`);
+    for (let i = 0; i < 5; i++) bar.append(el('i', i < a.stage ? 'on' : i === a.stage ? (a.status === 'running' ? 'on now' : 'on') : ''));
+    w.append(bar, el('small', null, a.stageLabel));
+    return w;
+  }
+
+  function renderBoard() {
+    $('masters').hidden = state.view !== 'sessions';
+    $('board').hidden = state.view !== 'board';
+    for (const b of $('views').children) b.classList.toggle('on', b.dataset.v === state.view);
+    if (!state.tracked.length) {
+      const w = el('div', 'welcome'), b = el('button', 'btn', '+ Add projects');
+      w.append(el('h2', null, 'No projects on your board'), el('div', null, 'Pick the projects you want to follow. Sessions from other projects stay hidden.'), b);
+      b.onclick = openDialog;
+      $('masters').hidden = true; $('board').hidden = false;
+      return $('board').replaceChildren(w);
+    }
+    state.view === 'sessions' ? renderMasters() : renderKanban();
+  }
+  for (const b of $('views').children) b.onclick = () => { state.view = b.dataset.v; store.set('view', state.view); renderBoard(); };
+
+  function renderKanban() {
+    // one card per subagent; sessions without subagents are their own card
+    const list = visibleSessions().flatMap(s => s.agents.length ? s.agents.map(a => agentItem(a, s)) : [s]);
+    $('board').replaceChildren(...COLUMNS.map(c => {
+      const items = list.filter(s => s.column === c.key);
+      const col = el('section', `col ${c.key}`);
+      col.style.setProperty('--c', `var(${c.color})`);
+      const head = el('div', 'col-head');
+      head.append(el('span', 'dot'), el('b', null, c.label), el('span', 'count', items.length));
+      const cards = el('div', 'cards');
+      cards.append(...items.map(s => {
+        const card = el('article', 'card' + (state.selected === s.id ? ' sel' : ''));
+        const top = el('div', 'card-top');
+        top.append(el('span', 'proj', s.project), el('span', 'when', ago(s.updated)));
+        card.append(top, el('h3', null, s.title || plain(s.lastPrompt) || s.id));
+        if (s.kind === 'agent') card.append(stageBar(s));
+        if (s.lastReply && state.selected !== s.id) card.append(el('p', null, plain(s.tldr || s.lastReply)));
+        const t = el('div', 'tags'); t.append(...tags(s)); card.append(t);
+        if (state.selected === s.id) card.append(detail(s));
+        card.onclick = () => select(s);
+        return card;
+      }));
+      if (!items.length) cards.append(el('div', 'empty-col', 'Nothing here'));
+      col.append(head, el('div', 'col-desc', c.desc), cards);
+      return col;
+    }));
+  }
+
+  let lastSessions = '', lastRender = 0;
+  async function refresh() {
+    try {
+      const text = await fetch('/api/sessions').then(r => r.text());
+      $('live').classList.remove('off');
+      $('stamp').textContent = `live · ${new Date().toLocaleTimeString()}`;
+      // ponytail: skip identical re-renders so text in an open detail stays selectable; re-render each minute for the ages
+      if (text !== lastSessions || Date.now() - lastRender > 60_000) {
+        state.sessions = JSON.parse(text);
+        lastSessions = text; lastRender = Date.now();
+        renderProjects(); renderBoard(); renderChatPick();
+      }
+    } catch { $('live').classList.add('off'); $('stamp').textContent = 'offline'; }
+    refreshChat();
+  }
+
+  // Chat column: bound to one master session, default the most recently active tracked one.
+  const chatSession = () => state.sessions.find(s => s.id === state.chat) || state.sessions.find(s => state.tracked.includes(s.project)) || null;
+  let chatKey = null;
+
+  function bindChat(id) {
+    state.chat = id; store.set('chat', id);
+    if (!$('term').hidden) showChat();
+    renderBoard(); renderChatPick(); refreshChat();
+  }
+
+  function renderChatPick() {
+    const cur = chatSession();
+    const list = state.sessions.filter(s => state.tracked.includes(s.project) || s === cur);
+    const opts = list.map(s => [s.id, `${s.title || plain(s.lastPrompt).slice(0, 60) || s.id} · ${s.project}`]);
+    const sel = $('chat-pick');
+    if (!(sel.options.length === opts.length && [...sel.options].every((o, i) => o.value === opts[i][0] && o.text === opts[i][1]))) {
+      sel.replaceChildren(...opts.map(([v, t]) => { const o = el('option', null, t); o.value = v; return o; }));
+    }
+    sel.value = cur?.id ?? '';
+  }
+  $('chat-pick').onchange = e => bindChat(e.target.value);
+
+  function bubble(i, sid) {
+    if (i.role === 'tools') return el('div', 'tools', i.text);
+    const b = el('div', `bubble ${i.role}${i.error ? ' failed' : ''}`), key = `${sid}:${i.at}`;
+    if (i.at) b.title = new Date(i.at).toLocaleString();
+    if (i.tldr) b.append(rich(i.tldr, true));
+    const body = rich(i.text);
+    if (!state.unfold.has(key)) body.classList.add('fold');
+    b.append(body);
+    const note = i.error ? 'Not sent' : i.sending ? 'sending…' : i.pending ? 'queued' : null;
+    if (note) b.append(el('div', 'b-note', note));
+    b.dataset.key = key;
+    return b;
+  }
+
+  // "Show more" only where the fold actually cuts something off; needs layout, so runs after insertion.
+  function addShowMore(feed) {
+    for (const body of feed.querySelectorAll('.body.fold')) {
+      if (body.scrollHeight <= body.clientHeight + 4) { body.classList.remove('fold'); continue; }
+      const btn = el('button', 'show', 'Show more');
+      btn.onclick = () => {
+        const key = body.parentElement.dataset.key, open = body.classList.toggle('fold');
+        open ? state.unfold.delete(key) : state.unfold.add(key);
+        btn.textContent = open ? 'Show more' : 'Show less';
+      };
+      body.after(btn);
+    }
+  }
+
+  async function refreshChat() {
+    const s = chatSession(), feed = $('feed');
+    if (!s) { chatKey = null; return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
+    let data;
+    try {
+      const r = await fetch(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}`);
+      if (!r.ok) throw new Error(await r.text());
+      data = await r.json();
+    } catch { return; }
+    if (chatSession()?.id !== s.id) return; // switched while loading
+    const chatting = $('term').hidden;
+    $('working').hidden = !data.working || !chatting;
+    $('ask').hidden = !data.asking || !chatting;
+    $('ask-q').textContent = data.asking || '';
+    // optimistic bubbles stay until the transcript has the same text
+    state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !data.items.some(i => i.role === 'user' && i.text === o.text));
+    const items = [...data.items, ...state.outbox.filter(o => o.sid === s.id)];
+    const key = s.id + JSON.stringify(items);
+    if (key === chatKey) return;
+    const fresh = !chatKey?.startsWith(s.id), atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40, top = feed.scrollTop;
+    chatKey = key;
+    feed.replaceChildren(...items.map(i => bubble(i, s.id)));
+    if (!items.length) feed.append(el('div', 'welcome', 'No messages yet.'));
+    addShowMore(feed);
+    feed.scrollTop = fresh || atBottom ? feed.scrollHeight : top;
+  }
+
+  $('send').onsubmit = async e => {
+    e.preventDefault();
+    const s = chatSession(), ta = $('msg'), btn = $('send').querySelector('button'), text = ta.value.trim();
+    if (!s || !text || btn.disabled) return;
+    btn.disabled = true; btn.textContent = 'Sending…'; $('c-err').textContent = '';
+    const out = { role: 'user', text, sid: s.id, sending: true };
+    state.outbox = [...state.outbox.filter(o => !o.error), out];
+    refreshChat();
+    try {
+      const r = await fetch(`/api/send?id=${encodeURIComponent(s.id)}`, { method: 'POST', headers: { 'x-codetool': '1', 'content-type': 'text/plain' }, body: text });
+      if (!r.ok) throw new Error(await r.text());
+      ta.value = '';
+      setTimeout(refreshChat, 1000);
+    } catch (err) { $('c-err').textContent = err.message; out.error = err.message; refreshChat(); }
+    btn.disabled = false; btn.textContent = 'Send'; ta.focus();
+  };
+  $('msg').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('send').requestSubmit(); } };
+
+  function setMode(term) {
+    $('chat').classList.toggle('wide', term);
+    $('t-terminal').classList.toggle('on', term); $('t-chat').classList.toggle('on', !term);
+    $('term').hidden = !term;
+    for (const id of ['feed', 'send', 'working', 'ask']) if (term || !['working', 'ask'].includes(id)) $(id).hidden = term;
+  }
+  function showChat() { $('term').src = 'about:blank'; setMode(false); chatKey = null; refreshChat(); }
+
+  async function showTerminal() {
+    const s = chatSession();
+    if (!s) return;
+    $('c-err').textContent = '';
+    try {
+      const r = await fetch(`/api/terminal?id=${encodeURIComponent(s.id)}`, { method: 'POST', headers: { 'x-codetool': '1' } });
+      if (!r.ok) throw new Error(await r.text());
+      const { port } = await r.json();
+      setMode(true);
+      $('term').src = `http://localhost:${port}/`; // ponytail: always reload, so a ttyd restarted on the same port reattaches instead of showing ttyd's reconnect prompt
+      $('term').focus();
+    } catch (e) { $('c-err').textContent = e.message; }
+  }
+  $('t-chat').onclick = showChat;
+  $('t-terminal').onclick = showTerminal;
+  $('ask-go').onclick = showTerminal;
+
+  $('resume').onclick = async () => {
+    const btn = $('resume'), s = chatSession();
+    if (!s || btn.disabled) return;
+    btn.disabled = true; $('c-err').textContent = '';
+    try {
+      const r = await fetch(`/api/resume?id=${encodeURIComponent(s.id)}`, { method: 'POST', headers: { 'x-codetool': '1' } });
+      if (!r.ok) $('c-err').textContent = await r.text();
+    } catch (e) { $('c-err').textContent = e.message; }
+    btn.disabled = false;
+  };
+
+  $('project').onchange = e => { state.project = e.target.value; store.set('project', state.project); renderBoard(); };
+  $('q').oninput = e => { state.q = e.target.value; renderBoard(); };
+  document.addEventListener('keydown', e => {
+    const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+    if (e.key === 'Escape' && state.selected) { state.selected = null; renderBoard(); }
+    if (e.key === 't' && !typing) { e.preventDefault(); $('term').hidden ? showTerminal() : showChat(); }
+    if (e.key === '/' && !typing) { e.preventDefault(); $('q').focus(); }
+  });
+
+  refresh(); setInterval(refresh, 3000);
+</script>
+</body>
+</html>

@@ -58,7 +58,8 @@
   .quiet:hover { color:var(--fg); background:var(--hover); }
   .quiet:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
   .offline { margin-left:auto; color:var(--c-needs); font-size:12px; }
-  .offline:not([hidden]) + #manage { margin-left:12px !important; }
+  .offline:not([hidden]) + #bell { margin-left:12px !important; }
+  #bell { font-size:14px; }
 
   .chip { display:inline-flex; align-items:center; gap:4px; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:1px 8px; border-radius:99px; background:var(--chip); color:var(--fg); font-size:11.5px; line-height:18px; }
   a.chip { text-decoration:none; color:var(--accent); background:var(--accent-bg); }
@@ -186,7 +187,8 @@
   <span class="sep">/</span>
   <label class="select"><select id="project" aria-label="Project"></select></label>
   <span class="offline" id="offline" hidden>Offline</span>
-  <button class="quiet" id="manage" title="Manage projects" aria-label="Manage projects" style="margin-left:auto">☰</button>
+  <button class="quiet" id="bell" title="Desktop notifications" aria-label="Desktop notifications" style="margin-left:auto"></button>
+  <button class="quiet" id="manage" title="Manage projects" aria-label="Manage projects">☰</button>
 </header>
 <div class="main">
   <div class="left">
@@ -460,6 +462,50 @@
     if (project !== state.project) { state.project = project; store.set('project', project); }
   }
 
+  // Transitions into an attention state since the previous poll, at most one per item. No previous poll, no events.
+  function attentionEvents(prevItems, nextItems) {
+    if (!prevItems) return [];
+    const before = new Map(prevItems.map(x => [x.key, x])), now = new Set(nextItems.map(x => x.key));
+    const failing = x => x?.prState?.ci === 'failing';
+    const events = nextItems.flatMap(x => {
+      const p = before.get(x.key), was = p?.column;
+      const kind = x.column === 'needs-you' && was !== 'needs-you' ? 'needs-you'
+        : x.column === 'ready' && was !== 'ready' ? 'ready'
+        : was === 'doing' && (x.column === 'review' || x.column === 'done') ? 'finished'
+        : failing(x) && !failing(p) ? 'failing' : null;
+      return kind ? [{ kind, item: x }] : [];
+    });
+    // finished agents without an MR drop off the board
+    return [...events, ...prevItems.filter(p => p.column === 'doing' && !now.has(p.key)).map(item => ({ kind: 'finished', item }))];
+  }
+  const shown = x => state.tracked.includes(x.project) && (state.project === 'all' || x.project === state.project);
+  function updateTitle() {
+    const n = visibleSessions().flatMap(s => s.items || []).filter(x => x.column === 'needs-you' || x.column === 'ready').length + (state.asking ? 1 : 0);
+    document.title = n ? `(${n}) Homebase` : 'Homebase';
+  }
+  const notifyOn = () => store.get('notify') === '1' && window.Notification?.permission === 'granted';
+  function notify({ kind, item: x }) {
+    if (!notifyOn() || (document.visibilityState === 'visible' && document.hasFocus())) return;
+    const ref = x.pr ? prLabel(x.pr) : x.title;
+    const [title, body] = { 'needs-you': [`Needs you: ${x.title} — ${x.next}`], ready: [`Ready to merge: ${ref}`, x.title], finished: [`Agent finished: ${x.title}`, x.column === 'doing' ? undefined : x.next], failing: [`Pipeline failing: ${ref}`, x.title] }[kind];
+    const n = new Notification(title, { body, tag: x.key, icon: '/icon.svg' });
+    n.onclick = () => {
+      window.focus(); n.close();
+      const it = state.sessions.flatMap(s => s.items || []).find(i => i.key === x.key);
+      if (it && state.selected !== it.key) select(it);
+      document.querySelector('.rows tr.sel')?.scrollIntoView({ block: 'center' });
+    };
+  }
+  const bell = $('bell');
+  const renderBell = () => { const on = notifyOn(); bell.textContent = on ? '🔔' : '🔕'; bell.setAttribute('aria-pressed', on); };
+  bell.hidden = !window.Notification;
+  // permission is only ever requested from this click
+  bell.onclick = async () => {
+    const on = !notifyOn() && await Notification.requestPermission() === 'granted';
+    store.set('notify', on ? '1' : '0'); renderBell();
+  };
+  if (window.Notification) renderBell();
+
   let lastSessions = '', lastRender = 0;
   async function refresh() {
     try {
@@ -471,7 +517,12 @@
         migrateTracked();
         lastSessions = text; lastRender = Date.now();
         renderProjects(); renderBoard();
+        // diffed over all items, then filtered, so changing the project filter doesn't read as transitions
+        const items = state.sessions.flatMap(s => s.items || []);
+        attentionEvents(state.items, items).filter(e => shown(e.item)).forEach(notify);
+        state.items = items;
       }
+      updateTitle();
     } catch { $('offline').hidden = false; }
     refreshChat();
   }
@@ -532,7 +583,7 @@
   const norm = t => (t || '').replace(/<pasted_content id="([^"]*)">([\s\S]*?)<\/pasted_content(?: id="\1")?>/g, '$2').replace(/\s+/g, ' ').trim();
   async function refreshChat() {
     const s = chatSession(), feed = $('feed');
-    if (!s) { chatKey = null; return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
+    if (!s) { chatKey = null; state.asking = null; updateTitle(); return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
     let data;
     try {
       const r = await fetch(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}`);
@@ -542,6 +593,7 @@
     if (chatSession()?.id !== s.id) return; // switched while loading
     $('working').hidden = !data.working;
     $('ask').hidden = !data.asking;
+    state.asking = data.asking; updateTitle();
     $('ask-q').textContent = data.asking || '';
     $('ask-cmd').textContent = `tmux attach -t cc-${s.id.slice(0, 8)}`;
     // Optimistic bubbles go once any user/queued/pending item has the same text (sent no earlier than 10s before),

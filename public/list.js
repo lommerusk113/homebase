@@ -6,6 +6,18 @@ import { milestoneTag } from './milestone.js';
 
 const dot = key => { const d = el('span', 'dot' + (key === 'doing' ? ' live' : '')); d.style.setProperty('--c', `var(${COL[key].color})`); return d; };
 
+// CI pill next to the MR chip: ✓ passed, ✗ failed, ● running/pending, grey for the rest; nothing without a pipeline.
+const PIPE = { success: ['✓', 'passed'], failed: ['✗', 'failed'], running: ['●', 'running'], pending: ['●', 'pending'], created: ['●', 'pending'], preparing: ['●', 'pending'], waiting_for_resource: ['●', 'pending'], scheduled: ['●', 'scheduled'] };
+function ciPill(p) {
+    if (!p?.status) return [];
+    const [icon, word] = PIPE[p.status] ?? ['–', p.status.replace(/_/g, ' ')];
+    const a = el(p.url ? 'a' : 'span', `ci-pill ci-${p.status}`, icon);
+    if (p.url) { a.href = p.url; a.target = '_blank'; a.onclick = e => e.stopPropagation(); }
+    const when = p.at && ago(Date.parse(p.at));
+    a.setAttribute('aria-label', `Pipeline ${word}`);
+    return [a, tooltip(a, `Pipeline ${word}${when ? ` · ${when === 'now' ? 'just now' : `${when} ago`}` : ''}`)];
+}
+
 // Work items (one per MR, plus running/stopped agents without one), grouped by what they wait on; merged ones folded at the bottom.
 function renderItems() {
     const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).sort((a, b) => b.updated - a.updated);
@@ -23,7 +35,7 @@ function renderItems() {
                 prog.append(m);
                 if (x.tokensTitle) prog.append(tooltip(m, x.tokensTitle));
             }
-            const pr = el('td', 'pr'); if (x.pr) pr.append(prChip(x));
+            const pr = el('td', 'pr'); if (x.pr) pr.append(prChip(x), ...ciPill(x.prState?.pipeline));
             const br = el('td', 'br'); if (x.branch) br.append(el('span', 'chip mono', x.branch));
             const act = el('td', 'act'); if (x.action && x.sessionId) act.append(...actionButton(x));
             tr.append(what, prog, pr, br, act, el('td', 'when', ago(x.updated)));

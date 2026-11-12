@@ -75,7 +75,31 @@ async function projectOf(cwd) {
     return projects.get(cwd);
 }
 
-// Read-only PR/MR lookup via gh/glab. Returns { state: open|merged|closed, title, branch, reviewers, ready, changes, changesBy, draft, ci } or null.
+// CI pipeline as { status, url, at } or null. GitLab passes the MR's head_pipeline (or legacy pipeline) as-is;
+// GitHub's statusCheckRollup is rolled up to success, failed or running (CheckRuns and StatusContexts alike).
+export function pipelineOf(gl, checks, prUrl) {
+
+    if (gl) {
+        return { status: gl.status, url: gl.web_url ?? null, at: gl.finished_at ?? gl.updated_at ?? null };
+    }
+    if (!checks?.length) {
+        return null;
+    }
+
+    const outcome = c => c.conclusion || (c.status && c.status !== 'COMPLETED' ? 'PENDING' : c.state);
+    const all = checks.map(outcome);
+    const status = all.some(o => ['FAILURE', 'ERROR', 'TIMED_OUT', 'STARTUP_FAILURE', 'ACTION_REQUIRED', 'CANCELLED'].includes(o)) ? 'failed'
+        : all.some(o => ['PENDING', 'EXPECTED', 'QUEUED', 'IN_PROGRESS'].includes(o) || !o) ? 'running'
+            : 'success';
+    const at = checks.map(c => c.completedAt ?? c.startedAt).filter(Boolean).sort().at(-1) ?? null;
+
+    return { status, url: `${prUrl}/checks`, at };
+}
+
+// The coarse ci flag nextStep/yourMove/rowAction read: 'failing', 'running' or null.
+export const ciOf = pipeline => ({ failed: 'failing', running: 'running', pending: 'running' })[pipeline?.status] ?? null;
+
+// Read-only PR/MR lookup via gh/glab. Returns { state: open|merged|closed, title, branch, reviewers, ready, changes, changesBy, draft, ci, pipeline } or null.
 async function fetchPr(url) {
 
     const gl = url.match(/^https:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)/);
@@ -84,6 +108,7 @@ async function fetchPr(url) {
         const mr = JSON.parse(stdout);
         const state = { opened: 'open', merged: 'merged' }[mr.state] ?? 'closed';
         const status = mr.detailed_merge_status;
+        const pipeline = pipelineOf(mr.head_pipeline ?? mr.pipeline);
 
         return {
             state,
@@ -95,14 +120,16 @@ async function fetchPr(url) {
             changes: status === 'requested_changes' || status === 'discussions_not_resolved',
             changesBy: [],
             draft: !!mr.draft,
-            ci: { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? null,
+            ci: { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? ciOf(pipeline),
+            pipeline,
             milestone: mr.milestone ? { id: mr.milestone.id, title: mr.milestone.title, due_date: mr.milestone.due_date } : null,
             target: mr.target_branch
         };
     }
 
-    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,title,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews']);
+    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,title,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup']);
     const pr = JSON.parse(stdout);
+    const pipeline = pipelineOf(null, pr.statusCheckRollup, url);
     const reviews = pr.latestReviews ?? [];
 
     return {
@@ -114,7 +141,8 @@ async function fetchPr(url) {
         changes: pr.reviewDecision === 'CHANGES_REQUESTED',
         changesBy: reviews.filter(r => r.state === 'CHANGES_REQUESTED').map(r => r.author?.login).filter(Boolean),
         draft: pr.isDraft,
-        ci: null, // ponytail: GitHub checks need statusCheckRollup; add it if failing pipelines matter there
+        ci: ciOf(pipeline),
+        pipeline,
         milestone: pr.milestone ? { id: pr.milestone.number, title: pr.milestone.title, due_date: pr.milestone.dueOn?.slice(0, 10) ?? null } : null,
         target: pr.baseRefName
     };

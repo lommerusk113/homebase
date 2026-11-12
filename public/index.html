@@ -20,6 +20,7 @@
   <div class="brand"><img src="/icon.svg" width="26" height="26" alt="">Homebase</div>
   <span class="sep">/</span>
   <wa-select id="project" size="small" aria-label="Project"></wa-select>
+  <span id="milestone-slot"></span><!-- milestone pill goes here (milestoneSelector from milestone.js) -->
   <span class="offline" id="offline" hidden>Offline</span>
   <button class="quiet" id="bell" title="Desktop notifications" aria-label="Desktop notifications" aria-pressed="false">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -31,7 +32,7 @@
 </header>
 <div class="main">
   <div class="left">
-    <div class="masters" id="masters"><div id="milestones" hidden></div></div>
+    <div class="masters" id="masters"></div>
     <div class="limits" id="limits" hidden></div>
     <wa-tooltip for="limits" id="limits-tip" placement="top-start"></wa-tooltip>
   </div>

@@ -1,16 +1,14 @@
 // Left column: work items grouped by what they wait on, the "Your move" line, and attention transitions.
-import { $, el, COLUMNS, COL, LIFECYCLE, state, visibleSessions, ago, prLabel, prChip, plain, foldable, waButton, tooltip } from './core.js';
+import { $, el, COLUMNS, COL, LIFECYCLE, state, hooks, visibleSessions, ago, prLabel, prChip, plain, foldable, waButton, tooltip } from './core.js';
 import { chatSession, bindChat, sendText } from './chat.js';
 import { milestoneTag } from './milestone.js';
 
-// the milestone strips (filled by milestone.js) are re-inserted as the same node, so their open state survives renders
-let msBox;
 
 const dot = key => { const d = el('span', 'dot' + (key === 'doing' ? ' live' : '')); d.style.setProperty('--c', `var(${COL[key].color})`); return d; };
 
 // Work items (one per MR, plus running/stopped agents without one), grouped by what they wait on; merged ones folded at the bottom.
 function renderItems() {
-    const items = visibleSessions().flatMap(s => s.items || []).sort((a, b) => b.updated - a.updated);
+    const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).sort((a, b) => b.updated - a.updated);
     const table = list => {
         const t = el('table', 'rows');
         t.append(...list.flatMap(x => {
@@ -57,7 +55,7 @@ function renderItems() {
         fold.append(sum, table(merged));
         groups.push(fold);
     }
-    $('masters').replaceChildren(...(items.length ? [yourMoveLine(items)] : []), msBox, ...groups);
+    $('masters').replaceChildren(...(items.length ? [yourMoveLine(items)] : []), ...groups);
     if (!groups.length) $('masters').append(el('div', 'welcome', 'Nothing in flight.'));
 }
 
@@ -143,7 +141,6 @@ function stageBar(x) {
 }
 
 export function renderBoard() {
-    msBox ??= $('milestones'); // before the welcome screen can detach it
     if (!state.tracked.length) {
         const w = el('div', 'welcome'), b = waButton('+ Add projects', null, { variant: 'success', appearance: 'accent', size: 'medium' });
         w.append(el('h2', null, 'No projects on your board'), el('div', null, 'Pick the projects you want to follow. Sessions from other projects stay hidden.'), b);

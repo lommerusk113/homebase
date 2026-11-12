@@ -452,3 +452,30 @@ assert.deepEqual(clearState('1700000000000'), { at: 1700000000000, fresh: false 
 assert.deepEqual(clearState('{"at":1700000000000,"mode":"new"}'), { at: 1700000000000, fresh: true }); // New conversation
 assert.deepEqual(clearState('junk'), { at: 0, fresh: false });
 console.log('ok clear state');
+
+import { folderFor, editorsFrom, openInEditor } from './server.mjs';
+{
+    const on = new Set(['/wt', '/repo']), exists = p => on.has(p);
+    assert.equal(folderFor('/wt', '/repo', exists), '/wt'); // worktree wins
+    assert.equal(folderFor('/gone', '/repo', exists), '/repo'); // worktree removed -> repo
+    assert.equal(folderFor(null, '/repo', exists), '/repo');
+    assert.equal(folderFor('/gone', '/also-gone', exists), null); // nothing to open
+    assert.equal(folderFor('-a', 'rel', () => true), null); // never a flag or a relative path
+
+    assert.deepEqual(editorsFrom(['/Applications/Safari.app', '/Applications/IntelliJ IDEA Ultimate.app'], {}),
+        [{ id: 'idea', name: 'IntelliJ IDEA', cmd: ['open', ['-a', '/Applications/IntelliJ IDEA Ultimate.app']] }]);
+    assert.deepEqual(editorsFrom(['/Applications/Visual Studio Code.app'], { idea: '/bin/idea' }).map(e => [e.id, e.cmd]),
+        [['idea', ['/bin/idea', []]], ['vscode', ['open', ['-a', '/Applications/Visual Studio Code.app']]]]);
+    assert.deepEqual(editorsFrom([], { code: '/usr/local/bin/code' }).map(e => e.id), ['vscode']);
+    assert.deepEqual(editorsFrom([], {}), []);
+
+    const calls = [], exec = async (...a) => { calls.push(a); };
+    const opts = { exec, eds: async () => editorsFrom(['/A/IntelliJ IDEA.app'], {}), list: async () => [{ items: [{ key: 'k', folder: '/wt' }, { key: 'gone', folder: null }] }] };
+    await openInEditor('k', 'idea', opts);
+    assert.deepEqual(calls, [['open', ['-a', '/A/IntelliJ IDEA.app', '/wt']]]);
+    await assert.rejects(openInEditor('k', 'vscode', opts), { status: 400 });
+    await assert.rejects(openInEditor('gone', 'idea', opts), { status: 404, message: 'folder is gone' });
+    await assert.rejects(openInEditor('nope', 'idea', opts), { status: 404, message: 'unknown item' });
+    assert.equal(calls.length, 1);
+}
+console.log('ok open in editor');

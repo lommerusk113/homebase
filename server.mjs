@@ -1,6 +1,7 @@
 // Dashboard over Claude Code transcripts in ~/.claude/projects. Never writes files; only types into its own tmux sessions.
 import { createServer } from 'node:http';
-import { readdir, stat, open, readFile } from 'node:fs/promises';
+import { readdir, stat, open, readFile, access } from 'node:fs/promises';
+import { existsSync, constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -561,6 +562,7 @@ export function summarizeAgent(meta, entries, ageMs, id) {
         pr: report.match(PR_URL)?.at(-1) ?? null,
         prs: [...new Set(report.match(PR_URL))],
         branch: entries.findLast(e => e.gitBranch)?.gitBranch ?? meta.worktreeBranch ?? null,
+        worktreePath: meta.worktreePath ?? null,
         model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? meta.pickedEffortModel ?? null,
         files: filesTouched(entries, meta.worktreePath ?? entries.findLast(e => e.cwd)?.cwd)
     };
@@ -771,6 +773,7 @@ async function sessions() {
     }
     for (const s of out) {
         s.items = items.filter(i => i.sessionId === s.id);
+        s.items.forEach(i => { i.folder = folderFor(i.worktreePath, s.cwd); });
         delete s.agents; // folded into items
     }
 
@@ -1002,6 +1005,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now()) {
             agentStatus: agent?.status ?? null,
             updated: Math.max(agent?.updated ?? 0, it.linkedAt),
             branch: prState?.branch ?? agent?.branch ?? null, // transcript gitBranch is unreliable inside worktrees
+            worktreePath: agent?.worktreePath ?? null,
             tldr: agent?.tldr ?? null,
             body: agent?.body ?? '',
             files: agent?.files ?? [],
@@ -1269,6 +1273,61 @@ async function transcript(dir, id) {
     return { items: chatItems(entries), asking: pendingQuestion(entries), questions: pendingAsk(entries), working: Date.now() - st.mtimeMs < WORKING_MS };
 }
 
+// Open in editor: the item's agent worktree if it's still there, else its session's cwd. Absolute paths only, so none reads as a flag.
+export const folderFor = (worktreePath, cwd, exists = existsSync) => [worktreePath, cwd].find(p => p?.startsWith('/') && exists(p)) ?? null;
+
+const EDITORS = [
+    { id: 'idea', name: 'IntelliJ IDEA', app: /^IntelliJ IDEA.*\.app$/, cli: 'idea' },
+    { id: 'vscode', name: 'VS Code', app: /^Visual Studio Code.*\.app$/, cli: 'code' }
+];
+// apps: .app paths found; clis: command name -> path. An app wins (open -a), else the CLI.
+export function editorsFrom(apps, clis) {
+    return EDITORS.flatMap(e => {
+        const app = apps.find(a => e.app.test(basename(a)));
+        const cmd = app ? ['open', ['-a', app]] : clis[e.cli] ? [clis[e.cli], []] : null;
+
+        return cmd ? [{ id: e.id, name: e.name, cmd }] : [];
+    });
+}
+
+async function detectEditors() {
+
+    const appDirs = ['/Applications', join(homedir(), 'Applications'), join(homedir(), 'Applications', 'JetBrains Toolbox')];
+    const apps = (await Promise.all(appDirs.map(d => readdir(d).then(fs => fs.map(f => join(d, f)), () => [])))).flat();
+
+    const binDirs = [...(process.env.PATH ?? '').split(':').filter(Boolean), join(homedir(), 'Library', 'Application Support', 'JetBrains', 'Toolbox', 'scripts')];
+    const clis = {};
+    for (const name of EDITORS.map(e => e.cli)) {
+        for (const d of binDirs) {
+            const ok = await access(join(d, name), constants.X_OK).then(() => true, () => false);
+            if (ok) {
+                clis[name] = join(d, name);
+                break;
+            }
+        }
+    }
+
+    return editorsFrom(apps, clis);
+}
+let editorList = null;
+const editors = () => (editorList ??= detectEditors());
+
+// Only known items, only the folder the server resolved; the client names an item and an editor, never a path.
+export async function openInEditor(key, editorId, { list = sessions, eds = editors, exec = run } = {}) {
+
+    const ed = (await eds()).find(e => e.id === editorId);
+    if (!ed) {
+        throw Object.assign(new Error('unknown editor'), { status: 400 });
+    }
+
+    const it = (await list()).flatMap(s => s.items ?? []).find(i => i.key === key);
+    if (!it?.folder) {
+        throw Object.assign(new Error(it ? 'folder is gone' : 'unknown item'), { status: 404 });
+    }
+
+    await exec(ed.cmd[0], [...ed.cmd[1], it.folder]);
+}
+
 // Only known sessions, only their recorded cwd.
 async function resumable(id) {
 
@@ -1428,6 +1487,7 @@ const STATIC = {
 };
 
 if (import.meta.url === `file://${process.argv[1]}`) {
+    editors();
     createServer(async (req, res) => {
         const url = new URL(req.url, 'http://x');
         try {
@@ -1452,6 +1512,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             if (url.pathname === '/api/interrupt' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
                 await interrupt(url.searchParams.get('id'));
                 return res.end('ok');
+            }
+            if (url.pathname === '/api/open' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
+                await openInEditor(url.searchParams.get('item'), url.searchParams.get('editor'));
+                return res.end('ok');
+            }
+            if (url.pathname === '/api/editors') {
+                res.setHeader('content-type', 'application/json');
+                return res.end(JSON.stringify((await editors()).map(({ id, name }) => ({ id, name }))));
             }
             if (url.pathname === '/api/milestones') {
                 res.setHeader('content-type', 'application/json');

@@ -6,6 +6,7 @@ import { renderBoard } from './list.js';
 export const chatSession = () => { const v = visibleSessions(); return v.find(s => s.id === state.chat) || v[0] || null; };
 let chatKey = null;
 let stick = false; // set by a send: the next render scrolls to the bottom even if the user had scrolled up
+let following = null; // session id a /clear was sent to: the chat moves to its successor once the server has mapped it
 
 export function bindChat(id) {
     state.chat = id; store.set('chat', id);
@@ -55,6 +56,8 @@ function addShowMore(feed) {
 // same unwrap as the server's unwrapPasted, plus whitespace collapsed, for matching sent text to transcript text
 const norm = t => (t || '').replace(/<pasted_content id="([^"]*)">([\s\S]*?)<\/pasted_content(?: id="\1")?>/g, '$2').replace(/\s+/g, ' ').trim();
 export async function refreshChat() {
+    const next = following && state.sessions.find(x => x.clearedFrom === following);
+    if (next) { following = null; state.chat = next.id; store.set('chat', next.id); renderBoard(); }
     const s = chatSession(), feed = $('feed');
     if (!s) { chatKey = null; state.asking = null; updateTitle(); return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
     let data;
@@ -72,7 +75,7 @@ export async function refreshChat() {
         const ol = el('ol'); ol.append(...q.options.map(o => el('li', null, o)));
         return [el('p', null, q.question), ...(q.options.length ? [ol] : [])];
     }));
-    $('ask-cmd').textContent = `tmux attach -t cc-${s.id.slice(0, 8)}`;
+    $('ask-cmd').textContent = `tmux attach -t ${s.tmux ?? `cc-${s.id.slice(0, 8)}`}`;
     // Optimistic bubbles go once any user/queued/pending item has the same text (sent no earlier than 10s before),
     // or 30s after the send succeeded: the transcript is the source of truth.
     const landed = o => data.items.some(i => i.role === 'user' && norm(i.text) === norm(o.text) && !(Date.parse(i.at) < Date.parse(o.at) - 10_000));
@@ -85,12 +88,19 @@ export async function refreshChat() {
         const i = items.findIndex(x => Date.parse(x.at) > Date.parse(o.at));
         items.splice(i < 0 ? items.length : i, 0, o);
     }
-    const key = s.id + JSON.stringify([items, data.asking, data.working]);
+    // Clear view: items up to the stored cut-off stay hidden in Homebase only
+    const cut = Number(store.get(`cleared:${s.id}`)) || 0, hidden = items.findLastIndex(i => i.at && Date.parse(i.at) <= cut) + 1;
+    items.splice(0, hidden);
+    const key = s.id + JSON.stringify([items, data.asking, data.working, hidden]);
     if (key === chatKey) return;
     const fresh = !chatKey?.startsWith(s.id), atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40, top = feed.scrollTop;
     chatKey = key;
     feed.replaceChildren(...items.map(i => bubble(i, s.id)));
-    if (!items.length) feed.append(el('div', 'welcome', 'No messages yet.'));
+    if (hidden) {
+        const line = el('div', 'c-hidden', 'Earlier messages hidden · '), btn = el('button', 'show', 'Show');
+        btn.onclick = () => { store.set(`cleared:${s.id}`, ''); refreshChat(); };
+        line.append(btn); feed.prepend(line);
+    } else if (!items.length) feed.append(el('div', 'welcome', 'No messages yet.'));
     // Quick replies under Claude's newest message when it ends with a question; an outbox bubble after it hides them.
     const last = items.at(-1);
     if (last?.replies?.length && !data.asking && !data.working) {
@@ -149,5 +159,20 @@ export function initChat() {
         if (!await sendText(s.id, text) && !ta.value) { ta.value = text; syncSend(); } // give the text back so it isn't lost
     };
     $('msg').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('send').requestSubmit(); } };
+    $('c-menu').addEventListener('wa-select', e => {
+        const s = chatSession();
+        if (!s) return;
+        if (e.detail.item.value === 'view') { store.set(`cleared:${s.id}`, String(Date.now())); refreshChat(); } else $('clear-dlg').open = true;
+    });
+    $('clear-go').onclick = async () => {
+        const s = chatSession();
+        $('clear-dlg').open = false; $('c-err').textContent = '';
+        if (!s) return;
+        try {
+            const r = await fetch(`/api/clear?id=${encodeURIComponent(s.id)}`, { method: 'POST', headers: { 'x-codetool': '1' } });
+            if (!r.ok) throw new Error(await r.text());
+            following = s.id;
+        } catch (err) { $('c-err').textContent = err.message; }
+    };
     $('ask-copy').onclick = () => navigator.clipboard.writeText($('ask-cmd').textContent).then(() => { $('ask-copy').textContent = 'Copied'; setTimeout(() => { $('ask-copy').textContent = 'Copy'; }, 1500); });
 }

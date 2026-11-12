@@ -367,3 +367,22 @@ assert.deepEqual(activeMilestones([
     { state: 'open', target: 'supplier-automation' }, { state: 'open', milestone: { title: 'Closed one' } }
 ], msList), ['Supplier automation', 'Reports']);
 console.log('ok milestones');
+
+import { findClearedSuccessor, tmuxFor } from './server.mjs';
+{
+    const c = { from: 'old', cwd: '/r', clearedAt: 1_000 };
+    const ss = [
+        { id: 'old', cwd: '/r', created: 0 },
+        { id: 'before', cwd: '/r', created: 900 },
+        { id: 'other', cwd: '/x', created: 2_000 },
+        { id: 'new', cwd: '/r', created: 1_500 },
+        { id: 'newer', cwd: '/r', created: 1_800 },
+        { id: 'late', cwd: '/r', created: 1_000 + 60_000 }
+    ];
+    assert.equal(findClearedSuccessor(ss, c).id, 'newer');
+    assert.equal(findClearedSuccessor(ss.filter(s => !s.id.startsWith('new')), c), null);
+    const aliases = new Map([['new-id-123', { tmux: 'cc-old-id-1', from: 'old-id-1234' }]]);
+    assert.equal(tmuxFor('new-id-123', aliases), 'cc-old-id-1');
+    assert.equal(tmuxFor('abcdef0123', aliases), 'cc-abcdef01');
+}
+console.log('ok clear');

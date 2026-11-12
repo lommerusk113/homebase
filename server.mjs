@@ -97,7 +97,7 @@ export function pipelineOf(gl, checks, prUrl) {
     return { status, url: `${prUrl}/checks`, at };
 }
 
-// The coarse ci flag nextStep/yourMove/rowAction read: 'failing', 'running' or null.
+// The coarse ci flag nextStep/rowAction read: 'failing', 'running' or null.
 export const ciOf = pipeline => ({ failed: 'failing', running: 'running', pending: 'running' })[pipeline?.status] ?? null;
 
 // Read-only PR/MR lookup via gh/glab. Returns { state: open|merged|closed, title, branch, reviewers, ready, changes, changesBy, draft, ci, pipeline } or null.
@@ -887,32 +887,6 @@ export function nextStep(prState, agent) {
     return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
 }
 
-// The user's own action on a work item for the "Your move" line, ranked by urgency (lower is sooner), else null.
-// Items an agent is working on, or that are merged, wait on nobody.
-export function yourMove(column, prState, agentStatus) {
-
-    if (column === 'doing' || column === 'done') {
-        return null;
-    }
-    if (column === 'ready') {
-        return { rank: 1, action: 'merge' };
-    }
-    if (prState?.changes) {
-        return { rank: 2, action: 'address comments on' };
-    }
-    if (prState?.ci === 'failing') {
-        return { rank: 3, action: 'fix pipeline on' };
-    }
-    if (agentStatus === 'stopped') {
-        return { rank: 4, action: 'check stopped agent' };
-    }
-    if (prState?.state === 'open' && !prState.draft && !prState.reviewers?.length) {
-        return { rank: 5, action: 'assign a reviewer on' };
-    }
-
-    return null;
-}
-
 // The one-click command for a work item's row, as { label, message } typed into its session, or null when nothing is on you.
 export function rowAction(pr, prState, agent, title) {
 
@@ -1020,7 +994,6 @@ export function workItems(sessions, prOf = () => null, now = Date.now()) {
             pr: it.pr,
             prState,
             column: col,
-            move: yourMove(col, prState, agent?.status),
             stage,
             stageLabel: prState?.state === 'closed' ? 'Closed' : LIFECYCLE[stage],
             agentStatus: agent?.status ?? null,

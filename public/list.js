@@ -8,7 +8,7 @@ const dot = key => { const d = el('span', 'dot' + (key === 'doing' ? ' live' : '
 
 // CI pill next to the MR chip: ✓ passed, ✗ failed, ● running/pending, grey for the rest; nothing without a pipeline.
 const PIPE = { success: ['✓', 'passed'], failed: ['✗', 'failed'], running: ['●', 'running'], pending: ['●', 'pending'], created: ['●', 'pending'], preparing: ['●', 'pending'], waiting_for_resource: ['●', 'pending'], scheduled: ['●', 'scheduled'] };
-function ciPill(p) {
+export function ciPill(p) {
     if (!p?.status) return [];
     const [icon, word] = PIPE[p.status] ?? ['–', p.status.replace(/_/g, ' ')];
     const a = el(p.url ? 'a' : 'span', `ci-pill ci-${p.status}`, icon);

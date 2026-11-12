@@ -1,14 +1,16 @@
 // Keyboard navigation over work-item rows (after Contado): j/k move, Enter/Space expand, o opens the MR, a runs the row action.
+// The same j/k/Enter/o work on the Issues tab's cards; 1 and 2 switch tabs.
 // The focused row is tracked by item key, so it survives the 3s re-renders; list.js calls hooks.rendered after each one.
 import { $, el, state, hooks } from './core.js';
 import { select, renderBoard } from './list.js';
+import { showTab, activeTab, collapseIssue } from './issues.js';
 
 export const SHORTCUTS = [
     ['j / ↓', 'Next item'], ['k / ↑', 'Previous item'], ['Enter / Space', 'Expand or collapse, chat with its session'],
     ['o', 'Open the MR in a new tab'], ['a', "Run the row's action (asks first)"], ['/ or c', 'Focus the chat input'],
-    ['Esc', 'Leave the input, or collapse the row'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['?', 'This overlay']
+    ['Esc', 'Leave the input, or collapse the row'], ['1 / 2', 'Work tab / Issues tab'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['?', 'This overlay']
 ];
-const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', g: 'g' };
+const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', g: 'g', 1: 'work', 2: 'issues' };
 
 // Action for a keydown ({ key, metaKey, ctrlKey, altKey }); prev is 'g' when g was pressed just before.
 export function keyAction(e, prev) {
@@ -26,7 +28,8 @@ export function stepKey(keys, current, dir) {
 }
 
 let focusKey = null, prev = null, prevAt = 0;
-const rows = () => [...document.querySelectorAll('#masters tr[data-key]')].filter(r => r.checkVisibility()); // skips the folded Merged group
+const ROWS = '#masters tr[data-key], #issues .card[data-key]'; // work rows and issue cards; the hidden tab's are skipped below
+const rows = () => [...document.querySelectorAll(ROWS)].filter(r => r.checkVisibility()); // skips the folded Merged group
 const rowOf = key => rows().find(r => r.dataset.key === key);
 const itemOf = key => state.sessions.flatMap(s => s.items || []).find(x => x.key === key);
 const typing = path => path.some(n => n.isContentEditable || ['input', 'textarea', 'wa-input', 'wa-textarea'].includes(n.localName));
@@ -35,11 +38,11 @@ const menuOpen = path => !!document.querySelector('wa-dialog[open], wa-select[op
 
 // Roving tabindex and ARIA state on the rows; refocus puts DOM focus back on the tracked row after a re-render took it away.
 function syncRows(refocus) {
-    const all = [...document.querySelectorAll('#masters tr[data-key]')], cur = all.find(r => r.dataset.key === focusKey);
+    const all = [...document.querySelectorAll(ROWS)], cur = all.find(r => r.dataset.key === focusKey), first = cur || rows()[0];
     all.forEach(r => {
-        r.tabIndex = r === (cur || all[0]) ? 0 : -1;
+        r.tabIndex = r === first ? 0 : -1;
         r.setAttribute('aria-selected', r === cur);
-        r.setAttribute('aria-expanded', r.dataset.key === state.selected);
+        if (r.localName === 'tr') r.setAttribute('aria-expanded', r.dataset.key === state.selected);
     });
     if (refocus && cur) cur.focus({ preventScroll: true });
 }
@@ -91,16 +94,18 @@ function onKey(e) {
     prev = e.key; prevAt = Date.now();
     if (!action) return;
     // Enter/Space on a link or button inside the page keep their native meaning
-    if (action === 'toggle' && e.target !== document.body && !e.target.matches?.('tr[data-key]')) return;
-    const x = itemOf(focusKey);
+    if (action === 'toggle' && e.target !== document.body && !e.target.matches?.(ROWS)) return;
+    const x = itemOf(focusKey), card = focusKey?.startsWith('issue:') ? rowOf(focusKey) : null;
     const run = {
         next: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, 1)),
         prev: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, -1)),
-        toggle: () => x && rowOf(x.key) && select(x),
-        open: () => x?.pr && window.open(x.pr, '_blank', 'noopener'),
+        toggle: () => (card ? card.click() : x && rowOf(x.key) && select(x)),
+        open: () => (card ? window.open(card.dataset.url, '_blank', 'noopener') : x?.pr && window.open(x.pr, '_blank', 'noopener')),
         act: () => x?.action && x.sessionId && rowOf(x.key)?.querySelector('.act-btn') && confirmAction(x),
         chat: () => $('msg').focus(),
-        escape: () => { if (state.selected) { state.selected = null; renderBoard(); } },
+        escape: () => { if (activeTab() === 'issues') collapseIssue(); else if (state.selected) { state.selected = null; renderBoard(); } },
+        work: () => showTab('work'),
+        issues: () => showTab('issues'),
         help,
         project: () => { const p = $('project'); p.focus(); p.open = true; },
         milestone: () => { const m = document.querySelector('.ms-pick:not([hidden])'); if (m) { m.open = true; m.querySelector('summary').focus(); } },
@@ -112,6 +117,6 @@ function onKey(e) {
 
 export function initKeys() {
     hooks.rendered = syncRows;
-    document.addEventListener('focusin', e => { const r = e.target.closest?.('#masters tr[data-key]'); if (r) focusKey = r.dataset.key; });
+    document.addEventListener('focusin', e => { const r = e.target.closest?.(ROWS); if (r) focusKey = r.dataset.key; });
     document.addEventListener('keydown', onKey);
 }

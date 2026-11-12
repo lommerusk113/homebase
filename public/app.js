@@ -4,6 +4,7 @@ import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat } from './chat.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
 import { initKeys } from './keys.js';
+import { renderIssues, showTab } from './issues.js';
 
 // One milestone pill for the selected project (none for "All"); it filters the list. Rebuilt only when the project changes.
 let pillFor = null, milestone = null;
@@ -11,7 +12,8 @@ hooks.inMilestone = x => inMilestone(x, milestone);
 function renderMilestone() {
     if (pillFor === state.project) return;
     pillFor = state.project; milestone = null;
-    $('milestone-slot').replaceChildren(...(pillFor === 'all' ? [] : [milestoneSelector(pillFor, { onChange: m => { milestone = m; renderBoard(); } })]));
+    renderIssues(pillFor === 'all' ? null : undefined);
+    $('milestone-slot').replaceChildren(...(pillFor === 'all' ? [] : [milestoneSelector(pillFor, { onChange: m => { milestone = m; renderBoard(); }, onData: renderIssues })]));
 }
 
 // Web Awesome's dark theme is a class; follow the OS like the rest of the page does.
@@ -147,6 +149,8 @@ project.addEventListener('change', () => {
     if (!project.value || project.value === state.project) return;
     state.project = project.value; store.set('project', state.project); renderMilestone(); renderBoard(); refreshChat();
 });
+for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => showTab(b.dataset.tab);
+showTab(store.get('tab'));
 initKeys(); // includes Esc collapsing the expanded row
 initChat();
 fetch('/api/editors').then(r => r.json()).then(e => { state.editors = e; renderBoard(); }).catch(() => {});

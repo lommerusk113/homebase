@@ -246,3 +246,25 @@ assert.deepEqual(ev([it('a', 'review')], [it('a', 'review', 'failing')]), [['fai
 assert.deepEqual(ev([it('a', 'review', 'failing')], [it('a', 'review', 'failing')]), []);
 assert.deepEqual(ev([], [it('n', 'needs-you'), it('m', 'review')]), [['needs-you', 'n']]);
 console.log('ok attention');
+import { quickReplies, pendingAsk } from './server.mjs';
+const YN = ['Yes', 'No'], YBN = ['Yes', 'Do both', 'No'];
+assert.deepEqual(quickReplies('Want me to commit?', 'Fixed it.'), YN);
+assert.deepEqual(quickReplies(null, 'Fixed the parser.\n\nShall I push it?'), YN);
+assert.deepEqual(quickReplies('Fixed.', 'Done.\n\nWant me to **also** update the docs?'), YN);
+assert.deepEqual(quickReplies('**Fix the parser or the renderer?**', 'Two causes.'), YBN);
+assert.deepEqual(quickReplies(null, 'Two ways.\n\nShould I go with A, or B?'), YBN);
+assert.deepEqual(quickReplies('Commit it or not?', ''), YN);
+assert.deepEqual(quickReplies('Fixed the crash.', 'Why did it fail? A stale cache.\n\nCleared it.'), []); // rhetorical, mid-body
+assert.deepEqual(quickReplies(null, 'He asked "should we ship?"'), []); // quoted
+assert.deepEqual(quickReplies(null, 'Done.\n\n> Can we skip this?'), []);
+assert.deepEqual(quickReplies(null, '```\nwhat?\n```'), []);
+assert.deepEqual(quickReplies(null, 'Open points:\n- Rename it?\n- Drop the flag?'), []); // several questions
+assert.deepEqual(quickReplies(null, ''), []);
+assert.deepEqual(chatItems([say('Done.\n\nShip it?')]).at(-1).replies, YN);
+assert.equal(chatItems([say('Ship it?'), { type: 'user', message: { content: 'yes' } }])[0].replies, undefined);
+assert.equal(chatItems([say('Ship it?'), tu('Bash')])[0].replies, undefined);
+const ask2 = tu('AskUserQuestion', { id: 'q2', input: { questions: [{ question: 'Which DB?', options: [{ label: 'Postgres', description: 'x' }, { label: 'SQLite' }] }] } });
+assert.deepEqual(pendingAsk([ask2]), [{ question: 'Which DB?', options: ['Postgres', 'SQLite'] }]);
+assert.equal(pendingAsk([ask2, { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'q2' }] } }]), null);
+assert.equal(pendingQuestion([tu('AskUserQuestion', { id: 'q3', input: {} })]), 'Claude asked a question.');
+console.log('ok quick replies');

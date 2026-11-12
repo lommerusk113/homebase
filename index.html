@@ -67,9 +67,7 @@
   .main { flex:1; display:flex; min-height:0; }
   .left { flex:1; min-width:0; display:flex; flex-direction:column; container-type:inline-size; }
   #chat { width:420px; flex-shrink:0; background:var(--bg); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
-  .c-head { display:flex; gap:8px; align-items:center; padding:10px 12px; border-bottom:1px solid var(--line); }
-  .c-head .select { flex:1; min-width:0; }
-  .c-head select { width:100%; text-overflow:ellipsis; font-size:13px; }
+  .c-head { padding:8px 12px; border-bottom:1px solid var(--line); font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .c-feed { flex:1; overflow:auto; padding:14px 12px; display:flex; flex-direction:column; gap:10px; background:var(--canvas); }
   .bubble { flex-shrink:0; max-width:92%; border-radius:12px; padding:2px 12px; font-size:13.5px; line-height:1.6; overflow-wrap:anywhere; }
   .bubble.assistant { align-self:flex-start; background:var(--bg); border:1px solid var(--line); border-bottom-left-radius:4px; }
@@ -92,7 +90,7 @@
   .c-input { display:flex; gap:8px; align-items:flex-end; padding:10px 12px 12px; border-top:1px solid var(--line); }
   .c-input textarea { flex:1; field-sizing:content; min-height:38px; max-height:180px; resize:none; font:inherit; font-size:13.5px; color:var(--fg); background:var(--canvas); border:1px solid var(--line); border-radius:8px; padding:8px 10px; outline:none; }
   .c-input textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
-  .c-input .btn { margin:0; padding:8px 14px; }
+  .c-input textarea:read-only { opacity:.6; }
   #c-err:empty { display:none; }
   #c-err { margin:0 12px 8px; }
   .detail { padding:2px 4px 12px; cursor:default; }
@@ -181,14 +179,12 @@
     <div class="masters" id="masters"></div>
   </div>
   <aside id="chat">
-    <div class="c-head">
-      <label class="select"><select id="chat-pick" aria-label="Session shown in chat"></select></label>
-    </div>
+    <div class="c-head" id="chat-head"></div>
     <div class="c-feed" id="feed"></div>
     <div class="c-note c-working" id="working" hidden><span class="pulse"></span>Claude is working…</div>
     <div class="c-note c-ask" id="ask" hidden><span><b>Claude is asking:</b> <span id="ask-q"></span> Answer from any terminal: <code class="mono" id="ask-cmd"></code></span><button class="ghost" id="ask-copy">Copy</button></div>
     <div class="error" id="c-err"></div>
-    <form class="c-input" id="send"><textarea id="msg" rows="1" placeholder="Message Claude…  (Shift+Enter for newline)"></textarea><button class="btn">Send</button></form>
+    <form class="c-input" id="send"><textarea id="msg" rows="1" placeholder="Message Claude…"></textarea></form>
   </aside>
 </div>
 <dialog id="dlg">
@@ -398,7 +394,7 @@
       if (text !== lastSessions || Date.now() - lastRender > 60_000) {
         state.sessions = JSON.parse(text);
         lastSessions = text; lastRender = Date.now();
-        renderProjects(); renderBoard(); renderChatPick();
+        renderProjects(); renderBoard(); renderChatHead();
       }
     } catch { $('live').classList.add('off'); $('stamp').textContent = 'offline'; }
     refreshChat();
@@ -411,20 +407,14 @@
 
   function bindChat(id) {
     state.chat = id; store.set('chat', id);
-    renderBoard(); renderChatPick(); refreshChat();
+    renderBoard(); renderChatHead(); refreshChat();
   }
 
-  function renderChatPick() {
-    const cur = chatSession();
-    const list = visibleSessions();
-    const opts = list.map(s => [s.id, `${s.title || plain(s.lastPrompt).slice(0, 60) || s.id} · ${s.project}`]);
-    const sel = $('chat-pick');
-    if (!(sel.options.length === opts.length && [...sel.options].every((o, i) => o.value === opts[i][0] && o.text === opts[i][1]))) {
-      sel.replaceChildren(...opts.map(([v, t]) => { const o = el('option', null, t); o.value = v; return o; }));
-    }
-    sel.value = cur?.id ?? '';
+  // Which chat this is; switch via the project picker or a session on the left.
+  function renderChatHead() {
+    const s = chatSession(), t = s ? `${s.title || plain(s.lastPrompt) || s.id} · ${s.project}` : '';
+    $('chat-head').textContent = t; $('chat-head').title = t;
   }
-  $('chat-pick').onchange = e => bindChat(e.target.value);
 
   function bubble(i, sid) {
     if (i.role === 'tools') return el('div', 'tools', i.text);
@@ -456,6 +446,8 @@
     }
   }
 
+  // same unwrap as the server's unwrapPasted, plus whitespace collapsed, for matching sent text to transcript text
+  const norm = t => (t || '').replace(/<pasted_content id="([^"]*)">([\s\S]*?)<\/pasted_content(?: id="\1")?>/g, '$2').replace(/\s+/g, ' ').trim();
   async function refreshChat() {
     const s = chatSession(), feed = $('feed');
     if (!s) { chatKey = null; return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
@@ -470,9 +462,16 @@
     $('ask').hidden = !data.asking;
     $('ask-q').textContent = data.asking || '';
     $('ask-cmd').textContent = `tmux attach -t cc-${s.id.slice(0, 8)}`;
-    // optimistic bubbles stay until the transcript has the same text
-    state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !data.items.some(i => i.role === 'user' && i.text === o.text));
-    const items = [...data.items, ...state.outbox.filter(o => o.sid === s.id)];
+    // Optimistic bubbles go once any user/queued/pending item has the same text (sent no earlier than 10s before),
+    // or 30s after the send succeeded: the transcript is the source of truth.
+    const landed = o => data.items.some(i => i.role === 'user' && norm(i.text) === norm(o.text) && !(Date.parse(i.at) < Date.parse(o.at) - 10_000));
+    state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !(landed(o) || Date.now() - o.okAt > 30_000));
+    // placed by send time, so one sent before a queued message stays above it
+    const items = [...data.items];
+    for (const o of state.outbox.filter(o => o.sid === s.id)) {
+      const i = items.findIndex(x => Date.parse(x.at) > Date.parse(o.at));
+      items.splice(i < 0 ? items.length : i, 0, o);
+    }
     const key = s.id + JSON.stringify(items);
     if (key === chatKey) return;
     const fresh = !chatKey?.startsWith(s.id), atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40, top = feed.scrollTop;
@@ -485,25 +484,25 @@
 
   $('send').onsubmit = async e => {
     e.preventDefault();
-    const s = chatSession(), ta = $('msg'), btn = $('send').querySelector('button'), text = ta.value.trim();
-    if (!s || !text || btn.disabled) return;
-    btn.disabled = true; btn.textContent = 'Sending…'; $('c-err').textContent = '';
-    const out = { role: 'user', text, sid: s.id, sending: true };
+    const s = chatSession(), ta = $('msg'), text = ta.value.trim();
+    if (!s || !text || ta.readOnly) return;
+    ta.readOnly = true; $('c-err').textContent = ''; // dimmed via :read-only while the send is in flight
+    const out = { role: 'user', text, sid: s.id, at: new Date().toISOString(), sending: true };
     state.outbox = [...state.outbox.filter(o => !o.error), out];
     refreshChat();
     try {
       const r = await fetch(`/api/send?id=${encodeURIComponent(s.id)}`, { method: 'POST', headers: { 'x-codetool': '1', 'content-type': 'text/plain' }, body: text });
       if (!r.ok) throw new Error(await r.text());
-      ta.value = '';
+      ta.value = ''; out.okAt = Date.now();
       setTimeout(refreshChat, 1000);
     } catch (err) { $('c-err').textContent = err.message; out.error = err.message; refreshChat(); }
-    btn.disabled = false; btn.textContent = 'Send'; ta.focus();
+    ta.readOnly = false; ta.focus();
   };
   $('msg').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('send').requestSubmit(); } };
 
   $('ask-copy').onclick = () => navigator.clipboard.writeText($('ask-cmd').textContent).then(() => { $('ask-copy').textContent = 'Copied'; setTimeout(() => { $('ask-copy').textContent = 'Copy'; }, 1500); });
 
-  $('project').onchange = e => { state.project = e.target.value; store.set('project', state.project); renderBoard(); renderChatPick(); refreshChat(); };
+  $('project').onchange = e => { state.project = e.target.value; store.set('project', state.project); renderBoard(); renderChatHead(); refreshChat(); };
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && state.selected) { state.selected = null; renderBoard(); }
   });

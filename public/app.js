@@ -152,4 +152,5 @@ document.addEventListener('keydown', e => {
 });
 
 initChat();
+fetch('/api/editors').then(r => r.json()).then(e => { state.editors = e; renderBoard(); }).catch(() => {});
 refresh(); setInterval(refresh, 3000);

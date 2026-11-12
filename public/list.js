@@ -1,5 +1,5 @@
 // Left column: work items grouped by what they wait on, the "Your move" line, and attention transitions.
-import { $, el, COLUMNS, COL, LIFECYCLE, state, hooks, visibleSessions, ago, prLabel, prChip, plain, foldable, waButton, tooltip } from './core.js';
+import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prLabel, prChip, plain, foldable, waButton, tooltip } from './core.js';
 import { chatSession, bindChat, sendText } from './chat.js';
 import { milestoneTag } from './milestone.js';
 
@@ -25,7 +25,7 @@ function renderItems() {
             }
             const pr = el('td', 'pr'); if (x.pr) pr.append(prChip(x));
             const br = el('td', 'br'); if (x.branch) br.append(el('span', 'chip mono', x.branch));
-            const act = el('td', 'act'); if (x.action && x.sessionId) act.append(...actionButton(x));
+            const act = el('td', 'act'); act.append(...openButton(x)); if (x.action && x.sessionId) act.append(...actionButton(x));
             tr.append(what, prog, pr, br, act, el('td', 'when', ago(x.updated)));
             tr.onclick = () => select(x);
             if (state.selected !== x.key) return [tr];
@@ -102,6 +102,28 @@ function actionButton(x) {
         sendText(x.sessionId, x.action.message);
     };
     return [b, tooltip(b, x.action.message)];
+}
+
+// Open the item's folder (worktree, else repo; resolved on the server) in an editor. Several editors: a menu, last pick first.
+const CODE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>';
+function openButton(x) {
+    const eds = state.editors ?? [];
+    if (!x.folder || !eds.length) return [];
+    const last = store.get('editor'), ordered = [...eds.filter(e => e.id === last), ...eds.filter(e => e.id !== last)];
+    const open = ed => { store.set('editor', ed.id); fetch(`/api/open?item=${encodeURIComponent(x.key)}&editor=${ed.id}`, { method: 'POST', headers: { 'x-codetool': '1' } }); };
+    const b = waButton('', 'open-btn', { appearance: 'plain', 'aria-label': ordered.length > 1 ? 'Open in editor' : `Open in ${ordered[0].name}` });
+    b.innerHTML = CODE_ICON;
+    const tip = tooltip(b, b.getAttribute('aria-label'));
+    if (ordered.length === 1) {
+        b.onclick = e => { e.stopPropagation(); open(ordered[0]); };
+        return [b, tip];
+    }
+    const dd = el('wa-dropdown');
+    b.slot = 'trigger';
+    dd.append(b, ...ordered.map(ed => { const i = el('wa-dropdown-item', null, `Open in ${ed.name}`); i.value = ed.id; return i; }));
+    dd.onclick = e => e.stopPropagation();
+    dd.addEventListener('wa-select', e => open(eds.find(ed => ed.id === e.detail.item.value)));
+    return [dd, tip];
 }
 
 // Click toggles an inline detail (TLDR with Show more, other agents on the item, edited files) and binds the chat to the item's session.

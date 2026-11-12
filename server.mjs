@@ -21,7 +21,10 @@ const WAITING_MS = 30 * 60_000;
 
 const PR_TTL_MS = 60_000;
 const AGENT_TAIL_BYTES = 128 * 1024;
-const AGENT_RUNNING_MS = 2 * 60_000;
+// Silence an unfinished subagent may keep before it counts as stopped, by what its transcript ends on.
+const AGENT_TOOL_MS = 30 * 60_000; // a tool call is still pending (long Bash, own background subagent)
+const AGENT_THINK_MS = 10 * 60_000; // last entry is a tool result or user message, so the model is thinking
+const AGENT_IDLE_MS = 2 * 60_000; // ended its turn with text but never handed back
 
 const cache = new Map(); // path -> { mtimeMs, entries }
 const projects = new Map(); // cwd -> repo name
@@ -442,13 +445,46 @@ export function agentStage(uses, report, done) {
     return stage;
 }
 
+// Status from the transcript tail: pending tool calls and thinking may be silent for long; an API error stops it at once.
+export function agentStatus(meta, entries, ageMs) {
+
+    if (meta.finished) {
+        return { status: 'done' };
+    }
+
+    const turns = entries.filter(e => e.type === 'assistant' || e.type === 'user');
+    const last = turns.at(-1);
+    if (last?.isApiErrorMessage) {
+        return { status: 'stopped', stopReason: 'api-error' };
+    }
+
+    const pending = new Set();
+    let prev;
+    for (const e of turns) {
+        const blocks = Array.isArray(e.message?.content) ? e.message.content : [];
+        if (e.type === 'assistant') {
+            if (prev === 'user') {
+                pending.clear();
+            }
+            blocks.filter(b => b.type === 'tool_use').forEach(b => pending.add(b.id));
+        } else {
+            blocks.filter(b => b.type === 'tool_result').forEach(b => pending.delete(b.tool_use_id));
+        }
+        prev = e.type;
+    }
+
+    const limit = pending.size ? AGENT_TOOL_MS : last?.type === 'assistant' ? AGENT_IDLE_MS : AGENT_THINK_MS;
+
+    return { status: ageMs < limit ? 'running' : 'stopped' };
+}
+
 export function summarizeAgent(meta, entries, ageMs, id) {
 
     const uses = entries.flatMap(e => (e.type === 'assistant' && Array.isArray(e.message?.content) ? e.message.content : []))
         .filter(b => b.type === 'tool_use');
     const handback = uses.findLast(b => b.name === 'SubagentHandback')?.input?.message;
     const report = handback ?? textOf(entries.findLast(e => e.type === 'assistant' && textOf(e))) ?? '';
-    const status = meta.finished ? 'done' : ageMs < AGENT_RUNNING_MS ? 'running' : 'stopped';
+    const { status, stopReason } = agentStatus(meta, entries, ageMs);
     const { tldr, text: body } = splitTldr(report);
     const stage = Math.max(agentStage(uses, report, status === 'done'), stagePeak.get(id) ?? 0);
     if (id) {
@@ -458,6 +494,7 @@ export function summarizeAgent(meta, entries, ageMs, id) {
     return {
         description: meta.description ?? meta.agentType,
         status,
+        stopReason,
         stage,
         stageLabel: STAGES[stage],
         report,
@@ -722,7 +759,7 @@ export function nextStep(prState, agent) {
         return `${agent.description} is ${VERB[agent.stage] ?? 'working'}…`;
     }
     if (agent?.status === 'stopped') {
-        return 'Agent stopped — check the chat';
+        return agent.stopReason === 'api-error' ? 'Agent hit an API error — continue it' : 'Agent stopped — check the chat';
     }
     if (!prState) {
         return 'Open the MR to check its state';

@@ -450,6 +450,16 @@
     renderItems();
   }
 
+  // Projects are named after their git repo now; map saved names that were folder names (e.g. codetool → homebase).
+  function migrateTracked() {
+    const folder = s => (s.cwd || '').replace(/\/\.(claude\/)?worktrees\/.*$/, '').split('/').pop();
+    const rename = n => state.sessions.some(s => s.project === n) ? n : (state.sessions.find(s => folder(s) === n)?.project ?? n);
+    const tracked = [...new Set(state.tracked.map(rename))];
+    if (tracked.join() !== state.tracked.join()) { state.tracked = tracked; saveTracked(); }
+    const project = state.project === 'all' ? 'all' : rename(state.project);
+    if (project !== state.project) { state.project = project; store.set('project', project); }
+  }
+
   let lastSessions = '', lastRender = 0;
   async function refresh() {
     try {
@@ -458,6 +468,7 @@
       // ponytail: skip identical re-renders so text in an open detail stays selectable; re-render each minute for the ages
       if (text !== lastSessions || Date.now() - lastRender > 60_000) {
         state.sessions = JSON.parse(text);
+        migrateTracked();
         lastSessions = text; lastRender = Date.now();
         renderProjects(); renderBoard();
       }

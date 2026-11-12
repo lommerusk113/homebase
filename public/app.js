@@ -13,7 +13,7 @@ function renderMilestone() {
     if (pillFor === state.project) return;
     pillFor = state.project; milestone = null;
     renderIssues(pillFor === 'all' ? null : undefined);
-    $('milestone-slot').replaceChildren(...(pillFor === 'all' ? [] : [milestoneSelector(pillFor, { onChange: m => { milestone = m; renderBoard(); }, onData: renderIssues })]));
+    $('milestone-slot').replaceChildren(...(pillFor === 'all' ? [] : [milestoneSelector(pillFor, { onChange: m => { milestone = m; renderBoard(); }, onData: renderIssues, onBusy: b => $('issues').classList.toggle('stale', b) })]));
 }
 
 // Web Awesome's dark theme is a class; follow the OS like the rest of the page does.

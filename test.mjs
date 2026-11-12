@@ -439,6 +439,7 @@ assert.equal(chatMessage({ iid: 5, mrs: [{ iid: 20, state: 'merged' }, { iid: 21
 assert.equal(shortTitle('Supplier automation v2: undo misses pastes', 'Supplier automation'), 'undo misses pastes');
 assert.equal(shortTitle('Fix: undo', 'Supplier automation'), 'Fix: undo');
 const msel = { title: 'Supplier automation', total: 59, closed: 48, due: null, groups: { doing: [1, 2, 3], closable: [], assigned: [1, 2, 3], unassigned: [1, 2, 3, 4, 5] } };
+assert.deepEqual(pillLabel({ title: 'Reports', total: 10, closed: 4, due: null, loading: true }), { text: '6 open', tip: 'Reports: loading issues… · no due date' });
 assert.deepEqual(pillLabel(msel), { text: '11 open', tip: 'Supplier automation: 11 open of 59 (3 in progress, 3 not started, 5 unassigned), 48 closed · no due date' });
 console.log('ok issues');
 
@@ -558,3 +559,33 @@ for (const p of [
     assert.equal(vendorPath(p), null, p);
 }
 console.log('ok vendor');
+
+import { limiter, dedupe } from './server.mjs';
+{
+    // at most 2 run at once, in call order, and a rejection doesn't stall the queue
+    const slot = limiter(2), started = [];
+    let active = 0, peak = 0;
+    const job = (n, fail) => slot(async () => {
+        started.push(n); peak = Math.max(peak, ++active);
+        await new Promise(r => setTimeout(r, 5));
+        active--;
+        if (fail) throw new Error(`job ${n}`);
+        return n;
+    });
+    const results = await Promise.allSettled([job(1), job(2, true), job(3), job(4), job(5)]);
+    assert.equal(peak, 2);
+    assert.deepEqual(started, [1, 2, 3, 4, 5]);
+    assert.deepEqual(results.map(r => r.value ?? r.reason.message), [1, 'job 2', 3, 4, 5]);
+
+    // concurrent calls for one key share a single run; after it settles the next call runs again
+    const once = dedupe();
+    let runs = 0;
+    const call = k => once(k, async () => { runs++; await new Promise(r => setTimeout(r, 5)); return k; });
+    assert.deepEqual(await Promise.all([call('a'), call('a'), call('b')]), ['a', 'a', 'b']);
+    assert.equal(runs, 2);
+    await call('a');
+    assert.equal(runs, 3);
+    await assert.rejects(once('x', () => { throw new Error('sync'); }), /sync/); // a throwing fn rejects, it doesn't throw
+    assert.equal(await once('x', () => 'again'), 'again'); // and doesn't stick
+    console.log('ok limiter dedupe');
+}

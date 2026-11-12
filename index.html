@@ -204,7 +204,7 @@
 </header>
 <div class="main">
   <div class="left">
-    <div class="masters" id="masters"></div>
+    <div class="masters" id="masters"><div id="milestones" hidden></div></div>
     <div class="limits" id="limits" hidden></div>
   </div>
   <aside id="chat">
@@ -265,6 +265,7 @@
   const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [], nudged: new Set() };
   const saveTracked = () => { store.set('tracked', JSON.stringify(state.tracked)); };
   const $ = id => document.getElementById(id);
+  const msBox = $('milestones'); // kept across renders; filled by /milestone.js
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
   const ago = ms => { const s = (Date.now() - ms) / 1000; return s < 60 ? 'now' : s < 3600 ? `${s / 60 | 0}m` : s < 86400 ? `${s / 3600 | 0}h` : `${s / 86400 | 0}d`; };
   const prLabel = url => { const m = url.match(/merge_requests\/(\d+)/) || url.match(/pull\/(\d+)/); return m ? (url.includes('merge_requests') ? '!' : '#') + m[1] : 'PR'; };
@@ -323,6 +324,7 @@
         tr.dataset.key = x.key;
         const what = el('td', 'what');
         what.append(el('b', null, x.title), el('small', 'next', `Next: ${x.next}`));
+        if (x.milestone && window.milestoneTag) what.firstChild.prepend(milestoneTag(x));
         const prog = el('td', 'prog'); prog.append(stageBar(x));
         if (x.tokens || x.time) { const m = el('small', 'meta', [x.tokens, x.time].filter(Boolean).join(' · ')); if (x.tokensTitle) m.title = x.tokensTitle; prog.append(m); }
         const pr = el('td', 'pr'); if (x.pr) pr.append(prChip(x));
@@ -353,7 +355,7 @@
       fold.append(sum, table(merged));
       groups.push(fold);
     }
-    $('masters').replaceChildren(...(items.length ? [yourMoveLine(items)] : []), ...groups);
+    $('masters').replaceChildren(...(items.length ? [yourMoveLine(items)] : []), msBox, ...groups);
     if (!groups.length) $('masters').append(el('div', 'welcome', 'Nothing in flight.'));
   }
 
@@ -710,6 +712,11 @@
   });
 
   refresh(); setInterval(refresh, 3000);
+</script>
+<script type="module">
+  import { mountMilestones, milestoneTag } from '/milestone.js';
+  window.milestoneTag = milestoneTag;
+  mountMilestones(msBox, () => state); // msBox and state are the classic script's globals
 </script>
 </body>
 </html>

@@ -224,6 +224,11 @@ export function toolSummary(uses) {
     return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+// Multi-line pastes are stored as `<pasted_content id="x">…</pasted_content id="x">`; show only what was typed.
+const PASTED = /<pasted_content id="([^"]*)">\n?([\s\S]*?)\n?<\/pasted_content(?: id="\1")?>/g;
+export const unwrapPasted = s => (typeof s === 'string' ? s.replace(PASTED, '$2').trim() : '');
+const DUP_MS = 60_000;
+
 // Master chat as bubbles: human prompts, Claude's text (consecutive chunks merged), and one activity line per run of tool calls.
 export function chatItems(entries, max = 60) {
 
@@ -243,19 +248,20 @@ export function chatItems(entries, max = 60) {
         if (e.isSidechain) {
             continue;
         }
-        if (isHumanPrompt(e)) {
+        const human = e.type === 'user' && !e.isMeta ? unwrapPasted(textOf(e)) : '';
+        if (human && !human.startsWith('<')) {
             flush();
-            items.push({ role: 'user', text: textOf(e), at: e.timestamp });
+            items.push({ role: 'user', text: human, at: e.timestamp });
             continue;
         }
         // Messages typed while Claude works: queued first, then absorbed into the running turn as an attachment.
         if (e.type === 'queue-operation') {
             if (e.operation === 'enqueue') {
-                queue.push({ text: e.content, at: e.timestamp });
+                queue.push({ raw: e.content, text: unwrapPasted(e.content), at: e.timestamp });
             } else if (e.operation === 'dequeue') {
                 queue.shift();
             } else if (e.operation === 'remove') {
-                const i = queue.findIndex(q => q.text === e.content);
+                const i = queue.findIndex(q => q.raw === e.content);
                 if (i >= 0) {
                     queue.splice(i, 1);
                 }
@@ -265,7 +271,7 @@ export function chatItems(entries, max = 60) {
         const a = e.type === 'attachment' ? e.attachment : null;
         if (a?.type === 'queued_command' && a.origin?.kind === 'human') {
             flush();
-            items.push({ role: 'user', text: typeof a.prompt === 'string' ? a.prompt : textOf({ message: { content: a.prompt } }), at: e.timestamp });
+            items.push({ role: 'user', text: unwrapPasted(typeof a.prompt === 'string' ? a.prompt : textOf({ message: { content: a.prompt } })), at: e.timestamp });
             continue;
         }
         if (e.type !== 'assistant') {
@@ -288,14 +294,28 @@ export function chatItems(entries, max = 60) {
     }
     flush();
 
-    const shown = new Set(items.filter(i => i.role === 'user').map(i => i.text));
     for (const q of queue) {
-        if (typeof q.text === 'string' && q.text.trim() && !q.text.startsWith('<') && !shown.has(q.text)) {
+        if (q.text && !q.text.startsWith('<')) {
             items.push({ role: 'user', text: q.text, at: q.at, pending: true });
         }
     }
 
-    return items.slice(-max).map(i => (i.role === 'assistant' ? { ...i, ...splitTldr(i.text) } : i));
+    // One message can surface as a prompt, a queued_command attachment and a pending enqueue; keep the first.
+    const seen = [];
+    const unique = items.filter(i => {
+        if (i.role !== 'user') {
+            return true;
+        }
+        const norm = i.text.replace(/\s+/g, ' '), t = Date.parse(i.at);
+        if (seen.some(u => u.norm === norm && Math.abs(u.t - t) < DUP_MS)) {
+            return false;
+        }
+        seen.push({ norm, t });
+
+        return true;
+    });
+
+    return unique.slice(-max).map(i => (i.role === 'assistant' ? { ...i, ...splitTldr(i.text) } : i));
 }
 
 // The question text of an AskUserQuestion that has no tool_result yet, else null.

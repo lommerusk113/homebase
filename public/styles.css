@@ -72,8 +72,8 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .p-row:hover { background:var(--hover); }
 .p-row span { flex:1; }
 .p-row small { color:var(--muted); }
-.p-row .add { color:var(--c-ready); }
-.p-row .rm { color:var(--c-needs); }
+.p-row .add::part(base) { color:var(--c-ready); }
+.p-row .rm::part(base) { color:var(--c-needs); }
 .d-empty { padding:6px 16px; color:var(--muted); font-size:12.5px; }
 .welcome { margin:auto; text-align:center; color:var(--muted); max-width:360px; }
 .welcome h2 { color:var(--fg); font-size:18px; margin:0 0 6px; }
@@ -81,9 +81,8 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 
 /* compact library buttons: rows, chat notes, reply chips, dialog rows */
 wa-button[size="small"] { --wa-form-control-height:26px; --wa-form-control-padding-inline:10px; font-size:12px; }
-wa-button[size="small"][appearance="outlined"] { color:var(--fg); }
-wa-button.act-btn { color:var(--muted); }
-wa-button.act-btn:hover:not([disabled]) { color:var(--fg); }
+wa-button.act-btn::part(base) { color:var(--muted); }
+wa-button.act-btn:hover:not([disabled])::part(base) { color:var(--fg); }
 wa-badge { font-size:11px; font-weight:500; }
 wa-badge::part(base) { padding:1px 8px; }
 

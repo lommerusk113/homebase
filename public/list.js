@@ -1,6 +1,10 @@
 // Left column: work items grouped by what they wait on, the "Your move" line, and attention transitions.
 import { $, el, COLUMNS, COL, LIFECYCLE, state, visibleSessions, ago, prLabel, prChip, plain, foldable, waButton, tooltip } from './core.js';
 import { chatSession, bindChat, sendText } from './chat.js';
+import { milestoneTag } from './milestone.js';
+
+// the milestone strips (filled by milestone.js) are re-inserted as the same node, so their open state survives renders
+let msBox;
 
 const dot = key => { const d = el('span', 'dot' + (key === 'doing' ? ' live' : '')); d.style.setProperty('--c', `var(${COL[key].color})`); return d; };
 
@@ -14,6 +18,7 @@ function renderItems() {
             tr.dataset.key = x.key;
             const what = el('td', 'what');
             what.append(el('b', null, x.title), el('small', 'next', `Next: ${x.next}`));
+            if (x.milestone) what.firstChild.prepend(milestoneTag(x));
             const prog = el('td', 'prog'); prog.append(stageBar(x));
             if (x.tokens || x.time) {
                 const m = el('small', 'meta', [x.tokens, x.time].filter(Boolean).join(' · '));
@@ -52,7 +57,7 @@ function renderItems() {
         fold.append(sum, table(merged));
         groups.push(fold);
     }
-    $('masters').replaceChildren(...(items.length ? [yourMoveLine(items)] : []), ...groups);
+    $('masters').replaceChildren(...(items.length ? [yourMoveLine(items)] : []), msBox, ...groups);
     if (!groups.length) $('masters').append(el('div', 'welcome', 'Nothing in flight.'));
 }
 
@@ -138,6 +143,7 @@ function stageBar(x) {
 }
 
 export function renderBoard() {
+    msBox ??= $('milestones'); // before the welcome screen can detach it
     if (!state.tracked.length) {
         const w = el('div', 'welcome'), b = waButton('+ Add projects', null, { variant: 'success', appearance: 'accent', size: 'medium' });
         w.append(el('h2', null, 'No projects on your board'), el('div', null, 'Pick the projects you want to follow. Sessions from other projects stay hidden.'), b);

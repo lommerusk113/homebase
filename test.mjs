@@ -44,6 +44,23 @@ const a = summarizeAgent({ description: 'Implement #1', finished: true }, [
 assert.deepEqual([a.status, a.pr, a.branch], ['done', 'https://gitlab.com/x/y/-/merge_requests/7', 'b1']);
 assert.equal(summarizeAgent({ finished: false }, [], 1_000).status, 'running');
 assert.equal(summarizeAgent({ finished: false }, [], 600_000).status, 'stopped');
+import { agentStatus } from './server.mjs';
+const MIN = 60_000;
+const call = (...ids) => ({ type: 'assistant', message: { content: ids.map(id => ({ type: 'tool_use', id, name: 'Bash' })) } });
+const result = id => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id }] } });
+const ended = { type: 'assistant', message: { content: [{ type: 'text', text: 'Done here.' }] } };
+const noise = { type: 'api-request', message: { content: [{ type: 'tool_use', id: 'x' }] } };
+const st = (entries, ageMs, meta = {}) => agentStatus(meta, entries, ageMs);
+assert.deepEqual(st([ended], 99 * MIN, { finished: true }), { status: 'done' });
+assert.equal(st([call('a')], 25 * MIN).status, 'running'); // long Bash
+assert.equal(st([call('a'), noise], 31 * MIN).status, 'stopped'); // pending call capped; non-turn entries ignored
+assert.equal(st([call('a', 'b'), result('a')], 25 * MIN).status, 'running'); // parallel call b still pending
+assert.equal(st([call('a'), result('a')], 9 * MIN).status, 'running'); // thinking
+assert.equal(st([call('a'), result('a')], 11 * MIN).status, 'stopped');
+assert.equal(st([call('a'), result('a'), ended], 1 * MIN).status, 'running');
+assert.equal(st([call('a'), result('a'), ended], 3 * MIN).status, 'stopped'); // ended its turn without handing back
+assert.equal(st([call('old'), result('x'), ended], 3 * MIN).status, 'stopped'); // an unanswered call from an earlier turn is not pending
+assert.deepEqual(st([call('a'), result('a'), { type: 'assistant', isApiErrorMessage: true, message: { content: [{ type: 'text', text: 'API Error' }] } }], 1_000), { status: 'stopped', stopReason: 'api-error' });
 console.log('ok agents');
 
 import { splitTldr, toolSummary, chatItems, pendingQuestion, sendSteps } from './server.mjs';
@@ -153,6 +170,7 @@ const open = extra => ({ state: 'open', reviewers: [], ...extra });
 assert.equal(nextStep({ state: 'merged' }, { status: 'running', stage: 1 }), 'Merged');
 assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebase !7' }), 'Rebase !7 is verifying…');
 assert.equal(nextStep(null, { status: 'stopped' }), 'Agent stopped — check the chat');
+assert.equal(nextStep(null, { status: 'stopped', stopReason: 'api-error' }), 'Agent hit an API error — continue it');
 assert.equal(nextStep(open({ changes: true, reviewers: ['Ann'] }), null), 'Address review comments from Ann');
 assert.equal(nextStep(open({ changes: true, reviewers: ['Ann'], changesBy: ['bob'] }), null), 'Address review comments from bob');
 assert.equal(nextStep(open({ reviewers: ['Ann', 'Bo'] }), { status: 'done' }), 'Waiting for review by Ann, Bo');
@@ -324,3 +342,28 @@ assert.deepEqual(peakLimits(peaks, [dump(5, 1738443600)], 1738425600_000 + 1).fi
 assert.equal([...peaks.keys()].some(k => k.includes('1738425600000')), false); // expired window dropped
 assert.equal(peakLimits(new Map(), [{}], now), null);
 console.log('ok limit peaks');
+
+import { repoPath, groupIssues, milestoneOf, activeMilestones } from './server.mjs';
+assert.deepEqual(repoPath('git@gitlab.com:tritt/accounting/pracsys.git\n'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
+assert.deepEqual(repoPath('https://gitlab.com/tritt/accounting/pracsys.git'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
+assert.deepEqual(repoPath('ssh://git@gitlab.example.com:2222/g/sub/p.git'), { host: 'gitlab.example.com', path: 'g/sub/p' });
+assert.deepEqual(repoPath('github-personal:lommerusk113/homebase.git'), { host: 'github-personal', path: 'lommerusk113/homebase' });
+assert.deepEqual(repoPath('https://github.com/contaas/portal-frontend/'), { host: 'github.com', path: 'contaas/portal-frontend' });
+const iss = (iid, state, assignees = []) => ({ iid, title: `I${iid}`, state, assignees, url: `u${iid}` });
+const g = groupIssues([iss(1, 'closed'), iss(2, 'open'), iss(3, 'open', ['Børre']), iss(4, 'open'), iss(5, 'open', ['Ann']), iss(6, 'open')], {
+    2: [{ state: 'merged' }],
+    4: [{ state: 'merged' }, { state: 'open' }], // follow-up still open
+    6: [{ state: 'closed' }]
+});
+assert.deepEqual(Object.fromEntries(Object.entries(g.groups).map(([k, v]) => [k, v.map(i => i.iid)])),
+    { closable: [2], doing: [4], assigned: [3, 5], unassigned: [6], done: [1] });
+assert.deepEqual([g.total, g.closed, g.groups.assigned[0].assignees], [6, 1, ['Børre']]);
+const msList = [{ id: 7, title: 'Supplier automation' }, { id: 8, title: 'Reports' }];
+assert.equal(milestoneOf({ milestone: { id: 9, title: 'Old' }, target: 'supplier-automation' }, msList), 'Old');
+assert.equal(milestoneOf({ milestone: null, target: 'supplier-automation' }, msList), 'Supplier automation');
+assert.equal(milestoneOf({ milestone: null, target: 'main' }, msList), null);
+assert.deepEqual(activeMilestones([
+    { state: 'merged', milestone: { title: 'Reports' } }, { state: 'merged', milestone: { title: 'Reports' } },
+    { state: 'open', target: 'supplier-automation' }, { state: 'open', milestone: { title: 'Closed one' } }
+], msList), ['Supplier automation', 'Reports']);
+console.log('ok milestones');

@@ -445,6 +445,8 @@ console.log('ok issues');
 
 import { chatStatus } from './public/core.js';
 assert.equal(chatStatus(null).kind, 'idle');
+assert.equal(chatStatus({ error: true, working: true, asking: 'Pick one?' }).kind, 'error'); // a failed poll never reads as idle or stale working
+assert.match(chatStatus({ error: true }).text, /reconnecting/);
 assert.equal(chatStatus({ working: true, asking: 'Pick one?', items: [] }).kind, 'asking'); // asking wins
 const askedAt = new Date(now - 125 * 60_000).toISOString();
 assert.equal(chatStatus({ working: true, items: [{ role: 'user', at: askedAt }, { role: 'user', at: new Date(now).toISOString(), pending: true }] }, now).text, 'Claude is working… · 2h5m');
@@ -654,6 +656,17 @@ import { join as pjoin } from 'node:path';
         assert.match(page.headers['content-security-policy'], /script-src 'self';/);
         const token = meta(page.body);
         assert.ok(token, 'page carries the token');
+        assert.equal(page.headers['cache-control'], 'no-store');
+        for (const path of ['/app.js', '/styles.css', '/vendor/marked/marked.min.js']) {
+            const js = await call(s.port, { path });
+            assert.equal(js.status, 200);
+            assert.equal(js.headers['cache-control'], 'no-cache', path); // revalidate every load: no stale modules after a restart
+            assert.match(js.headers.etag, /^"[\w-]+"$/, path);
+            const again = await call(s.port, { path, headers: { 'if-none-match': js.headers.etag } });
+            assert.equal(again.status, 304, path);
+            assert.equal(again.body, '');
+            assert.equal((await call(s.port, { path, headers: { 'if-none-match': '"stale"' } })).status, 200, path);
+        }
         const ok = await call(s.port, { path: '/api/limits', headers: { 'x-homebase-token': token, origin: `http://localhost:${s.port}` } });
         assert.equal(ok.status, 200);
         // POST rejection paths only: none of these reach a session.

@@ -1,5 +1,5 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton } from './core.js';
+import { $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat } from './chat.js';
 
@@ -102,19 +102,22 @@ async function refresh() {
     refreshChat(); refreshLimits();
 }
 
-// "Remaining: 5h 66% · week 88%" from the status-line dump; hidden when there is none.
+// "5h 27% used · resets 01:20 · week 36% used · resets Tue 19:00", as Claude Code's /usage counts it; hidden without a dump.
+const usedColor = used => (used < 60 ? 'var(--c-ready)' : used < 85 ? 'var(--c-warn)' : 'var(--c-danger)');
 async function refreshLimits() {
     let l = null;
     try { l = await fetch('/api/limits').then(r => r.json()); } catch {}
-    const box = $('limits'), wins = [['5h', l?.fiveHour], ['week', l?.sevenDay]].filter(([, w]) => w);
+    const box = $('limits'), wins = [['5h', l?.fiveHour, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }], ['week', l?.sevenDay, { weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }]].filter(([, w]) => w);
     box.hidden = !wins.length;
-    box.replaceChildren(...(wins.length ? ['Remaining:'] : []), ...wins.map(([label, w]) => {
-        const left = Math.max(0, Math.round(100 - w.used)), s = el('span'), bar = el('i'), fill = el('b');
-        fill.style.width = `${left}%`; bar.append(fill);
+    box.replaceChildren(...wins.flatMap(([label, w, fmt], i) => {
+        const used = Math.min(100, Math.round(w.used)), s = el('span'), bar = el('i'), fill = el('b');
+        fill.style.width = `${used}%`; fill.style.background = usedColor(used); bar.append(fill);
         s.title = `Resets ${new Date(w.resetsAt).toLocaleString()}`;
-        s.append(label, bar, `${left}%`);
-        return s;
+        s.append(label, bar, `${used}% used · resets ${new Date(w.resetsAt).toLocaleString([], fmt)}`);
+        return i ? [el('span', 'muted', '·'), s] : [s];
     }));
+    // text only, so an open tooltip survives the 3s refresh
+    if (l?.updated) { const a = ago(l.updated); $('limits-tip').textContent = a === 'now' ? 'Updated just now' : `Updated ${a} ago`; }
 }
 
 const project = $('project');

@@ -5,6 +5,7 @@ import { renderBoard } from './list.js';
 // only sessions in the selected project(s); falls back to the most recent one there
 export const chatSession = () => { const v = visibleSessions(); return v.find(s => s.id === state.chat) || v[0] || null; };
 let chatKey = null;
+let stick = false; // set by a send: the next render scrolls to the bottom even if the user had scrolled up
 
 export function bindChat(id) {
     state.chat = id; store.set('chat', id);
@@ -98,7 +99,8 @@ export async function refreshChat() {
         feed.append(row);
     }
     addShowMore(feed);
-    feed.scrollTop = fresh || atBottom ? feed.scrollHeight : top;
+    feed.scrollTop = fresh || atBottom || stick ? feed.scrollHeight : top;
+    stick = false;
 }
 
 async function sendNow(sid, key) {
@@ -118,6 +120,7 @@ export async function sendText(sid, text) {
     $('c-err').textContent = '';
     const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true };
     state.outbox = [...state.outbox.filter(o => !o.error), out];
+    stick = true;
     refreshChat();
     try {
         const r = await fetch(`/api/send?id=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'x-codetool': '1', 'content-type': 'text/plain' }, body: text });

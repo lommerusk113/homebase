@@ -313,3 +313,14 @@ assert.deepEqual(cut.map(i => [i.role, i.text, i.interrupted]), [
 assert.equal(chatItems([{ type: 'user', message: { content: '[Request interrupted by user]' } }]).length, 0); // nothing to mark
 assert.equal(chatItems([{ type: 'user', message: { content: '[Request interrupted by user] and more' } }])[0].role, 'user'); // only the exact marker
 console.log('ok interrupted');
+
+import { peakLimits } from './server.mjs';
+const dump = (five, fiveReset, week = 10) => ({ rate_limits: { five_hour: { used_percentage: five, resets_at: fiveReset }, seven_day: { used_percentage: week, resets_at: 1738857600 } } });
+const peaks = new Map();
+assert.deepEqual(peakLimits(peaks, [dump(70, 1738425600), dump(90, 1738425600)], now), { fiveHour: { used: 90, resetsAt: 1738425600_000 }, sevenDay: { used: 10, resetsAt: 1738857600_000 } });
+assert.equal(peakLimits(peaks, [dump(70, 1738425600)], now).fiveHour.used, 90); // a stale dump never lowers it
+assert.equal(peakLimits(peaks, [], now).fiveHour.used, 90); // remembered across polls
+assert.deepEqual(peakLimits(peaks, [dump(5, 1738443600)], 1738425600_000 + 1).fiveHour, { used: 5, resetsAt: 1738443600_000 }); // new window starts fresh
+assert.equal([...peaks.keys()].some(k => k.includes('1738425600000')), false); // expired window dropped
+assert.equal(peakLimits(new Map(), [{}], now), null);
+console.log('ok limit peaks');

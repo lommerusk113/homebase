@@ -920,28 +920,66 @@ export function limitsOf(j, now = Date.now()) {
     return out.fiveHour || out.sevenDay ? out : null;
 }
 
-// Newest status-line dump (written by scripts/statusline.sh) that carries rate limits, else null.
-// ponytail: one file per session accumulates in STATUS_DIR; prune old ones if the folder ever gets big
+// Highest used % seen per window, keyed by name and resets_at. Dumps are per session and can be stale, so a dump
+// must never lower the number within a window; a new resets_at starts fresh. Expired windows are dropped.
+export function peakLimits(peaks, dumps, now = Date.now()) {
+
+    for (const j of dumps) {
+        for (const [name, w] of Object.entries(limitsOf(j, now) ?? {})) {
+            if (w) {
+                const k = `${name}:${w.resetsAt}`;
+                peaks.set(k, Math.max(peaks.get(k) ?? 0, w.used));
+            }
+        }
+    }
+    for (const k of peaks.keys()) {
+        if (Number(k.split(':')[1]) <= now) {
+            peaks.delete(k);
+        }
+    }
+
+    const current = name => {
+        const resets = [...peaks.keys()].filter(k => k.startsWith(`${name}:`)).map(k => Number(k.split(':')[1]));
+        if (!resets.length) {
+            return null;
+        }
+        const resetsAt = Math.max(...resets);
+
+        return { used: peaks.get(`${name}:${resetsAt}`), resetsAt };
+    };
+    const out = { fiveHour: current('fiveHour'), sevenDay: current('sevenDay') };
+
+    return out.fiveHour || out.sevenDay ? out : null;
+}
+
+const limitPeaks = new Map();
+
+// Rate limits from every status-line dump (written by scripts/statusline.sh), plus when the newest one was written.
+// ponytail: one file per session accumulates in STATUS_DIR and all are read each poll; prune old ones if the folder ever gets big
 async function limits() {
 
     let names;
     try {
-        names = await readdir(STATUS_DIR);
+        names = (await readdir(STATUS_DIR)).filter(n => n.endsWith('.json'));
     } catch {
         return null;
     }
 
-    const files = await Promise.all(names.filter(n => n.endsWith('.json')).map(async n => ({ n, t: (await stat(join(STATUS_DIR, n)).catch(() => ({ mtimeMs: 0 }))).mtimeMs })));
-    for (const { n } of files.sort((a, b) => b.t - a.t)) {
+    const dumps = [];
+    let updated = 0;
+    for (const n of names) {
         try {
-            const l = limitsOf(JSON.parse(await readFile(join(STATUS_DIR, n), 'utf8')));
-            if (l) {
-                return l;
+            const path = join(STATUS_DIR, n);
+            const j = JSON.parse(await readFile(path, 'utf8'));
+            if (limitsOf(j)) {
+                dumps.push(j);
+                updated = Math.max(updated, (await stat(path)).mtimeMs);
             }
         } catch {}
     }
+    const out = peakLimits(limitPeaks, dumps);
 
-    return null;
+    return out && { ...out, updated };
 }
 
 async function transcript(dir, id) {

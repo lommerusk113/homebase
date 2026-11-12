@@ -228,3 +228,21 @@ assert.equal(sameRepo('https://gitlab.com/tritt/accounting/pracsys/-/merge_reque
 assert.equal(sameRepo('https://gitlab.com/tritt/accounting/pracsys/-/merge_requests/1590', 'homebase'), false);
 assert.equal(sameRepo('https://github.com/lommerusk113/homebase/pull/3', 'homebase'), true);
 console.log('ok same repo');
+// ponytail: attentionEvents lives in index.html's inline script, so it's lifted out by text
+import { readFileSync } from 'node:fs';
+const page = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
+const attentionEvents = new Function(`${page.match(/^ {2}function attentionEvents[\s\S]*?^ {2}}$/m)[0]}\nreturn attentionEvents;`)();
+const it = (key, column, ci) => ({ key, column, prState: ci ? { ci } : null });
+const ev = (prev, next) => attentionEvents(prev, next).map(e => [e.kind, e.item.key]);
+assert.deepEqual(ev(null, [it('a', 'needs-you')]), []); // first load
+assert.deepEqual(ev([it('a', 'review')], [it('a', 'needs-you')]), [['needs-you', 'a']]);
+assert.deepEqual(ev([it('a', 'needs-you')], [it('a', 'needs-you')]), []);
+assert.deepEqual(ev([it('a', 'review')], [it('a', 'ready')]), [['ready', 'a']]);
+assert.deepEqual(ev([it('a', 'doing')], [it('a', 'ready')]), [['ready', 'a']]); // one event per item
+assert.deepEqual(ev([it('a', 'doing'), it('b', 'doing')], [it('a', 'review'), it('b', 'done')]), [['finished', 'a'], ['finished', 'b']]);
+assert.deepEqual(ev([it('a', 'doing')], []), [['finished', 'a']]); // agent without an MR drops off
+assert.deepEqual(ev([it('a', 'review')], []), []);
+assert.deepEqual(ev([it('a', 'review')], [it('a', 'review', 'failing')]), [['failing', 'a']]);
+assert.deepEqual(ev([it('a', 'review', 'failing')], [it('a', 'review', 'failing')]), []);
+assert.deepEqual(ev([], [it('n', 'needs-you'), it('m', 'review')]), [['needs-you', 'n']]);
+console.log('ok attention');

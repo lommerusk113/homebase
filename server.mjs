@@ -28,14 +28,27 @@ const projects = new Map(); // cwd -> repo name
 const prs = new Map(); // url -> { at, value, pending }
 
 // Main repo name, so worktrees group under their repo. Read-only git call.
+export function repoName(url) {
+
+    const name = basename(url.trim().replace(/\.git$/, '').replace(/^.*:/, ''));
+    if (!name) {
+        throw new Error('no repo name');
+    }
+
+    return name;
+}
+
 async function projectOf(cwd) {
 
     if (!cwd) {
         return '—';
     }
     if (!projects.has(cwd)) {
-        projects.set(cwd, run('git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'])
-            .then(({ stdout }) => basename(dirname(stdout.trim())))
+        // repo name from origin (so a folder named differently still shows the real repo), else the main checkout's folder
+        projects.set(cwd, run('git', ['-C', cwd, 'remote', 'get-url', 'origin'])
+            .then(({ stdout }) => repoName(stdout))
+            .catch(() => run('git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'])
+                .then(({ stdout }) => basename(dirname(stdout.trim()))))
             .catch(() => basename(cwd.replace(/\/\.(claude\/)?worktrees\/.*$/, ''))));
     }
 

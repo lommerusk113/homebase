@@ -186,3 +186,9 @@ import { tmuxArgs } from './server.mjs';
 assert.deepEqual(tmuxArgs(['send-keys', '-t', 'cc-1', 'Escape'], undefined), ['send-keys', '-t', 'cc-1', 'Escape']);
 assert.deepEqual(tmuxArgs(['has-session'], 'hbtest'), ['-L', 'hbtest', 'has-session']);
 console.log('ok tmux socket');
+
+import { repoName } from './server.mjs';
+assert.equal(repoName('github-personal:lommerusk113/homebase.git\n'), 'homebase');
+assert.equal(repoName('git@gitlab.com:tritt/accounting/pracsys.git'), 'pracsys');
+assert.equal(repoName('https://github.com/contaas/portal-frontend'), 'portal-frontend');
+console.log('ok repo name');

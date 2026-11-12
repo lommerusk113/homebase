@@ -1499,7 +1499,7 @@ async function readBody(req, max) {
 // The page's files. A fixed map, so no request path ever reaches the file system.
 const JS = 'text/javascript; charset=utf-8';
 // Who may talk to the server. POSTs type into sessions that run shell commands, so every request must come from our own page:
-// Host stops DNS rebinding, Origin stops other sites, the per-start token stops other local programs,
+// Host stops DNS rebinding, Origin and the per-start token stop other websites (a cross-origin page cannot read the token),
 // and in LAN mode a paired-device cookie stops other machines on the network.
 export const localHosts = port => ['localhost', '127.0.0.1', '[::1]'].map(h => `${h}:${port}`);
 export function isPrivateIp(ip) {

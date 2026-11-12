@@ -31,6 +31,7 @@ function bubble(i, sid) {
         if (!state.unfold.has(key)) body.classList.add('fold');
         b.append(body);
     }
+    if (i.answer) b.append(answerTag(i.answer));
     if (i.interrupted) b.append(tooltip(b, 'Interrupted by you'));
     const note = i.error ? 'Not sent' : i.sending ? 'sending…' : i.pending ? 'queued' : null;
     if (note) {
@@ -44,6 +45,16 @@ function bubble(i, sid) {
     }
     b.dataset.key = key;
     return b;
+}
+
+// The user's short reply to this question, outside the fold so it shows when collapsed to the TLDR.
+function answerTag(a) {
+    const yes = !/^(no|nope)\b/i.test(a.text);
+    const t = el('div', `answer${yes ? ' yes' : ''}${a.error ? ' failed' : ''}`);
+    t.append(el('span', 'mark', a.error ? '!' : yes ? '✓' : '✕'), ` You: ${a.text}`);
+    const note = a.error ? `Not sent: ${a.error}` : a.sending ? 'sending…' : a.queued ? 'queued' : null;
+    if (note) t.append(` · ${note}`);
+    return t;
 }
 
 // "Show more" only where the fold actually cuts something off; needs layout, so runs after insertion.
@@ -91,13 +102,20 @@ export async function refreshChat() {
     $('ask-cmd').textContent = `tmux attach -t ${s.tmux ?? `cc-${s.id.slice(0, 8)}`}`;
     // Optimistic bubbles go once any user/queued/pending item has the same text (sent no earlier than 10s before),
     // or 30s after the send succeeded: the transcript is the source of truth.
-    const landed = o => data.items.some(i => i.role === 'user' && norm(i.text) === norm(o.text) && !(Date.parse(i.at) < Date.parse(o.at) - 10_000));
+    const landed = o => data.items.some(i => (i.role === 'user' && norm(i.text) === norm(o.text) && !(Date.parse(i.at) < Date.parse(o.at) - 10_000))
+        || (i.answer && norm(i.answer.text) === norm(o.text) && !(Date.parse(i.answer.at) < Date.parse(o.at) - 10_000)));
     state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !(landed(o) || Date.now() - o.okAt > 30_000));
     // placed by send time, so one sent before a queued message stays above it
     // a queued item whose Send now was clicked shows "sending…" until the queue entry resolves
     state.nudged = new Set(data.items.filter(i => i.pending).map(i => `${s.id}:${i.at}`).filter(k => state.nudged.has(k)));
     const items = data.items.map(i => (i.pending && state.nudged.has(`${s.id}:${i.at}`) ? { ...i, sending: true } : i));
     for (const o of state.outbox.filter(o => o.sid === s.id)) {
+        // a chip answer shows as the question's tag, not a bubble
+        const q = o.answerTo && items.findIndex(x => x.role === 'assistant' && x.at === o.answerTo);
+        if (q >= 0) {
+            if (!items[q].answer) items[q] = { ...items[q], answer: { text: o.text, sending: !o.error, error: o.error } };
+            continue;
+        }
         const i = items.findIndex(x => Date.parse(x.at) > Date.parse(o.at));
         items.splice(i < 0 ? items.length : i, 0, o);
     }
@@ -117,9 +135,9 @@ export async function refreshChat() {
     } else if (!items.length) feed.append(el('div', 'welcome', fresh ? 'New conversation — say something to Claude' : 'No messages yet.'));
     // Quick replies under Claude's newest message when it ends with a question; an outbox bubble after it hides them.
     const last = items.at(-1);
-    if (last?.replies?.length && !data.asking && !data.working) {
+    if (last?.replies?.length && (!last.answer || last.answer.error) && !data.asking && !data.working) {
         const row = el('div', 'replies');
-        row.append(...last.replies.map(t => { const b = waButton(t, null, { variant: 'brand', appearance: 'filled-outlined', pill: true }); b.onclick = () => sendReply(t); return b; }));
+        row.append(...last.replies.map(t => { const b = waButton(t, null, { variant: 'brand', appearance: 'filled-outlined', pill: true }); b.onclick = () => sendText(s.id, t, last.at); return b; }));
         feed.append(row);
     }
     addShowMore(feed);
@@ -140,9 +158,9 @@ async function sendNow(sid, key) {
 const syncSend = () => { $('send-btn').disabled = !$('msg').value?.trim(); };
 
 // Types text into a session as an outbox bubble ("sending…", then gone once the transcript has it); false if it failed.
-export async function sendText(sid, text) {
+export async function sendText(sid, text, answerTo) {
     $('c-err').textContent = '';
-    const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true };
+    const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo };
     state.outbox = [...state.outbox.filter(o => !o.error), out];
     stick = true;
     refreshChat();
@@ -156,11 +174,6 @@ export async function sendText(sid, text) {
         $('c-err').textContent = err.message; out.error = err.message; refreshChat();
         return false;
     }
-}
-// Through the input's own submit path (outbox, errors); the draft is put back since submit reads the value synchronously.
-function sendReply(text) {
-    const ta = $('msg'), draft = ta.value;
-    ta.value = text; $('send').requestSubmit(); ta.value = draft;
 }
 
 export function initChat() {

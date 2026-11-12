@@ -1,5 +1,6 @@
 // Milestone pill for the header: progress of the chosen milestone, a menu to switch it, and the list filter it drives.
 // Read-only towards GitLab/GitHub: the menu only links out.
+import { api } from './core.js';
 const FETCH_MS = 30_000; // the server caches the glab calls; this only bounds how stale the pill gets
 const POLL_MS = 3000;
 

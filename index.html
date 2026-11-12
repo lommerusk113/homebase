@@ -494,18 +494,20 @@
   $('send').onsubmit = async e => {
     e.preventDefault();
     const s = chatSession(), ta = $('msg'), text = ta.value.trim();
-    if (!s || !text || ta.readOnly) return;
-    ta.readOnly = true; $('c-err').textContent = ''; // dimmed via :read-only while the send is in flight
+    if (!s || !text) return;
+    ta.value = ''; $('c-err').textContent = ''; // clear at once; the "sending…" bubble shows progress
     const out = { role: 'user', text, sid: s.id, at: new Date().toISOString(), sending: true };
     state.outbox = [...state.outbox.filter(o => !o.error), out];
     refreshChat();
     try {
       const r = await fetch(`/api/send?id=${encodeURIComponent(s.id)}`, { method: 'POST', headers: { 'x-codetool': '1', 'content-type': 'text/plain' }, body: text });
       if (!r.ok) throw new Error(await r.text());
-      ta.value = ''; out.okAt = Date.now();
+      out.okAt = Date.now();
       setTimeout(refreshChat, 1000);
-    } catch (err) { $('c-err').textContent = err.message; out.error = err.message; refreshChat(); }
-    ta.readOnly = false; ta.focus();
+    } catch (err) {
+      $('c-err').textContent = err.message; out.error = err.message; refreshChat();
+      if (!ta.value) ta.value = text; // give the text back so it isn't lost
+    }
   };
   $('msg').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('send').requestSubmit(); } };
 

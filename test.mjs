@@ -193,16 +193,32 @@ assert.equal(repoName('git@gitlab.com:tritt/accounting/pracsys.git'), 'pracsys')
 assert.equal(repoName('https://github.com/contaas/portal-frontend'), 'portal-frontend');
 console.log('ok repo name');
 import { yourMove } from './server.mjs';
-const act = (...a) => yourMove(...a)?.action ?? null;
-assert.equal(act('ready', open({ ready: true, reviewers: ['Ann'] }), null), 'merge');
-assert.equal(act('needs-you', open({ changes: true, ci: 'failing' }), 'stopped'), 'address comments on');
-assert.equal(act('review', open({ ci: 'failing', reviewers: ['Ann'] }), null), 'fix pipeline on');
-assert.equal(act('needs-you', null, 'stopped'), 'check stopped agent');
-assert.equal(act('review', open(), 'done'), 'assign a reviewer on');
-assert.equal(act('review', open({ reviewers: ['Ann'] }), null), null);
-assert.equal(act('review', open({ draft: true }), null), null);
-assert.equal(act('doing', open({ changes: true }), 'running'), null);
-assert.equal(act('done', { state: 'merged' }, null), null);
+const mv = (...a) => yourMove(...a)?.action ?? null;
+assert.equal(mv('ready', open({ ready: true, reviewers: ['Ann'] }), null), 'merge');
+assert.equal(mv('needs-you', open({ changes: true, ci: 'failing' }), 'stopped'), 'address comments on');
+assert.equal(mv('review', open({ ci: 'failing', reviewers: ['Ann'] }), null), 'fix pipeline on');
+assert.equal(mv('needs-you', null, 'stopped'), 'check stopped agent');
+assert.equal(mv('review', open(), 'done'), 'assign a reviewer on');
+assert.equal(mv('review', open({ reviewers: ['Ann'] }), null), null);
+assert.equal(mv('review', open({ draft: true }), null), null);
+assert.equal(mv('doing', open({ changes: true }), 'running'), null);
+assert.equal(mv('done', { state: 'merged' }, null), null);
 assert.deepEqual(items.map(i => i.move), [null, null, null]);
 assert.deepEqual(['ready', 'needs-you', 'review'].map(c => yourMove(c, open({ ready: c === 'ready', changes: c === 'needs-you' }), null).rank), [1, 2, 5]);
 console.log('ok your move');
+import { rowAction } from './server.mjs';
+const act = (prState, agent, url = mr(4)) => rowAction(url, prState, agent, 'T');
+assert.deepEqual(act(open({ ready: true, reviewers: ['Ann'] }), null), { label: 'Merge + close issue', message: `Merge !4 (${mr(4)}) and close its issue.` });
+assert.deepEqual(act(open({ changes: true, reviewers: ['Ann'] }), { status: 'stopped' }), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
+assert.deepEqual(act(open({ ci: 'failing', reviewers: ['Ann'] }), null), { label: 'Fix pipeline', message: `The pipeline on !4 (${mr(4)}) is failing — find out why and fix it.` });
+assert.deepEqual(act(open(), { status: 'done' }), { label: 'Request review', message: `Assign a reviewer to !4 (${mr(4)}) — suggest who.` });
+assert.equal(act(open(), null, 'https://github.com/o/r/pull/9').message, 'Assign a reviewer to #9 (https://github.com/o/r/pull/9) — suggest who.');
+assert.deepEqual(rowAction(null, null, { status: 'stopped' }, 'Implement #9'), { label: 'Continue', message: "The subagent 'Implement #9' stopped — check why and continue it." });
+assert.equal(rowAction(null, null, { status: 'running' }, 'x'), null); // doing
+assert.equal(act(open({ ready: true }), { status: 'running' }), null); // doing
+assert.equal(act(open({ reviewers: ['Ann'] }), null), null); // waiting on review
+assert.equal(act({ state: 'merged' }, null), null);
+assert.equal(act(open({ draft: true }), null), null);
+assert.equal(act(null, null), null); // state unknown
+assert.equal(items[1].action, null);
+console.log('ok actions');

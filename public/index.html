@@ -38,11 +38,21 @@
   </div>
   <aside id="chat">
     <div class="c-status idle" id="status" role="status"><span class="pulse"></span><span id="status-text">Idle — waiting for you</span></div>
+    <wa-dropdown class="c-menu" id="c-menu" placement="bottom-end">
+      <button class="quiet" slot="trigger" title="Chat options" aria-label="Chat options">⋯</button>
+      <wa-dropdown-item value="view">Clear view<span slot="details">Homebase only</span></wa-dropdown-item>
+      <wa-dropdown-item value="new">New conversation (/clear)</wa-dropdown-item>
+    </wa-dropdown>
     <div class="c-feed" id="feed"></div>
     <div class="c-note c-ask" id="ask" hidden><div><b>Claude is asking:</b> <div id="ask-q"></div>Answer from any terminal: <code class="mono" id="ask-cmd"></code></div><wa-button size="s" appearance="outlined" id="ask-copy">Copy</wa-button></div>
     <form class="c-input" id="send"><div class="error" id="c-err"></div><wa-textarea id="msg" rows="1" resize="auto" placeholder="Message Claude…"></wa-textarea><button class="c-send" id="send-btn" type="submit" aria-label="Send" title="Send" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
   </aside>
 </div>
+<wa-dialog id="clear-dlg" label="Start a fresh conversation?">
+  Claude forgets this chat's context.
+  <wa-button slot="footer" size="s" appearance="outlined" data-dialog="close">Cancel</wa-button>
+  <wa-button slot="footer" size="s" variant="danger" id="clear-go">Start fresh</wa-button>
+</wa-dialog>
 <wa-dialog id="dlg" label="Projects on your board" light-dismiss>
   <div class="d-body" id="dlg-body"></div>
 </wa-dialog>

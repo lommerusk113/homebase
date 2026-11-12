@@ -492,3 +492,23 @@ import { folderFor, editorsFrom, openInEditor } from './server.mjs';
     assert.equal(calls.length, 1);
 }
 console.log('ok open in editor');
+
+import { keyAction, stepKey } from './public/keys.js';
+const kev = (key, mods = {}) => ({ key, ...mods });
+assert.equal(keyAction(kev('j')), 'next');
+assert.equal(keyAction(kev('ArrowUp')), 'prev');
+assert.equal(keyAction(kev(' ')), 'toggle');
+assert.equal(keyAction(kev('Enter')), 'toggle');
+assert.equal(keyAction(kev('/')), 'chat');
+assert.equal(keyAction(kev('?', { shiftKey: true })), 'help');
+assert.equal(keyAction(kev('p')), null);
+assert.equal(keyAction(kev('p'), 'g'), 'project');
+assert.equal(keyAction(kev('j'), 'g'), 'next');
+assert.equal(keyAction(kev('k', { metaKey: true })), null); // browser and OS shortcuts pass through
+assert.equal(stepKey(['a', 'b', 'c'], 'b', 1), 'c');
+assert.equal(stepKey(['a', 'b', 'c'], 'c', 1), 'c'); // clamps
+assert.equal(stepKey(['a', 'b', 'c'], 'a', -1), 'a');
+assert.equal(stepKey(['a', 'b', 'c'], null, 1), 'a');
+assert.equal(stepKey(['a', 'b', 'c'], 'gone', -1), 'c');
+assert.equal(stepKey([], 'a', 1), null);
+console.log('ok keys');

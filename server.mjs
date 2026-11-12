@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { readdir, stat, open, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
@@ -549,49 +549,9 @@ async function resumable(id) {
 // ponytail: login+interactive zsh so PATH matches your terminal; id is validated, cwd is passed as its own arg
 const claudeCmd = id => ['/bin/zsh', '-lic', `claude --resume ${id}`];
 
-async function resume(id) {
-
-    const s = await resumable(id);
-    await run('open', ['-na', 'Ghostty', '--args', `--working-directory=${s.cwd}`, '-e', ...claudeCmd(id)]);
-}
-
-// Browser terminal: one ttyd per session, attached to a tmux session so Claude keeps running when the tab closes.
-// tmux uses the same name as Ghostty would see, so `tmux attach -t cc-<id8>` works from any terminal too.
-const terms = new Map(); // id -> port
-const procs = new Set();
-let nextPort = 7700;
+// tmux keeps Claude running between messages; `tmux attach -t cc-<id8>` reaches it from any terminal.
 const tmuxName = id => `cc-${id.slice(0, 8)}`;
 const tmuxSession = (id, cwd) => ['-s', tmuxName(id), '-c', cwd, ...claudeCmd(id)];
-
-async function terminal(id) {
-
-    const s = await resumable(id);
-    if (terms.has(id)) {
-        return terms.get(id);
-    }
-
-    const port = nextPort++;
-    const proc = spawn('ttyd', [
-        '-p', String(port), '-i', 'lo0', '-W', '-O',
-        '-t', 'fontSize=13', '-t', 'theme={"background":"#0d1117"}',
-        'tmux', 'new-session', '-A', ...tmuxSession(id, s.cwd),
-        ';', 'set-option', 'mouse', 'on'
-    ], { stdio: 'ignore' });
-    proc.on('exit', () => { terms.delete(id); procs.delete(proc); });
-    terms.set(id, port);
-    procs.add(proc);
-
-    for (let i = 0; i < 40; i++) {
-        try {
-            await fetch(`http://localhost:${port}/`);
-            return port;
-        } catch {
-            await new Promise(r => setTimeout(r, 50));
-        }
-    }
-
-    throw new Error('ttyd did not start');
-}
 
 const MAX_SEND = 20 * 1024;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -619,7 +579,7 @@ const LIVE_ELSEWHERE_MS = 2 * 60_000;
 export function refuseIfLiveElsewhere(ageMs) {
 
     if (ageMs < LIVE_ELSEWHERE_MS) {
-        throw Object.assign(new Error('This session is open in another terminal. Close it there first, or use Open in Ghostty.'), { status: 409 });
+        throw Object.assign(new Error('This session is open in another terminal. Close it there first.'), { status: 409 });
     }
 }
 
@@ -659,13 +619,6 @@ async function readBody(req, max) {
     return data;
 }
 
-for (const sig of ['SIGINT', 'SIGTERM']) {
-    process.on(sig, () => {
-        procs.forEach(p => p.kill()); // tmux sessions (and Claude) survive on purpose
-        process.exit(0);
-    });
-}
-
 if (import.meta.url === `file://${process.argv[1]}`) {
     const html = await readFile(new URL('./index.html', import.meta.url));
     const icon = await readFile(new URL('./icon.svg', import.meta.url));
@@ -682,14 +635,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return res.end(JSON.stringify(await sessions()));
             }
             // POST + custom header: a cross-origin page can't send this without a preflight we never answer
-            if (url.pathname === '/api/resume' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
-                await resume(url.searchParams.get('id'));
-                return res.end('ok');
-            }
-            if (url.pathname === '/api/terminal' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
-                res.setHeader('content-type', 'application/json');
-                return res.end(JSON.stringify({ port: await terminal(url.searchParams.get('id')) }));
-            }
             if (url.pathname === '/api/send' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
                 await send(url.searchParams.get('id'), await readBody(req, MAX_SEND));
                 return res.end('ok');

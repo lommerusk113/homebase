@@ -78,9 +78,10 @@
   .bubble .b-note { font-size:11px; color:var(--muted); margin:-6px 0 6px; }
   .bubble.failed { border-color:var(--c-needs); }
   .bubble.failed .b-note { color:var(--c-needs); }
-  .bubble .show { appearance:none; border:0; background:none; color:var(--accent); font:inherit; font-size:12px; font-weight:500; padding:0 0 8px; cursor:pointer; }
-  .tldr { margin:10px 0 4px; padding:7px 10px; border-radius:8px; background:color-mix(in srgb, #d4a72c 18%, var(--bg)); border-left:3px solid #d4a72c; font-size:13.5px; line-height:1.5; }
-  .tldr::before { content:'TLDR'; display:block; font-size:10.5px; font-weight:700; letter-spacing:.08em; color:color-mix(in srgb, #d4a72c 70%, var(--fg)); }
+  .show { appearance:none; border:0; background:none; color:var(--accent); font:inherit; font-size:12px; font-weight:500; padding:0 0 8px; cursor:pointer; }
+  .lead { margin:8px 0; font-size:14.5px; line-height:1.5; overflow-wrap:anywhere; }
+  .lead strong { font-weight:700; color:var(--strong); }
+  .lead code { font-family:'JetBrains Mono', ui-monospace, monospace; font-size:12px; background:var(--chip); padding:1px 5px; border-radius:4px; }
   .tools { align-self:flex-start; flex-shrink:0; font-size:12px; color:var(--muted); padding:0 4px; }
   .tools::before { content:'⚙ '; }
   .c-note { margin:0 12px 8px; padding:8px 10px; border-radius:8px; font-size:12.5px; display:flex; gap:8px; align-items:center; }
@@ -225,7 +226,7 @@
     }
     return root;
   }
-  const rich = (text, inline) => { const d = el('div', inline ? 'tldr' : 'body'); d.innerHTML = DOMPurify.sanitize(inline ? marked.parseInline(text) : marked.parse(text || '')); return enrich(d); };
+  const rich = (text, inline) => { const d = el('div', inline ? 'lead' : 'body'); d.innerHTML = DOMPurify.sanitize(inline ? marked.parseInline(text) : marked.parse(text || '')); return enrich(d); };
   const COLUMNS = [
     { key: 'doing', label: 'Doing', color: '--c-doing' },
     { key: 'needs-you', label: 'Needs you', color: '--c-needs' },
@@ -331,12 +332,34 @@
     if (!$('masters').children.length) $('masters').append(el('div', 'welcome', 'No sessions match.'));
   }
 
-  // Click toggles an inline detail: TLDR callout, full report, edited files.
+  // First sentence of a message without a TLDR, capped near 200 chars, with dangling ** or ` closed.
+  function lead(text) {
+    const line = (text || '').split('\n').map(l => l.trim()).find(l => l && !/^(```|\||---|<)/.test(l)) || '';
+    const s = line.replace(/^(#+|[-*+>]|\d+[.)])\s+/, '');
+    let cut = s.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? s;
+    const long = cut.length > 200;
+    if (long) cut = cut.slice(0, 200).replace(/\s+\S*$/, '');
+    if ((cut.match(/\*\*/g)?.length ?? 0) % 2) cut += '**';
+    if ((cut.match(/`/g)?.length ?? 0) % 2) cut += '`';
+    return long ? cut + '…' : cut;
+  }
+  // Collapsed: only the TLDR (or the lead sentence). Show more reveals the rest; open state survives re-renders via state.unfold.
+  function foldable(tldr, rest, key) {
+    const head = tldr || lead(rest), more = tldr || rest?.trim() !== head ? rest?.trim() : '';
+    const top = rich(head, true);
+    if (!more) return [top];
+    const body = rich(more), btn = el('button', 'show');
+    const set = open => { body.hidden = !open; if (!tldr) top.hidden = open; btn.textContent = open ? 'Show less' : 'Show more'; };
+    set(state.unfold.has(key));
+    btn.onclick = e => { e.stopPropagation(); const open = !state.unfold.has(key); open ? state.unfold.add(key) : state.unfold.delete(key); set(open); };
+    return [top, body, btn];
+  }
+
+  // Click toggles an inline detail: TLDR with Show more for the full report, edited files.
   function select(x) { state.selected = state.selected === x.id ? null : x.id; renderBoard(); }
   function detail(x) {
     const d = el('div', 'detail');
-    if (x.tldr) d.append(rich(x.tldr, true));
-    if (x.body) d.append(rich(x.body));
+    if (x.tldr || x.body) d.append(...foldable(x.tldr, x.body, `agent:${x.id}`));
     if (x.files?.length) {
       const ul = el('ul', 'files');
       ul.append(...x.files.map(f => { const li = el('li'), i = f.lastIndexOf('/'); li.title = f; li.append(f.slice(0, i + 1), el('b', null, f.slice(i + 1))); return li; }));
@@ -407,10 +430,12 @@
     if (i.role === 'tools') return el('div', 'tools', i.text);
     const b = el('div', `bubble ${i.role}${i.error ? ' failed' : ''}`), key = `${sid}:${i.at}`;
     if (i.at) b.title = new Date(i.at).toLocaleString();
-    if (i.tldr) b.append(rich(i.tldr, true));
-    const body = rich(i.text);
-    if (!state.unfold.has(key)) body.classList.add('fold');
-    b.append(body);
+    if (i.role === 'assistant') b.append(...foldable(i.tldr, i.text, key));
+    else {
+      const body = rich(i.text);
+      if (!state.unfold.has(key)) body.classList.add('fold');
+      b.append(body);
+    }
     const note = i.error ? 'Not sent' : i.sending ? 'sending…' : i.pending ? 'queued' : null;
     if (note) b.append(el('div', 'b-note', note));
     b.dataset.key = key;

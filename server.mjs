@@ -262,6 +262,7 @@ export function toolSummary(uses) {
 const PASTED = /<pasted_content id="([^"]*)">\n?([\s\S]*?)\n?<\/pasted_content(?: id="\1")?>/g;
 export const unwrapPasted = s => (typeof s === 'string' ? s.replace(PASTED, '$2').trim() : '');
 const DUP_MS = 60_000;
+const INTERRUPTED = /^\[Request interrupted by user(?: for tool use)?\]$/;
 
 // Master chat as bubbles: human prompts, Claude's text (consecutive chunks merged), and one activity line per run of tool calls.
 export function chatItems(entries, max = 60) {
@@ -283,6 +284,14 @@ export function chatItems(entries, max = 60) {
             continue;
         }
         const human = e.type === 'user' && !e.isMeta ? unwrapPasted(textOf(e)) : '';
+        // "Send now" (Escape) leaves this marker; it flags Claude's message instead of showing as a bubble
+        if (INTERRUPTED.test(human)) {
+            const prev = items.findLast(i => i.role === 'assistant');
+            if (prev) {
+                prev.interrupted = true;
+            }
+            continue;
+        }
         if (human && !human.startsWith('<')) {
             flush();
             items.push({ role: 'user', text: human, at: e.timestamp });
@@ -1056,16 +1065,27 @@ async function readBody(req, max) {
     return data;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-    const html = await readFile(new URL('./index.html', import.meta.url));
-    const icon = await readFile(new URL('./icon.svg', import.meta.url));
+// The page's files. A fixed map, so no request path ever reaches the file system.
+const JS = 'text/javascript; charset=utf-8';
+const STATIC = {
+    '/': ['index.html', 'text/html; charset=utf-8'],
+    '/index.html': ['index.html', 'text/html; charset=utf-8'],
+    '/styles.css': ['styles.css', 'text/css; charset=utf-8'],
+    '/app.js': ['app.js', JS],
+    '/core.js': ['core.js', JS],
+    '/list.js': ['list.js', JS],
+    '/chat.js': ['chat.js', JS],
+    '/icon.svg': ['icon.svg', 'image/svg+xml']
+};
 
+if (import.meta.url === `file://${process.argv[1]}`) {
     createServer(async (req, res) => {
         const url = new URL(req.url, 'http://x');
         try {
-            if (url.pathname === '/icon.svg') {
-                res.setHeader('content-type', 'image/svg+xml');
-                return res.end(icon);
+            const file = Object.hasOwn(STATIC, url.pathname) && STATIC[url.pathname]; // not __proto__ and friends
+            if (file) {
+                res.setHeader('content-type', file[1]);
+                return res.end(await readFile(new URL(`./public/${file[0]}`, import.meta.url)));
             }
             if (url.pathname === '/api/sessions') {
                 res.setHeader('content-type', 'application/json');
@@ -1088,8 +1108,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 res.setHeader('content-type', 'application/json');
                 return res.end(JSON.stringify(await transcript(url.searchParams.get('dir'), url.searchParams.get('id'))));
             }
-            res.setHeader('content-type', 'text/html');
-            res.end(html);
+            res.statusCode = 404;
+            res.end('not found');
         } catch (e) {
             res.statusCode = e.status ?? 500;
             res.end(String(e.message));

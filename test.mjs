@@ -228,10 +228,7 @@ assert.equal(sameRepo('https://gitlab.com/tritt/accounting/pracsys/-/merge_reque
 assert.equal(sameRepo('https://gitlab.com/tritt/accounting/pracsys/-/merge_requests/1590', 'homebase'), false);
 assert.equal(sameRepo('https://github.com/lommerusk113/homebase/pull/3', 'homebase'), true);
 console.log('ok same repo');
-// ponytail: attentionEvents lives in index.html's inline script, so it's lifted out by text
-import { readFileSync } from 'node:fs';
-const page = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
-const attentionEvents = new Function(`${page.match(/^ {2}function attentionEvents[\s\S]*?^ {2}}$/m)[0]}\nreturn attentionEvents;`)();
+import { attentionEvents } from './public/list.js';
 const it = (key, column, ci) => ({ key, column, prState: ci ? { ci } : null });
 const ev = (prev, next) => attentionEvents(prev, next).map(e => [e.kind, e.item.key]);
 assert.deepEqual(ev(null, [it('a', 'needs-you')]), []); // first load
@@ -300,3 +297,19 @@ const timed = workItems([{ id: 's', project: 'p', prs: [{ url: mr(5), at: 1 }], 
 assert.deepEqual([timed.tokens, timed.time], ['1.2M tok', '1h 05m']);
 assert.equal(timed.tokensTitle, 'input 1 · output 2 · cache read 1,000,000 · cache write 200,000');
 console.log('ok usage + limits');
+
+// "Send now" interrupts: the marker isn't a bubble; it flags the last Claude message before it
+const cut = chatItems([
+    { type: 'user', message: { content: 'go' } },
+    say('Working on A.'), tu('Bash'),
+    { type: 'user', message: { content: 'also B' } },
+    { type: 'user', message: { content: [{ type: 'text', text: '[Request interrupted by user]' }] } },
+    say('Doing B.'),
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't', content: 'x' }, { type: 'text', text: '[Request interrupted by user for tool use]' }] } }
+]);
+assert.deepEqual(cut.map(i => [i.role, i.text, i.interrupted]), [
+    ['user', 'go', undefined], ['assistant', 'Working on A.', true], ['tools', 'Ran 1 command', undefined], ['user', 'also B', undefined], ['assistant', 'Doing B.', true]
+]);
+assert.equal(chatItems([{ type: 'user', message: { content: '[Request interrupted by user]' } }]).length, 0); // nothing to mark
+assert.equal(chatItems([{ type: 'user', message: { content: '[Request interrupted by user] and more' } }])[0].role, 'user'); // only the exact marker
+console.log('ok interrupted');

@@ -3,6 +3,7 @@
 import { api } from './core.js';
 const FETCH_MS = 30_000; // the server caches the glab calls; this only bounds how stale the pill gets
 const POLL_MS = 3000;
+const LOADING_MS = 1000; // while the server is still loading the issues, or refreshing stale ones
 
 const CSS = `
   .ms-pick { position:relative; font-size:12.5px; }
@@ -26,6 +27,10 @@ const CSS = `
   .ms-menu button.on { font-weight:600; }
   .ms-menu button span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .ms-menu button small { color:var(--muted); font-weight:400; }
+  .ms-pick wa-spinner { font-size:11px; --track-width:2px; }
+  .ms-pick > summary .ld { color:var(--muted); }
+  .ms-pick.busy > summary > :not(wa-spinner), .ms-pick.busy .ms-menu > :not(button) { opacity:.5; }
+  .ms-menu button wa-spinner { align-self:center; }
   .ms-tag { margin-right:6px; font-size:10.5px; font-weight:500; vertical-align:1px; }
 `;
 
@@ -53,9 +58,11 @@ export function milestoneTag(item) {
 }
 
 // Pill text and tooltip for a selected milestone (groups from the server's groupIssues): "11 open", the full breakdown in the tooltip.
+// Before the server has the issues (ms.loading, no groups) the counts come from the milestone list.
 export function pillLabel(ms) {
 
     const g = ms.groups, open = ms.total - ms.closed;
+    if (!g) return { text: ms.total == null ? 'loading…' : `${open} open`, tip: `${ms.title}: loading issues… · ${due(ms.due)}` };
     const parts = [[g.doing, 'in progress'], [g.closable, 'can be closed'], [g.assigned, 'not started'], [g.unassigned, 'unassigned']]
         .filter(([l]) => l.length).map(([l, label]) => `${l.length} ${label}`);
 
@@ -66,14 +73,25 @@ export function pillLabel(ms) {
 // The element polls /api/milestones itself while it is in the page and stops once removed.
 // onChange({ id, title } | null) runs when the selected milestone is known or changes. The choice is kept per project.
 // onData(response) runs with every changed /api/milestones response (the Issues tab draws from it).
-export function milestoneSelector(project, { onChange, onData } = {}) {
+// onBusy(true|false) runs when a picked milestone starts and stops loading, so a view can dim its old data.
+export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
     if (!styled) { document.head.append(el('style', null, CSS)); styled = true; }
     const key = `milestone:${project}`, pick = el('details', 'ms-pick'), summary = el('summary'), menu = el('div', 'ms-menu');
     pick.append(summary, menu);
-    pick.hidden = true;
-    let json = '', at = 0, asked = null, selectedId, pending = false, seen = false;
+    summary.append(el('span', null, '⚑'), el('span', 'ld', 'Loading…'), el('wa-spinner'));
+    summary.title = 'Loading milestones…';
+    let json = '', at = 0, asked = null, selectedId, pending = false, seen = false, busy = null, loading = false;
 
-    const choose = v => { store.set(key, v); pick.open = false; tick(); };
+    // the old data stays, dimmed, with a spinner on the pill and on the picked entry until the new milestone's data is in
+    const setBusy = v => {
+        busy = v;
+        pick.classList.toggle('busy', v != null);
+        onBusy?.(v != null);
+        if (v == null) { pick.querySelectorAll('wa-spinner.picked').forEach(s => s.remove()); return; }
+        summary.append(el('wa-spinner', 'picked'));
+        menu.querySelector(`button[data-id="${v}"]`)?.append(el('wa-spinner', 'picked'));
+    };
+    const choose = v => { store.set(key, v); setBusy(v); pick.open = false; tick(); };
     // a details menu doesn't close on outside clicks by itself
     const outside = e => { if (pick.open && !e.composedPath().includes(pick)) pick.open = false; };
     document.addEventListener('click', outside);
@@ -83,7 +101,11 @@ export function milestoneSelector(project, { onChange, onData } = {}) {
         const ms = data.selected;
         pick.hidden = !data.milestones.length;
         summary.replaceChildren(el('span', null, '⚑'), el('span', 't', ms ? ms.title : 'No milestone'));
-        if (ms) {
+        if (ms && !ms.groups) {
+            const { text, tip } = pillLabel(ms);
+            summary.append(el('span', 'n', `· ${text}`));
+            summary.title = tip;
+        } else if (ms) {
             const bar = el('span', 'ms-bar'), fill = el('b');
             fill.style.width = `${ms.total ? Math.round(100 * ms.closed / ms.total) : 0}%`;
             bar.append(fill);
@@ -94,8 +116,12 @@ export function milestoneSelector(project, { onChange, onData } = {}) {
             summary.title = 'Show only work items of a milestone';
         }
 
+        if (ms?.loading || data.updating) summary.append(el('wa-spinner'));
+
         const parts = [];
-        if (ms) {
+        if (ms?.loading) parts.push(el('div', 'info', 'Loading issues…'), el('hr'));
+        else if (ms?.error) parts.push(el('div', 'info', `Could not load the issues: ${ms.error}`), el('hr'));
+        if (ms?.groups) {
             const g = ms.groups, info = el('div', 'info');
             info.append(link(null, due(ms.due), ms.url));
             for (const [k, label] of [['doing', 'in progress'], ['assigned', 'assigned'], ['unassigned', 'unassigned']]) {
@@ -115,12 +141,14 @@ export function milestoneSelector(project, { onChange, onData } = {}) {
         }
         parts.push(...data.milestones.map(m => {
             const b = el('button', ms?.id === m.id ? 'on' : null);
+            b.dataset.id = m.id;
             b.append(el('span', null, m.title), el('small', null, m.total == null ? '' : `${m.closed}/${m.total}`));
             if (data.detected.includes(m.id)) b.title = 'Your MRs are in this milestone';
             b.onclick = () => choose(String(m.id));
             return b;
         }));
         const none = el('button', ms ? null : 'on');
+        none.dataset.id = 'none';
         none.append(el('span', null, 'No milestone'), el('small', null, 'show all'));
         none.onclick = () => choose('none');
         parts.push(none);
@@ -131,22 +159,28 @@ export function milestoneSelector(project, { onChange, onData } = {}) {
         if (pick.isConnected) seen = true;
         else if (seen) { clearInterval(timer); document.removeEventListener('click', outside); return; }
         const want = store.get(key) ?? '';
-        if (pending || (want === asked && Date.now() - at < FETCH_MS)) return;
+        if (pending || (want === asked && Date.now() - at < (loading ? LOADING_MS : FETCH_MS))) return;
         pending = true;
+        let ok = false;
         try {
             const r = await api(`/api/milestones?project=${encodeURIComponent(project)}&milestone=${encodeURIComponent(want)}`);
             const text = r.ok ? await r.text() : '';
+            ok = !!text;
+            if (ok && busy === want) setBusy(null);
             if (text && text !== json) { // redraw only on change, so an open menu stays put
                 json = text;
                 const data = JSON.parse(text);
+                loading = !!(data.selected?.loading || data.updating);
                 render(data);
                 onData?.(data);
                 const sel = data.selected ? { id: data.selected.id, title: data.selected.title } : null;
                 if (sel?.id !== selectedId) { selectedId = sel?.id; onChange?.(sel); }
             }
         } catch {} finally {
-            at = Date.now(); asked = want; pending = false;
+            at = ok ? Date.now() : 0; asked = want; pending = false; // a failed call retries on the next tick
         }
+        if (loading) setTimeout(tick, LOADING_MS);
+        else if (want !== (store.get(key) ?? '')) tick(); // picked again while this call ran
     }
 
     const timer = setInterval(tick, POLL_MS);

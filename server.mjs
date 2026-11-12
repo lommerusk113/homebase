@@ -1028,8 +1028,45 @@ const MS_LINKS_TTL_MS = 5 * 60_000;
 const MS_PARALLEL = 8;
 const swr = new Map(); // key -> { at, value, pending, error }
 
-// Stale-while-revalidate like prState, for any key. Only the first load waits; a failed first load throws.
-async function cached(key, ttl, fn) {
+// Runs at most n of the given async functions at a time; the rest wait in call order.
+export function limiter(n) {
+
+    let active = 0;
+    const queue = [];
+    const next = () => {
+        if (active >= n || !queue.length) {
+            return;
+        }
+        active++;
+        const { fn, resolve, reject } = queue.shift();
+        Promise.resolve().then(fn).then(resolve, reject).finally(() => {
+            active--;
+            next();
+        });
+    };
+
+    return fn => new Promise((resolve, reject) => {
+        queue.push({ fn, resolve, reject });
+        next();
+    });
+}
+
+// Concurrent calls with the same key share one promise; a call after it settled starts afresh.
+export function dedupe() {
+
+    const live = new Map();
+
+    return (key, fn) => {
+        if (!live.has(key)) {
+            live.set(key, Promise.resolve().then(fn).finally(() => live.delete(key)));
+        }
+
+        return live.get(key);
+    };
+}
+
+// Starts a refresh when the entry is stale and returns the entry ({ value, pending, error }) without waiting.
+function refresh(key, ttl, fn) {
 
     let hit = swr.get(key);
     if (!hit) {
@@ -1042,6 +1079,14 @@ async function cached(key, ttl, fn) {
             .catch(e => { hit.error = e; })
             .finally(() => { hit.at = Date.now(); hit.pending = null; });
     }
+
+    return hit;
+}
+
+// Stale-while-revalidate like prState, for any key. Only the first load waits; a failed first load throws.
+async function cached(key, ttl, fn) {
+
+    const hit = refresh(key, ttl, fn);
     if (hit.value === null) {
         await hit.pending;
     }
@@ -1053,7 +1098,15 @@ async function cached(key, ttl, fn) {
 }
 
 const isGitLab = repo => repo.host.includes('gitlab');
-const api = (repo, path) => run(isGitLab(repo) ? 'glab' : 'gh', ['api', path]).then(({ stdout }) => JSON.parse(stdout));
+// Every glab/gh call goes through one limiter, and an identical call already in flight is shared.
+const apiSlot = limiter(MS_PARALLEL);
+const apiOnce = dedupe();
+const api = (repo, path) => {
+
+    const cli = isGitLab(repo) ? 'glab' : 'gh';
+
+    return apiOnce(`${cli} ${path}`, () => apiSlot(() => run(cli, ['api', path]))).then(({ stdout }) => JSON.parse(stdout));
+};
 export const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // Open milestones with their issue counts (closed/total) for the selector menu.
@@ -1174,40 +1227,59 @@ export function activeMilestones(mrs, list) {
     return [...score].sort((a, b) => b[1] - a[1]).map(([id]) => id);
 }
 
+// The issue groups of one milestone; its open issues' MRs in parallel (api's limiter bounds them).
 async function milestoneIssues(project, repo, ms) {
 
-    const issues = await cached(`issues:${project}:${ms.id}`, MS_ISSUES_TTL_MS, () => fetchIssues(repo, ms));
+    const issues = await fetchIssues(repo, ms);
     const links = {};
     if (isGitLab(repo)) {
-        const open = issues.filter(i => i.state === 'open');
-        for (let i = 0; i < open.length; i += MS_PARALLEL) {
-            await Promise.all(open.slice(i, i + MS_PARALLEL).map(async ({ iid }) => {
-                links[iid] = await cached(`links:${project}:${iid}`, MS_LINKS_TTL_MS, () => fetchLinks(repo, iid)).catch(() => []);
-            }));
-        }
+        await Promise.all(issues.filter(i => i.state === 'open').map(async ({ iid }) => {
+            links[iid] = await cached(`links:${project}:${iid}`, MS_LINKS_TTL_MS, () => fetchLinks(repo, iid)).catch(() => []);
+        }));
     }
 
-    return { ...ms, ...groupIssues(issues, links) };
+    return groupIssues(issues, links);
 }
 
 // A project's open milestones, the ids its MRs point at, and the issue groups of the chosen one.
 // pick: a milestone id (or a title, as older saved choices hold), "none" for no milestone, empty for the most active one.
 async function milestones(project, pick) {
 
+    // right after start the projects come from the warm-up's session scan
+    if (!repoPaths.has(project)) {
+        await scanned;
+    }
     const repo = repoPaths.get(project);
     if (!repo) {
         throw Object.assign(new Error('unknown project'), { status: 404 });
     }
 
-    const list = await cached(`ms:${project}`, MS_LIST_TTL_MS, () => fetchMilestones(repo));
+    // the signed-in user, for the Issues tab's "you" lane; a failed lookup only loses the mark
+    const [list, me] = await Promise.all([
+        cached(`ms:${project}`, MS_LIST_TTL_MS, () => fetchMilestones(repo)),
+        cached(`me:${repo.host}`, 24 * 3600_000, () => api(repo, 'user').then(person)).catch(() => null)
+    ]);
     const mrs = [...prs].filter(([url, hit]) => hit.value && sameRepo(url, project)).map(([, hit]) => hit.value);
     const detected = activeMilestones(mrs, list);
     const ms = pick === 'none' ? null : list.find(m => String(m.id) === pick || m.title === pick) ?? list.find(m => m.id === detected[0]);
 
-    // the signed-in user, for the Issues tab's "you" lane; a failed lookup only loses the mark
-    const me = await cached(`me:${repo.host}`, 24 * 3600_000, () => api(repo, 'user').then(person)).catch(() => null);
+    // the issue groups never wait: until the first load is in, selected has the list's counts and loading: true
+    const issues = ms && refresh(`issues:${project}:${ms.id}`, MS_ISSUES_TTL_MS, () => milestoneIssues(project, repo, ms));
+    const selected = !ms ? null : issues.value ? { ...ms, ...issues.value } : { ...ms, loading: !!issues.pending, error: issues.error?.message ?? null };
+    const updating = !!(issues?.pending || swr.get(`ms:${project}`).pending);
 
-    return { project, milestones: list, detected, me, selected: ms ? await milestoneIssues(project, repo, ms) : null };
+    return { project, milestones: list, detected, me, selected, updating };
+}
+
+// Session scan at start, so /api/milestones knows the projects and the board's MRs before the page asks.
+let scanned = Promise.resolve();
+
+// Fills the milestone caches in the background for every project seen in recent sessions: the list, and the issues of its most active milestone.
+// ponytail: only the detected milestone's issues; another one loads on first pick (counts show at once, issues follow)
+function warmMilestones() {
+
+    scanned = sessions().catch(() => {});
+    scanned.then(() => Promise.all([...repoPaths.keys()].map(p => milestones(p, '').catch(() => {}))));
 }
 
 // HOMEBASE_STATUSLINE_DIR lets a test server read sample dumps instead of the real folder.
@@ -1677,6 +1749,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         console.log(`LAN mode: pairing code ${PAIR_CODE} (also in ${join(DATA_DIR, 'pairing-code')})`);
     }
     editors();
+    warmMilestones();
     createServer(async (req, res) => {
         const url = new URL(req.url, 'http://x');
         for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);

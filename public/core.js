@@ -22,7 +22,7 @@ export const el = (tag, cls, text) => { const e = document.createElement(tag); i
 // Web Awesome button; attributes rather than properties so it works before the element is upgraded.
 export const waButton = (text, cls, attrs = {}) => {
     const b = el('wa-button', cls, text);
-    for (const [k, v] of Object.entries({ size: 'small', appearance: 'outlined', ...attrs })) b.setAttribute(k, v === true ? '' : v);
+    for (const [k, v] of Object.entries({ size: 's', appearance: 'outlined', ...attrs })) b.setAttribute(k, v === true ? '' : v);
     return b;
 };
 // A <wa-tooltip> for target (given an id if it has none); the caller places it next to the target.

@@ -39,7 +39,7 @@ async function projectOf(cwd) {
     return projects.get(cwd);
 }
 
-// Read-only PR/MR lookup via gh/glab. Returns { state: open|merged|closed, ready, changes } or null.
+// Read-only PR/MR lookup via gh/glab. Returns { state: open|merged|closed, title, branch, reviewers, ready, changes, changesBy, draft, ci } or null.
 async function fetchPr(url) {
 
     const gl = url.match(/^https:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)/);
@@ -47,18 +47,36 @@ async function fetchPr(url) {
         const { stdout } = await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}`]);
         const mr = JSON.parse(stdout);
         const state = { opened: 'open', merged: 'merged' }[mr.state] ?? 'closed';
+        const status = mr.detailed_merge_status;
 
-        return { state, branch: mr.source_branch, ready: mr.detailed_merge_status === 'mergeable', changes: mr.detailed_merge_status === 'requested_changes' };
+        return {
+            state,
+            title: mr.title,
+            branch: mr.source_branch,
+            reviewers: (mr.reviewers ?? []).map(r => r.name),
+            ready: status === 'mergeable',
+            // ponytail: the MR payload doesn't say which reviewer blocked; the /reviewers endpoint would
+            changes: status === 'requested_changes' || status === 'discussions_not_resolved',
+            changesBy: [],
+            draft: !!mr.draft,
+            ci: { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? null
+        };
     }
 
-    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,reviewDecision,isDraft,headRefName']);
+    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,title,reviewDecision,isDraft,headRefName,reviewRequests,latestReviews']);
     const pr = JSON.parse(stdout);
+    const reviews = pr.latestReviews ?? [];
 
     return {
         state: pr.state.toLowerCase(),
+        title: pr.title,
         branch: pr.headRefName,
+        reviewers: [...new Set([...(pr.reviewRequests ?? []).map(r => r.login ?? r.name), ...reviews.map(r => r.author?.login)].filter(Boolean))],
         ready: pr.reviewDecision === 'APPROVED' && !pr.isDraft,
-        changes: pr.reviewDecision === 'CHANGES_REQUESTED'
+        changes: pr.reviewDecision === 'CHANGES_REQUESTED',
+        changesBy: reviews.filter(r => r.state === 'CHANGES_REQUESTED').map(r => r.author?.login).filter(Boolean),
+        draft: pr.isDraft,
+        ci: null // ponytail: GitHub checks need statusCheckRollup; add it if failing pipelines matter there
     };
 }
 
@@ -335,18 +353,6 @@ export function pendingQuestion(entries) {
     return answered ? null : ask.input?.questions?.[0]?.question ?? 'Claude asked a question.';
 }
 
-export function agentColumn(status, hasPr, pr) {
-
-    if (status === 'running') {
-        return 'doing';
-    }
-    if (hasPr) {
-        return column('idle', pr, true);
-    }
-
-    return status === 'done' ? 'done' : 'needs-you';
-}
-
 // Background subagents a master session started (depth 1 only; their own helpers are noise).
 export const STAGES = ['Explore', 'Implement', 'Verify', 'Ship', 'Done'];
 // Matched against each command of a Bash call, so they are anchored to its start.
@@ -408,6 +414,7 @@ export function summarizeAgent(meta, entries, ageMs, id) {
         tldr,
         body,
         pr: report.match(PR_URL)?.at(-1) ?? null,
+        prs: [...new Set(report.match(PR_URL))],
         branch: entries.findLast(e => e.gitBranch)?.gitBranch ?? meta.worktreeBranch ?? null,
         model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? meta.pickedEffortModel ?? null,
         files: filesTouched(entries, meta.worktreePath ?? entries.findLast(e => e.cwd)?.cwd)
@@ -472,6 +479,19 @@ export function status(lastTurn, ageMs) {
     return 'idle';
 }
 
+// Every PR/MR the session linked, with when it last did.
+function prLinks(entries) {
+
+    const at = new Map();
+    for (const e of entries) {
+        if (e.type === 'pr-link' && e.prUrl) {
+            at.set(e.prUrl, Math.max(at.get(e.prUrl) ?? 0, Date.parse(e.timestamp) || 0));
+        }
+    }
+
+    return [...at].map(([url, t]) => ({ url, at: t }));
+}
+
 export function summarize(entries, ageMs) {
 
     const last = type => entries.findLast(e => e.type === type);
@@ -485,6 +505,7 @@ export function summarize(entries, ageMs) {
         branch: meta.gitBranch,
         title: last('custom-title')?.customTitle ?? last('ai-title')?.aiTitle ?? null,
         pr: last('pr-link')?.prUrl ?? null,
+        prs: prLinks(entries),
         model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? null,
         status: status(lastTurn, ageMs),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
@@ -521,16 +542,163 @@ async function sessions() {
 
     await Promise.all(out.map(async s => {
         s.project = await projectOf(s.cwd);
-        s.prState = await prState(s.pr);
-        s.column = column(s.status, s.prState, !!s.pr);
-        await Promise.all(s.agents.map(async a => {
-            a.prState = await prState(a.pr);
-            a.branch = a.prState?.branch ?? a.branch; // transcript gitBranch is unreliable inside worktrees
-            a.column = agentColumn(a.status, !!a.pr, a.prState);
-        }));
     }));
 
+    const urls = new Set(out.flatMap(s => [...s.prs.map(p => p.url), ...s.agents.flatMap(a => a.prs)]));
+    const states = new Map(await Promise.all([...urls].map(async u => [u, await prState(u)])));
+    const items = workItems(out, u => states.get(u) ?? null);
+    for (const s of out) {
+        s.items = items.filter(i => i.sessionId === s.id);
+        delete s.agents; // folded into items
+    }
+
     return out.sort((a, b) => b.updated - a.updated);
+}
+
+// The left side's lifecycle: agent stages first, then MR states.
+export const LIFECYCLE = ['Implement', 'Verify', 'Review', 'Approved', 'Merged'];
+const VERB = ['exploring', 'implementing', 'verifying', 'shipping', 'finishing'];
+
+export function lifecycle(pr, prState, agent) {
+
+    if (prState?.state === 'merged' || prState?.state === 'closed') {
+        return 4;
+    }
+    if (prState?.ready) {
+        return 3;
+    }
+
+    return pr ? 2 : [0, 0, 1, 2, 2][agent?.stage ?? 0];
+}
+
+export function itemColumn(prState, agent, hasPr) {
+
+    if (prState?.state === 'merged' || prState?.state === 'closed') {
+        return 'done';
+    }
+    if (agent?.status === 'running') {
+        return 'doing';
+    }
+    if (agent?.status === 'stopped') {
+        return 'needs-you';
+    }
+
+    return column('idle', prState, hasPr);
+}
+
+// What has to happen next for a work item, as one deterministic line.
+export function nextStep(prState, agent) {
+
+    if (prState?.state === 'merged') {
+        return 'Merged';
+    }
+    if (prState?.state === 'closed') {
+        return 'Closed without merging';
+    }
+    if (agent?.status === 'running') {
+        return `${agent.description} is ${VERB[agent.stage] ?? 'working'}…`;
+    }
+    if (agent?.status === 'stopped') {
+        return 'Agent stopped — check the chat';
+    }
+    if (!prState) {
+        return 'Open the MR to check its state';
+    }
+    if (prState.changes) {
+        const by = prState.changesBy?.length ? prState.changesBy : prState.reviewers ?? [];
+        return by.length ? `Address review comments from ${by.join(', ')}` : 'Address review comments';
+    }
+    if (prState.ci === 'failing') {
+        return 'Pipeline failing';
+    }
+    if (prState.ci === 'running') {
+        return 'Pipeline running';
+    }
+    if (prState.draft) {
+        return 'Draft — mark it ready for review';
+    }
+    if (prState.ready) {
+        return 'Approved — merge it';
+    }
+
+    return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
+}
+
+// One item per PR/MR (deduped across sessions and agents), plus running or stopped agents with no MR yet.
+// Agents whose description names a known MR (!123) count as work on it; finished agents without an MR are dropped.
+export function workItems(sessions, prOf = () => null) {
+
+    const byUrl = new Map();
+    const add = (url, project) => {
+        if (!byUrl.has(url)) {
+            byUrl.set(url, { key: url, pr: url, project, agents: [], linkedAt: 0, linkSession: null });
+        }
+
+        return byUrl.get(url);
+    };
+
+    for (const s of sessions) {
+        for (const { url, at } of s.prs ?? []) {
+            const it = add(url, s.project);
+            if (!it.linkSession || at > it.linkedAt) {
+                Object.assign(it, { linkedAt: at, linkSession: s.id });
+            }
+        }
+        for (const a of s.agents ?? []) {
+            for (const url of a.prs ?? []) {
+                add(url, s.project);
+            }
+        }
+    }
+
+    const byRef = new Map([...byUrl.values()].map(it => [`${it.project}!${it.pr.match(/merge_requests\/(\d+)/)?.[1]}`, it]));
+    const loose = [];
+    for (const s of sessions) {
+        for (const a of s.agents ?? []) {
+            const own = { ...a, sessionId: s.id };
+            const refs = new Set((a.prs ?? []).map(u => byUrl.get(u)));
+            for (const m of (a.description ?? '').matchAll(/!(\d+)/g)) {
+                const it = byRef.get(`${s.project}!${m[1]}`);
+                if (it) {
+                    refs.add(it);
+                }
+            }
+
+            if (refs.size) {
+                refs.forEach(it => it.agents.push(own));
+            } else if (a.status !== 'done') {
+                loose.push({ key: a.id, pr: null, project: s.project, agents: [own], linkedAt: 0, linkSession: null });
+            }
+        }
+    }
+
+    return [...byUrl.values(), ...loose].map(it => {
+
+        const agents = it.agents.toSorted((a, b) => b.updated - a.updated);
+        const agent = agents[0] ?? null;
+        const prState = it.pr ? prOf(it.pr) : null;
+        const stage = lifecycle(it.pr, prState, agent);
+
+        return {
+            key: it.key,
+            project: it.project,
+            sessionId: agent?.sessionId ?? it.linkSession,
+            title: prState?.title ?? agent?.description ?? it.pr,
+            pr: it.pr,
+            prState,
+            column: itemColumn(prState, agent, !!it.pr),
+            stage,
+            stageLabel: prState?.state === 'closed' ? 'Closed' : LIFECYCLE[stage],
+            agentStatus: agent?.status ?? null,
+            updated: Math.max(agent?.updated ?? 0, it.linkedAt),
+            branch: prState?.branch ?? agent?.branch ?? null, // transcript gitBranch is unreliable inside worktrees
+            tldr: agent?.tldr ?? null,
+            body: agent?.body ?? '',
+            files: agent?.files ?? [],
+            activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
+            next: nextStep(prState, agent)
+        };
+    });
 }
 
 async function transcript(dir, id) {

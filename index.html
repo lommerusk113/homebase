@@ -382,7 +382,8 @@
   }
 
   // Chat column: bound to one master session, default the most recently active tracked one.
-  const chatSession = () => state.sessions.find(s => s.id === state.chat) || state.sessions.find(s => state.tracked.includes(s.project)) || null;
+  // only sessions in the selected project(s); falls back to the most recent one there
+  const chatSession = () => { const v = visibleSessions(); return v.find(s => s.id === state.chat) || v[0] || null; };
   let chatKey = null;
 
   function bindChat(id) {
@@ -392,7 +393,7 @@
 
   function renderChatPick() {
     const cur = chatSession();
-    const list = state.sessions.filter(s => state.tracked.includes(s.project) || s === cur);
+    const list = visibleSessions();
     const opts = list.map(s => [s.id, `${s.title || plain(s.lastPrompt).slice(0, 60) || s.id} · ${s.project}`]);
     const sel = $('chat-pick');
     if (!(sel.options.length === opts.length && [...sel.options].every((o, i) => o.value === opts[i][0] && o.text === opts[i][1]))) {
@@ -477,7 +478,7 @@
 
   $('ask-copy').onclick = () => navigator.clipboard.writeText($('ask-cmd').textContent).then(() => { $('ask-copy').textContent = 'Copied'; setTimeout(() => { $('ask-copy').textContent = 'Copy'; }, 1500); });
 
-  $('project').onchange = e => { state.project = e.target.value; store.set('project', state.project); renderBoard(); };
+  $('project').onchange = e => { state.project = e.target.value; store.set('project', state.project); renderBoard(); renderChatPick(); refreshChat(); };
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && state.selected) { state.selected = null; renderBoard(); }
   });

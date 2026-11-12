@@ -219,6 +219,14 @@ wa-details.group::part(icon) { color:var(--muted); font-size:12px; }
 .limits i b { display:block; height:100%; }
 .limits .limit-label { color:var(--fg); }
 
+/* keyboard navigation (keys.js) */
+.rows tr[data-key]:focus { outline:none; }
+.rows tr[data-key]:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+.keys-help { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; margin:0; font-size:13px; }
+.keys-help dt { font-family:'JetBrains Mono', monospace; font-weight:500; white-space:nowrap; }
+.keys-help dd { margin:0; color:var(--muted); }
+.keys-msg { white-space:pre-wrap; font-size:12.5px; background:var(--chip); padding:8px; border-radius:6px; }
+
 @media (max-width: 640px) {
   header.top { padding-left:16px; padding-right:16px; }
   .sep { display:none; }

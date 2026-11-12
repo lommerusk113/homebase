@@ -1,5 +1,5 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { api, $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks } from './core.js';
+import { api, $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks, setOffline } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat } from './chat.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
@@ -98,21 +98,24 @@ if (window.Notification) renderBell();
 let lastSessions = '', lastRender = 0;
 async function refresh() {
     try {
-        const text = await api('/api/sessions').then(r => r.text());
-        $('offline').hidden = true;
+        const r = await api('/api/sessions');
+        if (!r.ok) throw new Error(r.status);
+        const text = await r.text();
         // ponytail: skip identical re-renders so text in an open detail stays selectable; re-render each minute for the ages
         if (text !== lastSessions || Date.now() - lastRender > 60_000) {
             state.sessions = JSON.parse(text);
             migrateTracked();
             lastSessions = text; lastRender = Date.now();
+            try { sessionStorage.setItem('sessions', text); } catch {}
             renderProjects(); renderBoard();
             // diffed over all items, then filtered, so changing the project filter doesn't read as transitions
             const items = state.sessions.flatMap(s => s.items || []);
             attentionEvents(state.items, items).filter(e => shown(e.item)).forEach(notify);
             state.items = items;
         }
+        setOffline(false);
         updateTitle();
-    } catch { $('offline').hidden = false; }
+    } catch { setOffline(true); }
     refreshChat(); refreshLimits();
 }
 
@@ -154,4 +157,9 @@ showTab(store.get('tab'));
 initKeys(); // includes Esc collapsing the expanded row
 initChat();
 api('/api/editors').then(r => r.json()).then(e => { state.editors = e; renderBoard(); }).catch(() => {});
+// The last good list survives api()'s reload on 401, so a failing server shows dimmed data rather than an empty board.
+try {
+    state.sessions = JSON.parse(sessionStorage.getItem('sessions')) || [];
+    migrateTracked(); renderProjects(); renderBoard();
+} catch {}
 refresh(); setInterval(refresh, 3000);

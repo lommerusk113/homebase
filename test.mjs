@@ -653,6 +653,17 @@ import { join as pjoin } from 'node:path';
         assert.match(page.headers['content-security-policy'], /script-src 'self';/);
         const token = meta(page.body);
         assert.ok(token, 'page carries the token');
+        assert.equal(page.headers['cache-control'], 'no-store');
+        for (const path of ['/app.js', '/styles.css', '/vendor/marked/marked.min.js']) {
+            const js = await call(s.port, { path });
+            assert.equal(js.status, 200);
+            assert.equal(js.headers['cache-control'], 'no-cache', path); // revalidate every load: no stale modules after a restart
+            assert.match(js.headers.etag, /^"[\w-]+"$/, path);
+            const again = await call(s.port, { path, headers: { 'if-none-match': js.headers.etag } });
+            assert.equal(again.status, 304, path);
+            assert.equal(again.body, '');
+            assert.equal((await call(s.port, { path, headers: { 'if-none-match': '"stale"' } })).status, 200, path);
+        }
         const ok = await call(s.port, { path: '/api/limits', headers: { 'x-homebase-token': token, origin: `http://localhost:${s.port}` } });
         assert.equal(ok.status, 200);
         // POST rejection paths only: none of these reach a session.

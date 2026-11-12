@@ -7,7 +7,7 @@ import { join, basename, dirname, extname, sep } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 
 const run = promisify(execFile);
 // HOMEBASE_TMUX_SOCKET points every tmux call at a separate server (tmux -L), so tests never touch real sessions.
@@ -1653,7 +1653,23 @@ export function vendorPath(urlPath) {
     return rel;
 }
 
-async function serveVendor(rel, res) {
+// App and vendor files: the browser revalidates on every load (a cheap 304 when unchanged), so after a restart it
+// never runs stale modules next to a fresh index.html. Vendor paths carry no version (VENDOR.md updates files in
+// place), so they get the same treatment rather than long-lived caching.
+function sendRevalidated(req, res, body) {
+
+    const etag = `"${createHash('sha1').update(body).digest('base64url')}"`;
+    res.setHeader('cache-control', 'no-cache');
+    res.setHeader('etag', etag);
+    if (req.headers['if-none-match']?.split(/\s*,\s*/).includes(etag)) {
+        res.statusCode = 304;
+        return res.end();
+    }
+
+    return res.end(body);
+}
+
+async function serveVendor(rel, req, res) {
 
     const root = await realpath(VENDOR_DIR);
     const file = await realpath(join(root, rel)).catch(() => null);
@@ -1663,7 +1679,7 @@ async function serveVendor(rel, res) {
 
     res.setHeader('content-type', VENDOR_TYPES[extname(file)]);
     res.setHeader('x-content-type-options', 'nosniff');
-    res.end(await readFile(file));
+    sendRevalidated(req, res, await readFile(file));
 
     return true;
 }
@@ -1724,7 +1740,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 res.setHeader('content-type', file[1]);
                 const body = await readFile(new URL(`./public/${file[0]}`, import.meta.url));
                 if (file[0] !== 'index.html') {
-                    return res.end(body);
+                    return sendRevalidated(req, res, body);
                 }
                 // The token reaches only a page served to a request that passed the Host, Origin and pairing checks above.
                 res.setHeader('content-security-policy', CSP);
@@ -1732,7 +1748,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN));
             }
             const vendored = vendorPath(url.pathname);
-            if (vendored && await serveVendor(vendored, res)) {
+            if (vendored && await serveVendor(vendored, req, res)) {
                 return;
             }
             if (url.pathname === '/api/sessions') {

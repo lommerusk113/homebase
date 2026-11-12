@@ -1,5 +1,5 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago } from './core.js';
+import { $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago, limitLeft } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat } from './chat.js';
 
@@ -102,18 +102,18 @@ async function refresh() {
     refreshChat(); refreshLimits();
 }
 
-// "5h 27% used · resets 01:20 · week 36% used · resets Tue 19:00", as Claude Code's /usage counts it; hidden without a dump.
-const usedColor = used => (used < 60 ? 'var(--c-ready)' : used < 85 ? 'var(--c-warn)' : 'var(--c-danger)');
+// "5h 70% left · 1h20m · week 63% left · 4d22h", as Contado's footer shows it; hidden without a dump.
+const leftColor = left => (left >= 50 ? 'var(--c-ready)' : left >= 10 ? 'var(--c-warn)' : 'var(--c-danger)');
 async function refreshLimits() {
     let l = null;
     try { l = await fetch('/api/limits').then(r => r.json()); } catch {}
-    const box = $('limits'), wins = [['5h', l?.fiveHour, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }], ['week', l?.sevenDay, { weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }]].filter(([, w]) => w);
+    const box = $('limits'), wins = [['5h', l?.fiveHour], ['week', l?.sevenDay]].filter(([, w]) => w);
     box.hidden = !wins.length;
-    box.replaceChildren(...wins.flatMap(([label, w, fmt], i) => {
-        const used = Math.min(100, Math.round(w.used)), s = el('span'), bar = el('i'), fill = el('b');
-        fill.style.width = `${used}%`; fill.style.background = usedColor(used); bar.append(fill);
-        s.title = `Resets ${new Date(w.resetsAt).toLocaleString()}`;
-        s.append(label, bar, `${used}% used · resets ${new Date(w.resetsAt).toLocaleString([], fmt)}`);
+    box.replaceChildren(...wins.flatMap(([label, w], i) => {
+        const { left, until } = limitLeft(w), s = el('span'), bar = el('i'), fill = el('b');
+        fill.style.width = `${left}%`; fill.style.background = leftColor(left); bar.append(fill);
+        s.title = `${Math.round(w.used)}% used · resets ${new Date(w.resetsAt).toLocaleString()}`;
+        s.append(label, bar, `${left}% left · ${until}`);
         return i ? [el('span', 'muted', '·'), s] : [s];
     }));
     // text only, so an open tooltip survives the 3s refresh

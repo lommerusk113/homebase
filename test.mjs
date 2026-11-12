@@ -341,6 +341,12 @@ assert.equal(peakLimits(peaks, [], now).fiveHour.used, 90); // remembered across
 assert.deepEqual(peakLimits(peaks, [dump(5, 1738443600)], 1738425600_000 + 1).fiveHour, { used: 5, resetsAt: 1738443600_000 }); // new window starts fresh
 assert.equal([...peaks.keys()].some(k => k.includes('1738425600000')), false); // expired window dropped
 assert.equal(peakLimits(new Map(), [{}], now), null);
+import { limitLeft } from './public/core.js';
+assert.deepEqual(limitLeft({ used: 30, resetsAt: now + 80 * 60_000 }, now), { left: 70, until: '1h20m' });
+assert.deepEqual(limitLeft({ used: 37, resetsAt: now + (4 * 1440 + 22 * 60 + 30) * 60_000 }, now), { left: 63, until: '4d22h' });
+assert.deepEqual(limitLeft({ used: 30.5, resetsAt: now + 45 * 60_000 }, now), { left: 70, until: '45m' }); // rounds what is left, like Contado
+assert.deepEqual(limitLeft({ used: 104, resetsAt: now - 1 }, now), { left: 0, until: '0m' });
+assert.deepEqual(limitLeft({ used: 0, resetsAt: now + 2 * 1440 * 60_000 }, now), { left: 100, until: '2d' });
 console.log('ok limit peaks');
 
 import { repoPath, groupIssues, milestoneOf, activeMilestones } from './server.mjs';

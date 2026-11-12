@@ -41,6 +41,16 @@ export const limitLeft = (w, now = Date.now()) => {
     const m = Math.max(0, w.resetsAt - now) / 60000 | 0, d = m / 1440 | 0, h = m % 1440 / 60 | 0;
     return { left: Math.max(0, Math.min(100, Math.round(100 - w.used))), until: d ? `${d}d${h ? h + 'h' : ''}` : h ? `${h}h${m % 60 ? m % 60 + 'm' : ''}` : `${m}m` };
 };
+// Limits strip item: "Session 70%" at a glance, details in the tooltip; the countdown shows inline only once under 20% is left.
+export const limitView = (week, w, now = Date.now()) => {
+    const { left, until } = limitLeft(w, now), at = new Date(w.resetsAt), pad = n => String(n).padStart(2, '0');
+    const when = `${week ? at.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' : ''}${pad(at.getHours())}:${pad(at.getMinutes())}`;
+    return {
+        label: week ? 'Week' : 'Session', left,
+        text: `${left}%${left < 20 ? ` · resets ${until}` : ''}`,
+        tip: `${left}% left of your ${week ? 'weekly' : '5-hour'} limit · resets in ${until} (${when})`,
+    };
+};
 export const prLabel = url => { const m = url.match(/merge_requests\/(\d+)/) || url.match(/pull\/(\d+)/); return m ? (url.includes('merge_requests') ? '!' : '#') + m[1] : 'PR'; };
 export const prChip = s => { const a = el('a', 'chip mono', `${prLabel(s.pr)}${s.prState ? ' · ' + s.prState.state : ''}`); a.href = s.pr; a.target = '_blank'; a.onclick = e => e.stopPropagation(); return a; };
 

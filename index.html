@@ -163,6 +163,11 @@
   .stage .bar i.on { background:var(--c); }
   .stage .bar i.now { animation:pulse 1.2s ease-in-out infinite; }
   .stage small { font-size:11px; color:var(--muted); line-height:1.2; }
+  .rows .meta { display:block; font-size:11px; color:var(--muted); line-height:1.2; margin-top:2px; overflow:hidden; text-overflow:ellipsis; }
+  .limits { display:flex; align-items:center; gap:8px; padding:6px 24px; border-top:1px solid var(--line); background:var(--bg); font-size:11.5px; color:var(--muted); }
+  .limits span { display:inline-flex; align-items:center; gap:5px; }
+  .limits i { width:40px; height:4px; border-radius:2px; background:var(--line-soft); overflow:hidden; }
+  .limits i b { display:block; height:100%; background:var(--c-ready); }
 
   @media (max-width: 640px) {
     header.top { padding-left:16px; padding-right:16px; }
@@ -181,6 +186,7 @@
 <div class="main">
   <div class="left">
     <div class="masters" id="masters"></div>
+    <div class="limits" id="limits" hidden></div>
   </div>
   <aside id="chat">
     <div class="c-feed" id="feed"></div>
@@ -298,6 +304,7 @@
         const what = el('td', 'what');
         what.append(el('b', null, x.title), el('small', 'next', `Next: ${x.next}`));
         const prog = el('td', 'prog'); prog.append(stageBar(x));
+        if (x.tokens || x.time) { const m = el('small', 'meta', [x.tokens, x.time].filter(Boolean).join(' · ')); if (x.tokensTitle) m.title = x.tokensTitle; prog.append(m); }
         const pr = el('td', 'pr'); if (x.pr) pr.append(prChip(x));
         const br = el('td', 'br'); if (x.branch) br.append(el('span', 'chip mono', x.branch));
         tr.append(what, prog, pr, br, el('td', 'when', ago(x.updated)));
@@ -405,7 +412,22 @@
         renderProjects(); renderBoard();
       }
     } catch { $('offline').hidden = false; }
-    refreshChat();
+    refreshChat(); refreshLimits();
+  }
+
+  // "Remaining: 5h 66% · week 88%" from the status-line dump; hidden when there is none.
+  async function refreshLimits() {
+    let l = null;
+    try { l = await fetch('/api/limits').then(r => r.json()); } catch {}
+    const box = $('limits'), wins = [['5h', l?.fiveHour], ['week', l?.sevenDay]].filter(([, w]) => w);
+    box.hidden = !wins.length;
+    box.replaceChildren(...(wins.length ? ['Remaining:'] : []), ...wins.map(([label, w]) => {
+      const left = Math.max(0, Math.round(100 - w.used)), s = el('span'), bar = el('i'), fill = el('b');
+      fill.style.width = `${left}%`; bar.append(fill);
+      s.title = `Resets ${new Date(w.resetsAt).toLocaleString()}`;
+      s.append(label, bar, `${left}%`);
+      return s;
+    }));
   }
 
   // Chat column: bound to one master session, default the most recently active tracked one.

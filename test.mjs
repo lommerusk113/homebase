@@ -192,3 +192,35 @@ assert.equal(repoName('github-personal:lommerusk113/homebase.git\n'), 'homebase'
 assert.equal(repoName('git@gitlab.com:tritt/accounting/pracsys.git'), 'pracsys');
 assert.equal(repoName('https://github.com/contaas/portal-frontend'), 'portal-frontend');
 console.log('ok repo name');
+
+import { addUsage, readUsage, formatDuration, formatTokens, limitsOf } from './server.mjs';
+import { mkdtempSync, writeFileSync, appendFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+const use = (id, input, output, ts) => JSON.stringify({ type: 'assistant', timestamp: ts, message: { id, usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: 100, cache_creation_input_tokens: 10 } } });
+const u = addUsage({ byId: new Map() }, [use('m1', 2, 30, T('00.000')), use('m1', 2, 30, T('01.000')), use('m2', 5, 7, T('09.000')), `{"type":"user","timestamp":"${T('10.000')}"}`].join('\n'));
+assert.deepEqual(u.totals, { input: 7, output: 37, cacheRead: 200, cacheWrite: 20 });
+assert.equal(u.last - u.first, 10_000);
+const uf = `${mkdtempSync(`${tmpdir()}/hb-`)}/agent.jsonl`;
+writeFileSync(uf, use('a', 1, 1, T('00.000')) + '\n' + use('b', 1, 1, T('01.000')).slice(0, 20)); // second line half-written
+assert.equal((await readUsage(uf)).output, 1);
+appendFileSync(uf, use('b', 1, 1, T('01.000')).slice(20) + '\n' + use('b', 1, 1, T('01.000')) + '\n' + use('c', 1, 4, T('02.000')) + '\n');
+assert.deepEqual(await readUsage(uf), { input: 3, output: 6, cacheRead: 300, cacheWrite: 30, first: Date.parse(T('00.000')), last: Date.parse(T('02.000')) });
+assert.equal((await readUsage(uf)).output, 6); // unchanged file: nothing re-counted
+assert.equal(formatDuration(14 * 60_000), '14m');
+assert.equal(formatDuration(20_000), '<1m');
+assert.equal(formatDuration(65 * 60_000), '1h 05m');
+assert.equal(formatTokens(1_234_567), '1.2M tok');
+assert.equal(formatTokens(48_000), '48k tok');
+assert.equal(formatTokens(950), '950 tok');
+const now = 1_738_400_000_000;
+assert.deepEqual(limitsOf({ rate_limits: { five_hour: { used_percentage: 34, resets_at: 1738425600 }, seven_day: { used_percentage: 12.5, resets_at: 1738857600 } } }, now),
+    { fiveHour: { used: 34, resetsAt: 1738425600_000 }, sevenDay: { used: 12.5, resetsAt: 1738857600_000 } });
+assert.equal(limitsOf({ rate_limits: { five_hour: { used_percentage: 34, resets_at: 1738300000 }, seven_day: { used_percentage: 12, resets_at: 1738857600 } } }, now).fiveHour, null); // already reset
+assert.equal(limitsOf({ session_id: 'x' }, now), null);
+const timed = workItems([{ id: 's', project: 'p', prs: [{ url: mr(5), at: 1 }], agents: [
+    agent('a1', 2, { prs: [mr(5)], usage: { input: 1, output: 2, cacheRead: 1_000_000, cacheWrite: 200_000, first: 0, last: 14 * 60_000 } }),
+    agent('a2', 3, { description: 'Fix !5', status: 'running', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, first: 100 * 60_000, last: 101 * 60_000 } })
+] }], () => open(), 151 * 60_000)[0];
+assert.deepEqual([timed.tokens, timed.time], ['1.2M tok', '1h 05m']);
+assert.equal(timed.tokensTitle, 'input 1 · output 2 · cache read 1,000,000 · cache write 200,000');
+console.log('ok usage + limits');

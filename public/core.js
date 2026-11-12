@@ -32,6 +32,8 @@ export async function api(path, opts = {}) {
 }
 
 export const $ = id => document.getElementById(id);
+// Failed poll (network, 401, non-OK): header "Offline", list dimmed with its "Disconnected" note. The next good poll clears it.
+export const setOffline = off => { state.offline = off; $('offline').hidden = !off; document.body.classList.toggle('disconnected', off); };
 export const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 // Web Awesome button; attributes rather than properties so it works before the element is upgraded.
 export const waButton = (text, cls, attrs = {}) => {
@@ -55,8 +57,10 @@ export const limitLeft = (w, now = Date.now()) => {
     const m = Math.max(0, w.resetsAt - now) / 60000 | 0, d = m / 1440 | 0, h = m % 1440 / 60 | 0;
     return { left: Math.max(0, Math.min(100, Math.round(100 - w.used))), until: d ? `${d}d${h ? h + 'h' : ''}` : h ? `${h}h${m % 60 ? m % 60 + 'm' : ''}` : `${m}m` };
 };
-// Chat status bar: asking wins over working (Claude waits on you); working counts from your last message.
+// Chat status bar: a failed poll wins (never claim "Idle" on data we couldn't fetch), then asking over working
+// (Claude waits on you); working counts from your last message.
 export const chatStatus = (d, now = Date.now()) => {
+    if (d?.error) return { kind: 'error', text: 'Can’t reach Homebase — reconnecting…' };
     if (d?.asking) return { kind: 'asking', text: 'Claude is asking — answer below' };
     if (!d?.working) return { kind: 'idle', text: 'Idle — waiting for you' };
     const at = Date.parse(d.items?.findLast(i => i.role === 'user' && !i.pending)?.at), m = (now - at) / 60000 | 0;

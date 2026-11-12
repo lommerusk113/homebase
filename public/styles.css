@@ -136,6 +136,10 @@ a.chip:hover { text-decoration:underline; }
 .c-status .pulse { flex-shrink:0; background:var(--c); animation:none; }
 .c-status.working { --c:var(--c-doing); color:var(--c-doing); background:var(--accent-bg); border-bottom-color:var(--c-doing); }
 .c-status.asking { --c:var(--c-warn); color:var(--c-warn); background:color-mix(in srgb, var(--c-warn) 12%, var(--bg)); border-bottom-color:var(--c-warn); }
+.c-status.error { --c:var(--c-danger); color:var(--c-danger); background:color-mix(in srgb, var(--c-danger) 12%, var(--bg)); border-bottom-color:var(--c-danger); }
+.stale-note { display:none; padding:4px 14px; font-size:12px; color:var(--c-danger); }
+.disconnected .stale-note { display:block; }
+.disconnected .masters { opacity:.5; }
 .c-status:not(.idle) .pulse { animation:pulse 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .pulse, .dot.live, .stage .bar i.now { animation:none !important; } }
 .c-input { position:relative; display:flex; padding:10px 12px 12px; border-top:1px solid var(--line); }

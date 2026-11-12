@@ -1,11 +1,12 @@
 // Dashboard over Claude Code transcripts in ~/.claude/projects. Never writes files; only types into its own tmux sessions.
 import { createServer } from 'node:http';
-import { readdir, stat, open, readFile, access } from 'node:fs/promises';
+import { readdir, stat, open, readFile, access, realpath } from 'node:fs/promises';
 import { existsSync, constants } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, basename, dirname } from 'node:path';
+import { join, basename, dirname, extname, sep } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
 const run = promisify(execFile);
 // HOMEBASE_TMUX_SOCKET points every tmux call at a separate server (tmux -L), so tests never touch real sessions.
@@ -1510,6 +1511,61 @@ const STATIC = {
     '/icon.svg': ['icon.svg', 'image/svg+xml']
 };
 
+// No third-party origins: everything, Web Awesome included, comes from public/vendor. data: is for Web Awesome's
+// built-in icons, which it renders as data: SVG URLs and loads with fetch(). Its components set inline styles.
+const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; "
+    + "connect-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+
+// Third-party code copied into public/vendor (see VENDOR.md). Only these extensions are ever served from there.
+const VENDOR_DIR = fileURLToPath(new URL('./public/vendor', import.meta.url));
+const VENDOR_TYPES = {
+    '.js': JS,
+    '.mjs': JS,
+    '.css': 'text/css; charset=utf-8',
+    '.woff2': 'font/woff2',
+    '.svg': 'image/svg+xml',
+    '.json': 'application/json'
+};
+
+// '/vendor/a/b.js' -> 'a/b.js', or null for anything that could leave public/vendor or isn't an allowed type.
+// Pure: symlinks are checked against the real path when serving.
+export function vendorPath(urlPath) {
+
+    if (typeof urlPath !== 'string' || !urlPath.startsWith('/vendor/')) {
+        return null;
+    }
+
+    let rel;
+    try {
+        rel = decodeURIComponent(urlPath.slice('/vendor/'.length));
+    } catch {
+        return null;
+    }
+
+    // no '..', '.', dotfiles, empty segments, backslashes or NULs
+    const bad = rel.split('/').some(p => p === '' || p.startsWith('.')) || /[\\\0]/.test(rel);
+    if (bad || !Object.hasOwn(VENDOR_TYPES, extname(rel))) {
+        return null;
+    }
+
+    return rel;
+}
+
+async function serveVendor(rel, res) {
+
+    const root = await realpath(VENDOR_DIR);
+    const file = await realpath(join(root, rel)).catch(() => null);
+    if (!file?.startsWith(root + sep)) {
+        return false;
+    }
+
+    res.setHeader('content-type', VENDOR_TYPES[extname(file)]);
+    res.setHeader('x-content-type-options', 'nosniff');
+    res.end(await readFile(file));
+
+    return true;
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
     editors();
     createServer(async (req, res) => {
@@ -1518,7 +1574,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             const file = Object.hasOwn(STATIC, url.pathname) && STATIC[url.pathname]; // not __proto__ and friends
             if (file) {
                 res.setHeader('content-type', file[1]);
+                res.setHeader('x-content-type-options', 'nosniff');
+                if (file[1].startsWith('text/html')) {
+                    res.setHeader('content-security-policy', CSP);
+                }
                 return res.end(await readFile(new URL(`./public/${file[0]}`, import.meta.url)));
+            }
+            const vendored = vendorPath(url.pathname);
+            if (vendored && await serveVendor(vendored, res)) {
+                return;
             }
             if (url.pathname === '/api/sessions') {
                 res.setHeader('content-type', 'application/json');

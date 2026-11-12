@@ -37,11 +37,10 @@
     <wa-tooltip for="limits" id="limits-tip" placement="top-start"></wa-tooltip>
   </div>
   <aside id="chat">
+    <div class="c-status idle" id="status" role="status"><span class="pulse"></span><span id="status-text">Idle — waiting for you</span></div>
     <div class="c-feed" id="feed"></div>
-    <div class="c-note c-working" id="working" hidden><span class="pulse"></span>Claude is working…</div>
     <div class="c-note c-ask" id="ask" hidden><div><b>Claude is asking:</b> <div id="ask-q"></div>Answer from any terminal: <code class="mono" id="ask-cmd"></code></div><wa-button size="s" appearance="outlined" id="ask-copy">Copy</wa-button></div>
-    <div class="error" id="c-err"></div>
-    <form class="c-input" id="send"><wa-textarea id="msg" rows="1" resize="auto" placeholder="Message Claude…"></wa-textarea><button class="c-send" id="send-btn" type="submit" aria-label="Send" title="Send" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
+    <form class="c-input" id="send"><div class="error" id="c-err"></div><wa-textarea id="msg" rows="1" resize="auto" placeholder="Message Claude…"></wa-textarea><button class="c-send" id="send-btn" type="submit" aria-label="Send" title="Send" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></form>
   </aside>
 </div>
 <wa-dialog id="dlg" label="Projects on your board" light-dismiss>

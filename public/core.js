@@ -41,6 +41,13 @@ export const limitLeft = (w, now = Date.now()) => {
     const m = Math.max(0, w.resetsAt - now) / 60000 | 0, d = m / 1440 | 0, h = m % 1440 / 60 | 0;
     return { left: Math.max(0, Math.min(100, Math.round(100 - w.used))), until: d ? `${d}d${h ? h + 'h' : ''}` : h ? `${h}h${m % 60 ? m % 60 + 'm' : ''}` : `${m}m` };
 };
+// Chat status bar: asking wins over working (Claude waits on you); working counts from your last message.
+export const chatStatus = (d, now = Date.now()) => {
+    if (d?.asking) return { kind: 'asking', text: 'Claude is asking — answer below' };
+    if (!d?.working) return { kind: 'idle', text: 'Idle — waiting for you' };
+    const at = Date.parse(d.items?.findLast(i => i.role === 'user' && !i.pending)?.at), m = (now - at) / 60000 | 0;
+    return { kind: 'working', text: `Claude is working…${m > 0 ? ` · ${m < 60 ? m + 'm' : `${m / 60 | 0}h${m % 60 ? m % 60 + 'm' : ''}`}` : ''}` };
+};
 export const prLabel = url => { const m = url.match(/merge_requests\/(\d+)/) || url.match(/pull\/(\d+)/); return m ? (url.includes('merge_requests') ? '!' : '#') + m[1] : 'PR'; };
 export const prChip = s => { const a = el('a', 'chip mono', `${prLabel(s.pr)}${s.prState ? ' · ' + s.prState.state : ''}`); a.href = s.pr; a.target = '_blank'; a.onclick = e => e.stopPropagation(); return a; };
 

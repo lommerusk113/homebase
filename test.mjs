@@ -318,3 +318,28 @@ const timed = workItems([{ id: 's', project: 'p', prs: [{ url: mr(5), at: 1 }], 
 assert.deepEqual([timed.tokens, timed.time], ['1.2M tok', '1h 05m']);
 assert.equal(timed.tokensTitle, 'input 1 · output 2 · cache read 1,000,000 · cache write 200,000');
 console.log('ok usage + limits');
+
+import { repoPath, groupIssues, milestoneOf, activeMilestones } from './server.mjs';
+assert.deepEqual(repoPath('git@gitlab.com:tritt/accounting/pracsys.git\n'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
+assert.deepEqual(repoPath('https://gitlab.com/tritt/accounting/pracsys.git'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
+assert.deepEqual(repoPath('ssh://git@gitlab.example.com:2222/g/sub/p.git'), { host: 'gitlab.example.com', path: 'g/sub/p' });
+assert.deepEqual(repoPath('github-personal:lommerusk113/homebase.git'), { host: 'github-personal', path: 'lommerusk113/homebase' });
+assert.deepEqual(repoPath('https://github.com/contaas/portal-frontend/'), { host: 'github.com', path: 'contaas/portal-frontend' });
+const iss = (iid, state, assignees = []) => ({ iid, title: `I${iid}`, state, assignees, url: `u${iid}` });
+const g = groupIssues([iss(1, 'closed'), iss(2, 'open'), iss(3, 'open', ['Børre']), iss(4, 'open'), iss(5, 'open', ['Ann']), iss(6, 'open')], {
+    2: [{ state: 'merged' }],
+    4: [{ state: 'merged' }, { state: 'open' }], // follow-up still open
+    6: [{ state: 'closed' }]
+});
+assert.deepEqual(Object.fromEntries(Object.entries(g.groups).map(([k, v]) => [k, v.map(i => i.iid)])),
+    { closable: [2], doing: [4], assigned: [3, 5], unassigned: [6], done: [1] });
+assert.deepEqual([g.total, g.closed, g.groups.assigned[0].assignees], [6, 1, ['Børre']]);
+const msList = [{ id: 7, title: 'Supplier automation' }, { id: 8, title: 'Reports' }];
+assert.equal(milestoneOf({ milestone: { id: 9, title: 'Old' }, target: 'supplier-automation' }, msList), 'Old');
+assert.equal(milestoneOf({ milestone: null, target: 'supplier-automation' }, msList), 'Supplier automation');
+assert.equal(milestoneOf({ milestone: null, target: 'main' }, msList), null);
+assert.deepEqual(activeMilestones([
+    { state: 'merged', milestone: { title: 'Reports' } }, { state: 'merged', milestone: { title: 'Reports' } },
+    { state: 'open', target: 'supplier-automation' }, { state: 'open', milestone: { title: 'Closed one' } }
+], msList), ['Supplier automation', 'Reports']);
+console.log('ok milestones');

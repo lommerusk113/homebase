@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { sleep } from './cdp.mjs';
 
 const focused = `document.activeElement?.dataset?.key ?? null`;
-const visibleKeys = `[...document.querySelectorAll('#masters tr[data-key]')].filter(r => r.checkVisibility()).map(r => r.dataset.key)`;
+const visibleKeys = `[...document.querySelectorAll('#masters .s-row[data-key], #masters tr[data-key]')].filter(r => r.checkVisibility()).map(r => r.dataset.key)`;
 
 export default {
     '? opens the shortcuts overlay, Esc closes it': async ({ page, open }) => {

@@ -4,7 +4,7 @@ import { renderBoard } from './list.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
 /** @param {Session} s */
-const isMaster = s => !s.sidechain && !/\/\.(claude\/)?worktrees\//.test(s.cwd || '');
+export const isMaster = s => !s.sidechain && !/\/\.(claude\/)?worktrees\//.test(s.cwd || '');
 // The chat sticks to the bound session (chat:<project>, else the legacy global pick) and only moves on its own to a
 // Homebase /clear successor (clearedFrom). Nothing bound yet: the master with the latest real activity (lastActivity,
 // from the server), never file mtime, which an idle claude process still bumps with bookkeeping lines.
@@ -137,7 +137,9 @@ function bubble(i, sid, prevTopic, look = {}) {
         b.append(...foldable(i.tldr, i.text, key));
     } else {
         const body = rich(i.text);
-        if (!state.unfold.has(key)) body.classList.add('fold');
+        if (!state.unfold.has(key)) {
+            body.classList.add('fold');
+        }
         b.append(body);
     }
     if (i.answer) {

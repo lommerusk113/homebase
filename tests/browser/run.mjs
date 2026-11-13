@@ -113,7 +113,7 @@ const ctx = {
         const all = { ...DEFAULTS, ...storage };
         await page.ev(`localStorage.clear(); sessionStorage.clear(); ${Object.entries(all).filter(([, v]) => v != null).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(v)});`).join(' ')}`);
         await page.goto(base);
-        await page.waitFor(`document.querySelector('#masters tr[data-key], #masters .welcome') && document.getElementById('status-text').textContent !== 'Connecting…'`, { what: 'the board and the chat status' });
+        await page.waitFor(`document.querySelector('#masters tr[data-key], #masters .s-row, #masters .welcome') && document.getElementById('status-text').textContent !== 'Connecting…'`, { what: 'the board and the chat status' });
     },
     restartServer: async () => { await stopServer(); await startServer(); },
     touchSession: (project, id, text) => touchSession(home, project, id, text)

@@ -105,6 +105,49 @@ export function splitTopic(text) {
     return { topic: raw.replace(NEEDS_YOU, '').trim() || null, needsYou, text: text.slice(m[0].length).trim() };
 }
 
+// What the session is on now: the topic of Claude's newest reply that has one, from the parsed tail.
+export function latestTopic(entries) {
+
+    for (let i = entries.length - 1; i >= 0; i--) {
+        const e = entries[i];
+        if (e.type === 'assistant' && !e.isSidechain) {
+            const text = textOf(e);
+            const topic = text && splitTopic(text).topic;
+            if (topic) {
+                return topic;
+            }
+        }
+    }
+
+    return null;
+}
+
+// Human prompts still waiting in Claude Code's queue, replayed from queue-operation entries: enqueue appends, dequeue
+// takes the head, remove (absorbed mid-turn, or cancelled) drops the matching text. Task notifications and agent
+// messages queue too ("<..." text) and are left out.
+// ponytail: a queue older than the tail replays partly; a dequeue then takes the wrong head until the queue drains.
+export function queuedPrompts(entries) {
+
+    const queue = [];
+    for (const e of entries) {
+        if (e.type !== 'queue-operation') {
+            continue;
+        }
+        if (e.operation === 'enqueue') {
+            queue.push({ at: e.timestamp, text: typeof e.content === 'string' ? e.content : '' });
+        } else if (e.operation === 'dequeue') {
+            queue.shift();
+        } else if (e.operation === 'remove') {
+            const i = queue.findIndex(q => q.text === e.content);
+            if (i >= 0) {
+                queue.splice(i, 1);
+            }
+        }
+    }
+
+    return queue.filter(q => q.text.trim() && !q.text.trimStart().startsWith('<'));
+}
+
 // Pulls the last "TLDR: ..." line out of a message so the page can show it as a callout.
 export function splitTldr(text) {
 

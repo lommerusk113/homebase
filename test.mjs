@@ -260,7 +260,48 @@ assert.deepEqual(ev([it('a', 'review')], []), []);
 assert.deepEqual(ev([it('a', 'review')], [it('a', 'review', 'failing')]), [['failing', 'a']]);
 assert.deepEqual(ev([it('a', 'review', 'failing')], [it('a', 'review', 'failing')]), []);
 assert.deepEqual(ev([], [it('n', 'needs-you'), it('m', 'review')]), [['needs-you', 'n']]);
+// comment events: newer than seen and than the previous poll's newest; none before comments were loaded
+const cm = (key, ...ats) => ({ key, pr: `u/${key}`, column: 'review', comments: { latestAt: ats[0] ?? null, count: ats.length, items: ats.map((at, i) => ({ id: i, author: 'Børre Stellander', at })) } });
+const CT = t => `2026-11-13T10:0${t}:00Z`, S = t => Date.parse(CT(t));
+const cev = (prev, next, seen) => attentionEvents(prev, next, () => seen).map(e => [e.kind, e.item.key, e.comments?.length]);
+assert.deepEqual(cev([cm('a', CT(1))], [cm('a', CT(2), CT(1))], S(0)), [['comment', 'a', 1]]);
+assert.deepEqual(cev([cm('a', CT(1))], [cm('a', CT(1))], S(0)), []); // nothing newer than last poll
+assert.deepEqual(cev([cm('a', CT(1))], [cm('a', CT(2), CT(1))], S(3)), []); // already seen
+assert.deepEqual(cev([{ key: 'a', pr: 'u/a', column: 'review' }], [cm('a', CT(2))], S(0)), []); // comments just loaded
+assert.deepEqual(cev([cm('a')], [cm('a', CT(2))], S(0)), [['comment', 'a', 1]]); // first comment on the MR
+assert.deepEqual(ev([it('a', 'review')], [it('a', 'needs-you')]), [['needs-you', 'a']]); // default seen keeps old calls working
 console.log('ok attention');
+import { freshComments, authorSummary } from './public/core.js';
+import { isBot, humanComments } from './server.mjs';
+const c3 = { items: [{ at: CT(3), author: 'Børre Stellander' }, { at: CT(2), author: 'Ann Lee' }, { at: CT(1), author: 'Børre Stellander' }] };
+assert.deepEqual(freshComments(c3, S(1)).map(c => c.at), [CT(3), CT(2)]);
+assert.deepEqual(freshComments(null, 0), []);
+assert.equal(authorSummary(c3.items), 'Børre, Ann');
+assert.equal(authorSummary([...c3.items, { author: 'Kim X' }]), 'Børre, Ann +1');
+assert.equal(isBot({ username: 'dependabot[bot]' }), true);
+assert.equal(isBot({ username: 'project_123_bot_ab12' }), true);
+assert.equal(isBot({ username: 'renovate-bot' }), true);
+assert.equal(isBot({ username: 'x', type: 'Bot' }), true);
+assert.equal(isBot({ username: 'borre.stellander' }), false);
+assert.equal(isBot({ username: 'abbott' }), false);
+const raw = [
+    { id: 1, author: { name: 'Joakim', username: 'me' }, at: CT(5), body: 'mine', url: 'u#1' },
+    { id: 2, author: { name: 'Bot', username: 'gitlab-bot' }, at: CT(4), body: 'beep', url: 'u#2' },
+    { id: 3, author: { name: 'Børre Stellander', username: 'borre' }, at: CT(1), body: '**Old** note', url: 'u#3', resolved: false },
+    { id: 4, author: { name: 'Børre Stellander', username: 'borre' }, at: CT(3), body: 'x'.repeat(200), url: 'u#4', resolved: null },
+    { id: 5, author: { name: 'Ann', username: 'ann' }, at: CT(2), body: '  ', url: 'u#5' }
+];
+const hc = humanComments(raw, 'me');
+assert.deepEqual(hc.items.map(c => c.id), [4, 3]); // self, bot and empty dropped; newest first
+assert.equal(hc.latestAt, CT(3));
+assert.equal(hc.count, 2);
+assert.equal(hc.items[1].excerpt, 'Old note');
+assert.equal(hc.items[1].resolved, false);
+assert.equal('resolved' in hc.items[0], false);
+assert.ok(hc.items[0].excerpt.length <= 141);
+assert.equal(humanComments(raw, 'me', 1).items.length, 1);
+assert.deepEqual(humanComments([], 'me'), { latestAt: null, count: 0, items: [] });
+console.log('ok comments');
 import { quickReplies, pendingAsk } from './server.mjs';
 const YN = ['Yes', 'No'], YBN = ['Yes', 'Do both', 'No'];
 assert.deepEqual(quickReplies('Want me to commit?', 'Fixed it.'), YN);

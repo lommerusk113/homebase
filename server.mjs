@@ -799,6 +799,8 @@ async function sessions() {
     for (const it of items) {
         // only an already fetched milestone list; /api/milestones fills it for the projects on the board
         it.milestone = milestoneOf(it.prState, swr.get(`ms:${it.project}`)?.value ?? []);
+        // human comments on open MRs only; never waits, so the first poll after start has none yet
+        it.comments = it.prState?.state === 'open' ? refresh(`comments:${it.pr}`, PR_TTL_MS, () => fetchComments(it.pr)).value : null;
     }
     for (const s of out) {
         s.items = items.filter(i => i.sessionId === s.id);
@@ -1155,6 +1157,44 @@ export function excerpt(md, max = 300) {
     }
 
     return t.slice(0, max).replace(/\s+\S*$/, '') + '…';
+}
+
+// Bots by flag (GitLab bot, GitHub type Bot) or name: GitHub's foo[bot], GitLab's project_1_bot_x tokens, *-bot / bot-*.
+export const isBot = a => !!(a?.bot || a?.type === 'Bot' || /\[bot\]$|(^|[-_])bot($|[-_])/i.test(a?.username ?? ''));
+
+// Comments by others than me and bots, newest first, at most max, with a plain-text excerpt.
+export function humanComments(raw, me, max = 10) {
+
+    const items = raw.filter(c => c.author.username !== me && !isBot(c.author) && c.body?.trim())
+        .toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at))
+        .map(c => ({ id: c.id, author: c.author.name, at: c.at, excerpt: excerpt(c.body, 140), url: c.url, ...(c.resolved != null && { resolved: c.resolved }) }));
+
+    return { latestAt: items[0]?.at ?? null, count: items.length, items: items.slice(0, max) };
+}
+
+// Read-only: one glab call per MR (notes carry resolvable/resolved, so no discussions call), three gh calls per PR.
+async function fetchComments(url) {
+
+    const gl = url.match(/^https:\/\/([^/]+)\/(.+?)\/-\/merge_requests\/(\d+)/);
+    const gh = url.match(/^https:\/\/([^/]+)\/([^/]+\/[^/]+)\/pull\/(\d+)/);
+    const repo = { host: (gl ?? gh)[1] };
+    const me = (await cached(`me:${repo.host}`, 24 * 3600_000, () => api(repo, 'user').then(person)).catch(() => null))?.username;
+    const author = u => ({ ...person(u), bot: u.bot, type: u.type });
+
+    if (gl) {
+        const notes = await api(repo, `projects/${encodeURIComponent(gl[2])}/merge_requests/${gl[3]}/notes?sort=desc&order_by=updated_at&per_page=50`);
+        return humanComments(notes.filter(n => !n.system).map(n => ({
+            id: n.id, author: author(n.author), at: n.created_at, body: n.body, url: `${url}#note_${n.id}`, resolved: n.resolvable ? n.resolved : null
+        })), me);
+    }
+
+    // ponytail: first 100 of each list; a PR past that needs pages()
+    const base = `repos/${gh[2]}`;
+    const [issue, inline, reviews] = await Promise.all([`issues/${gh[3]}/comments`, `pulls/${gh[3]}/comments`, `pulls/${gh[3]}/reviews`]
+        .map(p => api(repo, `${base}/${p}?per_page=100`)));
+    const of = (c, at) => ({ id: c.id, author: author(c.user), at, body: c.body, url: c.html_url });
+
+    return humanComments([...issue.map(c => of(c, c.created_at)), ...inline.map(c => of(c, c.created_at)), ...reviews.filter(r => r.submitted_at).map(r => of(r, r.submitted_at))], me);
 }
 
 async function fetchIssues(repo, ms) {

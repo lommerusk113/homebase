@@ -2,6 +2,15 @@ import assert from 'node:assert/strict';
 import { sleep } from './cdp.mjs';
 
 export default {
+    'a newer session in the project is offered, and Switch binds the chat to it': async ({ page, open, IDS }) => {
+        await open();
+        await page.waitFor(`!document.getElementById('newer').hidden`, { what: 'the newer-session line' });
+        assert.equal(await page.ev(`document.getElementById('newer-text').textContent`), 'New session started in alpha · ');
+        await page.click('#newer-go');
+        await page.waitFor(`localStorage.getItem('chat:alpha') === ${JSON.stringify(IDS.worker)}`, { what: 'the chat to bind to the newer session' });
+        await page.waitFor(`document.getElementById('newer').hidden`, { what: 'the line to go' });
+    },
+
     'the chat stays on its bound session when another session gets newer': async ({ page, open, IDS, touchSession }) => {
         await open();
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the master chat' });

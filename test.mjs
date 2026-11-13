@@ -1206,3 +1206,30 @@ import { readTail } from './server.mjs';
     ]);
     console.log('ok big-line tail, api error line');
 }
+
+// A half-written agent .meta.json or a transcript deleted mid-poll skips that one entry, not the whole /api/sessions
+import { mkdirSync as mkdirS, symlinkSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { fetchComments } from './server/forge.mjs';
+{
+    const home = mkdtempSync(pjoin(tmpdir(), 'hb-home-'));
+    const dir = pjoin(home, '.claude', 'projects', 'p');
+    const subs = pjoin(dir, 'good', 'subagents');
+    mkdirS(subs, { recursive: true });
+    const at = new Date().toISOString();
+    writeFileSync(pjoin(dir, 'good.jsonl'), JSON.stringify({ type: 'user', sessionId: 'good', message: { content: 'hi' }, timestamp: at }) + '\n');
+    symlinkSync(pjoin(dir, 'nowhere.jsonl'), pjoin(dir, 'gone.jsonl')); // listed by readdir, gone on stat
+    const agentLine = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'done' }] }, timestamp: at }) + '\n';
+    writeFileSync(pjoin(subs, 'bad.jsonl'), agentLine);
+    writeFileSync(pjoin(subs, 'bad.meta.json'), '{"descrip');
+    writeFileSync(pjoin(subs, 'ok.jsonl'), agentLine);
+    writeFileSync(pjoin(subs, 'ok.meta.json'), JSON.stringify({ description: 'ok agent', finished: true }));
+    // ROOT comes from HOME at import, so sessions() runs in a child with HOME pointing at the fixture
+    const code = "import { sessions } from './server/sessions.mjs'; console.log(JSON.stringify((await sessions()).map(s => [s.id, s.items.map(i => i.key)])));";
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home }, cwd: import.meta.dirname, encoding: 'utf8' });
+    assert.deepEqual(JSON.parse(out), [['good', ['ok']]]);
+    rmSync(home, { recursive: true, force: true });
+
+    assert.deepEqual((await fetchComments('https://example.com/a/b/issues/1')).items, []);
+    console.log('ok corrupt meta, vanished transcript, unknown host');
+}

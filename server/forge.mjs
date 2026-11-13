@@ -322,6 +322,9 @@ export async function fetchComments(url) {
 
     const gl = url.match(/^https:\/\/([^/]+)\/(.+?)\/-\/merge_requests\/(\d+)/);
     const gh = url.match(/^https:\/\/([^/]+)\/([^/]+\/[^/]+)\/pull\/(\d+)/);
+    if (!gl && !gh) {
+        return humanComments([], null); // neither GitLab nor GitHub
+    }
     const repo = { host: (gl ?? gh)[1] };
     const me = (await cached(`me:${repo.host}`, 24 * 3600_000, () => api(repo, 'user').then(person)).catch(() => null))?.username;
     const author = u => ({ ...person(u), bot: u.bot, type: u.type });

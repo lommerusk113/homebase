@@ -339,9 +339,27 @@ assert.equal(hc.count, 2);
 assert.equal(hc.items[1].excerpt, 'Old note');
 assert.equal(hc.items[1].resolved, false);
 assert.equal('resolved' in hc.items[0], false);
+assert.equal(hc.unresolved, 1);
+assert.deepEqual(hc.unresolvedBy, ['Børre Stellander']);
+// unresolved human threads on an open MR: needs-you, it's on me, ahead of CI like requested changes
+import { withThreads, itemColumn } from './server.mjs';
+const waiting = open({ reviewers: ['Børre Stellander'] });
+const thr = (n, by = ['Børre Stellander']) => ({ count: n + 1, items: [], unresolved: n, unresolvedBy: n ? by : [] });
+const t2 = withThreads({ ...waiting, ci: 'failing' }, thr(2));
+assert.equal(itemColumn(t2, null, true), 'needs-you');
+assert.equal(nextStep(t2, null), 'Address 2 unresolved comments from Børre Stellander');
+assert.equal(nextStep(withThreads(waiting, thr(1, ['A', 'B'])), null), 'Address 1 unresolved comment from A, B');
+assert.equal(rowAction(mr(4), t2, null, 'T').label, 'Fix & reply');
+assert.equal(itemColumn(withThreads(waiting, thr(0)), null, true), 'review'); // all resolved, no approval yet
+assert.equal(nextStep(withThreads(waiting, thr(0)), null), 'Waiting for review by Børre Stellander');
+assert.equal(withThreads(waiting, null), waiting); // no comments data yet
+assert.equal(withThreads({ state: 'merged' }, thr(2)).changes, undefined);
+// the comment that moves an item into needs-you notifies once
+const nc = { ...cm('a', CT(2)), column: 'needs-you' };
+assert.deepEqual(cev([cm('a', CT(1))], [nc], S(0)), [['comment', 'a', 1]]);
 assert.ok(hc.items[0].excerpt.length <= 141);
 assert.equal(humanComments(raw, 'me', 1).items.length, 1);
-assert.deepEqual(humanComments([], 'me'), { latestAt: null, count: 0, items: [] });
+assert.deepEqual(humanComments([], 'me'), { latestAt: null, count: 0, items: [], unresolved: 0, unresolvedBy: [] });
 console.log('ok comments');
 import { quickReplies, pendingAsk } from './server.mjs';
 const YN = ['Yes', 'No'], YBN = ['Yes', 'Do both', 'No'];

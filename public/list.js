@@ -219,6 +219,8 @@ export function attentionEvents(prevItems, nextItems, seen = () => 0) {
         const fresh = freshComments(x.comments, Math.max(seen(x), Date.parse(p.comments.latestAt) || 0));
         return fresh.length ? [{ kind: 'comment', item: x, comments: fresh }] : [];
     });
+    // one notification per item: a comment that moved it into needs-you is told as the comment
+    const commented = new Set(comments.map(e => e.item.key));
     // finished agents without an MR drop off the board
-    return [...events, ...comments, ...prevItems.filter(p => p.column === 'doing' && !now.has(p.key)).map(item => ({ kind: 'finished', item }))];
+    return [...events.filter(e => !(e.kind === 'needs-you' && commented.has(e.item.key))), ...comments, ...prevItems.filter(p => p.column === 'doing' && !now.has(p.key)).map(item => ({ kind: 'finished', item }))];
 }

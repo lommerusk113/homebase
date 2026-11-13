@@ -470,8 +470,8 @@ assert.equal(limitView(false, { used: 81, resetsAt: thu + 97 * 60_000 }, thu).te
 assert.equal(limitView(false, { used: 80, resetsAt: thu + 97 * 60_000 }, thu).text, '20%');
 console.log('ok limit peaks');
 
-import { repoPath, groupIssues, milestoneOf, activeMilestones, keepMilestone, worksOn } from './server.mjs';
-import { inMilestone } from './public/milestone.js';
+import { repoPath, groupIssues, milestoneOf, activeMilestones, keepMilestone, worksOn, noMilestones } from './server.mjs';
+import { inMilestone, toData, isLoading, emptyPill } from './public/milestone.js';
 assert.deepEqual(repoPath('git@gitlab.com:tritt/accounting/pracsys.git\n'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
 assert.deepEqual(repoPath('https://gitlab.com/tritt/accounting/pracsys.git'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
 assert.deepEqual(repoPath('ssh://git@gitlab.example.com:2222/g/sub/p.git'), { host: 'gitlab.example.com', path: 'g/sub/p' });
@@ -507,11 +507,37 @@ assert.equal(inMilestone(row('u', { id: 8, title: 'R' }), { id: 7 }), false);
 assert.equal(inMilestone(row('u', null), { id: 7 }), false);
 assert.equal(inMilestone(row(null, null), { id: 7 }), true); // an agent without an MR stays
 assert.equal(inMilestone(row('u', null), null), true); // no milestone selected
+
+// A project without milestones to show gets a final answer, never loading: true.
+{
+    const gl = { host: 'gitlab.com', path: 'g/p' }, gh = { host: 'github.com', path: 'o/r' };
+    const none = noMilestones('p', gl, 'none');
+    assert.deepEqual([none.milestones, none.selected, none.loading, none.updating, none.reason, none.url], [[], null, false, false, 'none', 'https://gitlab.com/g/p/-/milestones']);
+    const err = noMilestones('r', gh, 'error', 'gh: Not Found (HTTP 404)');
+    assert.deepEqual([err.reason, err.error, err.loading, err.url], ['error', 'gh: Not Found (HTTP 404)', false, 'https://github.com/o/r/milestones']);
+    assert.equal(noMilestones('x', null, 'unsupported', 'unknown project').url, null);
+
+    // client: any answer maps to data; one without a milestone list is the error state
+    assert.deepEqual(toData(200, JSON.stringify(none)), none);
+    const bare = toData(500, 'Command failed: gh api …\n');
+    assert.deepEqual([bare.reason, bare.error, bare.milestones, bare.selected], ['error', 'Command failed: gh api …', [], null]);
+    assert.equal(toData(502, '').error, 'HTTP 502');
+    // fast polling stops on a final state, even while a refresh of the list runs in the background
+    assert.equal(isLoading({ ...err, updating: true }), false);
+    assert.equal(isLoading({ reason: null, selected: { loading: true }, updating: false }), true);
+    assert.equal(isLoading({ reason: null, selected: { groups: {} }, updating: false }), false);
+    assert.deepEqual(emptyPill(none), { text: 'No milestones', tip: 'No open milestones in p', err: false });
+    assert.deepEqual(emptyPill(err), { text: 'Milestones unavailable', tip: 'gh: Not Found (HTTP 404)\nRefresh (r) to retry', err: true });
+    assert.equal(emptyPill({ reason: null }), null);
+    assert.equal(emptyText(none), 'No open milestones in p.');
+    assert.match(emptyText(err), /^Milestones unavailable for r: gh: Not Found \(HTTP 404\)\. Press r/);
+    assert.equal(emptyText(noMilestones('x', null, 'unsupported', 'unknown project')), "Milestones aren't available for x: unknown project.");
+}
 console.log('ok milestones');
 
 import { excerpt } from './server.mjs';
 import { pillLabel } from './public/milestone.js';
-import { issueCards, buildLanes, closedBy, chatMessage, shortTitle, owners } from './public/issues.js';
+import { issueCards, buildLanes, closedBy, chatMessage, shortTitle, owners, emptyText } from './public/issues.js';
 assert.equal(excerpt('## Problem\n\nThe **row** only shows after a [reload](http://x).\n\n```js\ncode()\n```\nDone.'), 'The row only shows after a reload. Done.');
 assert.equal(excerpt('word '.repeat(100), 20), 'word word word word…');
 assert.equal(excerpt(null), '');
@@ -806,6 +832,11 @@ import { join as pjoin } from 'node:path';
         assert.equal(refreshed.status, 200);
         assert.equal(JSON.parse(refreshed.body).refreshing, false);
         assert.ok(JSON.parse(refreshed.body).lastRefreshedAt > 0);
+        // an unknown project: a 404 that still carries the final empty state, so the pill stops loading
+        const unknown = await call(s.port, { path: '/api/milestones?project=no-such-project-xyz&milestone=', headers: { 'x-homebase-token': token } });
+        assert.equal(unknown.status, 404);
+        assert.deepEqual((({ milestones, selected, loading, reason }) => ({ milestones, selected, loading, reason }))(JSON.parse(unknown.body)),
+            { milestones: [], selected: null, loading: false, reason: 'unsupported' });
     } finally { s.stop(); }
     console.log('ok server access');
 

@@ -31,6 +31,8 @@ const CSS = `
   .ms-pick > summary .ld { color:var(--muted); }
   .ms-pick.busy > summary > :not(wa-spinner), .ms-pick.busy .ms-menu > :not(button) { opacity:.5; }
   .ms-menu button wa-spinner { align-self:center; }
+  .ms-pick.off > summary { color:var(--muted); border-style:dashed; }
+  .ms-pick.off.err > summary { color:var(--c-needs); }
   .ms-tag { margin-right:6px; font-size:10.5px; font-weight:500; vertical-align:1px; }
 `;
 
@@ -69,6 +71,26 @@ export function pillLabel(ms) {
     return { text: `${open} open`, tip: `${ms.title}: ${open} open of ${ms.total}${parts.length ? ` (${parts.join(', ')})` : ''}, ${ms.closed} closed · ${due(ms.due)}` };
 }
 
+// An /api/milestones answer (status, body) as the pill's data. A body without a milestone list (a bare 500 from an
+// older server, a proxy page) becomes the error state, so the pill never waits on it.
+export function toData(status, text) {
+    try {
+        const d = JSON.parse(text);
+        if (Array.isArray(d?.milestones)) return d;
+    } catch {}
+    return { milestones: [], detected: [], me: null, selected: null, updating: false, loading: false, reason: 'error', error: text.trim() || `HTTP ${status}`, url: null };
+}
+
+// Whether to poll fast: the issues still load or a refresh runs. A reason (none, error, unsupported) is final.
+export const isLoading = d => !d.reason && !!(d.selected?.loading || d.updating);
+
+// Pill text and tooltip for a project without milestones to show (data.reason), null otherwise.
+export function emptyPill(d) {
+    if (!d.reason) return null;
+    if (d.reason === 'none') return { text: 'No milestones', tip: `No open milestones in ${d.project}`, err: false };
+    return { text: 'Milestones unavailable', tip: `${d.error ?? d.reason}\nRefresh (r) to retry`, err: true };
+}
+
 // The header pill for one project: "⚑ Supplier automation · 11 open" with a mini bar; its menu switches milestones.
 // The element polls /api/milestones itself while it is in the page and stops once removed.
 // onChange({ id, title } | null) runs when the selected milestone is known or changes. The choice is kept per project.
@@ -98,8 +120,17 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
     pick.addEventListener('keydown', e => { if (e.key === 'Escape') { pick.open = false; e.stopPropagation(); } });
 
     function render(data) {
-        const ms = data.selected;
-        pick.hidden = !data.milestones.length;
+        const ms = data.selected, empty = emptyPill(data);
+        pick.classList.toggle('off', !!empty);
+        pick.classList.toggle('err', !!empty?.err);
+        if (empty) {
+            summary.replaceChildren(el('span', null, '⚑'), el('span', null, empty.text));
+            summary.title = empty.tip;
+            const info = el('div', 'info', empty.err ? `${empty.tip.replace('\n', '. ')}.` : empty.tip);
+            menu.replaceChildren(info);
+            if (data.url) info.append(link(null, 'Milestones page ↗', data.url));
+            return;
+        }
         summary.replaceChildren(el('span', null, '⚑'), el('span', 't', ms ? ms.title : 'No milestone'));
         if (ms && !ms.groups) {
             const { text, tip } = pillLabel(ms);
@@ -164,13 +195,13 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
         let ok = false;
         try {
             const r = await api(`/api/milestones?project=${encodeURIComponent(project)}&milestone=${encodeURIComponent(want)}`);
-            const text = r.ok ? await r.text() : '';
-            ok = !!text;
+            const text = JSON.stringify(toData(r.status, await r.text()));
+            ok = true;
             if (ok && busy === want) setBusy(null);
             if (text && text !== json) { // redraw only on change, so an open menu stays put
                 json = text;
                 const data = JSON.parse(text);
-                loading = !!(data.selected?.loading || data.updating);
+                loading = isLoading(data);
                 render(data);
                 onData?.(data);
                 const sel = data.selected ? { id: data.selected.id, title: data.selected.title } : null;

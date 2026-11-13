@@ -151,11 +151,16 @@ export const ago = ms => {
     const s = (Date.now() - ms) / 1000;
     return s < 60 ? 'now' : s < 3600 ? `${s / 60 | 0}m` : s < 86400 ? `${s / 3600 | 0}h` : `${s / 86400 | 0}d`;
 };
+// Whole minutes as "45m" / "1h" / "1h20m".
+const hoursMinutes = m => (m < 60 ? `${m}m` : `${m / 60 | 0}h${m % 60 ? m % 60 + 'm' : ''}`);
 // Rate-limit window -> % left and time to reset, as Contado's footer shows it: "70%" and "1h20m" / "4d22h" / "45m".
 /** @param {LimitWindow} w */
 export const limitLeft = (w, now = Date.now()) => {
+
     const m = Math.max(0, w.resetsAt - now) / 60000 | 0, d = m / 1440 | 0, h = m % 1440 / 60 | 0;
-    return { left: Math.max(0, Math.min(100, Math.round(100 - w.used))), until: d ? `${d}d${h ? h + 'h' : ''}` : h ? `${h}h${m % 60 ? m % 60 + 'm' : ''}` : `${m}m` };
+    const until = d ? `${d}d${h ? h + 'h' : ''}` : hoursMinutes(m);
+
+    return { left: Math.max(0, Math.min(100, Math.round(100 - w.used))), until };
 };
 // Chat status bar: a failed poll wins (never claim "Idle" on data we couldn't fetch), then asking over working
 // (Claude waits on you); working counts from the turn start (`since`), else from your last message.
@@ -170,8 +175,10 @@ export const chatStatus = (d, now = Date.now()) => {
     if (!d?.working) {
         return { kind: 'idle', text: 'Idle — waiting for you' };
     }
-    const at = d.since ?? Date.parse(d.items?.findLast(i => i.role === 'user' && !i.pending)?.at), m = (now - at) / 60000 | 0;
-    return { kind: 'working', text: `Claude is working…${m > 0 ? ` · ${m < 60 ? m + 'm' : `${m / 60 | 0}h${m % 60 ? m % 60 + 'm' : ''}`}` : ''}` };
+    const at = d.since ?? Date.parse(d.items?.findLast(i => i.role === 'user' && !i.pending)?.at);
+    const m = (now - at) / 60000 | 0;
+
+    return { kind: 'working', text: `Claude is working…${m > 0 ? ` · ${hoursMinutes(m)}` : ''}` };
 };
 // Limits strip item: "Session 70%" at a glance, details in the tooltip; the countdown shows inline only once under 20% is left.
 /** @param {boolean | number} week @param {LimitWindow} w */

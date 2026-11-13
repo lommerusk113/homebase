@@ -16,10 +16,20 @@ function renderMilestone() {
     pillFor = state.project;
     milestone = null;
     renderIssues(pillFor === 'all' ? null : undefined);
-    $('milestone-slot').replaceChildren(...(pillFor === 'all' ? [] : [milestoneSelector(pillFor, { onChange: m => {
-        milestone = m;
-        renderBoard();
-    }, onData: renderIssues, onBusy: b => $('issues').classList.toggle('stale', b) })]));
+    if (pillFor === 'all') {
+        $('milestone-slot').replaceChildren();
+        return;
+    }
+
+    const pill = milestoneSelector(pillFor, {
+        onChange: m => {
+            milestone = m;
+            renderBoard();
+        },
+        onData: renderIssues,
+        onBusy: b => $('issues').classList.toggle('stale', b)
+    });
+    $('milestone-slot').replaceChildren(pill);
 }
 
 // Web Awesome's dark theme is a class; follow the OS like the rest of the page does.
@@ -115,8 +125,17 @@ function notify({ kind, item: x, comments }) {
         return;
     }
     const ref = x.pr ? prLabel(x.pr) : x.title;
-    const [title, body] = { 'needs-you': [`Needs you: ${x.title} — ${x.next}`], ready: [`Ready to merge: ${ref}`, x.title], finished: [`Agent finished: ${x.title}`, x.column === 'doing' ? undefined : x.next], failing: [`Pipeline failing: ${ref}`, x.title], comment: [`💬 ${authorSummary(comments ?? [])} commented on ${ref}`, comments?.[0]?.excerpt] }[kind];
-    const n = new Notification(title, { body, tag: kind === 'comment' ? `${x.key}:comment` : x.key, icon: '/icon.svg' });
+    const texts = {
+        'needs-you': [`Needs you: ${x.title} — ${x.next}`, undefined],
+        ready: [`Ready to merge: ${ref}`, x.title],
+        finished: [`Agent finished: ${x.title}`, x.column === 'doing' ? undefined : x.next],
+        failing: [`Pipeline failing: ${ref}`, x.title],
+        comment: [`💬 ${authorSummary(comments ?? [])} commented on ${ref}`, comments?.[0]?.excerpt]
+    };
+    const [title, body] = texts[kind];
+    const tag = kind === 'comment' ? `${x.key}:comment` : x.key;
+
+    const n = new Notification(title, { body, tag, icon: '/icon.svg' });
     n.onclick = () => {
         window.focus();
         n.close();

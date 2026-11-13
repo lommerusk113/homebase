@@ -83,7 +83,14 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
     pick.append(summary, menu);
     summary.append(el('span', null, '⚑'), el('span', 'ld', 'Loading…'), el('wa-spinner'));
     summary.title = 'Loading milestones…';
-    let json = '', at = 0, asked = null, selectedId, pending = false, seen = false, busy = null, loading = false;
+    let json = ''; // the last answer drawn
+    let at = 0; // when the last successful fetch finished
+    let asked = null; // the milestone that fetch was for
+    let selectedId;
+    let pending = false;
+    let seen = false; // has been in the page at least once
+    let busy = null; // the milestone being switched to, until its answer is in
+    let loading = false;
 
     // the old data stays, dimmed, with a spinner on the pill and on the picked entry until the new milestone's data is in
     const setBusy = v => {
@@ -231,9 +238,9 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
                 }
             }
         } catch {} finally {
-            at = ok ? Date.now() : 0;
+            at = ok ? Date.now() : 0; // a failed call retries on the next tick
             asked = want;
-            pending = false; // a failed call retries on the next tick
+            pending = false;
         }
         if (loading) {
             setTimeout(tick, LOADING_MS);

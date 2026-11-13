@@ -726,7 +726,24 @@ import { pipelineOf, ciOf } from './server.mjs';
 }
 console.log('ok pipeline');
 
-import { clearState, topicHue, TOPIC_HUES } from './public/chat.js';
+import { clearState, topicHue, TOPIC_HUES, pickChat, newerSession } from './public/chat.js';
+{
+    // the tracker incident: an idle older session's metadata writes put it first by mtime; the chat must not jump to it
+    const T = '/Users/b/tracker';
+    const old = { id: 'f67f', project: 'tracker', cwd: T, created: 1 }, live = { id: 'e9c1', project: 'tracker', cwd: `${T}/frontend`, created: 2 };
+    const wt = { id: 'wt', project: 'tracker', cwd: `${T}/.claude/worktrees/x`, created: 5 }, side = { id: 'sc', project: 'tracker', cwd: T, sidechain: true, created: 6 };
+    assert.equal(pickChat([old, live], 'e9c1', 'other-project').id, 'e9c1', 'bound session sticks though another is newer');
+    assert.equal(pickChat([old, live], null, 'gone').id, 'f67f', 'unbound: most recently active master');
+    assert.equal(pickChat([wt, side, live], null, null).id, 'e9c1', 'worktree and subagent sessions are never auto-picked');
+    assert.equal(pickChat([wt, live], 'wt', null).id, 'wt', 'an explicit pick of one still holds');
+    const succ = { id: 'next', project: 'tracker', cwd: T, created: 3, clearedFrom: 'e9c1' };
+    assert.equal(pickChat([succ, old, live], 'e9c1', null).id, 'next', 'a Homebase /clear successor takes over');
+    assert.equal(pickChat([{ ...succ, clearedFrom: undefined }, old, live], 'e9c1', null).id, 'e9c1', 'a plain newer session does not');
+    assert.equal(newerSession([wt, side, old, live], old).id, 'e9c1', 'newer master is offered');
+    assert.equal(newerSession([wt, side, old, live], live), null, 'worktree/subagent sessions are not offered');
+    assert.equal(newerSession([{ ...succ, project: 'other' }, live], live), null, 'other projects are not offered');
+    console.log('ok chat binding');
+}
 {
     const topics = ['Chat topic headers', 'Attention colours', 'CI pills', 'Milestone empty states', 'ø', 'x'.repeat(500)];
     for (const t of topics) {

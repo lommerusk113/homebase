@@ -997,6 +997,7 @@ export function summarize(entries, ageMs) {
         openPrompts: turnPrompts(entries, ageMs),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
+        sidechain: !!entries.find(e => e.type === 'user' || e.type === 'assistant')?.isSidechain, // a transcript a subagent wrote
         files: filesTouched(entries, meta.cwd),
         gates: gateRuns(entries)
     };

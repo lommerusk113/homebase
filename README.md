@@ -8,6 +8,20 @@ node server.mjs          # http://localhost:4321 (set PORT to change)
 
 The rate limits in the header come from `scripts/statusline.sh`: set it as Claude Code's `statusLine` command.
 
+## A second GitHub account
+
+`gh` runs with your usual login (`GITHUB_TOKEN` or `gh auth`).
+A repo whose origin uses the SSH host alias `github-personal` (e.g. `git@github-personal:me/repo.git`) runs `gh` with the token in the keychain service `gh-personal` instead, passed as `GH_TOKEN`.
+Store it once:
+
+```sh
+security add-generic-password -a "$USER" -s gh-personal -w   # prompts for the token
+```
+
+Use a fine-grained token for that account with: Issues read/write, Pull requests read/write, Contents read, Metadata read, Commit statuses read, Checks read, and Actions read for CI.
+Other aliases: `HOMEBASE_GH_TOKENS="github-personal=gh-personal,github-other=gh-other"` (alias=keychain service).
+The token is read on first use; if it's missing, Homebase logs that once and uses the default account.
+
 ## Checks
 
 Every merge must pass these:

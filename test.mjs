@@ -613,6 +613,33 @@ assert.equal(inMilestone(row('u', null), null), true); // no milestone selected
 }
 console.log('ok milestones');
 
+import { hostOf, repoHosts, tokenSource } from './server.mjs';
+{
+    // a PR URL finds its origin's alias once sessions saw the repo; others keep the URL host
+    assert.equal(hostOf('https://github.com/Owner/Tracker/pull/3'), 'github.com');
+    repoHosts.set('owner/tracker', 'github-personal');
+    assert.equal(hostOf('https://github.com/Owner/Tracker/pull/3'), 'github-personal');
+    assert.equal(hostOf('https://gitlab.com/a/b/-/merge_requests/1'), 'gitlab.com');
+    repoHosts.delete('owner/tracker');
+    // only mapped hosts get a token, read once per host; a failed or empty read falls back (null) and warns once
+    const reads = [];
+    const token = tokenSource(new Map([['github-personal', 'gh-personal'], ['broken', 'nope'], ['empty', 'blank']]),
+        service => (reads.push(service), service === 'gh-personal' ? 'sekrit' : service === 'blank' ? '' : Promise.reject(new Error('not found'))));
+    const warn = console.warn, warned = [];
+    console.warn = m => warned.push(m);
+    assert.equal(await token('github.com'), null);
+    assert.equal(await token('github-personal'), 'sekrit');
+    assert.equal(await token('github-personal'), 'sekrit');
+    assert.equal(await token('broken'), null);
+    assert.equal(await token('broken'), null);
+    assert.equal(await token('empty'), null);
+    console.warn = warn;
+    assert.deepEqual(reads, ['gh-personal', 'nope', 'blank']);
+    assert.equal(warned.length, 2);
+    assert.ok(warned.every(m => !m.includes('sekrit')));
+}
+console.log('ok gh tokens');
+
 import { excerpt } from './server.mjs';
 import { pillLabel } from './public/milestone.js';
 import { issueCards, buildLanes, closedBy, chatMessage, shortTitle, owners, emptyText } from './public/issues.js';

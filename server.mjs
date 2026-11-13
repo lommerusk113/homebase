@@ -22,7 +22,7 @@ export {
     pendingAsk, pendingQuestion, turnState, turnPrompts, latestTopic, queuedPrompts, addUsage, readUsage, formatDuration, formatTokens
 } from './server/transcripts.mjs';
 export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, status, lastActivity, summarize, folderFor } from './server/sessions.mjs';
-export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments, swrEntry, swr, cached, refreshAll, refreshInfo } from './server/forge.mjs';
+export { hostOf, repoHosts, tokenSource, pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments, swrEntry, swr, cached, refreshAll, refreshInfo } from './server/forge.mjs';
 export {
     column, gateFor, toGate, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf
 } from './server/items.mjs';

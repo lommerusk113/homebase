@@ -5,6 +5,51 @@ import { promisify } from 'node:util';
 
 const run = promisify(execFile);
 
+// gh runs as the work account (GITHUB_TOKEN). A repo cloned through an SSH host alias listed here runs gh with the token
+// in that keychain service instead: HOMEBASE_GH_TOKENS="alias=service,…", default github-personal=gh-personal.
+const GH_TOKENS = new Map((process.env.HOMEBASE_GH_TOKENS ?? 'github-personal=gh-personal').split(',')
+    .map(pair => pair.split('=').map(s => s.trim())).filter(([alias, service]) => alias && service));
+export const repoHosts = new Map(); // 'owner/repo' (lowercase) -> origin host, filled by sessions so PR URLs find their alias
+
+// The forge host of a PR/MR URL: the origin's alias when sessions saw it (github-personal), else the URL's host.
+export function hostOf(url) {
+
+    const m = url.match(/^https:\/\/([^/]+)\/([^/]+\/[^/]+)\/pull\//);
+    if (!m) {
+        return url.match(/^https:\/\/([^/]+)/)?.[1] ?? null;
+    }
+
+    return repoHosts.get(m[2].toLowerCase()) ?? m[1];
+}
+
+// host -> Promise of its token, or null for hosts without one. Read lazily once per host; a failed read logs once and
+// falls back to the default account. Never logs the token.
+export function tokenSource(services, read) {
+
+    const tokens = new Map();
+
+    return host => {
+        const service = services.get(host);
+        if (!service) {
+            return Promise.resolve(null);
+        }
+        if (!tokens.has(host)) {
+            tokens.set(host, Promise.resolve().then(() => read(service)).then(t => t || Promise.reject(new Error('empty'))).catch(() => {
+                console.warn(`homebase: no gh token in keychain service "${service}" for ${host}; using the default account`);
+                return null;
+            }));
+        }
+
+        return tokens.get(host);
+    };
+}
+const ghToken = tokenSource(GH_TOKENS, service => run('security', ['find-generic-password', '-s', service, '-w']).then(r => r.stdout.trim()));
+// execFile options for a gh call on host: GH_TOKEN (wins over GITHUB_TOKEN) when the host has its own token.
+const ghOpts = async (host, opts = {}) => {
+    const token = await ghToken(host);
+    return token ? { ...opts, env: { ...process.env, GH_TOKEN: token } } : opts;
+};
+
 export const PR_TTL_MS = 60_000;
 export const prs = new Map(); // url -> { at, value, pending }
 
@@ -66,7 +111,7 @@ async function fetchPr(url) {
         };
     }
 
-    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid']);
+    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid'], await ghOpts(hostOf(url)));
     const pr = JSON.parse(stdout);
     const pipeline = pipelineOf(null, pr.statusCheckRollup, url);
     const reviews = pr.latestReviews ?? [];
@@ -250,8 +295,9 @@ export const api = (repo, path) => {
 
     const cli = isGitLab(repo) ? 'glab' : 'gh';
 
-    // the timeout kills a hung glab/gh, so it never holds a limiter slot for good
-    return apiOnce(`${cli} ${path}`, () => apiSlot(() => run(cli, ['api', path], { timeout: API_CALL_TIMEOUT_MS }))).then(({ stdout }) => JSON.parse(stdout));
+    // the timeout kills a hung glab/gh, so it never holds a limiter slot for good; keyed by host, as `user` differs per token
+    return apiOnce(`${cli} ${repo.host} ${path}`, () => apiSlot(async () => run(cli, ['api', path], await ghOpts(repo.host, { timeout: API_CALL_TIMEOUT_MS }))))
+        .then(({ stdout }) => JSON.parse(stdout));
 };
 
 // Every page of a list endpoint, 100 per page.
@@ -338,7 +384,7 @@ export async function fetchComments(url) {
     if (!gl && !gh) {
         return humanComments([], null); // neither GitLab nor GitHub
     }
-    const repo = { host: (gl ?? gh)[1] };
+    const repo = { host: gl ? gl[1] : hostOf(url) };
     const me = (await signedIn(repo))?.username;
     const author = u => ({ ...person(u), bot: u.bot, type: u.type });
 
@@ -363,7 +409,7 @@ export async function fetchComments(url) {
     const toThread = t => ({
         resolved: t.isResolved, notes: t.comments.nodes.map(c => ({ author: { name: c.author?.login, username: c.author?.login, type: c.author?.__typename } }))
     });
-    const threads = await apiOnce(`gh graphql threads ${url}`, () => apiSlot(() => run('gh', args, { timeout: API_CALL_TIMEOUT_MS })))
+    const threads = await apiOnce(`gh graphql threads ${url}`, () => apiSlot(async () => run('gh', args, await ghOpts(repo.host, { timeout: API_CALL_TIMEOUT_MS }))))
         .then(({ stdout }) => JSON.parse(stdout).data.repository.pullRequest.reviewThreads.nodes.map(toThread))
         .catch(() => null);
 

@@ -1,5 +1,5 @@
 // Dashboard over Claude Code transcripts in ~/.claude/projects. Only types into its own tmux sessions; writes files only in LAN mode (pairing code, session secret).
-// Entry point: config, startup and the router. Everything else lives in server/ (see server/README.md) and is re-exported here.
+// Entry point: config, startup and the router. Everything else lives in server/ (see server/README.md); what test.mjs uses is re-exported here.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
@@ -21,7 +21,7 @@ export {
     pendingAsk, pendingQuestion, turnState, turnPrompts, latestTopic, queuedPrompts, addUsage, readUsage, formatDuration, formatTokens
 } from './server/transcripts.mjs';
 export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, status, lastActivity, summarize, folderFor } from './server/sessions.mjs';
-export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments } from './server/forge.mjs';
+export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments, swrEntry, swr, cached, refreshAll, refreshInfo } from './server/forge.mjs';
 export {
     column, gateFor, toGate, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf
 } from './server/items.mjs';

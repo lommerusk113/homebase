@@ -140,16 +140,16 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
             return;
         }
         summary.replaceChildren(el('span', null, '⚑'), el('span', 't', ms ? ms.title : 'No milestone'));
-        if (ms && !ms.groups) {
+        if (ms) {
             const { text, tip } = pillLabel(ms);
             summary.append(el('span', 'n', `· ${text}`));
-            summary.title = tip;
-        } else if (ms) {
-            const bar = el('span', 'ms-bar'), fill = el('b');
-            fill.style.width = `${ms.total ? Math.round(100 * ms.closed / ms.total) : 0}%`;
-            bar.append(fill);
-            const { text, tip } = pillLabel(ms);
-            summary.append(el('span', 'n', `· ${text}`), bar);
+            // the progress bar once the issue groups are in
+            if (ms.groups) {
+                const bar = el('span', 'ms-bar'), fill = el('b');
+                fill.style.width = `${ms.total ? Math.round(100 * ms.closed / ms.total) : 0}%`;
+                bar.append(fill);
+                summary.append(bar);
+            }
             summary.title = tip;
         } else {
             summary.title = 'Show only work items of a milestone';

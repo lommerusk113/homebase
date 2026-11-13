@@ -940,6 +940,49 @@ import { refetch, refreshDue } from './server.mjs';
 }
 console.log('ok refresh');
 
+import { swrEntry, swr, cached, refreshAll, refreshInfo } from './server.mjs';
+{
+    // refreshAll: the other cache entries first, the issue groups once those are in; concurrent calls share one run
+    const order = [];
+    let linkCalls = 0, release;
+    const links = () => {
+        order.push('links');
+        return linkCalls++ ? new Promise(r => { release = r; }) : Promise.resolve(1);
+    };
+    const issues = () => {
+        order.push('issues');
+        return Promise.resolve(2);
+    };
+    await swrEntry('links:p:1', 1e9, links).pending;
+    await swrEntry('issues:p:11', 1e9, issues).pending;
+    order.length = 0;
+    const run = refreshAll();
+    assert.equal(refreshAll(), run);
+    await new Promise(r => setTimeout(r, 10));
+    assert.deepEqual(order, ['links']);
+    assert.equal(refreshInfo().refreshing, true);
+    release(1);
+    await run;
+    assert.deepEqual(order, ['links', 'issues']);
+    assert.equal(refreshInfo().refreshing, false);
+
+    // cached: only the first load waits, a stale entry answers with the old value at once, a failed first load throws
+    assert.equal(await cached('t:a', 0, () => Promise.resolve(1)), 1);
+    let settled = false;
+    const stale = cached('t:a', -1, () => new Promise(() => {})).then(v => {
+        settled = true;
+        return v;
+    });
+    await new Promise(r => setTimeout(r, 10));
+    assert.equal(settled, true);
+    assert.equal(await stale, 1);
+    await assert.rejects(cached('t:b', 1e9, () => Promise.reject(new Error('down'))), /down/);
+    for (const k of ['links:p:1', 'issues:p:11', 't:a', 't:b']) {
+        swr.delete(k);
+    }
+}
+console.log('ok refreshAll, cached');
+
 // Integration: real server on a random port, over a temp HOME and data dir and a tmux socket nobody uses. Only GETs, rejected POSTs and a refresh with nothing to refresh.
 import { request } from 'node:http';
 import { createServer as netServer } from 'node:net';
@@ -992,6 +1035,7 @@ import { createServer as netServer } from 'node:net';
         }
         const ok = await call(s.port, { path: '/api/limits', headers: { 'x-homebase-token': token, origin: `http://localhost:${s.port}` } });
         assert.equal(ok.status, 200);
+        assert.equal(ok.headers['content-type'], 'application/json');
         // POST rejection paths only: none of these reach a session.
         assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-codetool': '1' }, body: 'hi' })).status, 401);
         assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token, 'sec-fetch-site': 'cross-site' }, body: 'hi' })).status, 403);
@@ -1015,6 +1059,7 @@ import { createServer as netServer } from 'node:net';
         // an unknown project: a 404 that still carries the final empty state, so the pill stops loading
         const unknown = await call(s.port, { path: '/api/milestones?project=no-such-project-xyz&milestone=', headers: { 'x-homebase-token': token } });
         assert.equal(unknown.status, 404);
+        assert.equal(unknown.headers['content-type'], 'application/json'); // the error body is JSON too
         assert.deepEqual((({ milestones, selected, loading, reason }) => ({ milestones, selected, loading, reason }))(JSON.parse(unknown.body)),
             { milestones: [], selected: null, loading: false, reason: 'unsupported' });
     } finally { s.stop(); }

@@ -363,7 +363,7 @@ const SHORT_ANSWER = /^(?:yes|yeah|yep|sure|ok|okay|no|nope|do it|go ahead|do bo
 
 // A short reply right after a Claude message that asked something becomes its answer tag instead of a bubble:
 // a chip label offered on it, or a tiny approval like "ok" / "go ahead". Only the item directly before counts.
-export function pairAnswers(items) {
+function pairAnswers(items) {
 
     const out = [];
     for (const i of items) {

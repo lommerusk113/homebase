@@ -395,7 +395,7 @@ const nc = { ...cm('a', CT(2)), column: 'needs-you' };
 assert.deepEqual(cev([cm('a', CT(1))], [nc], S(0)), [['comment', 'a', 1]]);
 assert.ok(hc.items[0].excerpt.length <= 141);
 assert.equal(humanComments(raw, 'me', 1).items.length, 1);
-assert.deepEqual(humanComments([], 'me'), { latestAt: null, count: 0, items: [], unresolved: 0, unresolvedBy: [], replied: 0, repliedTo: [] });
+assert.deepEqual(humanComments([], 'me'), { latestAt: null, count: 0, items: [], unanswered: 0, unansweredBy: [], unresolved: 0, unresolvedBy: [], replied: 0, repliedTo: [] });
 // whose turn per GitLab thread: the last human note decides; replied threads wait on the reviewer
 const B = { name: 'Børre', username: 'borre' }, ME = { name: 'Joakim', username: 'me' }, BOT = { name: 'Bot', username: 'gitlab-bot' };
 const th = (...authors) => ({ resolved: false, notes: authors.map(author => ({ author })) });
@@ -431,7 +431,26 @@ assert.deepEqual([done.unresolved, done.replied], [0, 0]);
 assert.equal(withThreads(waiting, done), waiting);
 // a non-resolvable general comment is a new comment, not a thread
 const gen = humanComments([{ id: 9, author: B, at: CT(1), body: 'LGTM', url: 'u#9', resolved: null }], 'me', 10, []);
-assert.deepEqual([gen.count, gen.unresolved, gen.replied], [1, 0, 0]);
+assert.deepEqual([gen.count, gen.unresolved, gen.replied, gen.unanswered], [1, 0, 0, 0]);
+// general comments by others after my newest note (thread or general) are on me
+const note = (author, s, general = true) => ({ id: s, author, at: CT(s), body: 'x', url: `u#${s}`, resolved: general ? null : false, general });
+const ANN = { name: 'Ann', username: 'ann' };
+const asked = humanComments([note(ME, 1), note(B, 2)], 'me', 10, []);
+assert.deepEqual([asked.unanswered, asked.unansweredBy], [1, ['Børre']]);
+const askedPr = withThreads(waiting, asked);
+assert.equal(itemColumn(askedPr, null, true), 'needs-you');
+assert.equal(nextStep(askedPr, null), "Reply to Børre's comment");
+assert.deepEqual(rowAction(mr(4), askedPr, null, 'T'), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
+assert.equal(withThreads(waiting, humanComments([note(B, 2), note(ME, 3, false)], 'me', 10, [])), waiting); // my later thread note answers it
+assert.equal(withThreads(waiting, humanComments([note(ME, 1), note(BOT, 2)], 'me', 10, [])), waiting); // bots don't count
+assert.equal(nextStep(withThreads(waiting, humanComments([note(ME, 1), note(B, 2), note(ANN, 3)], 'me')), null), 'Answer 2 comments from Ann, Børre');
+const both = withThreads(waiting, humanComments([note(B, 2)], 'me', 10, [th(B), th(ANN)]));
+assert.deepEqual([both.unresolved, both.unanswered], [2, 1]);
+assert.equal(nextStep(both, null), 'Address 2 unresolved threads and answer 1 comment from Børre, Ann');
+const askedReady = withThreads({ ...waiting, ready: true }, asked);
+assert.equal(nextStep(askedReady, null), 'Approved — 1 unanswered comment from Børre');
+assert.equal(rowAction(mr(4), askedReady, null, 'T').label, 'Fix & reply');
+assert.equal(withThreads(waiting, humanComments([], 'me', 10, [])), waiting); // no comments
 console.log('ok comments');
 import { quickReplies, pendingAsk } from './server.mjs';
 const YN = ['Yes', 'No'], YBN = ['Yes', 'Do both', 'No'];

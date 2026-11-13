@@ -1122,6 +1122,9 @@ export function nextStep(prState, agent) {
     }
     if (prState.unresolved) {
         const n = prState.unresolved;
+        if (prState.ready) {
+            return `Approved — ${n} unanswered comment${n === 1 ? '' : 's'}${prState.unresolvedBy?.length ? ` from ${prState.unresolvedBy.join(', ')}` : ''}`;
+        }
         return `Address ${n} unresolved comment${n === 1 ? '' : 's'}${prState.unresolvedBy?.length ? ` from ${prState.unresolvedBy.join(', ')}` : ''}`;
     }
     if (prState.changes) {
@@ -1131,7 +1134,7 @@ export function nextStep(prState, agent) {
     if (prState.ci === 'failing') {
         return 'Pipeline failing';
     }
-    if (prState.replied) {
+    if (prState.replied && !prState.ready) {
         const n = prState.replied;
         return `Replied to ${n} thread${n === 1 ? '' : 's'} — waiting for ${prState.repliedTo?.join(', ') || 'the reviewer'} to resolve`;
     }
@@ -1142,7 +1145,8 @@ export function nextStep(prState, agent) {
         return 'Draft — mark it ready for review';
     }
     if (prState.ready) {
-        return 'Approved — merge it';
+        const n = prState.replied;
+        return `Approved — merge it${n ? ` · ${n} replied thread${n === 1 ? '' : 's'} still open` : ''}`;
     }
 
     return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
@@ -1171,8 +1175,8 @@ export function rowAction(pr, prState, agent, title) {
     if (prState.ci === 'failing') {
         return { label: 'Fix pipeline', message: `The pipeline on ${ref} is failing — find out why and fix it.` };
     }
-    if (prState.replied) {
-        return null; // every open thread was last answered by me: the reviewer resolves them
+    if (prState.replied && !prState.ready) {
+        return null; // every open thread was last answered by me: the reviewer resolves them, unless GitLab already allows the merge
     }
     if (prState.ready) {
         return { label: 'Merge + close issue', message: `Run review-gate on ${ref}. If the verdict is ready, merge it and close its issue. If it's fix first, show me the findings and don't merge.` };

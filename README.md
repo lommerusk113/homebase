@@ -4,9 +4,9 @@ A local dashboard over your Claude Code sessions.
 
 ```sh
 node server.mjs          # http://localhost:4321 (set PORT to change)
-node test.mjs
-./check-types.sh         # type-checks public/*.js (JSDoc + public/types.d.ts), no build
 ```
+
+The rate limits in the header come from `scripts/statusline.sh`: set it as Claude Code's `statusLine` command.
 
 ## Checks
 
@@ -30,7 +30,7 @@ Homebase can type into Claude Code sessions, which run shell commands, so it onl
 
 - It listens on 127.0.0.1 only, unless LAN mode is on. Other machines can't reach it.
 - Every request must carry `Host: localhost:<port>` (or `127.0.0.1`, `[::1]`); a request with a foreign `Origin` is refused. This blocks DNS rebinding and other websites.
-- Every `/api/*` call needs the `x-homebase-token` header. The token is random per server start and is handed out inside the served page, which cross-origin pages can't read. After a restart the page reloads itself once to pick up the new token.
+- Every `/api/*` call needs the `x-homebase-token` header. The token is random per server start and is handed out inside the served page, which cross-origin pages can't read. After a restart the page fetches the new token on its next API call, without reloading.
 
 The token stops other websites, not local programs.
 Any process on the Mac, run by any OS user, can fetch the page, read the token and call the API.

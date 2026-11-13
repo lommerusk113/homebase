@@ -20,6 +20,24 @@ export default {
         assert.equal(await page.ev(`(() => { const f = document.getElementById('feed'); return f.scrollHeight - f.scrollTop - f.clientHeight < 40; })()`), true, 'scrolled to the new bubble');
     },
 
+    'a failed send marks the bubble, shows the error and gives the text back': async ({ page, open, answerPosts }) => {
+        await open();
+        await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
+        page.route = q => (q.url.includes('/api/send') ? { status: 500, body: 'tmux down' } : answerPosts(q));
+        await page.click('#msg');
+        await page.type('this one fails');
+        await page.key('Enter');
+        await page.waitFor(`document.querySelector('#feed .bubble.user.failed')`, { what: 'the failed bubble' });
+        assert.equal(await page.ev(`document.querySelector('#feed .bubble.user.failed .b-note').textContent`), 'Not sent');
+        assert.equal(await page.ev(`document.getElementById('c-err').textContent`), 'tmux down');
+        assert.equal(await page.ev(`document.getElementById('msg').value`), 'this one fails');
+        // the next send drops the failed bubble
+        page.route = answerPosts;
+        await page.key('Enter');
+        await page.waitFor(`!document.querySelector('#feed .bubble.user.failed')`, { what: 'the failed bubble to go' });
+        assert.equal(await page.ev(`document.getElementById('c-err').textContent`), '');
+    },
+
     'the feed does not jump when the status changes or while typing': async ({ page, open }) => {
         await open();
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });

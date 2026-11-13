@@ -1,21 +1,21 @@
 // Work-item rules (pure): one item per MR or loose agent, its column, lifecycle stage, next step, row action, gate badge and milestone.
 import { PR_URL, USAGE_KEYS, formatDuration, formatTokens } from './transcripts.mjs';
-import { mentionsMr } from './forge.mjs';
+import { mentionsMr, mrNumber, mrRef } from './forge.mjs';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
-export function column(status, pr, hasPr) {
+export function column(status, prState, hasPr) {
 
     if (status === 'working') {
         return 'doing';
     }
-    if (pr?.state === 'merged' || pr?.state === 'closed') {
+    if (prState?.state === 'merged' || prState?.state === 'closed') {
         return 'done';
     }
-    if (pr?.changes) {
+    if (prState?.changes) {
         return 'needs-you';
     }
-    if (pr?.ready) {
+    if (prState?.ready) {
         return 'ready';
     }
     if (hasPr) {
@@ -28,14 +28,13 @@ export function column(status, pr, hasPr) {
 // The newest gate run that names this MR by URL, !N / #N, or its branch.
 export function gateFor(runs, url, branch) {
 
-    const n = url.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
-    const ref = new RegExp(`(?<![\\w/])${url.includes('/pull/') ? '#' : '!'}${n}\\b`);
+    const ref = new RegExp(`(?<![\\w/])${mrRef(url)}\\b`);
 
     return runs.filter(r => r.text.includes(url) || ref.test(r.text) || (branch && r.text.includes(branch))).toSorted((a, b) => b.at - a.at)[0] ?? null;
 }
 
 // Stale once the MR head moved past the commit the gate checked; without a commit in the report, the head first seen alongside the run stands in.
-export function gateBadge(run, sha, heads = new Map()) {
+export function toGate(run, sha, heads = new Map()) {
 
     if (!run) {
         return null;
@@ -51,10 +50,10 @@ export function gateBadge(run, sha, heads = new Map()) {
 }
 
 // The left side's lifecycle: agent stages first, then MR states.
-export const LIFECYCLE = ['Implement', 'Verify', 'Review', 'Approved', 'Merged'];
+const LIFECYCLE = ['Implement', 'Verify', 'Review', 'Approved', 'Merged'];
 const VERB = ['exploring', 'implementing', 'verifying', 'shipping', 'finishing'];
 
-export function lifecycle(pr, prState, agent) {
+function lifecycle(pr, prState, agent) {
 
     if (prState?.state === 'merged' || prState?.state === 'closed') {
         return 4;
@@ -101,10 +100,9 @@ export function nextStep(prState, agent) {
     }
     if (prState.unresolved) {
         const n = prState.unresolved;
-        if (prState.ready) {
-            return `Approved — ${n} unanswered comment${n === 1 ? '' : 's'}${prState.unresolvedBy?.length ? ` from ${prState.unresolvedBy.join(', ')}` : ''}`;
-        }
-        return `Address ${n} unresolved comment${n === 1 ? '' : 's'}${prState.unresolvedBy?.length ? ` from ${prState.unresolvedBy.join(', ')}` : ''}`;
+        const comments = `comment${n === 1 ? '' : 's'}${prState.unresolvedBy?.length ? ` from ${prState.unresolvedBy.join(', ')}` : ''}`;
+
+        return prState.ready ? `Approved — ${n} unanswered ${comments}` : `Address ${n} unresolved ${comments}`;
     }
     if (prState.changes) {
         const by = prState.changesBy?.length ? prState.changesBy : prState.reviewers ?? [];
@@ -146,8 +144,7 @@ export function rowAction(pr, prState, agent, title) {
         return null;
     }
 
-    const n = pr.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
-    const ref = `${pr.includes('/pull/') ? '#' : '!'}${n} (${pr})`;
+    const ref = `${mrRef(pr)} (${pr})`;
     if (prState.changes) {
         return { label: 'Fix & reply', message: `Address the review comments on ${ref}, push, and reply in each thread.` };
     }
@@ -167,8 +164,6 @@ export function rowAction(pr, prState, agent, title) {
     return null;
 }
 
-// One item per PR/MR (deduped across sessions and agents), plus running or stopped agents with no MR yet.
-// Agents whose description names a known MR (!123) count as work on it; finished agents without an MR are dropped.
 // A report that merely quotes another repo's MR (e.g. a Homebase agent citing a pracsys MR) isn't work on this project.
 export function sameRepo(url, project) {
     return url.match(/^https:\/\/[^/]+\/(.+?)(?:\/-)?\/(?:merge_requests|pull)\//)?.[1].split('/').pop() === project;
@@ -183,7 +178,7 @@ const leadRefs = text => [PR_URL, /(?<![\w&!#])!\d+/, /(?<![\w&!#])#\d+/].map(re
 // description names the MR or its issue, or its prompt's first MR or issue ref is it.
 export function worksOnMr(agent, url, prState) {
 
-    const n = url.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
+    const n = mrNumber(url);
     if (new RegExp(`!${n}(?!\\d)`).test(agent.description ?? '')) {
         return true;
     }
@@ -203,7 +198,10 @@ export function requestFor(sessions, project, url, prState) {
     return hits.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
 }
 
-export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads) {
+// The work items' raw groups: one per PR/MR (deduped across sessions and agents), plus running or stopped agents with
+// no MR yet. Agents whose description names a known MR (!123) count as work on it; finished agents without an MR stay
+// for RECENT_DONE_MS, then drop out.
+function itemGroups(sessions, prOf, now) {
 
     const byUrl = new Map();
     const add = (url, project) => {
@@ -247,7 +245,28 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         }
     }
 
-    return [...byUrl.values(), ...loose].map(it => {
+    return [...byUrl.values(), ...loose];
+}
+
+// Token sums and working time over an item's agents: summed per agent, so idle gaps between agents don't count;
+// a running agent counts up to now.
+function agentUsage(agents, now) {
+
+    const tokens = Object.fromEntries(Object.keys(USAGE_KEYS).map(k => [k, agents.reduce((n, a) => n + (a.usage?.[k] ?? 0), 0)]));
+    const total = Object.values(tokens).reduce((a, b) => a + b, 0);
+    const timeMs = agents.reduce((n, a) => n + (a.usage?.first != null ? (a.status === 'running' ? now : a.usage.last) - a.usage.first : 0), 0);
+
+    return {
+        tokens: total ? formatTokens(total) : null,
+        tokensTitle: total ? `input ${tokens.input.toLocaleString('en')} · output ${tokens.output.toLocaleString('en')} · cache read ${tokens.cacheRead.toLocaleString('en')} · cache write ${tokens.cacheWrite.toLocaleString('en')}` : null,
+        time: timeMs > 0 ? formatDuration(timeMs) : null
+    };
+}
+
+// One row per work item, newest agent first, with its column, stage, next step, action, gate badge and usage.
+export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads) {
+
+    return itemGroups(sessions, prOf, now).map(it => {
 
         const agents = it.agents.toSorted((a, b) => b.updated - a.updated);
         const agent = agents[0] ?? null;
@@ -259,10 +278,6 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             ? requestFor(sessions, it.project, it.pr, prState) : null;
         const col = requested ? 'doing' : itemColumn(prState, agent, !!it.pr);
         const title = prState?.title ?? agent?.description ?? it.pr;
-        const tokens = Object.fromEntries(Object.keys(USAGE_KEYS).map(k => [k, agents.reduce((n, a) => n + (a.usage?.[k] ?? 0), 0)]));
-        const total = Object.values(tokens).reduce((a, b) => a + b, 0);
-        // summed per agent, so idle gaps between agents don't count; a running agent counts up to now
-        const timeMs = agents.reduce((n, a) => n + (a.usage?.first != null ? (a.status === 'running' ? now : a.usage.last) - a.usage.first : 0), 0);
 
         return {
             key: it.key,
@@ -285,20 +300,18 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
             next: requested ? 'Claude is on it…' : col === 'finished' ? 'Finished without an MR' : nextStep(prState, agent),
             action: requested ? null : rowAction(it.pr, prState, agent, title),
-            gate: it.pr ? gateBadge(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
-            tokens: total ? formatTokens(total) : null,
-            tokensTitle: total ? `input ${tokens.input.toLocaleString('en')} · output ${tokens.output.toLocaleString('en')} · cache read ${tokens.cacheRead.toLocaleString('en')} · cache write ${tokens.cacheWrite.toLocaleString('en')}` : null,
-            time: timeMs > 0 ? formatDuration(timeMs) : null
+            gate: it.pr ? toGate(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
+            ...agentUsage(agents, now)
         };
     });
 }
 
-export const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // Milestone { id, title } of an MR: its own milestone, else the listed one whose slug is its target branch (supplier-automation).
-export function milestoneOf(pr, list) {
+export function milestoneOf(prState, list) {
 
-    const m = pr && (pr.milestone ?? list.find(m => slug(m.title) === pr.target));
+    const m = prState && (prState.milestone ?? list.find(m => slug(m.title) === prState.target));
 
     return m ? { id: m.id, title: m.title } : null;
 }

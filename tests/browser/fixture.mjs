@@ -24,11 +24,14 @@ const result = (id, content, s) => ({ type: 'user', uuid: `r${s}`, timestamp: ag
 const done = s => ({ type: 'system', subtype: 'turn_duration', durationMs: 4000, timestamp: ago(s) });
 const link = (n, s) => ({ type: 'pr-link', prUrl: MR(n), timestamp: ago(s) });
 
+// Fields every entry of a session's transcript carries.
+const entryBase = (home, project, id) => ({ isSidechain: false, cwd: join(home, 'repos', project), sessionId: id, version: '2.1.322', gitBranch: 'main' });
+
 function session(home, project, id, entries, mtimeAgo) {
 
     const dir = join(home, '.claude', 'projects', `-fx-${project}`);
     mkdirSync(dir, { recursive: true });
-    const base = { isSidechain: false, cwd: join(home, 'repos', project), sessionId: id, version: '2.1.322', gitBranch: 'main' };
+    const base = entryBase(home, project, id);
     const path = join(dir, `${id}.jsonl`);
     writeFileSync(path, jsonl(entries.map(e => ({ ...base, ...e }))));
     const t = new Date(Date.now() - mtimeAgo * 1000);
@@ -136,6 +139,6 @@ export function buildFixture(root) {
 
 // Appends an assistant reply to a session file, which makes it the most recently updated one.
 export function touchSession(home, project, id, text) {
-    const base = { isSidechain: false, cwd: join(home, 'repos', project), sessionId: id, version: '2.1.322', gitBranch: 'main' };
+    const base = entryBase(home, project, id);
     appendFileSync(join(home, '.claude', 'projects', `-fx-${project}`, `${id}.jsonl`), jsonl([{ ...base, ...said(text, 0) }, { ...base, ...done(0) }]));
 }

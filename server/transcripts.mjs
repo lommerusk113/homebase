@@ -287,7 +287,7 @@ export function chatItems(entries, max = 60) {
         const a = e.type === 'attachment' ? e.attachment : null;
         if (a?.type === 'queued_command' && a.origin?.kind === 'human') {
             flush();
-            items.push({ role: 'user', text: unwrapPasted(typeof a.prompt === 'string' ? a.prompt : textOf({ message: { content: a.prompt } })), at: e.timestamp });
+            items.push({ role: 'user', text: unwrapPasted(textOf({ message: { content: a.prompt } })), at: e.timestamp });
             continue;
         }
         if (e.type === 'user' && !(Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result'))) {
@@ -363,7 +363,7 @@ const SHORT_ANSWER = /^(?:yes|yeah|yep|sure|ok|okay|no|nope|do it|go ahead|do bo
 
 // A short reply right after a Claude message that asked something becomes its answer tag instead of a bubble:
 // a chip label offered on it, or a tiny approval like "ok" / "go ahead". Only the item directly before counts.
-export function pairAnswers(items) {
+function pairAnswers(items) {
 
     const out = [];
     for (const i of items) {
@@ -490,7 +490,7 @@ export function turnPrompts(entries, ageMs) {
         } else if (e.type === 'user' && e.turnPosition) {
             prompts = isHumanPrompt(e) ? [{ at: e.timestamp, text: unwrapPasted(textOf(e)) }] : [];
         } else if (a?.type === 'queued_command' && a.origin?.kind === 'human') {
-            prompts.push({ at: e.timestamp, text: unwrapPasted(typeof a.prompt === 'string' ? a.prompt : textOf({ message: { content: a.prompt } })) });
+            prompts.push({ at: e.timestamp, text: unwrapPasted(textOf({ message: { content: a.prompt } })) });
         }
     }
 

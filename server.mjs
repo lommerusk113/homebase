@@ -1,5 +1,5 @@
 // Dashboard over Claude Code transcripts in ~/.claude/projects. Only types into its own tmux sessions; writes files only in LAN mode (pairing code, session secret).
-// Entry point: config, startup and the router. Everything else lives in server/ (see server/README.md) and is re-exported here.
+// Entry point: config, startup and the router. Everything else lives in server/ (see server/README.md); what test.mjs uses is re-exported here.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
@@ -17,13 +17,13 @@ import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, COOKIE, cook
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
 
 export {
-    readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, pairAnswers, quickReplies,
+    readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, quickReplies,
     pendingAsk, pendingQuestion, turnState, turnPrompts, latestTopic, queuedPrompts, addUsage, readUsage, formatDuration, formatTokens
 } from './server/transcripts.mjs';
-export { repoName, repoPath, STAGES, runs, agentStage, agentStatus, summarizeAgent, status, lastActivity, summarize, folderFor } from './server/sessions.mjs';
-export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments } from './server/forge.mjs';
+export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, status, lastActivity, summarize, folderFor } from './server/sessions.mjs';
+export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments, swrEntry, swr, cached, refreshAll, refreshInfo } from './server/forge.mjs';
 export {
-    column, gateFor, gateBadge, LIFECYCLE, lifecycle, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, slug, milestoneOf
+    column, gateFor, toGate, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf
 } from './server/items.mjs';
 export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones } from './server/milestones.mjs';
 export { limitsOf, peakLimits } from './server/limits.mjs';
@@ -54,6 +54,8 @@ const DATA_DIR = process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebas
 const TOKEN = randomBytes(32).toString('hex');
 const SECURITY_HEADERS = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY' };
 const pairLimit = rateLimiter();
+const PAIR_BODY_MAX = 200; // "code=XXXXXXXX" with room to spare
+const PAIR_COOKIE_MAX_AGE_S = 365 * 24 * 3600;
 
 function writeSecret(name, value) {
 
@@ -83,7 +85,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (!bindOk(BIND, LAN)) {
         throw new Error(`refusing to listen on ${BIND}: Homebase binds to 127.0.0.1 unless HOMEBASE_LAN=1`);
     }
-    const { code: PAIR_CODE, session: SESSION } = lanSecrets();
+    const { code: PAIR_CODE, session: SESSION_SECRET } = lanSecrets();
     if (LAN) {
         console.log(`LAN mode: pairing code ${PAIR_CODE} (also in ${join(DATA_DIR, 'pairing-code')})`);
     }
@@ -91,8 +93,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     warmMilestones();
     createServer(async (req, res) => {
         const url = new URL(req.url, 'http://x');
-        for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
-        const deny = (code, msg) => { res.statusCode = code; res.end(msg); };
+        for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
+            res.setHeader(k, v);
+        }
+        const deny = (code, msg) => {
+            res.statusCode = code;
+            res.end(msg);
+        };
+        const json = value => {
+            res.setHeader('content-type', 'application/json');
+            return res.end(JSON.stringify(value));
+        };
+        // POST + custom header: a cross-origin page can't send this without a preflight we never answer
+        const isPost = path => url.pathname === path && req.method === 'POST' && req.headers['x-codetool'] === '1';
         const hosts = LAN ? lanHosts(PORT) : localHosts(PORT);
         if (!allowedHost(req.headers.host, hosts) || !allowedOrigin(req.headers.origin, hosts)) {
             return deny(403, 'forbidden');
@@ -102,7 +115,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             return deny(403, 'forbidden');
         }
         // Other machines (LAN mode only) pair once with the code; until then they get the pairing page and nothing else.
-        if (!isLoopback(req.socket.remoteAddress) && !cookieOk(req.headers.cookie, SESSION)) {
+        if (!isLoopback(req.socket.remoteAddress) && !cookieOk(req.headers.cookie, SESSION_SECRET)) {
             res.setHeader('cache-control', 'no-store');
             res.setHeader('content-security-policy', CSP); // the pairing page: a plain form POST, no scripts
             if (url.pathname === '/pair' && req.method === 'POST') {
@@ -111,15 +124,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 }
                 let code = '';
                 try {
-                    code = new URLSearchParams(await readBody(req, 200)).get('code')?.trim().toUpperCase() ?? '';
+                    code = new URLSearchParams(await readBody(req, PAIR_BODY_MAX)).get('code')?.trim().toUpperCase() ?? '';
                 } catch {}
                 if (!tokenOk(code, PAIR_CODE)) {
                     res.setHeader('content-type', 'text/html; charset=utf-8');
                     return deny(403, pairPage('Wrong code.'));
                 }
-                res.setHeader('set-cookie', `${COOKIE}=${SESSION}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000`);
+                res.setHeader('set-cookie', `${COOKIE}=${SESSION_SECRET}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${PAIR_COOKIE_MAX_AGE_S}`);
                 res.setHeader('location', '/');
-                return deny(303, '');
+                res.statusCode = 303;
+                return res.end();
             }
             if (url.pathname === '/' || url.pathname === '/index.html') {
                 res.setHeader('content-type', 'text/html; charset=utf-8');
@@ -148,23 +162,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return;
             }
             if (url.pathname === '/api/sessions') {
-                res.setHeader('content-type', 'application/json');
-                return res.end(JSON.stringify(await sessions()));
+                return json(await sessions());
             }
-            // POST + custom header: a cross-origin page can't send this without a preflight we never answer
-            if (url.pathname === '/api/send' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
+            if (isPost('/api/send')) {
                 await send(url.searchParams.get('id'), await readBody(req, MAX_SEND));
                 return res.end('ok');
             }
-            if (url.pathname === '/api/clear' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
+            if (isPost('/api/clear')) {
                 await clearChat(url.searchParams.get('id'));
                 return res.end('ok');
             }
-            if (url.pathname === '/api/interrupt' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
+            if (isPost('/api/interrupt')) {
                 await interrupt(url.searchParams.get('id'));
                 return res.end('ok');
             }
-            if (url.pathname === '/api/open' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
+            if (isPost('/api/open')) {
                 await openInEditor(url.searchParams.get('item'), url.searchParams.get('editor'));
                 return res.end('ok');
             }
@@ -173,32 +185,26 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 if (req.method === 'POST') {
                     await refreshAll();
                 }
-                res.setHeader('content-type', 'application/json');
-                return res.end(JSON.stringify(refreshInfo()));
+                return json(refreshInfo());
             }
             if (url.pathname === '/api/editors') {
-                res.setHeader('content-type', 'application/json');
-                return res.end(JSON.stringify((await editors()).map(({ id, name }) => ({ id, name }))));
+                return json((await editors()).map(({ id, name }) => ({ id, name })));
             }
             if (url.pathname === '/api/milestones') {
-                res.setHeader('content-type', 'application/json');
-                return res.end(JSON.stringify(await milestones(url.searchParams.get('project'), url.searchParams.get('milestone'))));
+                return json(await milestones(url.searchParams.get('project'), url.searchParams.get('milestone')));
             }
             if (url.pathname === '/api/limits') {
-                res.setHeader('content-type', 'application/json');
-                return res.end(JSON.stringify(await limits()));
+                return json(await limits());
             }
             if (url.pathname === '/api/transcript') {
-                res.setHeader('content-type', 'application/json');
-                return res.end(JSON.stringify(await transcript(url.searchParams.get('dir'), url.searchParams.get('id'))));
+                return json(await transcript(url.searchParams.get('dir'), url.searchParams.get('id')));
             }
             res.statusCode = 404;
             res.end('not found');
         } catch (e) {
             res.statusCode = e.status ?? 500;
             if (e.body) {
-                res.setHeader('content-type', 'application/json');
-                return res.end(JSON.stringify(e.body));
+                return json(e.body);
             }
             res.end(String(e.message));
         }

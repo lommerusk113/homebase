@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawn, execFileSync } from 'node:child_process';
 import { status, summarize, column } from './server.mjs';
 
 assert.equal(column('working', { state: 'merged' }, true), 'doing');
@@ -209,6 +213,7 @@ assert.equal(nextStep(open(), null), 'Needs a reviewer');
 assert.equal(nextStep(open({ ready: true }), null), 'Approved — merge it');
 assert.equal(nextStep(open({ ci: 'failing' }), null), 'Pipeline failing');
 assert.equal(nextStep(open({ ci: 'running' }), null), 'Pipeline running');
+assert.equal(nextStep(open({ draft: true }), null), 'Draft — mark it ready for review');
 console.log('ok next');
 
 const mr = n => `https://gitlab.com/g/p/-/merge_requests/${n}`;
@@ -233,6 +238,11 @@ assert.equal(items[1].next, 'Waiting for review by Ann');
 const perks = now => workItems([{ id: 'm', project: 'tracker', prs: [], agents: [agent('perks', 0, { description: 'Build faction perks simulator' })] }], () => null, now);
 assert.deepEqual(perks(3600_000).map(i => [i.key, i.column, i.next]), [['perks', 'finished', 'Finished without an MR']]);
 assert.deepEqual(perks(3 * 3600_000), []);
+const one = prOf => workItems([{ id: 's', project: 'p', prs: [{ url: mr(5), at: 1 }], agents: [] }], prOf, 0, new Map())[0];
+assert.equal(one(() => open({ ready: true })).stageLabel, 'Approved');
+assert.deepEqual((({ column, stageLabel, next }) => [column, stageLabel, next])(one(() => ({ state: 'closed' }))), ['done', 'Closed', 'Closed without merging']);
+const verifying = workItems([{ id: 's', project: 'p', prs: [], agents: [agent('v', 1, { status: 'running', stage: 2 })] }], () => null, 0, new Map());
+assert.deepEqual(verifying.map(i => i.stageLabel), ['Verify']);
 console.log('ok items');
 
 import { tmuxArgs } from './server.mjs';
@@ -261,7 +271,7 @@ assert.equal(act({ state: 'merged' }, null), null);
 assert.equal(act(open({ draft: true }), null), null);
 assert.equal(act(null, null), null); // state unknown
 
-import { gateRuns, gateFor, gateBadge } from './server.mjs';
+import { gateRuns, gateFor, toGate } from './server.mjs';
 // shapes as in real transcripts: Skill tool_use { skill, args }, the skill's report as later assistant text
 const said = (ts, ...content) => ({ type: 'assistant', timestamp: ts, message: { content } });
 const skill = (name, args) => ({ type: 'tool_use', id: 'toolu_01', name: 'Skill', input: { skill: name, args } });
@@ -291,12 +301,12 @@ assert.equal(gateFor(runs, mr(9), 'kjn-gate'), runs[1]);
 assert.equal(gateFor(runs, mr(40), 'other'), null);
 assert.equal(gateFor([{ text: 'see #9', at: 1 }], 'https://github.com/o/r/pull/9', null).at, 1);
 // staleness: commit from the report, else the head first seen with the run
-assert.equal(gateBadge(runs[1], 'abc1234ffff').stale, false);
-assert.equal(gateBadge(runs[1], 'def5678ffff').stale, true);
+assert.equal(toGate(runs[1], 'abc1234ffff').stale, false);
+assert.equal(toGate(runs[1], 'def5678ffff').stale, true);
 const heads = new Map();
-assert.equal(gateBadge(runs[0], 'aaa111', heads).stale, false);
-assert.deepEqual(gateBadge(runs[0], 'bbb222', heads), { verdict: 'fix first', at: runs[0].at, tldr: runs[0].tldr, commit: null, stale: true });
-assert.equal(gateBadge(null, 'x'), null);
+assert.equal(toGate(runs[0], 'aaa111', heads).stale, false);
+assert.deepEqual(toGate(runs[0], 'bbb222', heads), { verdict: 'fix first', at: runs[0].at, tldr: runs[0].tldr, commit: null, stale: true });
+assert.equal(toGate(null, 'x'), null);
 const gated = workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: runs, agents: [] }], () => open({ ready: true, sha: 'abc' }), 0, new Map());
 assert.equal(gated[0].gate.verdict, 'fix first');
 console.log('ok review gate');
@@ -318,6 +328,7 @@ assert.deepEqual(ev([it('a', 'review')], [it('a', 'ready')]), [['ready', 'a']]);
 assert.deepEqual(ev([it('a', 'doing')], [it('a', 'ready')]), [['ready', 'a']]); // one event per item
 assert.deepEqual(ev([it('a', 'doing'), it('b', 'doing')], [it('a', 'review'), it('b', 'done')]), [['finished', 'a'], ['finished', 'b']]);
 assert.deepEqual(ev([it('a', 'doing')], []), [['finished', 'a']]); // agent without an MR drops off
+assert.deepEqual(ev([it('a', 'doing')], [it('a', 'finished')]), [['finished', 'a']]);
 assert.deepEqual(ev([it('a', 'review')], []), []);
 assert.deepEqual(ev([it('a', 'review')], [it('a', 'review', 'failing')]), [['failing', 'a']]);
 assert.deepEqual(ev([it('a', 'review', 'failing')], [it('a', 'review', 'failing')]), []);
@@ -374,6 +385,10 @@ assert.equal(rowAction(mr(4), t2, null, 'T').label, 'Fix & reply');
 assert.equal(itemColumn(withThreads(waiting, thr(0)), null, true), 'review'); // all resolved, no approval yet
 assert.equal(nextStep(withThreads(waiting, thr(0)), null), 'Waiting for review by Børre Stellander');
 assert.equal(withThreads(waiting, null), waiting); // no comments data yet
+// a stopped agent needs you even when its MR is ready; a finished one without an MR is "finished"
+assert.equal(itemColumn(open({ ready: true }), { status: 'stopped' }, true), 'needs-you');
+assert.equal(itemColumn(null, { status: 'stopped' }, false), 'needs-you');
+assert.equal(itemColumn(null, { status: 'done' }, false), 'finished');
 assert.equal(withThreads({ state: 'merged' }, thr(2)).changes, undefined);
 // the comment that moves an item into needs-you notifies once
 const nc = { ...cm('a', CT(2)), column: 'needs-you' };
@@ -455,8 +470,6 @@ assert.equal(pendingQuestion([tu('AskUserQuestion', { id: 'q3', input: {} })]), 
 console.log('ok quick replies');
 
 import { addUsage, readUsage, formatDuration, formatTokens, limitsOf } from './server.mjs';
-import { mkdtempSync, writeFileSync, appendFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 const use = (id, input, output, ts) => JSON.stringify({ type: 'assistant', timestamp: ts, message: { id, usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: 100, cache_creation_input_tokens: 10 } } });
 const u = addUsage({ byId: new Map() }, [use('m1', 2, 30, T('00.000')), use('m1', 2, 30, T('01.000')), use('m2', 5, 7, T('09.000')), `{"type":"user","timestamp":"${T('10.000')}"}`].join('\n'));
 assert.deepEqual(u.totals, { input: 7, output: 37, cacheRead: 200, cacheWrite: 20 });
@@ -843,11 +856,12 @@ for (const p of [
 console.log('ok vendor');
 
 // Every request from the page goes through core.js's api(), which adds the token; a missing import fails silently in a try/catch.
-import { readdirSync, readFileSync as readSrc } from 'node:fs';
 for (const f of readdirSync(new URL('./public', import.meta.url)).filter(f => f.endsWith('.js') && f !== 'core.js')) {
-    const src = readSrc(new URL(`./public/${f}`, import.meta.url), 'utf8');
+    const src = readFileSync(new URL(`./public/${f}`, import.meta.url), 'utf8');
     assert.doesNotMatch(src, /\bfetch\(/, `${f} uses fetch() instead of api()`);
-    if (/\bapi\(/.test(src)) assert.match(src, /import \{[^}]*\bapi\b[^}]*\} from '\.\/core\.js'/, `${f} calls api() without importing it`);
+    if (/\bapi\(/.test(src)) {
+        assert.match(src, /import \{[^}]*\bapi\b[^}]*\} from '\.\/core\.js'/, `${f} calls api() without importing it`);
+    }
 }
 console.log('ok api wrapper');
 
@@ -878,13 +892,19 @@ import { localHosts, lanHosts, isPrivateIp, allowedHost, allowedOrigin, tokenOk,
     assert.ok(!cookieOk('homebase_session=', undefined));
     assert.ok(isLoopback('127.0.0.1') && isLoopback('::1') && !isLoopback('192.168.1.5'));
     assert.ok(bindOk('127.0.0.1', false) && !bindOk('0.0.0.0', false) && bindOk('0.0.0.0', true) && !bindOk('192.168.1.5', true));
-    for (const ip of ['10.0.0.1', '172.16.0.1', '172.31.255.255', '192.168.1.5']) assert.ok(isPrivateIp(ip), ip);
-    for (const ip of ['172.15.0.1', '172.32.0.1', '8.8.8.8', '127.0.0.1', 'fe80::1', undefined]) assert.ok(!isPrivateIp(ip), ip);
+    for (const ip of ['10.0.0.1', '172.16.0.1', '172.31.255.255', '192.168.1.5']) {
+        assert.ok(isPrivateIp(ip), ip);
+    }
+    for (const ip of ['172.15.0.1', '172.32.0.1', '8.8.8.8', '127.0.0.1', 'fe80::1', undefined]) {
+        assert.ok(!isPrivateIp(ip), ip);
+    }
     const ifaces = { lo0: [{ address: '127.0.0.1' }], en0: [{ address: 'fe80::1' }, { address: '192.168.1.5' }], utun: [{ address: '100.64.0.1' }] };
     assert.deepEqual(lanHosts(4321, 'Mac', ifaces), [...local, 'mac.local:4321', '192.168.1.5:4321']);
     assert.deepEqual(lanHosts(4321, 'Mac.local', {}), [...local, 'mac.local:4321']);
     const hit = rateLimiter(5, 60_000, 900_000);
-    for (let i = 0; i < 5; i++) assert.ok(hit('a', 1000));
+    for (let i = 0; i < 5; i++) {
+        assert.ok(hit('a', 1000));
+    }
     assert.ok(!hit('a', 1000)); // 6th try locks out
     assert.ok(hit('b', 1000)); // per key
     assert.ok(!hit('a', 70_000)); // still locked after the window
@@ -920,12 +940,52 @@ import { refetch, refreshDue } from './server.mjs';
 }
 console.log('ok refresh');
 
-// Integration: real server on a random port, against a temp data dir and a tmux socket nobody uses. Only GETs and rejected POSTs.
-import { spawn } from 'node:child_process';
+import { swrEntry, swr, cached, refreshAll, refreshInfo } from './server.mjs';
+{
+    // refreshAll: the other cache entries first, the issue groups once those are in; concurrent calls share one run
+    const order = [];
+    let linkCalls = 0, release;
+    const links = () => {
+        order.push('links');
+        return linkCalls++ ? new Promise(r => { release = r; }) : Promise.resolve(1);
+    };
+    const issues = () => {
+        order.push('issues');
+        return Promise.resolve(2);
+    };
+    await swrEntry('links:p:1', 1e9, links).pending;
+    await swrEntry('issues:p:11', 1e9, issues).pending;
+    order.length = 0;
+    const run = refreshAll();
+    assert.equal(refreshAll(), run);
+    await new Promise(r => setTimeout(r, 10));
+    assert.deepEqual(order, ['links']);
+    assert.equal(refreshInfo().refreshing, true);
+    release(1);
+    await run;
+    assert.deepEqual(order, ['links', 'issues']);
+    assert.equal(refreshInfo().refreshing, false);
+
+    // cached: only the first load waits, a stale entry answers with the old value at once, a failed first load throws
+    assert.equal(await cached('t:a', 0, () => Promise.resolve(1)), 1);
+    let settled = false;
+    const stale = cached('t:a', -1, () => new Promise(() => {})).then(v => {
+        settled = true;
+        return v;
+    });
+    await new Promise(r => setTimeout(r, 10));
+    assert.equal(settled, true);
+    assert.equal(await stale, 1);
+    await assert.rejects(cached('t:b', 1e9, () => Promise.reject(new Error('down'))), /down/);
+    for (const k of ['links:p:1', 'issues:p:11', 't:a', 't:b']) {
+        swr.delete(k);
+    }
+}
+console.log('ok refreshAll, cached');
+
+// Integration: real server on a random port, over a temp HOME and data dir and a tmux socket nobody uses. Only GETs, rejected POSTs and a refresh with nothing to refresh.
 import { request } from 'node:http';
 import { createServer as netServer } from 'node:net';
-import { readFileSync as readSync, rmSync, statSync } from 'node:fs';
-import { join as pjoin } from 'node:path';
 {
     const freePort = () => new Promise(r => { const s = netServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
     const call = (port, { host, path = '/', method = 'GET', headers = {}, body, addr = '127.0.0.1' } = {}) => new Promise((ok, fail) => {
@@ -938,8 +998,8 @@ import { join as pjoin } from 'node:path';
         r.end(body);
     });
     async function start(env) {
-        const port = await freePort(), dir = mkdtempSync(pjoin(tmpdir(), 'homebase-test-'));
-        const child = spawn(process.execPath, ['server.mjs'], { cwd: new URL('.', import.meta.url).pathname, env: { ...process.env, PORT: String(port), HOMEBASE_DIR: dir, HOMEBASE_STATUSLINE_DIR: dir, HOMEBASE_TMUX_SOCKET: 'homebase-test-none', ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
+        const port = await freePort(), dir = mkdtempSync(join(tmpdir(), 'homebase-test-'));
+        const child = spawn(process.execPath, ['server.mjs'], { cwd: new URL('.', import.meta.url).pathname, env: { ...process.env, HOME: dir, PORT: String(port), HOMEBASE_DIR: dir, HOMEBASE_STATUSLINE_DIR: dir, HOMEBASE_TMUX_SOCKET: 'homebase-test-none', ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
         let out = '';
         await new Promise((ok, fail) => { child.stdout.on('data', c => { out += c; if (out.includes('Homebase on')) ok(); }); child.on('exit', fail); });
         return { port, dir, out, stop: () => { child.kill(); rmSync(dir, { recursive: true, force: true }); } };
@@ -975,12 +1035,23 @@ import { join as pjoin } from 'node:path';
         }
         const ok = await call(s.port, { path: '/api/limits', headers: { 'x-homebase-token': token, origin: `http://localhost:${s.port}` } });
         assert.equal(ok.status, 200);
+        assert.equal(ok.headers['content-type'], 'application/json');
         // POST rejection paths only: none of these reach a session.
         assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-codetool': '1' }, body: 'hi' })).status, 401);
         assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token, 'sec-fetch-site': 'cross-site' }, body: 'hi' })).status, 403);
         assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token, origin: 'http://evil.com' }, body: 'hi' })).status, 403);
         assert.equal((await call(s.port, { path: '/pair', method: 'POST', body: 'code=x' })).status, 404); // no pairing outside LAN mode
         assert.equal((await call(s.port, { path: '/api/refresh', method: 'POST', headers: { 'x-codetool': '1' } })).status, 401);
+        // without x-codetool a POST matches no route, even with the token
+        assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-homebase-token': token }, body: 'hi' })).status, 404);
+        assert.equal((await call(s.port, { path: '/api/refresh', method: 'POST', headers: { 'x-homebase-token': token } })).status, 404);
+        // only known sessions and plain transcript folders; HOME is empty, so nothing reaches tmux
+        const authed = { 'x-homebase-token': token };
+        for (const dir of ['..', 'a%2Fb']) {
+            assert.deepEqual((({ status, body }) => [status, body])(await call(s.port, { path: `/api/transcript?dir=${dir}&id=x`, headers: authed })), [500, 'bad path'], dir);
+        }
+        const sent = await call(s.port, { path: '/api/send?id=..%2Fx', method: 'POST', headers: { ...authed, 'x-codetool': '1' }, body: 'hi' });
+        assert.deepEqual([sent.status, sent.body], [500, 'bad id']);
         const refreshed = await call(s.port, { path: '/api/refresh', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token } });
         assert.equal(refreshed.status, 200);
         assert.equal(JSON.parse(refreshed.body).refreshing, false);
@@ -988,6 +1059,7 @@ import { join as pjoin } from 'node:path';
         // an unknown project: a 404 that still carries the final empty state, so the pill stops loading
         const unknown = await call(s.port, { path: '/api/milestones?project=no-such-project-xyz&milestone=', headers: { 'x-homebase-token': token } });
         assert.equal(unknown.status, 404);
+        assert.equal(unknown.headers['content-type'], 'application/json'); // the error body is JSON too
         assert.deepEqual((({ milestones, selected, loading, reason }) => ({ milestones, selected, loading, reason }))(JSON.parse(unknown.body)),
             { milestones: [], selected: null, loading: false, reason: 'unsupported' });
     } finally { s.stop(); }
@@ -1000,10 +1072,10 @@ import { join as pjoin } from 'node:path';
     } else {
         const l = await start({ HOMEBASE_LAN: '1' });
         try {
-            const code = readSync(pjoin(l.dir, 'pairing-code'), 'utf8').trim();
+            const code = readFileSync(join(l.dir, 'pairing-code'), 'utf8').trim();
             assert.match(l.out, new RegExp(`pairing code ${code}`));
-            assert.equal(statSync(pjoin(l.dir, 'pairing-code')).mode & 0o777, 0o600);
-            assert.equal(statSync(pjoin(l.dir, 'session-secret')).mode & 0o777, 0o600);
+            assert.equal(statSync(join(l.dir, 'pairing-code')).mode & 0o777, 0o600);
+            assert.equal(statSync(join(l.dir, 'session-secret')).mode & 0o777, 0o600);
             const host = `${lanIp}:${l.port}`, lan = { addr: lanIp, host };
             assert.equal((await call(l.port, { ...lan, host: 'evil.com' })).status, 403);
             const pairing = await call(l.port, lan);
@@ -1028,7 +1100,9 @@ import { join as pjoin } from 'node:path';
             assert.equal((await call(l.port, { ...lan, path: '/api/limits', headers: { cookie: jar, 'x-homebase-token': token } })).status, 200);
             assert.equal((await call(l.port, { ...lan, path: '/api/limits', headers: { 'x-homebase-token': token } })).status, 401); // token alone isn't enough off-machine
             assert.ok(meta((await call(l.port)).body), 'loopback needs no pairing');
-            for (let i = 0; i < 3; i++) assert.equal((await call(l.port, { ...lan, path: '/pair', method: 'POST', headers: form, body: 'code=WRONG123' })).status, 403);
+            for (let i = 0; i < 3; i++) {
+                assert.equal((await call(l.port, { ...lan, path: '/pair', method: 'POST', headers: form, body: 'code=WRONG123' })).status, 403);
+            }
             assert.equal((await call(l.port, { ...lan, path: '/pair', method: 'POST', headers: form, body: `code=${code}` })).status, 429); // 6th try: locked out, even with the right code
         } finally { l.stop(); }
         console.log('ok LAN pairing');
@@ -1044,7 +1118,9 @@ import { limiter, dedupe } from './server.mjs';
         started.push(n); peak = Math.max(peak, ++active);
         await new Promise(r => setTimeout(r, 5));
         active--;
-        if (fail) throw new Error(`job ${n}`);
+        if (fail) {
+            throw new Error(`job ${n}`);
+        }
         return n;
     });
     const results = await Promise.allSettled([job(1), job(2, true), job(3), job(4), job(5)]);
@@ -1069,12 +1145,15 @@ import { api, page, refreshToken } from './public/core.js';
 import { saveDraft, restoreDraft } from './public/chat.js';
 {
     // A stub server: /api/* wants the current token, / serves the page with the token and build it has now.
-    const real = globalThis.fetch, calls = [];
+    const real = globalThis.fetch, calls = [], codetool = [];
     let current = 'new', serveToken = 'new', build = 'b2';
     globalThis.fetch = async (path, opts = {}) => {
         calls.push(path);
+        codetool.push([path, opts.headers?.['x-codetool']]);
         await new Promise(r => setTimeout(r, 2));
-        if (path === '/') return new Response(`<meta name="homebase-token" content="${serveToken}"><meta name="homebase-build" content="${build}">`);
+        if (path === '/') {
+            return new Response(`<meta name="homebase-token" content="${serveToken}"><meta name="homebase-build" content="${build}">`);
+        }
         return new Response('ok', { status: opts.headers['x-homebase-token'] === current ? 200 : 401 });
     };
     const count = p => calls.filter(c => c === p).length;
@@ -1085,6 +1164,8 @@ import { saveDraft, restoreDraft } from './public/chat.js';
         assert.deepEqual(rs.map(r => r.status), [200, 200, 200]);
         assert.equal(count('/'), 1);
         assert.deepEqual([count('/api/a'), count('/api/b'), count('/api/c')], [2, 2, 2]);
+        // the retried POST still carries x-codetool, the GETs never do
+        assert.deepEqual(codetool.filter(([p]) => p.startsWith('/api/')).map(([p, h]) => `${p}:${h}`).sort(), ['/api/a:undefined', '/api/a:undefined', '/api/b:undefined', '/api/b:undefined', '/api/c:1', '/api/c:1']);
         assert.equal(page.token, 'new');
         assert.equal(page.updated, true, 'a different build id flags the update');
         // the new token works: no refresh
@@ -1186,7 +1267,7 @@ import { issueOf, mentionsMr, turnPrompts, worksOnMr, requestFor } from './serve
 // tracker e9c15e3f: a ~900 KB tool_result line filled the 512 KB tail, so the chat showed one bubble and the 403 vanished
 import { readTail } from './server.mjs';
 {
-    const f = pjoin(mkdtempSync(pjoin(tmpdir(), 'hb-')), 't.jsonl');
+    const f = join(mkdtempSync(join(tmpdir(), 'hb-')), 't.jsonl');
     const ts = '2026-11-13T10:15:47.041Z';
     const lines = [
         { type: 'user', message: { role: 'user', content: 'weight OC roles for new players' }, timestamp: '2026-11-13T10:10:00.000Z' },
@@ -1208,22 +1289,20 @@ import { readTail } from './server.mjs';
 }
 
 // A half-written agent .meta.json or a transcript deleted mid-poll skips that one entry, not the whole /api/sessions
-import { mkdirSync as mkdirS, symlinkSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
-import { fetchComments } from './server/forge.mjs';
+import { fetchComments } from './server.mjs';
 {
-    const home = mkdtempSync(pjoin(tmpdir(), 'hb-home-'));
-    const dir = pjoin(home, '.claude', 'projects', 'p');
-    const subs = pjoin(dir, 'good', 'subagents');
-    mkdirS(subs, { recursive: true });
+    const home = mkdtempSync(join(tmpdir(), 'hb-home-'));
+    const dir = join(home, '.claude', 'projects', 'p');
+    const subs = join(dir, 'good', 'subagents');
+    mkdirSync(subs, { recursive: true });
     const at = new Date().toISOString();
-    writeFileSync(pjoin(dir, 'good.jsonl'), JSON.stringify({ type: 'user', sessionId: 'good', message: { content: 'hi' }, timestamp: at }) + '\n');
-    symlinkSync(pjoin(dir, 'nowhere.jsonl'), pjoin(dir, 'gone.jsonl')); // listed by readdir, gone on stat
+    writeFileSync(join(dir, 'good.jsonl'), JSON.stringify({ type: 'user', sessionId: 'good', message: { content: 'hi' }, timestamp: at }) + '\n');
+    symlinkSync(join(dir, 'nowhere.jsonl'), join(dir, 'gone.jsonl')); // listed by readdir, gone on stat
     const agentLine = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'done' }] }, timestamp: at }) + '\n';
-    writeFileSync(pjoin(subs, 'bad.jsonl'), agentLine);
-    writeFileSync(pjoin(subs, 'bad.meta.json'), '{"descrip');
-    writeFileSync(pjoin(subs, 'ok.jsonl'), agentLine);
-    writeFileSync(pjoin(subs, 'ok.meta.json'), JSON.stringify({ description: 'ok agent', finished: true }));
+    writeFileSync(join(subs, 'bad.jsonl'), agentLine);
+    writeFileSync(join(subs, 'bad.meta.json'), '{"descrip');
+    writeFileSync(join(subs, 'ok.jsonl'), agentLine);
+    writeFileSync(join(subs, 'ok.meta.json'), JSON.stringify({ description: 'ok agent', finished: true }));
     // ROOT comes from HOME at import, so sessions() runs in a child with HOME pointing at the fixture
     const code = "import { sessions } from './server/sessions.mjs'; console.log(JSON.stringify((await sessions()).map(s => [s.id, s.items.map(i => i.key)])));";
     const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home }, cwd: import.meta.dirname, encoding: 'utf8' });

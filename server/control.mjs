@@ -82,9 +82,9 @@ async function resumable(id) {
     return s;
 }
 
-export async function send(id, text, s = null) {
+export async function send(id, text, session = null) {
 
-    s ??= await resumable(id);
+    session ??= await resumable(id);
     let name = tmuxFor(id);
     let steps = sendSteps(name, text);
 
@@ -94,8 +94,8 @@ export async function send(id, text, s = null) {
         aliases.delete(id); // the aliased tmux session is gone: start one of its own
         name = tmuxName(id);
         steps = sendSteps(name, text);
-        refuseIfLiveElsewhere(Date.now() - s.updated);
-        await tmux(['new-session', '-d', ...tmuxSession(id, s.cwd)]);
+        refuseIfLiveElsewhere(Date.now() - session.updated);
+        await tmux(['new-session', '-d', ...tmuxSession(id, session.cwd)]);
         await sleep(5000); // ponytail: fixed wait for claude to boot; poll capture-pane for its prompt if this proves flaky
     }
 

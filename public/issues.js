@@ -1,10 +1,10 @@
 // Issues tab: the selected milestone's open issues in one lane per person (you first, then A–Z, then Unassigned).
 // Read-only towards GitLab; "Send to chat" only types into the bound chat session. Draws from milestone.js's /api/milestones data.
-import { $, el, ago, prChip, tooltip, waButton, store, hooks } from './core.js';
+import { $, el, link, ago, prChip, tooltip, waButton, store, hooks, firstName } from './core.js';
 import { ciPill } from './list.js';
 import { chatSession, sendText } from './chat.js';
 
-export const STATES = { doing: 'in progress', closable: 'can be closed', todo: 'not started', free: 'unassigned' };
+const STATES = { doing: 'in progress', closable: 'can be closed', todo: 'not started', free: 'unassigned' };
 
 // Open issues as cards with their state, in lane order: in progress, can be closed, not started, unassigned.
 /** @typedef {Issue & { st: keyof typeof STATES }} Card */
@@ -18,7 +18,9 @@ export function issueCards(groups) {
 // Who a card belongs to: its assignees, else the authors of its MRs (an in-progress issue nobody assigned).
 /** @param {Card | Issue} card @returns {Person[]} */
 export function owners(card) {
-    if (card.assignees.length) return card.assignees;
+    if (card.assignees.length) {
+        return card.assignees;
+    }
     return [...new Map(card.mrs.filter(m => m.author).map(m => [m.author.username, m.author])).values()];
 }
 
@@ -30,14 +32,22 @@ export function buildLanes(cards, done, me) {
     const lanes = new Map();
     for (const c of cards) {
         for (const p of owners(c)) {
-            if (!lanes.has(p.username)) lanes.set(p.username, { who: p, me: p.username === me?.username, list: [], closed: 0 });
+            if (!lanes.has(p.username)) {
+                lanes.set(p.username, { who: p, me: p.username === me?.username, list: [], closed: 0 });
+            }
             lanes.get(p.username).list.push(c);
         }
     }
     const free = { who: null, me: false, list: cards.filter(c => !owners(c).length), closed: 0 };
     for (const i of done) {
-        if (!i.assignees.length) free.closed++;
-        for (const p of i.assignees) if (lanes.has(p.username)) lanes.get(p.username).closed++;
+        if (!i.assignees.length) {
+            free.closed++;
+        }
+        for (const p of i.assignees) {
+            if (lanes.has(p.username)) {
+                lanes.get(p.username).closed++;
+            }
+        }
     }
     return [...[...lanes.values()].sort((a, b) => b.me - a.me || a.who.name.localeCompare(b.who.name)), free];
 }
@@ -46,7 +56,11 @@ export function buildLanes(cards, done, me) {
 /** @param {Issue[]} done @returns {[string, number][]} */
 export function closedBy(done) {
     const n = new Map();
-    for (const i of done) for (const k of i.assignees.length ? i.assignees.map(p => p.name) : ['unassigned']) n.set(k, (n.get(k) ?? 0) + 1);
+    for (const i of done) {
+        for (const k of i.assignees.length ? i.assignees.map(p => p.name) : ['unassigned']) {
+            n.set(k, (n.get(k) ?? 0) + 1);
+        }
+    }
     // @ts-expect-error boolean minus boolean is 0/1/-1 at runtime, the intended sort key
     return [...n].sort((a, b) => (a[0] === 'unassigned') - (b[0] === 'unassigned') || a[0].localeCompare(b[0]));
 }
@@ -66,20 +80,22 @@ export const shortTitle = (title, milestone) => {
 };
 
 const COLOURS = ['#0969da', '#8250df', '#1a7f37', '#9a6700', '#bf3989', '#0a7b83'];
-const first = n => n.split(' ')[0];
 const initials = n => n.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 
 /** @type {Milestones | null | undefined} */
 let data;
 let openIid = null, closedOpen = false;
 const sentAt = new Map(); // iid -> last send, so a re-render keeps the button showing it
+const SENT_SHOWN_MS = 3000; // how long "Sent ✓" shows; further sends of that issue are ignored meanwhile
 
 // Tabs: Work (the item list) and Issues. 1 and 2 switch (keys.js); the choice survives reloads.
 /** @param {string | null} tab */
 export function showTab(tab) {
     tab = tab === 'issues' ? 'issues' : 'work';
     store.set('tab', tab);
-    for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) b.setAttribute('aria-selected', b.dataset.tab === tab);
+    for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) {
+        b.setAttribute('aria-selected', b.dataset.tab === tab);
+    }
     $('masters').hidden = tab !== 'work';
     $('issues').hidden = tab !== 'issues';
 }
@@ -104,7 +120,8 @@ const NO_GROUPS = { closable: [], doing: [], assigned: [], unassigned: [], done:
 export function renderIssues(d = data) {
     data = d;
     const badge = $('tab-free'), free = d?.selected?.groups?.unassigned.length ?? 0;
-    badge.hidden = !free; badge.textContent = `${free} unassigned`;
+    badge.hidden = !free;
+    badge.textContent = `${free} unassigned`;
     const pane = $('issues'), hadFocus = pane.contains(document.activeElement);
     const ms = d?.selected;
     if (d === undefined || ms?.loading) {
@@ -116,9 +133,7 @@ export function renderIssues(d = data) {
     if (d?.reason) {
         const box = el('div', 'welcome', emptyText(d));
         if (d.url) {
-            const a = el('a', null, 'Milestones page ↗');
-            a.href = d.url; a.target = '_blank'; a.rel = 'noopener';
-            box.append(' ', a);
+            box.append(' ', link(null, 'Milestones page ↗', d.url));
         }
         pane.replaceChildren(box);
         return;
@@ -137,8 +152,12 @@ export function renderIssues(d = data) {
 // The Issues tab's line for a project without milestones to show (d.reason from /api/milestones).
 /** @param {Milestones} d */
 export function emptyText(d) {
-    if (d.reason === 'none') return `No open milestones in ${d.project}.`;
-    if (d.reason === 'unsupported') return `Milestones aren't available for ${d.project}: ${d.error ?? 'unknown project'}.`;
+    if (d.reason === 'none') {
+        return `No open milestones in ${d.project}.`;
+    }
+    if (d.reason === 'unsupported') {
+        return `Milestones aren't available for ${d.project}: ${d.error ?? 'unknown project'}.`;
+    }
     return `Milestones unavailable for ${d.project}: ${d.error ?? 'unknown error'}. Press r or the refresh button to retry.`;
 }
 
@@ -146,8 +165,7 @@ export function emptyText(d) {
 /** @param {SelectedMilestone & { groups: IssueGroups }} ms @param {string | false} [hint] */
 function head(ms, hint) {
     const g = ms.groups, open = ms.total - ms.closed, h = el('div', 'is-head');
-    const title = el('div', 'is-title'), gl = el('a', null, 'GitLab ↗');
-    gl.href = ms.url; gl.target = '_blank'; gl.rel = 'noopener';
+    const title = el('div', 'is-title'), gl = link(null, 'GitLab ↗', ms.url);
     title.append(el('b', null, `⚑ ${ms.title}`), gl);
     if (hint) {
         const s = el('span', 'is-hint');
@@ -160,14 +178,26 @@ function head(ms, hint) {
         [g.assigned.length, '--c-idle', 'not started'], [g.unassigned.length, '--c-needs', 'unassigned']];
     const bar = el('div', 'is-bar'), legend = el('div', 'is-legend');
     for (const [n, c, label] of segs) {
-        if (!n) continue;
-        const i = el('i'); i.style.flex = String(n); i.style.background = `var(${c})`; bar.append(i);
-        const s = el('span'); s.style.setProperty('--c', `var(${c})`); s.append(el('i', 'sw'), `${n} ${label}`); legend.append(s);
+        if (!n) {
+            continue;
+        }
+        const i = el('i');
+        i.style.flex = String(n);
+        i.style.background = `var(${c})`;
+        bar.append(i);
+        const s = el('span');
+        s.style.setProperty('--c', `var(${c})`);
+        s.append(el('i', 'sw'), `${n} ${label}`);
+        legend.append(s);
     }
-    const mid = el('div'); mid.append(bar, legend);
+    const mid = el('div');
+    mid.append(bar, legend);
     const due = el('div', 'is-due');
-    if (ms.due) due.append('due ', el('b', null, new Date(ms.due + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })));
-    else due.append(el('b', null, 'No due date'));
+    if (ms.due) {
+        due.append('due ', el('b', null, new Date(ms.due + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })));
+    } else {
+        due.append(el('b', null, 'No due date'));
+    }
     h.append(title, big, mid, due);
     return h;
 }
@@ -176,10 +206,16 @@ function head(ms, hint) {
 function lane({ who, me, list, closed }, n, ms) {
     const sec = el('section', 'lane' + (who ? '' : ' free')), side = el('div', 'who'), name = el('div', 'name');
     const av = el('span', 'av', who ? initials(who.name) : '?');
-    if (who) av.style.background = COLOURS[n % COLOURS.length];
-    name.append(av, who ? first(who.name) : 'Unassigned');
-    if (who) name.title = `${who.name} (@${who.username})`;
-    if (me) name.append(el('span', 'you', 'you'));
+    if (who) {
+        av.style.background = COLOURS[n % COLOURS.length];
+    }
+    name.append(av, who ? firstName(who.name) : 'Unassigned');
+    if (who) {
+        name.title = `${who.name} (@${who.username})`;
+    }
+    if (me) {
+        name.append(el('span', 'you', 'you'));
+    }
     const count = st => list.filter(c => c.st === st).length;
     const parts = who ? [['doing', 'in progress'], ['closable', 'can close'], ['todo', 'not started'], ['free', 'unassigned']].map(([st, l]) => count(st) && `${count(st)} ${l}`).filter(Boolean)
         : [`${list.length} up for grabs`];
@@ -193,36 +229,56 @@ function lane({ who, me, list, closed }, n, ms) {
 /** @param {Card} c @param {SelectedMilestone} ms */
 function card(c, ms) {
     const open = openIid === c.iid, a = el('article', `card ${c.st}${open ? ' open' : ''}`);
-    a.dataset.key = `issue:${c.iid}`; a.dataset.url = c.url;
+    a.dataset.key = `issue:${c.iid}`;
+    a.dataset.url = c.url;
     a.setAttribute('aria-expanded', open);
     const top = el('div', 'top');
     top.append(el('span', 'mono', `#${c.iid}`), el('span', 'st', STATES[c.st]), el('span', 'age', c.updated ? ago(Date.parse(c.updated)) : ''));
-    if (c.updated) /** @type {HTMLElement} */ (top.lastChild).title = `Updated ${new Date(c.updated).toLocaleString()}`;
+    if (c.updated) {
+        /** @type {HTMLElement} */ (top.lastChild).title = `Updated ${new Date(c.updated).toLocaleString()}`;
+    }
     const ft = el('div', 'ft');
-    for (const m of c.mrs) ft.append(prChip({ pr: m.url }), ...ciPill(m.pipeline));
-    if (!c.mrs.length) ft.append(el('span', 'chip', 'no MR'));
+    for (const m of c.mrs) {
+        ft.append(prChip({ pr: m.url }), ...ciPill(m.pipeline));
+    }
+    if (!c.mrs.length) {
+        ft.append(el('span', 'chip', 'no MR'));
+    }
     a.append(top, el('div', 'tt', open ? c.title : shortTitle(c.title, ms.title)), ft);
-    if (!open) a.title = c.title;
-    if (open) a.append(more(c));
-    a.onclick = () => { openIid = open ? null : c.iid; renderIssues(); };
+    if (open) {
+        a.append(more(c));
+    } else {
+        a.title = c.title;
+    }
+    a.onclick = () => {
+        openIid = open ? null : c.iid;
+        renderIssues();
+    };
     return a;
 }
 
 /** @param {Card} c */
 function more(c) {
     const box = el('div', 'more'), msg = chatMessage(c), acts = el('div', 'acts');
-    if (c.desc) box.append(el('div', 'desc', c.desc));
-    const sent = Date.now() - (sentAt.get(c.iid) ?? 0) < 3000;
+    if (c.desc) {
+        box.append(el('div', 'desc', c.desc));
+    }
+    const sent = Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_SHOWN_MS;
     const send = waButton(sent ? 'Sent ✓' : 'Send to chat', null, { variant: 'brand', appearance: 'filled', ...(sent || !chatSession() ? { disabled: true } : {}) });
     send.onclick = e => {
         e.stopPropagation();
         const s = chatSession();
-        if (!s || Date.now() - (sentAt.get(c.iid) ?? 0) < 3000) return;
-        sentAt.set(c.iid, Date.now()); renderIssues(); setTimeout(() => renderIssues(), 3000);
+        if (!s || Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_SHOWN_MS) {
+            return;
+        }
+        sentAt.set(c.iid, Date.now());
+        renderIssues();
+        setTimeout(() => renderIssues(), SENT_SHOWN_MS);
         sendText(s.id, msg);
     };
-    const note = el('span', 'msg', 'sends '); note.append(el('code', null, msg));
-    const gl = el('a', 'gl', 'Open in GitLab ↗'); gl.href = c.url; gl.target = '_blank'; gl.rel = 'noopener';
+    const note = el('span', 'msg', 'sends ');
+    note.append(el('code', null, msg));
+    const gl = link('gl', 'Open in GitLab ↗', c.url);
     acts.append(send, tooltip(send, chatSession() ? `Types "${msg}" into the chat on the right` : 'No chat session to send to'), note, gl);
     box.append(acts);
     box.onclick = e => e.stopPropagation();
@@ -232,9 +288,13 @@ function more(c) {
 /** @param {Issue[]} done */
 function closedLine(done) {
     const d = el('details', 'is-closed'), s = el('summary');
-    s.append(el('b', null, `Closed · ${done.length}`), el('span', null, closedBy(done).map(([who, n]) => `${who === 'unassigned' ? who : first(who)} ${n}`).join(' · ')));
+    s.append(el('b', null, `Closed · ${done.length}`), el('span', null, closedBy(done).map(([who, n]) => `${who === 'unassigned' ? who : firstName(who)} ${n}`).join(' · ')));
     const chips = el('div', 'chips');
-    chips.append(...done.map(i => { const a = el('a', 'chip', `#${i.iid} ${i.title}`); a.href = i.url; a.target = '_blank'; a.rel = 'noopener'; a.title = i.title; return a; }));
+    chips.append(...done.map(i => {
+        const a = link('chip', `#${i.iid} ${i.title}`, i.url);
+        a.title = i.title;
+        return a;
+    }));
     d.append(s, chips);
     d.open = closedOpen;
     d.ontoggle = () => { closedOpen = d.open; };
@@ -243,7 +303,10 @@ function closedLine(done) {
 
 // Esc in the Issues tab folds the open card; false when there was none.
 export function collapseIssue() {
-    if (openIid == null) return false;
-    openIid = null; renderIssues();
+    if (openIid == null) {
+        return false;
+    }
+    openIid = null;
+    renderIssues();
     return true;
 }

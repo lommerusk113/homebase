@@ -542,6 +542,49 @@ export function turnPrompts(entries, ageMs) {
     return prompts;
 }
 
+const spawnCache = new WeakMap(); // parsed tail (one per transcript mtime) -> its spawnPrompts
+const NOTE = /<task-id>(\w+)<\/task-id>(?:\s*<tool-use-id>(\w+)<\/tool-use-id>)?/;
+
+// The human prompts behind each Agent call in the tail, as tool_use id -> text: those of the turn that made the call
+// (the one that started it plus any queued into it before the call). A turn a task notification started inherits them
+// from the agent it reports on, so the agents a gate's verdict leads to link like the gate.
+export function spawnPrompts(entries) {
+
+    if (spawnCache.has(entries)) {
+        return spawnCache.get(entries);
+    }
+
+    const byUse = new Map(), useOf = new Map(); // tool_use id -> prompts; agent id -> its tool_use id
+    let prompts = [];
+    for (const e of entries) {
+        if (e.isSidechain) {
+            continue;
+        }
+        const a = e.type === 'attachment' ? e.attachment : null;
+        const blocks = Array.isArray(e.message?.content) ? e.message.content : [];
+        if (e.type === 'user' && e.turnPosition) {
+            const note = textOf(e).match(NOTE);
+            prompts = isHumanPrompt(e) ? [unwrapPasted(textOf(e))] : byUse.get(note?.[2] ?? useOf.get(note?.[1])) ?? [];
+        } else if (a?.type === 'queued_command' && a.origin?.kind === 'human') {
+            prompts = [...prompts, unwrapPasted(textOf({ message: { content: a.prompt } }))];
+        } else if (e.type === 'assistant') {
+            blocks.filter(b => b.type === 'tool_use' && (b.name === 'Agent' || b.name === 'Task')).forEach(b => byUse.set(b.id, prompts));
+        } else if (e.type === 'user') {
+            for (const b of blocks.filter(b => b.type === 'tool_result' && byUse.has(b.tool_use_id))) {
+                const id = JSON.stringify(b.content ?? '').match(/agentId: (\w+)/)?.[1];
+                if (id) {
+                    useOf.set(id, b.tool_use_id);
+                }
+            }
+        }
+    }
+
+    const out = new Map([...byUse].filter(([, p]) => p.length).map(([id, p]) => [id, p.join('\n')]));
+    spawnCache.set(entries, out);
+
+    return out;
+}
+
 const usageCache = new Map(); // subagent transcript path -> { offset, byId, first, last, totals }
 export const USAGE_KEYS = { input: 'input_tokens', output: 'output_tokens', cacheRead: 'cache_read_input_tokens', cacheWrite: 'cache_creation_input_tokens' };
 

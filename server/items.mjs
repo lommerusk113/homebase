@@ -187,7 +187,8 @@ const gateHeads = new Map(); // gate run -> MR head sha first seen with it
 const leadRefs = text => [PR_URL, /(?<![\w&!#])!\d+/, /(?<![\w&!#])#\d+/].map(re => text.match(re)?.[0]).filter(Boolean).join(' ');
 
 // An agent works on an MR when its description names `!N`, or, while not done, it is on the MR's branch, its
-// description names the MR or its issue, or its prompt's first MR or issue ref is it.
+// description names the MR or its issue, its prompt's first MR or issue ref is it, or the master's prompt behind the
+// call that started it (`spawnedFor`) names it anywhere, as "merge !1784 and !1785" does both.
 export function worksOnMr(agent, url, prState) {
 
     const n = mrNumber(url);
@@ -199,7 +200,7 @@ export function worksOnMr(agent, url, prState) {
     }
 
     return (!!prState?.branch && (agent.branches ?? [agent.branch]).includes(prState.branch))
-        || mentionsMr(`${agent.description ?? ''} ${leadRefs(agent.prompt ?? '')}`, url, prState?.issue);
+        || mentionsMr(`${agent.description ?? ''} ${leadRefs(agent.prompt ?? '')}\n${agent.spawnedFor ?? ''}`, url, prState?.issue);
 }
 
 // The newest human prompt of an open turn in a session of the project that names the MR, as { at, text }, else null.

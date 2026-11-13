@@ -226,7 +226,8 @@ assert.equal(repoName('https://github.com/contaas/portal-frontend'), 'portal-fro
 console.log('ok repo name');
 import { rowAction } from './server.mjs';
 const act = (prState, agent, url = mr(4)) => rowAction(url, prState, agent, 'T');
-assert.deepEqual(act(open({ ready: true, reviewers: ['Ann'] }), null), { label: 'Merge + close issue', message: `Merge !4 (${mr(4)}) and close its issue.` });
+assert.deepEqual(act(open({ ready: true, reviewers: ['Ann'] }), null), { label: 'Merge + close issue', message: `Run review-gate on !4 (${mr(4)}). If the verdict is ready, merge it and close its issue. If it's fix first, show me the findings and don't merge.` });
+assert.equal(act(open({ ready: true }), null, 'https://github.com/o/r/pull/9').message.slice(0, 63), 'Run review-gate on #9 (https://github.com/o/r/pull/9). If the v');
 assert.deepEqual(act(open({ changes: true, reviewers: ['Ann'] }), { status: 'stopped' }), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
 assert.deepEqual(act(open({ ci: 'failing', reviewers: ['Ann'] }), null), { label: 'Fix pipeline', message: `The pipeline on !4 (${mr(4)}) is failing — find out why and fix it.` });
 assert.deepEqual(act(open(), { status: 'done' }), { label: 'Request review', message: `Assign a reviewer to !4 (${mr(4)}) — suggest who.` });
@@ -238,6 +239,46 @@ assert.equal(act(open({ reviewers: ['Ann'] }), null), null); // waiting on revie
 assert.equal(act({ state: 'merged' }, null), null);
 assert.equal(act(open({ draft: true }), null), null);
 assert.equal(act(null, null), null); // state unknown
+
+import { gateRuns, gateFor, gateBadge } from './server.mjs';
+// shapes as in real transcripts: Skill tool_use { skill, args }, the skill's report as later assistant text
+const said = (ts, ...content) => ({ type: 'assistant', timestamp: ts, message: { content } });
+const skill = (name, args) => ({ type: 'tool_use', id: 'toolu_01', name: 'Skill', input: { skill: name, args } });
+const txt = text => ({ type: 'text', text });
+const gateTail = [
+    said('2026-11-13T10:00:00Z', txt('**ready** to go, I think')), // before any gate: ignored
+    said('2026-11-13T10:01:00Z', skill('review-gate', `!4 ${mr(4)}`)),
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_01', content: 'Launching skill: review-gate' }] } },
+    said('2026-11-13T10:02:00Z', txt('Running code-review and threat-review as subagents.')),
+    said('2026-11-13T10:09:00Z', txt('**Verdict: fix first** — adds the gate badge\n\n| # | Sev |\n\n**TLDR:** **Fix first**: one HIGH on !4, fix the null check.')),
+    said('2026-11-13T11:00:00Z', skill('review-gate', 'branch kjn-gate at commit abc1234')),
+    said('2026-11-13T11:05:00Z', txt('Verdict: **ready** — clean.\nTLDR: **ready**, open it.'))
+];
+const runs = gateRuns(gateTail);
+assert.deepEqual(runs.map(r => [r.verdict, r.at, r.tldr, r.commit]), [
+    ['fix first', Date.parse('2026-11-13T10:09:00Z'), '**Fix first**: one HIGH on !4, fix the null check.', null],
+    ['ready', Date.parse('2026-11-13T11:05:00Z'), '**ready**, open it.', 'abc1234']
+]);
+assert.deepEqual(gateRuns([said('t', skill('code-review', '!4')), said('t', txt('**Verdict: ready**'))]), []); // other skills don't arm
+// a subagent briefed with review-gate reports through its handback
+const handback = said('2026-11-13T12:00:00Z', { type: 'tool_use', name: 'SubagentHandback', input: { message: '**Verdict: ready** — fine\n\n**TLDR:** **ready** for review, open !7.' } });
+assert.equal(gateRuns([handback], 'Run review-gate on the branch').at(0).verdict, 'ready');
+assert.deepEqual(gateRuns([handback], 'Implement the badge'), []);
+// association: URL, !N (not !40 or a path), branch
+assert.equal(gateFor(runs, mr(4), 'x'), runs[0]);
+assert.equal(gateFor(runs, mr(9), 'kjn-gate'), runs[1]);
+assert.equal(gateFor(runs, mr(40), 'other'), null);
+assert.equal(gateFor([{ text: 'see #9', at: 1 }], 'https://github.com/o/r/pull/9', null).at, 1);
+// staleness: commit from the report, else the head first seen with the run
+assert.equal(gateBadge(runs[1], 'abc1234ffff').stale, false);
+assert.equal(gateBadge(runs[1], 'def5678ffff').stale, true);
+const heads = new Map();
+assert.equal(gateBadge(runs[0], 'aaa111', heads).stale, false);
+assert.deepEqual(gateBadge(runs[0], 'bbb222', heads), { verdict: 'fix first', at: runs[0].at, tldr: runs[0].tldr, commit: null, stale: true });
+assert.equal(gateBadge(null, 'x'), null);
+const gated = workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: runs, agents: [] }], () => open({ ready: true, sha: 'abc' }), 0, new Map());
+assert.equal(gated[0].gate.verdict, 'fix first');
+console.log('ok review gate');
 assert.equal(items[1].action, null);
 console.log('ok actions');
 

@@ -5,16 +5,26 @@ import { milestoneTag } from './milestone.js';
 
 
 /** @param {Column} key */
-const dot = key => { const d = el('span', 'dot' + (key === 'doing' ? ' live' : '')); d.style.setProperty('--c', `var(${COL[key].color})`); return d; };
+const dot = key => {
+    const d = el('span', 'dot' + (key === 'doing' ? ' live' : ''));
+    d.style.setProperty('--c', `var(${COL[key].color})`);
+    return d;
+};
 
 // CI pill next to the MR chip: ✓ passed, ✗ failed, ● running/pending, grey for the rest; nothing without a pipeline.
 const PIPE = { success: ['✓', 'passed'], failed: ['✗', 'failed'], running: ['●', 'running'], pending: ['●', 'pending'], created: ['●', 'pending'], preparing: ['●', 'pending'], waiting_for_resource: ['●', 'pending'], scheduled: ['●', 'scheduled'] };
 /** @param {Pipeline | null | undefined} p @returns {HTMLElement[]} */
 export function ciPill(p) {
-    if (!p?.status) return [];
+    if (!p?.status) {
+        return [];
+    }
     const [icon, word] = PIPE[p.status] ?? ['–', p.status.replace(/_/g, ' ')];
     const a = el(p.url ? 'a' : 'span', `ci-pill ci-${p.status}`, icon);
-    if (a instanceof HTMLAnchorElement) { a.href = p.url; a.target = '_blank'; a.onclick = e => e.stopPropagation(); }
+    if (a instanceof HTMLAnchorElement) {
+        a.href = p.url;
+        a.target = '_blank';
+        a.onclick = e => e.stopPropagation();
+    }
     const when = p.at && ago(Date.parse(p.at));
     a.setAttribute('aria-label', `Pipeline ${word}`);
     return [a, tooltip(a, `Pipeline ${word}${when ? ` · ${when === 'now' ? 'just now' : `${when} ago`}` : ''}`)];
@@ -23,7 +33,9 @@ export function ciPill(p) {
 // review-gate badge next to the MR chip: ✓ gate (ready), ⚠ gate (fix first), gate stale once the MR head moved; nothing if it never ran.
 /** @param {Gate | null} g @returns {HTMLElement[]} */
 function gateBadge(g) {
-    if (!g) return [];
+    if (!g) {
+        return [];
+    }
     const [cls, label] = g.stale ? ['stale', 'gate stale'] : g.verdict === 'ready' ? ['ready', '✓ gate'] : ['fix', '⚠ gate'];
     const b = el('span', `gate-badge gate-${cls}`, label);
     const when = g.at && ago(g.at);
@@ -38,7 +50,9 @@ export function sessionRows(visible, unfolded = new Set(), max = 2) {
     /** @type {Map<string, Session[]>} */
     const by = new Map();
     for (const s of visible.filter(isMaster).sort((a, b) => (b.lastActivity ?? b.created ?? 0) - (a.lastActivity ?? a.created ?? 0))) {
-        if (!by.has(s.project)) by.set(s.project, []);
+        if (!by.has(s.project)) {
+            by.set(s.project, []);
+        }
         by.get(s.project).push(s);
     }
     return [...by].map(([project, list]) => {
@@ -49,11 +63,16 @@ export function sessionRows(visible, unfolded = new Set(), max = 2) {
 // What the session is on: its newest reply's topic, else the start of its last prompt.
 /** @param {Pick<Session, 'topic' | 'lastPrompt'>} s */
 export function sessionTopic(s) {
-    if (s.topic) return s.topic;
+    if (s.topic) {
+        return s.topic;
+    }
     return excerpt(s.lastPrompt) || 'No prompt yet';
 }
 // plain() would also drop the # of "#2225"; only markdown emphasis and leading heading marks go here
-const excerpt = (t, n = 80) => { const p = (t || '').replace(/[*_`>]+|^\s*#+\s+/g, '').replace(/\s+/g, ' ').trim(); return p.length > n ? p.slice(0, n).replace(/\s+\S*$/, '') + '…' : p; };
+const excerpt = (t, n = 80) => {
+    const p = (t || '').replace(/[*_`>]+|^\s*#+\s+/g, '').replace(/\s+/g, ' ').trim();
+    return p.length > n ? p.slice(0, n).replace(/\s+\S*$/, '') + '…' : p;
+};
 // Issues (#N) the session's running or queued prompts name that no work item covers yet: placeholder rows in Doing.
 /** @param {Session} s @param {WorkItem[]} items the project's items @returns {string[]} */
 export function startingIssues(s, items) {
@@ -64,18 +83,24 @@ export function startingIssues(s, items) {
 // working (from the turn start), asking, or idle since the last activity.
 /** @param {Session} s @returns {{ kind: 'working' | 'asking' | 'idle', text: string }} */
 export function sessionState(s) {
-    if (s.asking) return { kind: 'asking', text: 'Claude is asking' };
+    if (s.asking) {
+        return { kind: 'asking', text: 'Claude is asking' };
+    }
     const t = ago(s.status === 'working' ? s.since ?? s.lastActivity ?? s.updated : s.lastActivity ?? s.updated);
     return s.status === 'working' ? { kind: 'working', text: `working${t === 'now' ? '' : ` · ${t}`}` } : { kind: 'idle', text: `idle · ${t}` };
 }
 function renderSessions() {
     const unfolded = new Set([...state.unfold].filter(k => k.startsWith('sessions:')).map(k => k.slice(9)));
     const groups = sessionRows(visibleSessions(), unfolded), bound = chatSession()?.id, all = state.project === 'all';
-    if (!groups.length) return null;
+    if (!groups.length) {
+        return null;
+    }
     const sec = el('section', 'group g-sessions'), h = el('h2', 'g-head', 'Sessions');
     sec.append(h);
     for (const g of groups) {
-        if (all) sec.append(el('div', 's-proj', g.project));
+        if (all) {
+            sec.append(el('div', 's-proj', g.project));
+        }
         for (const s of g.shown) {
             const st = sessionState(s), r = el('div', `s-row s-${st.kind}${s.id === bound ? ' bound' : ''}`);
             r.dataset.key = `session:${s.id}`;
@@ -84,17 +109,28 @@ function renderSessions() {
             const now = st.kind === 'working' && s.now ? excerpt(s.now, 60) : '';
             // no topic yet: sessionTopic would repeat the running prompt, so Now stands alone
             const topic = el('span', 's-topic', s.topic || !now ? sessionTopic(s) : '');
-            if (now) topic.append(el('span', 's-now', `${topic.textContent ? ' · ' : ''}Now: ${now}`));
+            if (now) {
+                topic.append(el('span', 's-now', `${topic.textContent ? ' · ' : ''}Now: ${now}`));
+            }
             r.append(el('span', 'pulse'), el('span', 's-state', st.text), topic, el('span', 's-counts', counts));
-            if (s.queued?.length) { const q = el('span', 'chip s-queued', `Queued: ${s.queued.length}`); r.append(q, tooltip(q, s.queued.map(t => excerpt(t, 120)).join(' · '))); }
-            if (s.id === bound) r.append(el('span', 'chip s-chat', 'chat'));
+            if (s.queued?.length) {
+                const q = el('span', 'chip s-queued', `Queued: ${s.queued.length}`);
+                r.append(q, tooltip(q, s.queued.map(t => excerpt(t, 120)).join(' · ')));
+            }
+            if (s.id === bound) {
+                r.append(el('span', 'chip s-chat', 'chat'));
+            }
             r.title = counts ? `Subagents: ${counts} (finished in the last 2h)` : '';
             r.onclick = () => bindChat(s.id);
             sec.append(r);
         }
         if (g.older) {
             const b = el('button', 'show s-older', `+${g.older} older`);
-            b.onclick = e => { e.stopPropagation(); state.unfold.add(`sessions:${g.project}`); renderBoard(); };
+            b.onclick = e => {
+                e.stopPropagation();
+                state.unfold.add(`sessions:${g.project}`);
+                renderBoard();
+            };
             sec.append(b);
         }
     }
@@ -128,26 +164,49 @@ function renderItems() {
             const fresh = x.pr ? freshComments(x.comments, seenAt(x.pr)) : [];
             const next = el('small', 'next', `Next: ${x.next}${fresh.length ? ` · ${fresh.length} new comment${fresh.length === 1 ? '' : 's'}` : ''}`);
             // before Next, so the ellipsis doesn't cut it
-            if (unanswered.has(x.key) && x.action && !x.sent && !x.requested) next.prepend(el('span', 'no-reply', 'No response yet — check the chat · '));
-            if (x.comments?.count) next.prepend(commentBadge(x, fresh), ' ');
+            if (unanswered.has(x.key) && x.action && !x.sent && !x.requested) {
+                next.prepend(el('span', 'no-reply', 'No response yet — check the chat · '));
+            }
+            if (x.comments?.count) {
+                next.prepend(commentBadge(x, fresh), ' ');
+            }
             what.append(el('b', null, x.title), next);
-            if (x.milestone) what.firstElementChild.prepend(milestoneTag(x));
-            const prog = el('td', 'prog'); prog.append(stageBar(x));
+            if (x.milestone) {
+                what.firstElementChild.prepend(milestoneTag(x));
+            }
+            const prog = el('td', 'prog');
+            prog.append(stageBar(x));
             if (x.tokens || x.time) {
                 const m = el('small', 'meta', [x.tokens, x.time].filter(Boolean).join(' · '));
                 prog.append(m);
-                if (x.tokensTitle) prog.append(tooltip(m, x.tokensTitle));
+                if (x.tokensTitle) {
+                    prog.append(tooltip(m, x.tokensTitle));
+                }
             }
-            const pr = el('td', 'pr'); if (x.pr) pr.append(prChip(x), ...ciPill(x.prState?.pipeline), ...gateBadge(x.gate));
-            const br = el('td', 'br'); if (x.branch) br.append(el('span', 'chip mono', x.branch));
-            const act = el('td', 'act'); act.append(...openButton(x));
-            if (x.sent || x.requested) act.append(sentPill(x));
-            else if (x.action && x.sessionId) act.append(...actionButton(x));
+            const pr = el('td', 'pr');
+            if (x.pr) {
+                pr.append(prChip(x), ...ciPill(x.prState?.pipeline), ...gateBadge(x.gate));
+            }
+            const br = el('td', 'br');
+            if (x.branch) {
+                br.append(el('span', 'chip mono', x.branch));
+            }
+            const act = el('td', 'act');
+            act.append(...openButton(x));
+            if (x.sent || x.requested) {
+                act.append(sentPill(x));
+            } else if (x.action && x.sessionId) {
+                act.append(...actionButton(x));
+            }
             tr.append(what, prog, pr, br, act, el('td', 'when', ago(x.updated)));
             tr.onclick = () => select(x);
-            if (state.selected !== x.key) return [tr];
+            if (state.selected !== x.key) {
+                return [tr];
+            }
             const more = el('tr', 'detail'), td = el('td');
-            td.colSpan = 6; td.append(detail(x)); more.append(td);
+            td.colSpan = 6;
+            td.append(detail(x));
+            more.append(td);
             return [tr, more];
         }));
         return t;
@@ -161,8 +220,16 @@ function renderItems() {
         sum.slot = 'summary';
         sum.append(dot(c.key), `${c.label} (${list.length})`);
         // tooltips inside also fire wa-show/wa-hide, and those bubble
-        f.addEventListener('wa-show', e => { if (e.target === f) setOpen(true); });
-        f.addEventListener('wa-hide', e => { if (e.target === f) setOpen(false); });
+        f.addEventListener('wa-show', e => {
+            if (e.target === f) {
+                setOpen(true);
+            }
+        });
+        f.addEventListener('wa-hide', e => {
+            if (e.target === f) {
+                setOpen(false);
+            }
+        });
         f.append(sum, table(list));
         return f;
     };
@@ -170,12 +237,21 @@ function renderItems() {
     const finishedKey = `fold:finished:${state.project}`;
     const groups = COLUMNS.map(c => {
         const list = items.filter(x => x.column === c.key), extra = c.key === 'doing' ? placeholders : [];
-        if (!list.length && !extra.length) return null;
-        if (c.key === 'done') return fold(c, list, !!state.showMerged, v => { state.showMerged = v; });
-        if (c.key === 'finished') return fold(c, list, store.get(finishedKey) === 'open', v => store.set(finishedKey, v ? 'open' : 'closed'));
-        const h = el('h2', 'g-head'); h.append(dot(c.key), `${c.label} · ${list.length + extra.length}`);
-        const t = table(list); t.prepend(...extra);
-        const sec = el('section', `group g-${c.key}`); sec.append(h, t);
+        if (!list.length && !extra.length) {
+            return null;
+        }
+        if (c.key === 'done') {
+            return fold(c, list, !!state.showMerged, v => { state.showMerged = v; });
+        }
+        if (c.key === 'finished') {
+            return fold(c, list, store.get(finishedKey) === 'open', v => store.set(finishedKey, v ? 'open' : 'closed'));
+        }
+        const h = el('h2', 'g-head');
+        h.append(dot(c.key), `${c.label} · ${list.length + extra.length}`);
+        const t = table(list);
+        t.prepend(...extra);
+        const sec = el('section', `group g-${c.key}`);
+        sec.append(h, t);
         return sec;
     }).filter(Boolean);
     const hadFocus = $('masters').contains(document.activeElement); // replaceChildren drops it; keys.js puts it back
@@ -193,21 +269,44 @@ function commentBadge(x, fresh) {
     b.setAttribute('aria-label', fresh.length ? `${fresh.length} new comments` : `${x.comments.count} comments, none new`);
     return b;
 }
-const markAllSeen = () => { for (const x of state.sessions.flatMap(s => s.items || [])) if (x.pr) markSeen(x.pr); renderBoard(); updateTitle(); };
+const markAllSeen = () => {
+    for (const x of state.sessions.flatMap(s => s.items || [])) {
+        if (x.pr) {
+                markSeen(x.pr);
+            }
+    }
+    renderBoard();
+    updateTitle();
+};
 
 // Optimistic "sent" marks: item key -> click time, in memory and sessionStorage, until the server reports the item
 // requested or doing, or SENT_MS pass without that (then the button comes back with a hint).
 const SENT_MS = 120_000;
-const sent = new Map((() => { try { return JSON.parse(sessionStorage.getItem('sent')) ?? []; } catch { return []; } })());
+const sent = new Map((() => {
+    try {
+        return JSON.parse(sessionStorage.getItem('sent')) ?? [];
+    } catch {
+        return [];
+    }
+})());
 const unanswered = new Set(); // keys whose mark timed out
-const saveSent = () => { try { sessionStorage.setItem('sent', JSON.stringify([...sent])); } catch {} };
+const saveSent = () => {
+    try {
+        sessionStorage.setItem('sent', JSON.stringify([...sent]));
+    } catch {}
+};
 /** @param {WorkItem} x @returns {WorkItem} */
 function optimistic(x, now = Date.now()) {
     const at = sent.get(x.key);
-    if (at == null) return x;
+    if (at == null) {
+        return x;
+    }
     if (x.requested || x.column === 'doing' || now - at > SENT_MS) {
-        sent.delete(x.key); saveSent();
-        if (!x.requested && x.column !== 'doing') unanswered.add(x.key);
+        sent.delete(x.key);
+        saveSent();
+        if (!x.requested && x.column !== 'doing') {
+            unanswered.add(x.key);
+        }
         return x;
     }
     return { ...x, sent: at, column: 'doing', next: 'Sent to Claude…' };
@@ -227,11 +326,24 @@ function actionButton(x) {
     const b = waButton(x.action.label, 'act-btn');
     b.onclick = async e => {
         e.stopPropagation();
-        if (sent.has(x.key)) return;
-        sent.set(x.key, Date.now()); saveSent(); unanswered.delete(x.key);
-        if (x.sessionId !== chatSession()?.id) bindChat(x.sessionId); else renderBoard();
+        if (sent.has(x.key)) {
+            return;
+        }
+        sent.set(x.key, Date.now());
+        saveSent();
+        unanswered.delete(x.key);
+        if (x.sessionId !== chatSession()?.id) {
+            bindChat(x.sessionId);
+        } else {
+            renderBoard();
+        }
         setTimeout(renderBoard, SENT_MS + 500);
-        if (!await sendText(x.sessionId, x.action.message)) { sent.delete(x.key); saveSent(); renderBoard(); } // sendText shows the error
+        // a failed send drops the sent mark; sendText shows the error
+        if (!await sendText(x.sessionId, x.action.message)) {
+            sent.delete(x.key);
+            saveSent();
+            renderBoard();
+        }
     };
     return [b, tooltip(b, x.action.message)];
 }
@@ -241,19 +353,31 @@ const CODE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" s
 /** @param {WorkItem} x @returns {HTMLElement[]} */
 function openButton(x) {
     const eds = state.editors ?? [];
-    if (!x.folder || !eds.length) return [];
+    if (!x.folder || !eds.length) {
+        return [];
+    }
     const last = store.get('editor'), ordered = [...eds.filter(e => e.id === last), ...eds.filter(e => e.id !== last)];
-    const open = /** @param {Editor} ed */ ed => { store.set('editor', ed.id); api(`/api/open?item=${encodeURIComponent(x.key)}&editor=${ed.id}`, { method: 'POST' }); };
+    const open = /** @param {Editor} ed */ ed => {
+        store.set('editor', ed.id);
+        api(`/api/open?item=${encodeURIComponent(x.key)}&editor=${ed.id}`, { method: 'POST' });
+    };
     const b = waButton('', 'open-btn', { appearance: 'plain', 'aria-label': ordered.length > 1 ? 'Open in editor' : `Open in ${ordered[0].name}` });
     b.innerHTML = CODE_ICON;
     const tip = tooltip(b, b.getAttribute('aria-label'));
     if (ordered.length === 1) {
-        b.onclick = e => { e.stopPropagation(); open(ordered[0]); };
+        b.onclick = e => {
+            e.stopPropagation();
+            open(ordered[0]);
+        };
         return [b, tip];
     }
     const dd = el('wa-dropdown');
     b.slot = 'trigger';
-    dd.append(b, ...ordered.map(ed => { const i = el('wa-dropdown-item', null, `Open in ${ed.name}`); i.value = ed.id; return i; }));
+    dd.append(b, ...ordered.map(ed => {
+        const i = el('wa-dropdown-item', null, `Open in ${ed.name}`);
+        i.value = ed.id;
+        return i;
+    }));
     dd.onclick = e => e.stopPropagation();
     dd.addEventListener('wa-select', e => open(eds.find(ed => ed.id === e.detail.item.value)));
     return [dd, tip];
@@ -264,8 +388,16 @@ function openButton(x) {
 export function select(x) {
     state.selected = state.selected === x.key ? null : x.key;
     // opening marks the MR seen; the detail still lists what was new until then
-    if (state.selected && x.pr) { state.opened = { key: x.key, since: seenAt(x.pr) }; markSeen(x.pr); updateTitle(); }
-    if (x.sessionId && x.sessionId !== chatSession()?.id) bindChat(x.sessionId); else renderBoard();
+    if (state.selected && x.pr) {
+        state.opened = { key: x.key, since: seenAt(x.pr) };
+        markSeen(x.pr);
+        updateTitle();
+    }
+    if (x.sessionId && x.sessionId !== chatSession()?.id) {
+        bindChat(x.sessionId);
+    } else {
+        renderBoard();
+    }
 }
 /** @param {WorkItem} x */
 function detail(x) {
@@ -274,24 +406,30 @@ function detail(x) {
         const fresh = freshComments(x.comments, state.opened?.key === x.key ? state.opened.since : seenAt(x.pr));
         const h = el('h4', null, fresh.length ? `New comments · ${fresh.length}` : `Comments · ${x.comments.count} · none new`), all = el('button', 'show mark-all', 'Mark all seen');
         all.onclick = markAllSeen;
-        h.append(all); d.append(h);
+        h.append(all);
+        d.append(h);
         if (fresh.length) {
             const ul = el('ul', 'comments');
             ul.append(...fresh.map(c => {
                 const li = el('li'), a = el('a', null, c.excerpt || '(no text)');
-                a.href = c.url; a.target = '_blank';
+                a.href = c.url;
+                a.target = '_blank';
                 li.append(el('b', null, c.author), el('span', 'muted', ` · ${ago(Date.parse(c.at))}${c.resolved === false ? ' · unresolved' : ''} · `), a);
                 return li;
             }));
             d.append(ul);
         }
     }
-    if (x.tldr || x.body) d.append(...foldable(x.tldr, x.body, `item:${x.key}`));
+    if (x.tldr || x.body) {
+        d.append(...foldable(x.tldr, x.body, `item:${x.key}`));
+    }
     if (x.activity?.length) {
         const ul = el('ul', 'activity');
         ul.append(...x.activity.map(a => {
             const li = el('li'), badge = el('wa-badge', null, a.status);
-            badge.setAttribute('variant', 'neutral'); badge.setAttribute('appearance', 'filled'); badge.setAttribute('pill', '');
+            badge.setAttribute('variant', 'neutral');
+            badge.setAttribute('appearance', 'filled');
+            badge.setAttribute('pill', '');
             li.append(badge, ' ', el('b', null, a.description), a.tldr ? ` — ${plain(a.tldr)}` : '');
             return li;
         }));
@@ -299,10 +437,17 @@ function detail(x) {
     }
     if (x.files?.length) {
         const ul = el('ul', 'files');
-        ul.append(...x.files.map(f => { const li = el('li'), i = f.lastIndexOf('/'); li.title = f; li.append(f.slice(0, i + 1), el('b', null, f.slice(i + 1))); return li; }));
+        ul.append(...x.files.map(f => {
+            const li = el('li'), i = f.lastIndexOf('/');
+            li.title = f;
+            li.append(f.slice(0, i + 1), el('b', null, f.slice(i + 1)));
+            return li;
+        }));
         d.append(el('h4', null, `Files edited · ${x.files.length}`), ul);
     }
-    if (!d.children.length) d.append(el('p', 'muted', 'Nothing to show yet.'));
+    if (!d.children.length) {
+        d.append(el('p', 'muted', 'Nothing to show yet.'));
+    }
     d.onclick = e => e.stopPropagation();
     return d;
 }
@@ -311,7 +456,11 @@ function detail(x) {
 function stageBar(x) {
     const w = el('div', 'stage'), bar = el('div', 'bar');
     w.style.setProperty('--c', `var(${COL[x.column].color})`);
-    LIFECYCLE.forEach((name, i) => { const s = el('i', i < x.stage ? 'on' : i === x.stage ? (x.agentStatus === 'running' || x.sent || x.requested ? 'on now' : 'on') : ''); s.title = name; bar.append(s); });
+    LIFECYCLE.forEach((name, i) => {
+        const s = el('i', i < x.stage ? 'on' : i === x.stage ? (x.agentStatus === 'running' || x.sent || x.requested ? 'on now' : 'on') : '');
+        s.title = name;
+        bar.append(s);
+    });
     w.append(bar, el('small', null, x.stageLabel));
     return w;
 }
@@ -335,7 +484,9 @@ export function renderBoard() {
  * @returns {AttentionEvent[]}
  */
 export function attentionEvents(prevItems, nextItems, seen = () => 0) {
-    if (!prevItems) return [];
+    if (!prevItems) {
+        return [];
+    }
     const before = new Map(prevItems.map(x => [x.key, x])), nextKeys = new Set(nextItems.map(x => x.key));
     const failing = /** @param {WorkItem | undefined} x */ x => x?.prState?.ci === 'failing';
     const events = nextItems.flatMap(x => {
@@ -348,7 +499,9 @@ export function attentionEvents(prevItems, nextItems, seen = () => 0) {
     });
     const comments = nextItems.flatMap(x => {
         const p = before.get(x.key);
-        if (!x.pr || !x.comments || !p?.comments) return [];
+        if (!x.pr || !x.comments || !p?.comments) {
+            return [];
+        }
         const fresh = freshComments(x.comments, Math.max(seen(x), Date.parse(p.comments.latestAt) || 0));
         return fresh.length ? [/** @type {AttentionEvent} */ ({ kind: 'comment', item: x, comments: fresh })] : [];
     });

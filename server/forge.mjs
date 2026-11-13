@@ -285,18 +285,20 @@ export function excerpt(md, max = 300) {
 }
 
 // Unresolved human review threads on an open MR count as changes requested: GitLab reports not_approved, not
-// discussions_not_resolved, while approval is also missing. Threads I answered last wait on the reviewer to resolve
-// them, so when those are all that is open, the review is no longer on me.
+// discussions_not_resolved, while approval is also missing. So do general comments newer than my last note. Threads I
+// answered last wait on the reviewer to resolve them, so when those are all that is open, the review is no longer on me.
 export function withThreads(prState, comments) {
 
-    if (prState?.state !== 'open' || !(comments?.unresolved || comments?.replied)) {
+    if (prState?.state !== 'open' || !(comments?.unresolved || comments?.unanswered || comments?.replied)) {
         return prState;
     }
-    if (!comments.unresolved) {
+    if (!comments.unresolved && !comments.unanswered) {
         return { ...prState, changes: false, replied: comments.replied, repliedTo: comments.repliedTo };
     }
 
-    return { ...prState, changes: true, unresolved: comments.unresolved, unresolvedBy: comments.unresolvedBy };
+    const { unresolved, unresolvedBy, unanswered, unansweredBy } = comments;
+
+    return { ...prState, changes: true, unresolved, unresolvedBy, unanswered, unansweredBy };
 }
 
 // Bots by flag (GitLab bot, GitHub type Bot) or name: GitHub's foo[bot], GitLab's project_1_bot_x tokens, *-bot / bot-*.
@@ -305,14 +307,19 @@ export const isBot = a => !!(a?.bot || a?.type === 'Bot' || /\[bot\]$|(^|[-_])bo
 // Comments by others than me and bots, newest first, at most max, with a plain-text excerpt. With threads
 // ([{ resolved, notes: [{ author }] }], oldest note first), whose turn each unresolved one is: mine when another human
 // wrote in it and I wrote its last human note (replied), else theirs (unresolved). Without, unresolved notes count.
+// General comments (raw with general: true) by others after my newest note of any kind are unanswered.
 export function humanComments(raw, me, max = 10, threads = null) {
 
     const human = a => a.username !== me && !isBot(a);
-    const items = raw.filter(c => human(c.author) && c.body?.trim())
-        .toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at))
-        .map(c => ({ id: c.id, author: c.author.name, at: c.at, excerpt: excerpt(c.body, 140), url: c.url, ...(c.resolved != null && { resolved: c.resolved }) }));
+    const others = raw.filter(c => human(c.author) && c.body?.trim()).toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    const items = others.map(c => ({ id: c.id, author: c.author.name, at: c.at, excerpt: excerpt(c.body, 140), url: c.url, ...(c.resolved != null && { resolved: c.resolved }) }));
 
-    const shown = { latestAt: items[0]?.at ?? null, count: items.length, items: items.slice(0, max) };
+    const myLatest = Math.max(0, ...raw.filter(c => c.author.username === me).map(c => Date.parse(c.at)));
+    const pending = others.filter(c => c.general && Date.parse(c.at) > myLatest);
+    const shown = {
+        latestAt: items[0]?.at ?? null, count: items.length, items: items.slice(0, max),
+        unanswered: pending.length, unansweredBy: [...new Set(pending.map(c => c.author.name))]
+    };
     if (!threads) {
         const open = items.filter(c => c.resolved === false);
 
@@ -345,7 +352,7 @@ export async function fetchComments(url) {
     if (gl) {
         const discussions = (await pages(repo, `projects/${encodeURIComponent(gl[2])}/merge_requests/${gl[3]}/discussions`))
             .map(d => d.notes.filter(n => !n.system).map(n => ({
-                id: n.id, author: author(n.author), at: n.created_at, body: n.body, url: `${url}#note_${n.id}`, resolvable: n.resolvable, resolved: n.resolvable ? n.resolved : null
+                id: n.id, author: author(n.author), at: n.created_at, body: n.body, url: `${url}#note_${n.id}`, resolvable: n.resolvable, resolved: n.resolvable ? n.resolved : null, general: !n.resolvable
             }))).filter(notes => notes.length);
         const threads = discussions.filter(notes => notes[0].resolvable).map(notes => ({ resolved: notes.every(n => n.resolved), notes }));
         return humanComments(discussions.flat(), me, 10, threads);
@@ -367,5 +374,5 @@ export async function fetchComments(url) {
         .then(({ stdout }) => JSON.parse(stdout).data.repository.pullRequest.reviewThreads.nodes.map(toThread))
         .catch(() => null);
 
-    return humanComments([...issue.map(c => of(c, c.created_at)), ...inline.map(c => of(c, c.created_at)), ...reviews.filter(r => r.submitted_at).map(r => of(r, r.submitted_at))], me, 10, threads);
+    return humanComments([...issue.map(c => ({ ...of(c, c.created_at), general: true })), ...inline.map(c => of(c, c.created_at)), ...reviews.filter(r => r.submitted_at).map(r => of(r, r.submitted_at))], me, 10, threads);
 }

@@ -198,9 +198,9 @@ export function requestFor(sessions, project, url, prState) {
     return hits.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
 }
 
-// One item per PR/MR (deduped across sessions and agents), plus running or stopped agents with no MR yet.
-// Agents whose description names a known MR (!123) count as work on it; finished agents without an MR are dropped.
-export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads) {
+// The work items' raw groups: one per PR/MR (deduped across sessions and agents), plus running or stopped agents with
+// no MR yet. Agents whose description names a known MR (!123) count as work on it; finished agents without an MR are dropped.
+function itemGroups(sessions, prOf, now) {
 
     const byUrl = new Map();
     const add = (url, project) => {
@@ -244,7 +244,28 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         }
     }
 
-    return [...byUrl.values(), ...loose].map(it => {
+    return [...byUrl.values(), ...loose];
+}
+
+// Token sums and working time over an item's agents: summed per agent, so idle gaps between agents don't count;
+// a running agent counts up to now.
+function agentUsage(agents, now) {
+
+    const tokens = Object.fromEntries(Object.keys(USAGE_KEYS).map(k => [k, agents.reduce((n, a) => n + (a.usage?.[k] ?? 0), 0)]));
+    const total = Object.values(tokens).reduce((a, b) => a + b, 0);
+    const timeMs = agents.reduce((n, a) => n + (a.usage?.first != null ? (a.status === 'running' ? now : a.usage.last) - a.usage.first : 0), 0);
+
+    return {
+        tokens: total ? formatTokens(total) : null,
+        tokensTitle: total ? `input ${tokens.input.toLocaleString('en')} · output ${tokens.output.toLocaleString('en')} · cache read ${tokens.cacheRead.toLocaleString('en')} · cache write ${tokens.cacheWrite.toLocaleString('en')}` : null,
+        time: timeMs > 0 ? formatDuration(timeMs) : null
+    };
+}
+
+// One row per work item, newest agent first, with its column, stage, next step, action, gate badge and usage.
+export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads) {
+
+    return itemGroups(sessions, prOf, now).map(it => {
 
         const agents = it.agents.toSorted((a, b) => b.updated - a.updated);
         const agent = agents[0] ?? null;
@@ -256,10 +277,6 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             ? requestFor(sessions, it.project, it.pr, prState) : null;
         const col = requested ? 'doing' : itemColumn(prState, agent, !!it.pr);
         const title = prState?.title ?? agent?.description ?? it.pr;
-        const tokens = Object.fromEntries(Object.keys(USAGE_KEYS).map(k => [k, agents.reduce((n, a) => n + (a.usage?.[k] ?? 0), 0)]));
-        const total = Object.values(tokens).reduce((a, b) => a + b, 0);
-        // summed per agent, so idle gaps between agents don't count; a running agent counts up to now
-        const timeMs = agents.reduce((n, a) => n + (a.usage?.first != null ? (a.status === 'running' ? now : a.usage.last) - a.usage.first : 0), 0);
 
         return {
             key: it.key,
@@ -283,9 +300,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             next: requested ? 'Claude is on it…' : col === 'finished' ? 'Finished without an MR' : nextStep(prState, agent),
             action: requested ? null : rowAction(it.pr, prState, agent, title),
             gate: it.pr ? toGate(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
-            tokens: total ? formatTokens(total) : null,
-            tokensTitle: total ? `input ${tokens.input.toLocaleString('en')} · output ${tokens.output.toLocaleString('en')} · cache read ${tokens.cacheRead.toLocaleString('en')} · cache write ${tokens.cacheWrite.toLocaleString('en')}` : null,
-            time: timeMs > 0 ? formatDuration(timeMs) : null
+            ...agentUsage(agents, now)
         };
     });
 }

@@ -29,9 +29,9 @@ export function pipelineOf(gl, checks, prUrl) {
     return { status, url: `${prUrl}/checks`, at };
 }
 
-// The coarse ci flag nextStep/rowAction read: 'failing', 'running' or null.
 // The MR/PR number in its URL, as a string.
 export const mrNumber = url => url.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
+// The coarse ci flag nextStep/rowAction read: 'failing', 'running' or null.
 export const ciOf = pipeline => ({ failed: 'failing', running: 'running', pending: 'running' })[pipeline?.status] ?? null;
 
 // Read-only PR/MR lookup via gh/glab. Returns { state: open|merged|closed, title, branch, reviewers, ready, changes, changesBy, draft, ci, pipeline } or null.
@@ -130,8 +130,6 @@ export async function prState(url) {
     return hit.value;
 }
 
-const MS_PARALLEL = 8;
-const MS_CALL_TIMEOUT_MS = 60_000;
 export const swr = new Map(); // key -> { at, value, pending, error }
 
 // Runs at most n of the given async functions at a time; the rest wait in call order.
@@ -213,11 +211,15 @@ export function refreshAll() {
     }
     refreshStartedAt = Date.now();
     const entries = [...swr];
-    const again = issues => Promise.all(entries.filter(([k, hit]) => hit.fn && k.startsWith('issues:') === issues).map(([, hit]) => refetch(hit, hit.fn)));
+    const isIssues = ([k]) => k.startsWith('issues:');
+    const refetchAll = list => Promise.all(list.filter(([, hit]) => hit.fn).map(([, hit]) => refetch(hit, hit.fn)));
     refreshRun = Promise.all([
         ...[...prs].map(([url, hit]) => refetch(hit, () => apiSlot(() => fetchPr(url)))),
-        again(false).then(() => again(true))
-    ]).finally(() => { refreshRun = null; lastRefreshedAt = Date.now(); });
+        refetchAll(entries.filter(e => !isIssues(e))).then(() => refetchAll(entries.filter(isIssues)))
+    ]).finally(() => {
+        refreshRun = null;
+        lastRefreshedAt = Date.now();
+    });
 
     return refreshRun;
 }
@@ -239,14 +241,16 @@ export async function cached(key, ttl, fn) {
 
 export const isGitLab = repo => repo.host.includes('gitlab');
 // Every glab/gh call goes through one limiter, and an identical call already in flight is shared.
-const apiSlot = limiter(MS_PARALLEL);
+const API_PARALLEL = 8;
+const API_CALL_TIMEOUT_MS = 60_000;
+const apiSlot = limiter(API_PARALLEL);
 const apiOnce = dedupe();
 export const api = (repo, path) => {
 
     const cli = isGitLab(repo) ? 'glab' : 'gh';
 
     // the timeout kills a hung glab/gh, so it never holds a limiter slot for good
-    return apiOnce(`${cli} ${path}`, () => apiSlot(() => run(cli, ['api', path], { timeout: MS_CALL_TIMEOUT_MS }))).then(({ stdout }) => JSON.parse(stdout));
+    return apiOnce(`${cli} ${path}`, () => apiSlot(() => run(cli, ['api', path], { timeout: API_CALL_TIMEOUT_MS }))).then(({ stdout }) => JSON.parse(stdout));
 };
 
 // Every page of a list endpoint, 100 per page.
@@ -307,18 +311,22 @@ export function humanComments(raw, me, max = 10, threads = null) {
         .toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at))
         .map(c => ({ id: c.id, author: c.author.name, at: c.at, excerpt: excerpt(c.body, 140), url: c.url, ...(c.resolved != null && { resolved: c.resolved }) }));
 
+    const shown = { latestAt: items[0]?.at ?? null, count: items.length, items: items.slice(0, max) };
     if (!threads) {
         const open = items.filter(c => c.resolved === false);
-        return { latestAt: items[0]?.at ?? null, count: items.length, items: items.slice(0, max), unresolved: open.length, unresolvedBy: [...new Set(open.map(c => c.author))], replied: 0, repliedTo: [] };
+
+        return { ...shown, unresolved: open.length, unresolvedBy: [...new Set(open.map(c => c.author))], replied: 0, repliedTo: [] };
     }
 
+    // mine: I wrote its last note by a person, so I have replied
+    const byPerson = n => n.author.username === me || human(n.author);
     const turns = threads.filter(t => !t.resolved && t.notes.some(n => human(n.author)))
-        .map(t => ({ mine: t.notes.findLast(n => n.author.username === me || human(n.author)).author.username === me, by: t.notes.filter(n => human(n.author)).map(n => n.author.name) }));
+        .map(t => ({ mine: t.notes.findLast(byPerson).author.username === me, by: t.notes.filter(n => human(n.author)).map(n => n.author.name) }));
     const names = list => [...new Set(list.flatMap(t => t.by))];
     const open = turns.filter(t => !t.mine);
     const replied = turns.filter(t => t.mine);
 
-    return { latestAt: items[0]?.at ?? null, count: items.length, items: items.slice(0, max), unresolved: open.length, unresolvedBy: names(open), replied: replied.length, repliedTo: names(replied) };
+    return { ...shown, unresolved: open.length, unresolvedBy: names(open), replied: replied.length, repliedTo: names(replied) };
 }
 
 // Read-only: one glab call per MR (discussions nest the notes; more pages only past 100 discussions), four gh calls per PR.
@@ -350,10 +358,13 @@ export async function fetchComments(url) {
     const [owner, name] = gh[2].split('/');
     // ponytail: first 100 threads, last 50 comments each; review threads are only in GraphQL
     const q = `query($o:String!,$n:String!,$p:Int!){repository(owner:$o,name:$n){pullRequest(number:$p){reviewThreads(first:100){nodes{isResolved comments(last:50){nodes{author{__typename login}}}}}}}}`;
-    const threads = await apiOnce(`gh graphql threads ${url}`, () => apiSlot(() => run('gh', ['api', 'graphql', '-f', `query=${q}`, '-F', `o=${owner}`, '-F', `n=${name}`, '-F', `p=${gh[3]}`], { timeout: MS_CALL_TIMEOUT_MS })))
-        .then(({ stdout }) => JSON.parse(stdout).data.repository.pullRequest.reviewThreads.nodes.map(t => ({
-            resolved: t.isResolved, notes: t.comments.nodes.map(c => ({ author: { name: c.author?.login, username: c.author?.login, type: c.author?.__typename } }))
-        }))).catch(() => null);
+    const args = ['api', 'graphql', '-f', `query=${q}`, '-F', `o=${owner}`, '-F', `n=${name}`, '-F', `p=${gh[3]}`];
+    const toThread = t => ({
+        resolved: t.isResolved, notes: t.comments.nodes.map(c => ({ author: { name: c.author?.login, username: c.author?.login, type: c.author?.__typename } }))
+    });
+    const threads = await apiOnce(`gh graphql threads ${url}`, () => apiSlot(() => run('gh', args, { timeout: API_CALL_TIMEOUT_MS })))
+        .then(({ stdout }) => JSON.parse(stdout).data.repository.pullRequest.reviewThreads.nodes.map(toThread))
+        .catch(() => null);
 
     return humanComments([...issue.map(c => of(c, c.created_at)), ...inline.map(c => of(c, c.created_at)), ...reviews.filter(r => r.submitted_at).map(r => of(r, r.submitted_at))], me, 10, threads);
 }

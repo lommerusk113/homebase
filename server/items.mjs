@@ -101,10 +101,9 @@ export function nextStep(prState, agent) {
     }
     if (prState.unresolved) {
         const n = prState.unresolved;
-        if (prState.ready) {
-            return `Approved — ${n} unanswered comment${n === 1 ? '' : 's'}${prState.unresolvedBy?.length ? ` from ${prState.unresolvedBy.join(', ')}` : ''}`;
-        }
-        return `Address ${n} unresolved comment${n === 1 ? '' : 's'}${prState.unresolvedBy?.length ? ` from ${prState.unresolvedBy.join(', ')}` : ''}`;
+        const comments = `comment${n === 1 ? '' : 's'}${prState.unresolvedBy?.length ? ` from ${prState.unresolvedBy.join(', ')}` : ''}`;
+
+        return prState.ready ? `Approved — ${n} unanswered ${comments}` : `Address ${n} unresolved ${comments}`;
     }
     if (prState.changes) {
         const by = prState.changesBy?.length ? prState.changesBy : prState.reviewers ?? [];

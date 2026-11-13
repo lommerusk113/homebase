@@ -103,15 +103,17 @@ const answerPosts = q => {
 
 const DEFAULTS = { tracked: '["alpha","beta","gamma"]', project: 'alpha', tab: 'work', chat: IDS.master };
 const ctx = {
-    page, base, home, IDS, answerPosts,
+    page, base, IDS, answerPosts,
     // Fresh page: storage reset to DEFAULTS plus overrides (null removes a key), then loaded and the board drawn.
     async open(storage = {}) {
         page.route = answerPosts;
         if (!(await page.ev('location.href').catch(() => '')).startsWith(base)) {
             await page.goto(base);
         }
-        const all = { ...DEFAULTS, ...storage };
-        await page.ev(`localStorage.clear(); sessionStorage.clear(); ${Object.entries(all).filter(([, v]) => v != null).map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(v)});`).join(' ')}`);
+        const sets = Object.entries({ ...DEFAULTS, ...storage })
+            .filter(([, v]) => v != null)
+            .map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(v)});`);
+        await page.ev(`localStorage.clear(); sessionStorage.clear(); ${sets.join(' ')}`);
         await page.goto(base);
         await page.waitFor(`document.querySelector('#masters tr[data-key], #masters .s-row, #masters .welcome') && document.getElementById('status-text').textContent !== 'Connecting…'`, { what: 'the board and the chat status' });
     },
@@ -157,6 +159,7 @@ try {
 } finally {
     page.close();
     const failed = results.filter(r => r.error);
+    // gamma's forge calls fail on purpose (see fixture.mjs); any other FAIL is a missing fixture
     const unknown = existsSync(env.HOMEBASE_STUB_LOG) ? readFileSync(env.HOMEBASE_STUB_LOG, 'utf8').split('\n').filter(l => l.startsWith('FAIL') && !l.includes('gamma')) : [];
     if (unknown.length) {
         console.log(`\nforge calls without a fixture (add them to forge-stub.mjs):\n  ${[...new Set(unknown)].join('\n  ')}`);

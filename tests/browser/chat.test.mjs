@@ -4,6 +4,22 @@ const bubble = text => `[...document.querySelectorAll('#feed .bubble')].find(b =
 const ready = page => page.waitFor(`${bubble('tag the release')}`, { what: 'the newest master bubble' });
 
 export default {
+    'Clear view hides what came before the cut, and Show brings it back': async ({ page, open, IDS }) => {
+        await open({ [`cleared:${IDS.master}`]: String(Date.now() - 150_000) });
+        await ready(page);
+        assert.equal(await page.ev(`!!${bubble('Fix the login redirect bug')}`), false);
+        assert.equal(await page.ev(`document.querySelector('#feed').firstElementChild.className`), 'c-hidden');
+        await page.click('#feed .c-hidden button');
+        await page.waitFor(`${bubble('Fix the login redirect bug')}`, { what: 'the hidden history to come back' });
+    },
+
+    'a New conversation cut hides the history without the Show line': async ({ page, open, IDS }) => {
+        await open({ [`cleared:${IDS.master}`]: JSON.stringify({ at: Date.now() - 150_000, mode: 'new' }) });
+        await ready(page);
+        assert.equal(await page.ev(`!!${bubble('Fix the login redirect bug')}`), false);
+        assert.equal(await page.ev(`!!document.querySelector('#feed .c-hidden')`), false);
+    },
+
     'history renders, including what came before a huge tool result': async ({ page, open }) => {
         await open();
         await ready(page);

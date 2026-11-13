@@ -1,5 +1,5 @@
 // Left column: work items grouped by what they wait on, and attention transitions.
-import { api, $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip } from './core.js';
+import { api, $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle } from './core.js';
 import { chatSession, bindChat, sendText } from './chat.js';
 import { milestoneTag } from './milestone.js';
 
@@ -28,7 +28,10 @@ function renderItems() {
             const tr = el('tr', state.selected === x.key ? 'sel' : '');
             tr.dataset.key = x.key;
             const what = el('td', 'what');
-            what.append(el('b', null, x.title), el('small', 'next', `Next: ${x.next}`));
+            const fresh = x.pr ? freshComments(x.comments, seenAt(x.pr)) : [];
+            const next = el('small', 'next', `Next: ${x.next}${fresh.length ? ` · ${fresh.length} new comment${fresh.length === 1 ? '' : 's'}` : ''}`);
+            if (x.comments?.count) next.prepend(commentBadge(x, fresh), ' ');
+            what.append(el('b', null, x.title), next);
             if (x.milestone) what.firstChild.prepend(milestoneTag(x));
             const prog = el('td', 'prog'); prog.append(stageBar(x));
             if (x.tokens || x.time) {
@@ -74,6 +77,14 @@ function renderItems() {
     hooks.rendered?.(hadFocus);
 }
 
+// "💬 2 new · Børre" in the accent colour, or a muted "💬 5" when none are new since last checked.
+function commentBadge(x, fresh) {
+    const b = el('span', 'cm-badge' + (fresh.length ? ' new' : ''), fresh.length ? `💬 ${fresh.length} new · ${authorSummary(fresh)}` : `💬 ${x.comments.count}`);
+    b.setAttribute('aria-label', fresh.length ? `${fresh.length} new comments` : `${x.comments.count} comments, none new`);
+    return b;
+}
+const markAllSeen = () => { for (const x of state.sessions.flatMap(s => s.items || [])) if (x.pr) markSeen(x.pr); renderBoard(); updateTitle(); };
+
 // The row's one-click command (label and message from the server's rowAction): binds the chat to the item's session and sends there.
 const sentAt = new Map(); // item key -> last click, so a re-render keeps the button disabled
 const COOLDOWN_MS = 3000;
@@ -116,10 +127,28 @@ function openButton(x) {
 // Click toggles an inline detail (TLDR with Show more, other agents on the item, edited files) and binds the chat to the item's session.
 export function select(x) {
     state.selected = state.selected === x.key ? null : x.key;
+    // opening marks the MR seen; the detail still lists what was new until then
+    if (state.selected && x.pr) { state.opened = { key: x.key, since: seenAt(x.pr) }; markSeen(x.pr); updateTitle(); }
     if (x.sessionId && x.sessionId !== chatSession()?.id) bindChat(x.sessionId); else renderBoard();
 }
 function detail(x) {
     const d = el('div', 'detail');
+    if (x.comments?.count) {
+        const fresh = freshComments(x.comments, state.opened?.key === x.key ? state.opened.since : seenAt(x.pr));
+        const h = el('h4', null, fresh.length ? `New comments · ${fresh.length}` : `Comments · ${x.comments.count} · none new`), all = el('button', 'show mark-all', 'Mark all seen');
+        all.onclick = markAllSeen;
+        h.append(all); d.append(h);
+        if (fresh.length) {
+            const ul = el('ul', 'comments');
+            ul.append(...fresh.map(c => {
+                const li = el('li'), a = el('a', null, c.excerpt || '(no text)');
+                a.href = c.url; a.target = '_blank';
+                li.append(el('b', null, c.author), el('span', 'muted', ` · ${ago(Date.parse(c.at))}${c.resolved === false ? ' · unresolved' : ''} · `), a);
+                return li;
+            }));
+            d.append(ul);
+        }
+    }
     if (x.tldr || x.body) d.append(...foldable(x.tldr, x.body, `item:${x.key}`));
     if (x.activity?.length) {
         const ul = el('ul', 'activity');
@@ -159,8 +188,9 @@ export function renderBoard() {
     renderItems();
 }
 
-// Transitions into an attention state since the previous poll, at most one per item. No previous poll, no events.
-export function attentionEvents(prevItems, nextItems) {
+// Transitions into an attention state since the previous poll, at most one per item, plus a comment event per item with
+// comments newer than both its seen time and the previous poll's newest. No previous poll (or comments not loaded then), no events.
+export function attentionEvents(prevItems, nextItems, seen = () => 0) {
     if (!prevItems) return [];
     const before = new Map(prevItems.map(x => [x.key, x])), now = new Set(nextItems.map(x => x.key));
     const failing = x => x?.prState?.ci === 'failing';
@@ -172,6 +202,12 @@ export function attentionEvents(prevItems, nextItems) {
             : failing(x) && !failing(p) ? 'failing' : null;
         return kind ? [{ kind, item: x }] : [];
     });
+    const comments = nextItems.flatMap(x => {
+        const p = before.get(x.key);
+        if (!x.pr || !x.comments || !p?.comments) return [];
+        const fresh = freshComments(x.comments, Math.max(seen(x), Date.parse(p.comments.latestAt) || 0));
+        return fresh.length ? [{ kind: 'comment', item: x, comments: fresh }] : [];
+    });
     // finished agents without an MR drop off the board
-    return [...events, ...prevItems.filter(p => p.column === 'doing' && !now.has(p.key)).map(item => ({ kind: 'finished', item }))];
+    return [...events, ...comments, ...prevItems.filter(p => p.column === 'doing' && !now.has(p.key)).map(item => ({ kind: 'finished', item }))];
 }

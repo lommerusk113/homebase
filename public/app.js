@@ -1,5 +1,5 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { api, $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks, setOffline } from './core.js';
+import { api, $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks, setOffline, seenAt, authorSummary } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat } from './chat.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
@@ -72,11 +72,11 @@ function migrateTracked() {
 }
 
 const notifyOn = () => store.get('notify') === '1' && window.Notification?.permission === 'granted';
-function notify({ kind, item: x }) {
+function notify({ kind, item: x, comments }) {
     if (!notifyOn() || (document.visibilityState === 'visible' && document.hasFocus())) return;
     const ref = x.pr ? prLabel(x.pr) : x.title;
-    const [title, body] = { 'needs-you': [`Needs you: ${x.title} — ${x.next}`], ready: [`Ready to merge: ${ref}`, x.title], finished: [`Agent finished: ${x.title}`, x.column === 'doing' ? undefined : x.next], failing: [`Pipeline failing: ${ref}`, x.title] }[kind];
-    const n = new Notification(title, { body, tag: x.key, icon: '/icon.svg' });
+    const [title, body] = { 'needs-you': [`Needs you: ${x.title} — ${x.next}`], ready: [`Ready to merge: ${ref}`, x.title], finished: [`Agent finished: ${x.title}`, x.column === 'doing' ? undefined : x.next], failing: [`Pipeline failing: ${ref}`, x.title], comment: [`💬 ${authorSummary(comments ?? [])} commented on ${ref}`, comments?.[0]?.excerpt] }[kind];
+    const n = new Notification(title, { body, tag: kind === 'comment' ? `${x.key}:comment` : x.key, icon: '/icon.svg' });
     n.onclick = () => {
         window.focus(); n.close();
         const it = state.sessions.flatMap(s => s.items || []).find(i => i.key === x.key);
@@ -110,7 +110,7 @@ async function refresh() {
             renderProjects(); renderBoard();
             // diffed over all items, then filtered, so changing the project filter doesn't read as transitions
             const items = state.sessions.flatMap(s => s.items || []);
-            attentionEvents(state.items, items).filter(e => shown(e.item)).forEach(notify);
+            attentionEvents(state.items, items, x => seenAt(x.pr)).filter(e => shown(e.item)).forEach(notify);
             state.items = items;
         }
         setOffline(false);

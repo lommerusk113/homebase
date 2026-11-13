@@ -978,6 +978,18 @@ function prLinks(entries) {
     return [...at].map(([url, t]) => ({ url, at: t }));
 }
 
+// When the session last really did something: a human prompt (typed or queued) or Claude's text/tool call. File mtime
+// isn't it, since an idle claude process keeps appending cost-state, bridge-session and similar bookkeeping lines.
+export function lastActivity(entries) {
+
+    const e = entries.findLast(e => !e.isSidechain && (isHumanPrompt(e)
+        || (e.type === 'attachment' && e.attachment?.type === 'queued_command' && e.attachment.origin?.kind === 'human')
+        || (e.type === 'assistant' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'text' || b.type === 'tool_use'))));
+    const at = Date.parse(e?.timestamp);
+
+    return Number.isNaN(at) ? null : at;
+}
+
 export function summarize(entries, ageMs) {
 
     const last = type => entries.findLast(e => e.type === type);
@@ -997,6 +1009,8 @@ export function summarize(entries, ageMs) {
         openPrompts: turnPrompts(entries, ageMs),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
+        sidechain: !!entries.find(e => e.type === 'user' || e.type === 'assistant')?.isSidechain, // a transcript a subagent wrote
+        lastActivity: lastActivity(entries),
         files: filesTouched(entries, meta.cwd),
         gates: gateRuns(entries)
     };
@@ -1068,7 +1082,8 @@ async function sessions() {
         }
     }
 
-    return out.sort((a, b) => b.updated - a.updated);
+    // by real activity, so an idle process's bookkeeping writes don't float it to the top
+    return out.sort((a, b) => (b.lastActivity ?? b.created) - (a.lastActivity ?? a.created));
 }
 
 // The left side's lifecycle: agent stages first, then MR states.

@@ -2,11 +2,27 @@
 import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, setOffline } from './core.js';
 import { renderBoard } from './list.js';
 
-// only sessions in the selected project(s); falls back to the most recent one there
-export const chatSession = () => { const v = visibleSessions(); return v.find(s => s.id === state.chat) || v[0] || null; };
+// Subagent and worktree sessions never become the chat's master on their own.
+const isMaster = s => !s.sidechain && !/\/\.(claude\/)?worktrees\//.test(s.cwd || '');
+// The chat sticks to the bound session (chat:<project>, else the legacy global pick) and only moves on its own to a
+// Homebase /clear successor (clearedFrom). Nothing bound yet: the master with the latest real activity (lastActivity,
+// from the server), never file mtime, which an idle claude process still bumps with bookkeeping lines.
+const activity = s => s.lastActivity ?? s.created ?? 0;
+export function pickChat(visible, bound, legacy) {
+    const byId = id => id && visible.find(s => s.id === id);
+    let s = byId(bound) || byId(legacy);
+    for (let next; s && (next = visible.find(x => x.clearedFrom === s.id)); s = next);
+    return s || visible.filter(isMaster).sort((a, b) => activity(b) - activity(a))[0] || null;
+}
+// A master in the bound session's project started after it and active since: offered as "Switch", never switched to
+// on its own. Uses created and lastActivity, not mtime.
+export const newerSession = (visible, s) => (s && visible.filter(x => x.id !== s.id && x.project === s.project && isMaster(x)
+    && x.created > s.created && activity(x) > activity(s)).sort((a, b) => activity(b) - activity(a))[0]) || null;
+const bindKey = () => `chat:${state.project}`;
+// only sessions in the selected project(s)
+export const chatSession = () => pickChat(visibleSessions(), store.get(bindKey()), state.chat);
 let chatKey = null;
 let stick = false; // set by a send: the next render scrolls to the bottom even if the user had scrolled up
-let following = null; // session id a /clear was sent to: the chat moves to its successor once the server has mapped it
 
 // cleared:<id> holds a timestamp (Clear view) or {"at","mode":"new"} (New conversation: the same cut, but not a "hidden" one)
 export function clearState(raw) {
@@ -40,7 +56,7 @@ let restored = false; // once per page load, for the first bound session
 const session = () => { try { return sessionStorage; } catch { return null; } };
 
 export function bindChat(id) {
-    state.chat = id; store.set('chat', id);
+    state.chat = id; store.set('chat', id); store.set(bindKey(), id);
     renderBoard(); refreshChat();
 }
 
@@ -138,9 +154,11 @@ function setStatus(data) {
 // same unwrap as the server's unwrapPasted, plus whitespace collapsed, for matching sent text to transcript text
 const norm = t => (t || '').replace(/<pasted_content id="([^"]*)">([\s\S]*?)<\/pasted_content(?: id="\1")?>/g, '$2').replace(/\s+/g, ' ').trim();
 export async function refreshChat() {
-    const next = following && state.sessions.find(x => x.clearedFrom === following);
-    if (next) { following = null; state.chat = next.id; store.set('chat', next.id); renderBoard(); }
     const s = chatSession(), feed = $('feed');
+    if (s && store.get(bindKey()) !== s.id) { store.set(bindKey(), s.id); renderBoard(); } // persist the binding, or a successor it moved to
+    const newer = newerSession(visibleSessions(), s);
+    $('newer').hidden = !newer;
+    if (newer) { $('newer-text').textContent = `New session started in ${newer.project} · `; $('newer-go').onclick = () => bindChat(newer.id); }
     if (s && !restored) { restored = true; restoreDraft(session(), s.id, $('msg')).then(ok => ok && syncSend()); }
     if (!s) { chatKey = null; state.asking = null; updateTitle(); setStatus(state.offline ? { error: true } : null); return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
     let data;
@@ -280,7 +298,6 @@ export function initChat() {
         try {
             const r = await api(`/api/clear?id=${encodeURIComponent(s.id)}`, { method: 'POST' });
             if (!r.ok) throw new Error(await r.text());
-            following = s.id;
             store.set(`cleared:${s.id}`, JSON.stringify({ at: Date.now(), mode: 'new' }));
             refreshChat();
         } catch (err) { $('c-err').textContent = err.message; }

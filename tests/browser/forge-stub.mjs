@@ -104,7 +104,7 @@ function gh(rest) {
     }
 
     if (rest[0] === 'pr' && rest[1] === 'view' && rest[2] === 'https://github.com/acme/beta/pull/7') {
-        return out({ state: 'OPEN', title: 'Add SQLite support', body: '', reviewDecision: '', isDraft: false, headRefName: 'sqlite', baseRefName: 'main', milestone: null, reviewRequests: [], latestReviews: [], statusCheckRollup: [{ conclusion: 'SUCCESS', completedAt: ago(300) }], headRefOid: 'ddd4444' });
+        return out({ state: 'OPEN', title: 'Add SQLite support', body: '', reviewDecision: 'REVIEW_REQUIRED', isDraft: false, headRefName: 'sqlite', baseRefName: 'main', milestone: null, reviewRequests: [], latestReviews: [], statusCheckRollup: [{ conclusion: 'SUCCESS', completedAt: ago(300) }], headRefOid: 'ddd4444' });
     }
     if (rest[0] !== 'api') {
         return fail(`stub: no gh fixture for ${rest.join(' ')}`);

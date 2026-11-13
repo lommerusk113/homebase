@@ -135,7 +135,15 @@ export const hooks = { inMilestone: () => true };
 
 export const visibleSessions = () => state.sessions.filter(s => state.tracked.includes(s.project) && (state.project === 'all' || s.project === state.project));
 export const shown = x => state.tracked.includes(x.project) && (state.project === 'all' || x.project === state.project);
+// "Since last checked" per MR: seen:<mrUrl> in localStorage. An MR never seen before counts as seen now, so the first load doesn't flood.
+export const seenAt = pr => { const v = Number(store.get(`seen:${pr}`)); if (v) return v; const now = Date.now(); store.set(`seen:${pr}`, now); return now; };
+export const markSeen = (pr, at = Date.now()) => store.set(`seen:${pr}`, at);
+export const freshComments = (c, seen) => (c?.items ?? []).filter(i => Date.parse(i.at) > seen);
+const firstName = n => n.split(/\s+/)[0];
+// "Børre" / "Børre, Ann" / "Børre, Ann +1": distinct first names, at most two
+export const authorSummary = items => { const n = [...new Set(items.map(i => firstName(i.author)))]; return n.slice(0, 2).join(', ') + (n.length > 2 ? ` +${n.length - 2}` : ''); };
+export const newCount = x => (x.pr ? freshComments(x.comments, seenAt(x.pr)).length : 0);
 export function updateTitle() {
-    const n = visibleSessions().flatMap(s => s.items || []).filter(x => x.column === 'needs-you' || x.column === 'ready').length + (state.asking ? 1 : 0);
+    const n = visibleSessions().flatMap(s => s.items || []).filter(x => x.column === 'needs-you' || x.column === 'ready' || newCount(x)).length + (state.asking ? 1 : 0);
     document.title = n ? `(${n}) Homebase` : 'Homebase';
 }

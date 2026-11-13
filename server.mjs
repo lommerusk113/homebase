@@ -264,6 +264,18 @@ export function filesTouched(entries, cwd) {
 const PR_URL = /https:\/\/[^\s)>\]`'"]+?\/(?:-\/merge_requests|pull)\/\d+/g;
 const TLDR = /^[ \t>*_]*TL;?DR\b[*_]*:?[*_]*[ \t]*(.+)$/gim;
 
+// "**▸ Topic**" / "**▸ Topic:**" / "▸ Topic" as the first non-empty line becomes the bubble's header.
+const TOPIC = /^\s*(?:\*\*)?▸\s*(.+?):?\s*(?:\*\*)?[ \t]*(?:\n|$)/;
+export function splitTopic(text) {
+
+    const m = text.match(TOPIC);
+    if (!m) {
+        return { topic: null, text };
+    }
+
+    return { topic: m[1].replace(/\*\*$/, '').replace(/:$/, '').trim(), text: text.slice(m[0].length).trim() };
+}
+
 // Pulls the last "TLDR: ..." line out of a message so the page can show it as a callout.
 export function splitTldr(text) {
 
@@ -476,13 +488,20 @@ export function chatItems(entries, max = 60) {
         return true;
     });
 
-    const out = pairAnswers(unique.map(i => (i.role === 'assistant' ? { ...i, ...splitTldr(i.text) } : i))).slice(-max);
+    const out = pairAnswers(unique.map(i => (i.role === 'assistant' ? topicAndTldr(i) : i))).slice(-max);
     const last = out.at(-1);
     if (last?.role === 'assistant' && !last.answer) {
         last.replies = quickReplies(last.tldr, last.text); // only the newest item, so any later user message hides them
     }
 
     return out;
+}
+
+function topicAndTldr(i) {
+
+    const { topic, text } = splitTopic(i.text);
+
+    return { ...i, topic, ...splitTldr(text) };
 }
 
 const SHORT_ANSWER = /^(?:yes|yeah|yep|sure|ok|okay|no|nope|do it|go ahead|do both)(?: please)?[.!]*$/i;

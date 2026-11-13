@@ -13,6 +13,7 @@ export const SHORTCUTS = [
 const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', r: 'refresh', g: 'g', 1: 'work', 2: 'issues' };
 
 // Action for a keydown ({ key, metaKey, ctrlKey, altKey }); prev is 'g' when g was pressed just before.
+/** @param {Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey'>} e @param {string | null} prev @returns {string | null} */
 export function keyAction(e, prev) {
     if (e.metaKey || e.ctrlKey || e.altKey) return null;
     if (prev === 'g' && e.key === 'p') return 'project';
@@ -20,6 +21,7 @@ export function keyAction(e, prev) {
 }
 
 // Key after (dir 1) or before (dir -1) current among the visible keys; clamps at the ends, starts at an end when current is gone.
+/** @param {string[]} keys @param {string | null} current @param {number} dir @returns {string | null} */
 export function stepKey(keys, current, dir) {
     if (!keys.length) return null;
     const i = keys.indexOf(current);
@@ -29,8 +31,10 @@ export function stepKey(keys, current, dir) {
 
 let focusKey = null, prev = null, prevAt = 0;
 const ROWS = '#masters tr[data-key], #issues .card[data-key]'; // work rows and issue cards; the hidden tab's are skipped below
-const rows = () => [...document.querySelectorAll(ROWS)].filter(r => r.checkVisibility()); // skips the folded Merged group
+/** @returns {HTMLElement[]} */
+const rows = () => [.../** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(ROWS))].filter(r => r.checkVisibility()); // skips the folded Merged group
 const rowOf = key => rows().find(r => r.dataset.key === key);
+/** @param {string | null} key @returns {WorkItem | undefined} */
 const itemOf = key => state.sessions.flatMap(s => s.items || []).find(x => x.key === key);
 const typing = path => path.some(n => n.isContentEditable || ['input', 'textarea', 'wa-input', 'wa-textarea'].includes(n.localName));
 const menuOpen = path => !!document.querySelector('wa-dialog[open], wa-select[open], wa-dropdown[open], details.ms-pick[open]')
@@ -38,7 +42,7 @@ const menuOpen = path => !!document.querySelector('wa-dialog[open], wa-select[op
 
 // Roving tabindex and ARIA state on the rows; refocus puts DOM focus back on the tracked row after a re-render took it away.
 function syncRows(refocus) {
-    const all = [...document.querySelectorAll(ROWS)], cur = all.find(r => r.dataset.key === focusKey), first = cur || rows()[0];
+    const all = [.../** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(ROWS))], cur = all.find(r => r.dataset.key === focusKey), first = cur || rows()[0];
     all.forEach(r => {
         r.tabIndex = r === first ? 0 : -1;
         r.setAttribute('aria-selected', r === cur);
@@ -71,6 +75,7 @@ function help() {
 }
 // The action types into the user's Claude session, so it asks first, showing the message; the dialog itself has focus,
 // so a stray Enter or a second a does nothing, and only a click (or Tab to Send) sends.
+/** @param {WorkItem} x */
 function confirmAction(x) {
     const cancel = el('wa-button', null, 'Cancel'), go = el('wa-button', null, `Send "${x.action.label}"`);
     cancel.slot = go.slot = 'footer';
@@ -80,21 +85,22 @@ function confirmAction(x) {
     body.append('Sends this to the item\'s Claude session:', el('pre', 'keys-msg', x.action.message));
     const d = dialog(`${x.action.label}?`, body, [cancel, go]);
     cancel.onclick = () => { d.open = false; };
-    go.onclick = () => { d.open = false; rowOf(x.key)?.querySelector('.act-btn')?.click(); }; // the button's own path: sent mark, chat binding
+    go.onclick = () => { d.open = false; /** @type {HTMLElement | null} */ (rowOf(x.key)?.querySelector('.act-btn'))?.click(); }; // the button's own path: sent mark, chat binding
 }
 
+/** @param {KeyboardEvent} e */
 function onKey(e) {
     const path = e.composedPath();
     if (menuOpen(path)) return;
     if (typing(path)) {
-        if (e.key === 'Escape') { document.activeElement?.blur(); rowOf(focusKey)?.focus({ preventScroll: true }); }
+        if (e.key === 'Escape') { /** @type {HTMLElement | null} */ (document.activeElement)?.blur(); rowOf(focusKey)?.focus({ preventScroll: true }); }
         return;
     }
     const action = keyAction(e, Date.now() - prevAt < 1500 ? prev : null);
     prev = e.key; prevAt = Date.now();
     if (!action) return;
     // Enter/Space on a link or button inside the page keep their native meaning
-    if (action === 'toggle' && e.target !== document.body && !e.target.matches?.(ROWS)) return;
+    if (action === 'toggle' && e.target !== document.body && !/** @type {Element} */ (e.target).matches?.(ROWS)) return;
     const x = itemOf(focusKey), card = focusKey?.startsWith('issue:') ? rowOf(focusKey) : null;
     const run = {
         next: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, 1)),
@@ -108,7 +114,7 @@ function onKey(e) {
         issues: () => showTab('issues'),
         help,
         project: () => { const p = $('project'); p.focus(); p.open = true; },
-        milestone: () => { const m = document.querySelector('.ms-pick:not([hidden])'); if (m) { m.open = true; m.querySelector('summary').focus(); } },
+        milestone: () => { const m = /** @type {HTMLDetailsElement | null} */ (document.querySelector('.ms-pick:not([hidden])')); if (m) { m.open = true; m.querySelector('summary').focus(); } },
         refresh: () => hooks.refresh(),
         g: () => {}
     }[action];
@@ -118,6 +124,6 @@ function onKey(e) {
 
 export function initKeys() {
     hooks.rendered = syncRows;
-    document.addEventListener('focusin', e => { const r = e.target.closest?.(ROWS); if (r) focusKey = r.dataset.key; });
+    document.addEventListener('focusin', e => { const r = /** @type {HTMLElement | null} */ (e.target instanceof Element ? e.target.closest(ROWS) : null); if (r) focusKey = r.dataset.key; });
     document.addEventListener('keydown', onKey);
 }

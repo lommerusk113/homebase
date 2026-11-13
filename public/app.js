@@ -22,6 +22,7 @@ const syncTheme = () => document.documentElement.classList.toggle('wa-dark', dar
 dark.addEventListener('change', syncTheme); syncTheme();
 
 // Rebuild options only when they changed, and never while the list is open: the open listbox would lose its options.
+/** @param {WaSelect} sel @param {[string, string][]} opts @param {string} value */
 function fillSelect(sel, opts, value) {
     if (sel.open) return;
     const now = [...sel.querySelectorAll('wa-option')];
@@ -31,12 +32,13 @@ function fillSelect(sel, opts, value) {
     if (sel.value !== value) sel.value = value;
 }
 
-const counts = () => { const c = {}; for (const s of state.sessions) c[s.project] = (c[s.project] || 0) + 1; return c; };
+/** @returns {Record<string, number>} */
+const counts = () => { const c = /** @type {Record<string, number>} */ ({}); for (const s of state.sessions) c[s.project] = (c[s.project] || 0) + 1; return c; };
 
 function renderProjects() {
     if (state.project !== 'all' && !state.tracked.includes(state.project)) state.project = 'all';
     const names = [...state.tracked].sort((a, b) => a.localeCompare(b));
-    fillSelect($('project'), [['all', 'All my projects'], ...names.map(n => [n, n])], state.project);
+    fillSelect($('project'), [['all', 'All my projects'], ...names.map(n => /** @type {[string, string]} */ ([n, n]))], state.project);
     renderMilestone();
 }
 
@@ -63,7 +65,7 @@ $('manage').onclick = () => { renderDialog(); $('dlg').open = true; };
 
 // Projects are named after their git repo now; map saved names that were folder names (e.g. codetool → homebase).
 function migrateTracked() {
-    const folder = s => (s.cwd || '').replace(/\/\.(claude\/)?worktrees\/.*$/, '').split('/').pop();
+    const folder = /** @param {Session} s */ s => (s.cwd || '').replace(/\/\.(claude\/)?worktrees\/.*$/, '').split('/').pop();
     const rename = n => state.sessions.some(s => s.project === n) ? n : (state.sessions.find(s => folder(s) === n)?.project ?? n);
     const tracked = [...new Set(state.tracked.map(rename))];
     if (tracked.join() !== state.tracked.join()) { state.tracked = tracked; saveTracked(); }
@@ -72,6 +74,7 @@ function migrateTracked() {
 }
 
 const notifyOn = () => store.get('notify') === '1' && window.Notification?.permission === 'granted';
+/** @param {AttentionEvent} e */
 function notify({ kind, item: x, comments }) {
     if (!notifyOn() || (document.visibilityState === 'visible' && document.hasFocus())) return;
     const ref = x.pr ? prLabel(x.pr) : x.title;
@@ -119,11 +122,12 @@ let lastSessions = '', lastRender = 0;
 async function refresh() {
     try {
         const r = await api('/api/sessions');
+        // @ts-expect-error Error() stringifies the status; only the catch below sees it
         if (!r.ok) throw new Error(r.status);
         const text = await r.text();
         // ponytail: skip identical re-renders so text in an open detail stays selectable; re-render each minute for the ages
         if (text !== lastSessions || Date.now() - lastRender > 60_000) {
-            state.sessions = JSON.parse(text);
+            state.sessions = /** @type {Session[]} */ (JSON.parse(text));
             migrateTracked();
             lastSessions = text; lastRender = Date.now();
             try { sessionStorage.setItem('sessions', text); } catch {}
@@ -142,6 +146,7 @@ async function refresh() {
 // "Session ▬ 70%   Week ▬ 63%"; reset times live in each item's tooltip. Hidden without a dump.
 const leftColor = left => (left >= 50 ? 'var(--c-ready)' : left >= 10 ? 'var(--c-warn)' : 'var(--c-danger)');
 async function refreshLimits() {
+    /** @type {Limits | null} */
     let l = null;
     try { l = await api('/api/limits').then(r => r.json()); } catch {}
     const box = $('limits'), wins = [l?.fiveHour, l?.sevenDay].map((w, week) => w && limitView(week, w)).filter(Boolean);
@@ -158,9 +163,9 @@ async function refreshLimits() {
         }));
     }
     box.querySelectorAll('.limit').forEach((s, i) => {
-        const v = wins[i], [name, bar, val] = s.children;
+        const v = wins[i], [name, bar, val] = s.children, fill = /** @type {HTMLElement} */ (bar.firstChild);
         name.textContent = v.label; val.textContent = v.text;
-        bar.firstChild.style.width = `${v.left}%`; bar.firstChild.style.background = leftColor(v.left);
+        fill.style.width = `${v.left}%`; fill.style.background = leftColor(v.left);
         s.nextElementSibling.replaceChildren(v.tip, ...(updated ? [el('br'), updated] : []));
     });
 }
@@ -172,7 +177,7 @@ project.addEventListener('change', () => {
     if (!project.value || project.value === state.project) return;
     state.project = project.value; store.set('project', state.project); renderMilestone(); renderBoard(); refreshChat();
 });
-for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => showTab(b.dataset.tab);
+for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) b.onclick = () => showTab(b.dataset.tab);
 showTab(store.get('tab'));
 initKeys(); // includes Esc collapsing the expanded row
 initChat();

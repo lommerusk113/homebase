@@ -7,12 +7,16 @@ import { chatSession, sendText } from './chat.js';
 export const STATES = { doing: 'in progress', closable: 'can be closed', todo: 'not started', free: 'unassigned' };
 
 // Open issues as cards with their state, in lane order: in progress, can be closed, not started, unassigned.
+/** @typedef {Issue & { st: keyof typeof STATES }} Card */
+
+/** @param {IssueGroups} groups @returns {Card[]} */
 export function issueCards(groups) {
     return [['doing', 'doing'], ['closable', 'closable'], ['assigned', 'todo'], ['unassigned', 'free']]
         .flatMap(([g, st]) => groups[g].map(i => ({ ...i, st })));
 }
 
 // Who a card belongs to: its assignees, else the authors of its MRs (an in-progress issue nobody assigned).
+/** @param {Card | Issue} card @returns {Person[]} */
 export function owners(card) {
     if (card.assignees.length) return card.assignees;
     return [...new Map(card.mrs.filter(m => m.author).map(m => [m.author.username, m.author])).values()];
@@ -20,6 +24,8 @@ export function owners(card) {
 
 // Lanes [{ who: { name, username } | null, me, list, closed }]: you first, others by name, Unassigned last (always there).
 // done: the milestone's closed issues, counted per assignee.
+/** @typedef {{ who: Person | null, me: boolean, list: Card[], closed: number }} Lane */
+/** @param {Card[]} cards @param {Issue[]} done @param {Person | null} me @returns {Lane[]} */
 export function buildLanes(cards, done, me) {
     const lanes = new Map();
     for (const c of cards) {
@@ -37,19 +43,23 @@ export function buildLanes(cards, done, me) {
 }
 
 // Closed issues per assignee for the folded Closed line: [[name, n]] by name, unassigned last.
+/** @param {Issue[]} done @returns {[string, number][]} */
 export function closedBy(done) {
     const n = new Map();
     for (const i of done) for (const k of i.assignees.length ? i.assignees.map(p => p.name) : ['unassigned']) n.set(k, (n.get(k) ?? 0) + 1);
+    // @ts-expect-error boolean minus boolean is 0/1/-1 at runtime, the intended sort key
     return [...n].sort((a, b) => (a[0] === 'unassigned') - (b[0] === 'unassigned') || a[0].localeCompare(b[0]));
 }
 
 // What "Send to chat" types: start a not-started issue, or check on one with an MR (its open MR first).
+/** @param {Issue} card */
 export function chatMessage(card) {
     const mr = card.mrs.find(m => m.state === 'open') ?? card.mrs[0];
     return mr ? `Check on #${card.iid} and !${mr.iid}` : `Implement #${card.iid}`;
 }
 
 // "Supplier automation: undo in the grid" -> "undo in the grid" when the prefix is the milestone's name.
+/** @param {string} title @param {string} milestone */
 export const shortTitle = (title, milestone) => {
     const m = title.match(/^([^:]{1,60}):\s+(.+)$/);
     return m && m[1].toLowerCase().startsWith(milestone.toLowerCase()) ? m[2] : title;
@@ -59,14 +69,17 @@ const COLOURS = ['#0969da', '#8250df', '#1a7f37', '#9a6700', '#bf3989', '#0a7b83
 const first = n => n.split(' ')[0];
 const initials = n => n.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 
-let data, openIid = null, closedOpen = false;
+/** @type {Milestones | null | undefined} */
+let data;
+let openIid = null, closedOpen = false;
 const sentAt = new Map(); // iid -> last send, so a re-render keeps the button showing it
 
 // Tabs: Work (the item list) and Issues. 1 and 2 switch (keys.js); the choice survives reloads.
+/** @param {string | null} tab */
 export function showTab(tab) {
     tab = tab === 'issues' ? 'issues' : 'work';
     store.set('tab', tab);
-    for (const b of document.querySelectorAll('#tabs button')) b.setAttribute('aria-selected', b.dataset.tab === tab);
+    for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) b.setAttribute('aria-selected', b.dataset.tab === tab);
     $('masters').hidden = tab !== 'work';
     $('issues').hidden = tab !== 'issues';
 }
@@ -87,6 +100,7 @@ const NO_GROUPS = { closable: [], doing: [], assigned: [], unassigned: [], done:
 
 // d: an /api/milestones response, null for "All my projects", undefined while the project's first response loads.
 // A selected milestone without groups is still loading its issues (the counts are already there).
+/** @param {Milestones | null} [d] */
 export function renderIssues(d = data) {
     data = d;
     const badge = $('tab-free'), free = d?.selected?.groups?.unassigned.length ?? 0;
@@ -115,12 +129,13 @@ export function renderIssues(d = data) {
         return;
     }
     const cards = issueCards(ms.groups);
-    pane.replaceChildren(head(ms, d.updating && 'Updating…'), ...buildLanes(cards, ms.groups.done, d.me).map((l, n) => lane(l, n, ms)), closedLine(ms.groups.done),
+    pane.replaceChildren(head(/** @type {SelectedMilestone & { groups: IssueGroups }} */ (ms), d.updating && 'Updating…'), ...buildLanes(cards, ms.groups.done, d.me).map((l, n) => lane(l, n, ms)), closedLine(ms.groups.done),
         el('div', 'is-note', 'Read-only: Homebase never writes to GitLab. "Send to chat" only types into the chat on the right.'));
     hooks.rendered?.(hadFocus);
 }
 
 // The Issues tab's line for a project without milestones to show (d.reason from /api/milestones).
+/** @param {Milestones} d */
 export function emptyText(d) {
     if (d.reason === 'none') return `No open milestones in ${d.project}.`;
     if (d.reason === 'unsupported') return `Milestones aren't available for ${d.project}: ${d.error ?? 'unknown project'}.`;
@@ -128,6 +143,7 @@ export function emptyText(d) {
 }
 
 // hint: "Loading issues…" or "Updating…" next to the title, with a spinner.
+/** @param {SelectedMilestone & { groups: IssueGroups }} ms @param {string | false} [hint] */
 function head(ms, hint) {
     const g = ms.groups, open = ms.total - ms.closed, h = el('div', 'is-head');
     const title = el('div', 'is-title'), gl = el('a', null, 'GitLab ↗');
@@ -145,7 +161,7 @@ function head(ms, hint) {
     const bar = el('div', 'is-bar'), legend = el('div', 'is-legend');
     for (const [n, c, label] of segs) {
         if (!n) continue;
-        const i = el('i'); i.style.flex = n; i.style.background = `var(${c})`; bar.append(i);
+        const i = el('i'); i.style.flex = String(n); i.style.background = `var(${c})`; bar.append(i);
         const s = el('span'); s.style.setProperty('--c', `var(${c})`); s.append(el('i', 'sw'), `${n} ${label}`); legend.append(s);
     }
     const mid = el('div'); mid.append(bar, legend);
@@ -156,6 +172,7 @@ function head(ms, hint) {
     return h;
 }
 
+/** @param {Lane} lane @param {number} n @param {SelectedMilestone} ms */
 function lane({ who, me, list, closed }, n, ms) {
     const sec = el('section', 'lane' + (who ? '' : ' free')), side = el('div', 'who'), name = el('div', 'name');
     const av = el('span', 'av', who ? initials(who.name) : '?');
@@ -173,13 +190,14 @@ function lane({ who, me, list, closed }, n, ms) {
     return sec;
 }
 
+/** @param {Card} c @param {SelectedMilestone} ms */
 function card(c, ms) {
     const open = openIid === c.iid, a = el('article', `card ${c.st}${open ? ' open' : ''}`);
     a.dataset.key = `issue:${c.iid}`; a.dataset.url = c.url;
     a.setAttribute('aria-expanded', open);
     const top = el('div', 'top');
     top.append(el('span', 'mono', `#${c.iid}`), el('span', 'st', STATES[c.st]), el('span', 'age', c.updated ? ago(Date.parse(c.updated)) : ''));
-    if (c.updated) top.lastChild.title = `Updated ${new Date(c.updated).toLocaleString()}`;
+    if (c.updated) /** @type {HTMLElement} */ (top.lastChild).title = `Updated ${new Date(c.updated).toLocaleString()}`;
     const ft = el('div', 'ft');
     for (const m of c.mrs) ft.append(prChip({ pr: m.url }), ...ciPill(m.pipeline));
     if (!c.mrs.length) ft.append(el('span', 'chip', 'no MR'));
@@ -190,6 +208,7 @@ function card(c, ms) {
     return a;
 }
 
+/** @param {Card} c */
 function more(c) {
     const box = el('div', 'more'), msg = chatMessage(c), acts = el('div', 'acts');
     if (c.desc) box.append(el('div', 'desc', c.desc));
@@ -210,6 +229,7 @@ function more(c) {
     return box;
 }
 
+/** @param {Issue[]} done */
 function closedLine(done) {
     const d = el('details', 'is-closed'), s = el('summary');
     s.append(el('b', null, `Closed · ${done.length}`), el('span', null, closedBy(done).map(([who, n]) => `${who === 'unassigned' ? who : first(who)} ${n}`).join(' · ')));

@@ -5,7 +5,10 @@ A local dashboard over your Claude Code sessions.
 ```sh
 node server.mjs          # http://localhost:4321 (set PORT to change)
 node test.mjs
+./check-types.sh         # type-checks public/*.js (JSDoc + public/types.d.ts), no build
 ```
+
+Run `./check-types.sh` before merging.
 
 ## Security
 

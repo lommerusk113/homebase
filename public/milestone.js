@@ -157,7 +157,7 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
 
     async function tick() {
         if (pick.isConnected) seen = true;
-        else if (seen) { clearInterval(timer); document.removeEventListener('click', outside); return; }
+        else if (seen) { clearInterval(timer); document.removeEventListener('click', outside); document.removeEventListener('homebase:refresh', now); return; }
         const want = store.get(key) ?? '';
         if (pending || (want === asked && Date.now() - at < (loading ? LOADING_MS : FETCH_MS))) return;
         pending = true;
@@ -184,6 +184,9 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
     }
 
     const timer = setInterval(tick, POLL_MS);
+    // the refresh button: fetch now instead of waiting out FETCH_MS
+    const now = () => { at = 0; tick(); };
+    document.addEventListener('homebase:refresh', now);
     tick();
     return pick;
 }

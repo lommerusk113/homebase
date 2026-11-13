@@ -8,9 +8,9 @@ import { showTab, activeTab, collapseIssue } from './issues.js';
 export const SHORTCUTS = [
     ['j / ↓', 'Next item'], ['k / ↑', 'Previous item'], ['Enter / Space', 'Expand or collapse, chat with its session'],
     ['o', 'Open the MR in a new tab'], ['a', "Run the row's action (asks first)"], ['/ or c', 'Focus the chat input'],
-    ['Esc', 'Leave the input, or collapse the row'], ['1 / 2', 'Work tab / Issues tab'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['?', 'This overlay']
+    ['Esc', 'Leave the input, or collapse the row'], ['1 / 2', 'Work tab / Issues tab'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['r', 'Refresh from GitLab/GitHub'], ['?', 'This overlay']
 ];
-const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', g: 'g', 1: 'work', 2: 'issues' };
+const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', r: 'refresh', g: 'g', 1: 'work', 2: 'issues' };
 
 // Action for a keydown ({ key, metaKey, ctrlKey, altKey }); prev is 'g' when g was pressed just before.
 export function keyAction(e, prev) {
@@ -109,6 +109,7 @@ function onKey(e) {
         help,
         project: () => { const p = $('project'); p.focus(); p.open = true; },
         milestone: () => { const m = document.querySelector('.ms-pick:not([hidden])'); if (m) { m.open = true; m.querySelector('summary').focus(); } },
+        refresh: () => hooks.refresh(),
         g: () => {}
     }[action];
     run();

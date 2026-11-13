@@ -59,6 +59,9 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 #bell { margin-left:auto; display:grid; place-items:center; height:26px; }
 #bell .b-on, #bell.on .b-off { display:none; }
 #bell.on .b-on { display:inline; }
+#reload { display:grid; place-items:center; height:26px; }
+#reload.spin svg { animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
 #bell .b-dot { fill:var(--accent); stroke:var(--bg); stroke-width:2; }
 
 #dlg { --width:min(420px, calc(100vw - 32px)); }

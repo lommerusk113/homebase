@@ -44,13 +44,44 @@ export function bindChat(id) {
     renderBoard(); refreshChat();
 }
 
-function bubble(i, sid, prevTopic) {
+// Stable colour per topic: one of TOPIC_HUES --t<n> tokens in styles.css, so bubbles on one task share a colour.
+export const TOPIC_HUES = 8;
+export function topicHue(topic) {
+    let h = 2166136261; // FNV-1a; low bits alone only see the chars' low bits, so fold the high half in
+    for (const c of topic) h = Math.imul(h ^ c.codePointAt(0), 16777619);
+    return ((h ^ (h >>> 16)) >>> 0) % TOPIC_HUES;
+}
+
+// Needs-you bubbles stay unread (a dot) until opened or answered. needs-seen:<sid> = { at, keys }: anything at or
+// before `at` counts as seen, so the first load doesn't light up every old bubble.
+const seenStore = sid => { try { return JSON.parse(store.get(`needs-seen:${sid}`)) || null; } catch { return null; } };
+function markRead(sid, key, b) {
+    const v = seenStore(sid) ?? { at: 0, keys: [] };
+    if (!v.keys.includes(key)) store.set(`needs-seen:${sid}`, JSON.stringify({ ...v, keys: [...v.keys, key].slice(-200) }));
+    b.querySelector('.unread')?.remove();
+}
+
+function bubble(i, sid, prevTopic, look = {}) {
     if (i.role === 'tools') return el('div', 'tools', i.text);
-    const b = el('div', `bubble ${i.role}${i.error ? ' failed' : ''}${i.interrupted ? ' interrupted' : ''}`), key = `${sid}:${i.at}`;
+    const needs = i.role === 'assistant' && i.needsYou && !i.error;
+    const kind = i.role !== 'assistant' || i.error ? '' : needs ? ' needs' : ` fyi${look.latest ? ' latest' : ''}`;
+    const b = el('div', `bubble ${i.role}${kind}${i.error ? ' failed' : ''}${i.interrupted ? ' interrupted' : ''}`), key = `${sid}:${i.at}`;
     // the interrupted mark gets its own tooltip instead of the timestamp
     if (i.at && !i.interrupted) b.title = new Date(i.at).toLocaleString();
+    if (i.topic) { b.classList.add('topical'); b.style.setProperty('--tc', `var(--t${topicHue(i.topic)})`); }
     // topic header only where it changes from Claude's previous bubble, so a run on one task reads as one block
-    if (i.topic && i.topic !== prevTopic) b.append(el('div', 'b-topic', i.topic));
+    const head = i.topic && i.topic !== prevTopic;
+    if (head || needs) {
+        const row = el('div', 'b-topic');
+        if (head) row.append(el('span', 'b-topic-name', i.topic));
+        if (needs) {
+            const pill = el('span', 'need-pill', 'needs you');
+            if (look.unread) pill.prepend(el('span', 'unread'));
+            row.append(pill);
+            b.addEventListener('click', () => markRead(sid, key, b));
+        }
+        b.append(row);
+    }
     if (i.role === 'assistant') b.append(...foldable(i.tldr, i.text, key));
     else {
         const body = rich(i.text);
@@ -158,7 +189,16 @@ export async function refreshChat() {
     const first = !chatKey?.startsWith(s.id), atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40, top = feed.scrollTop;
     chatKey = key;
     let topic = null;
-    feed.replaceChildren(...items.map(i => { const prev = topic; if (i.role === 'assistant') topic = i.topic; return bubble(i, s.id, prev); }));
+    const latest = items.findLastIndex(i => i.role === 'assistant');
+    let seen = seenStore(s.id);
+    if (!seen) { seen = { at: Date.parse(items.at(-1)?.at) || Date.now(), keys: [] }; store.set(`needs-seen:${s.id}`, JSON.stringify(seen)); }
+    // unread: newer than the first load, not opened, and no message from the user after it
+    const unread = (i, n) => i.needsYou && Date.parse(i.at) > seen.at && !seen.keys.includes(`${s.id}:${i.at}`) && !items.slice(n + 1).some(x => x.role === 'user');
+    feed.replaceChildren(...items.map((i, n) => {
+        const prev = topic;
+        if (i.role === 'assistant') topic = i.topic;
+        return bubble(i, s.id, prev, { latest: n === latest, unread: unread(i, n) });
+    }));
     if (hidden && !cut.fresh) {
         const line = el('div', 'c-hidden', 'Earlier messages hidden · '), btn = el('button', 'show', 'Show');
         btn.onclick = () => { store.set(`cleared:${s.id}`, ''); refreshChat(); };
@@ -207,7 +247,15 @@ export async function sendText(sid, text, answerTo) {
     }
 }
 
+// Chat menu toggle: hides FYI bubbles (and tool lines), keeping needs-you, the user's own and the newest Claude bubble.
+function setNeedsOnly(on) {
+    store.set('needs-only', on ? '1' : '');
+    $('feed').classList.toggle('needs-only', on);
+    $('needs-only').checked = on;
+}
+
 export function initChat() {
+    setNeedsOnly(store.get('needs-only') === '1');
     $('msg').addEventListener('input', () => { syncSend(); saveDraft(session(), chatSession()?.id, $('msg')); });
     $('send').onsubmit = async e => {
         e.preventDefault();
@@ -221,6 +269,7 @@ export function initChat() {
     $('c-menu').addEventListener('wa-select', e => {
         const s = chatSession();
         if (!s) return;
+        if (e.detail.item.value === 'needs-only') return setNeedsOnly(store.get('needs-only') !== '1'); // from our state, not the item's own toggle
         if (e.detail.item.value === 'view') { store.set(`cleared:${s.id}`, String(Date.now())); refreshChat(); } else $('clear-dlg').open = true;
     });
     $('clear-go').onclick = async () => {

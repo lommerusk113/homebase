@@ -238,6 +238,59 @@ const INTERRUPTED = /^\[Request interrupted by user(?: for tool use)?\]$/;
 // Master chat as bubbles: human prompts, Claude's text (consecutive chunks merged), and one activity line per run of tool calls.
 export function chatItems(entries, max = 60) {
 
+    const items = dedupePrompts([...mergeChunks(rawItems(entries)), ...pendingPrompts(entries)]);
+    const out = pairAnswers(items.map(i => (i.role === 'assistant' ? topicAndTldr(i) : i))).slice(-max);
+
+    const last = out.at(-1);
+    if (last?.role === 'assistant' && !last.answer) {
+        last.replies = quickReplies(last.tldr, last.text); // only the newest item, so any later user message hides them
+    }
+
+    return out;
+}
+
+// What a main-chat entry adds to the bubbles, or null for nothing:
+// - interrupt: the Esc marker, which flags Claude's message before it;
+// - prompt: a typed prompt, or one queued while Claude worked and absorbed into the running turn;
+// - turn: any other non-tool-result user entry (agent message, task notification, reminder), which starts a new turn;
+// - error: an API error line;
+// - assistant: Claude's text and tool calls.
+function entryKind(e) {
+
+    if (e.isSidechain) {
+        return null;
+    }
+
+    const human = e.type === 'user' && !e.isMeta ? unwrapPasted(textOf(e)) : '';
+    if (INTERRUPTED.test(human)) {
+        return { kind: 'interrupt' };
+    }
+    if (human && !human.startsWith('<')) {
+        return { kind: 'prompt', text: human };
+    }
+
+    const a = e.type === 'attachment' ? e.attachment : null;
+    if (a?.type === 'queued_command' && a.origin?.kind === 'human') {
+        return { kind: 'prompt', text: unwrapPasted(textOf({ message: { content: a.prompt } })) };
+    }
+    if (e.type === 'user' && !(Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result'))) {
+        return { kind: 'turn' };
+    }
+    if (e.type !== 'assistant') {
+        return null;
+    }
+    // "Please run /login · API Error: 403 …": a red error line, not a Claude bubble
+    if (e.isApiErrorMessage) {
+        return { kind: 'error', text: textOf(e) };
+    }
+
+    return { kind: 'assistant', text: textOf(e), uses: Array.isArray(e.message?.content) ? e.message.content.filter(b => b.type === 'tool_use') : [] };
+}
+
+// Bubbles in entry order: one per Claude text chunk, marked `continues` unless a new turn started before it, and one
+// activity line per run of tool calls.
+function rawItems(entries) {
+
     const items = [];
     let uses = [];
     const flush = () => {
@@ -247,89 +300,89 @@ export function chatItems(entries, max = 60) {
         }
     };
 
-    // ponytail: replays the queue in the tail; a dequeue whose enqueue fell out of the tail shifts the wrong item
-    const queue = [];
-    // A non-tool-result user entry (agent message, task notification, reminder) starts a new turn, so the next reply gets its own bubble.
     let newTurn = false;
-
     for (const e of entries) {
-        if (e.isSidechain) {
-            continue;
-        }
-        const human = e.type === 'user' && !e.isMeta ? unwrapPasted(textOf(e)) : '';
-        // "Send now" (Escape) leaves this marker; it flags Claude's message instead of showing as a bubble
-        if (INTERRUPTED.test(human)) {
+        const entry = entryKind(e);
+        if (entry?.kind === 'interrupt') {
             const prev = items.findLast(i => i.role === 'assistant');
             if (prev) {
                 prev.interrupted = true;
             }
-            continue;
-        }
-        if (human && !human.startsWith('<')) {
+        } else if (entry?.kind === 'prompt') {
             flush();
-            items.push({ role: 'user', text: human, at: e.timestamp });
-            continue;
-        }
-        // Messages typed while Claude works: queued first, then absorbed into the running turn as an attachment.
-        if (e.type === 'queue-operation') {
-            if (e.operation === 'enqueue') {
-                queue.push({ raw: e.content, text: unwrapPasted(e.content), at: e.timestamp });
-            } else if (e.operation === 'dequeue') {
-                queue.shift();
-            } else if (e.operation === 'remove') {
-                const i = queue.findIndex(q => q.raw === e.content);
-                if (i >= 0) {
-                    queue.splice(i, 1);
-                }
-            }
-            continue;
-        }
-        const a = e.type === 'attachment' ? e.attachment : null;
-        if (a?.type === 'queued_command' && a.origin?.kind === 'human') {
-            flush();
-            items.push({ role: 'user', text: unwrapPasted(textOf({ message: { content: a.prompt } })), at: e.timestamp });
-            continue;
-        }
-        if (e.type === 'user' && !(Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result'))) {
+            items.push({ role: 'user', text: entry.text, at: e.timestamp });
+        } else if (entry?.kind === 'turn') {
             newTurn = true;
-        }
-        if (e.type !== 'assistant') {
-            continue;
-        }
-        // "Please run /login · API Error: 403 …": a red error line, not a Claude bubble
-        if (e.isApiErrorMessage) {
+        } else if (entry?.kind === 'error') {
             flush();
-            items.push({ role: 'error', text: textOf(e), at: e.timestamp });
+            items.push({ role: 'error', text: entry.text, at: e.timestamp });
             newTurn = true;
-            continue;
-        }
-
-        const text = textOf(e);
-        if (text) {
-            flush();
-            const prev = items.at(-1);
-            if (prev?.role === 'assistant' && !newTurn) {
-                prev.text += '\n\n' + text;
-            } else {
-                items.push({ role: 'assistant', text, at: e.timestamp });
+        } else if (entry?.kind === 'assistant') {
+            if (entry.text) {
+                flush();
+                items.push({ role: 'assistant', text: entry.text, at: e.timestamp, ...(!newTurn && { continues: true }) });
+                newTurn = false;
             }
-            newTurn = false;
-        }
-        if (Array.isArray(e.message?.content)) {
-            uses.push(...e.message.content.filter(b => b.type === 'tool_use'));
+            uses.push(...entry.uses);
         }
     }
     flush();
 
-    for (const q of queue) {
-        if (q.text && !q.text.startsWith('<')) {
-            items.push({ role: 'user', text: q.text, at: q.at, pending: true });
+    return items;
+}
+
+// Joins a `continues` chunk into the Claude bubble right before it, so two replies of separate turns stay separate.
+function mergeChunks(items) {
+
+    const out = [];
+    for (const { continues, ...item } of items) {
+        const prev = out.at(-1);
+        if (continues && prev?.role === 'assistant') {
+            prev.text += '\n\n' + item.text;
+            if (item.interrupted) {
+                prev.interrupted = true;
+            }
+            continue;
+        }
+        out.push(item);
+    }
+
+    return out;
+}
+
+// Messages typed while Claude works are queued first, then absorbed into the running turn as an attachment; the ones
+// still queued are pending bubbles.
+// ponytail: replays the queue in the tail; a dequeue whose enqueue fell out of the tail shifts the wrong item
+function pendingPrompts(entries) {
+
+    const queue = [];
+    for (const e of entries) {
+        if (e.isSidechain || e.type !== 'queue-operation') {
+            continue;
+        }
+        if (e.operation === 'enqueue') {
+            queue.push({ raw: e.content, text: unwrapPasted(e.content), at: e.timestamp });
+        } else if (e.operation === 'dequeue') {
+            queue.shift();
+        } else if (e.operation === 'remove') {
+            const i = queue.findIndex(q => q.raw === e.content);
+            if (i >= 0) {
+                queue.splice(i, 1);
+            }
         }
     }
 
-    // One message can surface as a prompt, a queued_command attachment and a pending enqueue; keep the first.
+    return queue
+        .filter(q => q.text && !q.text.startsWith('<'))
+        .map(q => ({ role: 'user', text: q.text, at: q.at, pending: true }));
+}
+
+// One message can surface as a prompt, a queued_command attachment and a pending enqueue; keep the first.
+function dedupePrompts(items) {
+
     const seen = [];
-    const unique = items.filter(i => {
+
+    return items.filter(i => {
         if (i.role !== 'user') {
             return true;
         }
@@ -341,14 +394,6 @@ export function chatItems(entries, max = 60) {
 
         return true;
     });
-
-    const out = pairAnswers(unique.map(i => (i.role === 'assistant' ? topicAndTldr(i) : i))).slice(-max);
-    const last = out.at(-1);
-    if (last?.role === 'assistant' && !last.answer) {
-        last.replies = quickReplies(last.tldr, last.text); // only the newest item, so any later user message hides them
-    }
-
-    return out;
 }
 
 function topicAndTldr(i) {

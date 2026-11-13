@@ -343,10 +343,8 @@ export function summarize(entries, ageMs) {
     };
 }
 
-export async function sessions() {
-
-    const now = Date.now();
-    const out = [];
+// Session transcripts written within MAX_AGE_MS, as { dir, file, path, st }. A project folder or transcript that vanishes mid-listing is skipped.
+async function* recentTranscripts(now) {
 
     for (const dir of await readdir(ROOT)) {
         let files;
@@ -356,40 +354,61 @@ export async function sessions() {
             continue;
         }
 
-        for (const f of files) {
-            const path = join(ROOT, dir, f);
-            let st, entries;
+        for (const file of files) {
+            const path = join(ROOT, dir, file);
+            let st;
             try {
                 st = await stat(path);
-                if (now - st.mtimeMs > MAX_AGE_MS) {
-                    continue;
-                }
-                entries = await tailOf(path, st);
             } catch {
-                continue; // deleted between readdir and read
+                continue; // deleted between readdir and stat
+            }
+            if (now - st.mtimeMs > MAX_AGE_MS) {
+                continue;
             }
 
-            const s = summarize(entries, now - st.mtimeMs);
-            const id = s.id ?? f.replace('.jsonl', '');
-            out.push({ ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, agents: await agents(join(ROOT, dir, id, 'subagents'), now) });
+            yield { dir, file, path, st };
         }
     }
+}
 
-    await Promise.all(out.map(async s => {
-        s.project = await projectOf(s.cwd);
-    }));
+// One session from its cached tail, with its subagents; null when the transcript vanished before it was read.
+async function sessionOf({ dir, file, path, st }, now) {
+
+    let entries;
+    try {
+        entries = await tailOf(path, st);
+    } catch {
+        return null; // deleted between stat and read
+    }
+
+    const s = summarize(entries, now - st.mtimeMs);
+    const id = s.id ?? file.replace('.jsonl', '');
+
+    return { ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, agents: await agents(join(ROOT, dir, id, 'subagents'), now) };
+}
+
+// The work items of all sessions (their PRs/MRs and agents), with PR/MR state, human comments and milestone.
+async function itemsOf(out) {
 
     const urls = new Set(out.flatMap(s => [...s.prs.map(p => p.url), ...s.agents.flatMap(a => a.prs)]));
     const states = new Map(await Promise.all([...urls].map(async u => [u, await prState(u)])));
     // human comments on open MRs only; never waits, so the first poll after start has none yet
     const comments = new Map([...urls].filter(u => states.get(u)?.state === 'open')
         .map(u => [u, swrEntry(`comments:${u}`, PR_TTL_MS, () => fetchComments(u)).value ?? null]));
+
     const items = workItems(out, u => withThreads(states.get(u) ?? null, comments.get(u)));
     for (const it of items) {
         // only an already fetched milestone list; /api/milestones fills it for the projects on the board
         it.milestone = milestoneOf(it.prState, swr.get(`ms:${it.project}`)?.value ?? []);
         it.comments = comments.get(it.pr) ?? null;
     }
+
+    return items;
+}
+
+// Each session gets its items and subagent counts; its raw agents, gates and open prompts stay out of the response.
+function attachItems(out, items, now) {
+
     for (const s of out) {
         s.items = items.filter(i => i.sessionId === s.id);
         s.subagents = { running: s.agents.filter(a => a.status === 'running').length, finished: s.agents.filter(a => a.status === 'done' && now - a.updated < FINISHED_MS).length };
@@ -398,8 +417,11 @@ export async function sessions() {
         delete s.gates;
         delete s.openPrompts;
     }
+}
 
-    // /clear sent from Homebase: the new transcript keeps typing into the old tmux session
+// Each session's tmux target. A /clear sent from Homebase starts a new transcript that keeps typing into the old tmux session.
+function attachTmux(out, now) {
+
     for (const c of clears.splice(0)) {
         const next = findClearedSuccessor(out, c);
         if (next) {
@@ -408,6 +430,7 @@ export async function sessions() {
             clears.push(c);
         }
     }
+
     for (const s of out) {
         const a = aliases.get(s.id);
         s.tmux = tmuxFor(s.id);
@@ -415,9 +438,30 @@ export async function sessions() {
             s.clearedFrom = a.from;
         }
     }
+}
 
-    // by real activity, so an idle process's bookkeeping writes don't float it to the top
-    return out.sort((a, b) => (b.lastActivity ?? b.created) - (a.lastActivity ?? a.created));
+// By real activity, so an idle process's bookkeeping writes don't float it to the top.
+const byActivity = (a, b) => (b.lastActivity ?? b.created) - (a.lastActivity ?? a.created);
+
+export async function sessions() {
+
+    const now = Date.now();
+    const out = [];
+    for await (const transcript of recentTranscripts(now)) {
+        const s = await sessionOf(transcript, now);
+        if (s) {
+            out.push(s);
+        }
+    }
+
+    await Promise.all(out.map(async s => {
+        s.project = await projectOf(s.cwd);
+    }));
+
+    attachItems(out, await itemsOf(out), now);
+    attachTmux(out, now);
+
+    return out.sort(byActivity);
 }
 
 // Open in editor: the item's agent worktree if it's still there, else its session's cwd. Absolute paths only, so none reads as a flag.

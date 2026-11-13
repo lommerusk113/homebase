@@ -79,12 +79,12 @@ export const limitLeft = (w, now = Date.now()) => {
     return { left: Math.max(0, Math.min(100, Math.round(100 - w.used))), until: d ? `${d}d${h ? h + 'h' : ''}` : h ? `${h}h${m % 60 ? m % 60 + 'm' : ''}` : `${m}m` };
 };
 // Chat status bar: a failed poll wins (never claim "Idle" on data we couldn't fetch), then asking over working
-// (Claude waits on you); working counts from your last message.
+// (Claude waits on you); working counts from the turn start (`since`), else from your last message.
 export const chatStatus = (d, now = Date.now()) => {
     if (d?.error) return { kind: 'error', text: 'Can’t reach Homebase — reconnecting…' };
     if (d?.asking) return { kind: 'asking', text: 'Claude is asking — answer below' };
     if (!d?.working) return { kind: 'idle', text: 'Idle — waiting for you' };
-    const at = Date.parse(d.items?.findLast(i => i.role === 'user' && !i.pending)?.at), m = (now - at) / 60000 | 0;
+    const at = d.since ?? Date.parse(d.items?.findLast(i => i.role === 'user' && !i.pending)?.at), m = (now - at) / 60000 | 0;
     return { kind: 'working', text: `Claude is working…${m > 0 ? ` · ${m < 60 ? m + 'm' : `${m / 60 | 0}h${m % 60 ? m % 60 + 'm' : ''}`}` : ''}` };
 };
 // Limits strip item: "Session 70%" at a glance, details in the tooltip; the countdown shows inline only once under 20% is left.

@@ -68,7 +68,7 @@ async function projectOf(cwd) {
     return projects.get(cwd);
 }
 
-export const STAGES = ['Explore', 'Implement', 'Verify', 'Ship', 'Done'];
+const STAGES = ['Explore', 'Implement', 'Verify', 'Ship', 'Done'];
 // Matched against each command of a Bash call, so they are anchored to its start.
 const VERIFY_CMD = /^(?:\S*gradlew?\b.*\b(?:check|test)\b|(?:npx |pnpm |yarn |bunx? )?(?:vitest|jest|tsc|eslint)\b|(?:npm|pnpm|yarn|bun) (?:run )?(?:test|check|lint|typecheck)\b|node (?:--test|\S*test)|mvn\b.*\b(?:test|verify)\b)/;
 const SHIP_CMD = /^(?:git push|glab mr create|gh pr create)\b/;

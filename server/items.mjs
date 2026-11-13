@@ -1,6 +1,6 @@
 // Work-item rules (pure): one item per MR or loose agent, its column, lifecycle stage, next step, row action, gate badge and milestone.
 import { PR_URL, USAGE_KEYS, formatDuration, formatTokens } from './transcripts.mjs';
-import { mentionsMr, mrNumber } from './forge.mjs';
+import { mentionsMr, mrNumber, mrRef } from './forge.mjs';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
@@ -28,8 +28,7 @@ export function column(status, prState, hasPr) {
 // The newest gate run that names this MR by URL, !N / #N, or its branch.
 export function gateFor(runs, url, branch) {
 
-    const n = mrNumber(url);
-    const ref = new RegExp(`(?<![\\w/])${url.includes('/pull/') ? '#' : '!'}${n}\\b`);
+    const ref = new RegExp(`(?<![\\w/])${mrRef(url)}\\b`);
 
     return runs.filter(r => r.text.includes(url) || ref.test(r.text) || (branch && r.text.includes(branch))).toSorted((a, b) => b.at - a.at)[0] ?? null;
 }
@@ -51,10 +50,10 @@ export function toGate(run, sha, heads = new Map()) {
 }
 
 // The left side's lifecycle: agent stages first, then MR states.
-export const LIFECYCLE = ['Implement', 'Verify', 'Review', 'Approved', 'Merged'];
+const LIFECYCLE = ['Implement', 'Verify', 'Review', 'Approved', 'Merged'];
 const VERB = ['exploring', 'implementing', 'verifying', 'shipping', 'finishing'];
 
-export function lifecycle(pr, prState, agent) {
+function lifecycle(pr, prState, agent) {
 
     if (prState?.state === 'merged' || prState?.state === 'closed') {
         return 4;
@@ -145,8 +144,7 @@ export function rowAction(pr, prState, agent, title) {
         return null;
     }
 
-    const n = mrNumber(pr);
-    const ref = `${pr.includes('/pull/') ? '#' : '!'}${n} (${pr})`;
+    const ref = `${mrRef(pr)} (${pr})`;
     if (prState.changes) {
         return { label: 'Fix & reply', message: `Address the review comments on ${ref}, push, and reply in each thread.` };
     }
@@ -292,7 +290,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
     });
 }
 
-export const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // Milestone { id, title } of an MR: its own milestone, else the listed one whose slug is its target branch (supplier-automation).
 export function milestoneOf(prState, list) {

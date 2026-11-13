@@ -31,6 +31,8 @@ export function pipelineOf(gl, checks, prUrl) {
 
 // The MR/PR number in its URL, as a string.
 export const mrNumber = url => url.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
+// How people write the MR/PR in text: !12 on GitLab, #12 on GitHub.
+export const mrRef = url => `${url.includes('/pull/') ? '#' : '!'}${mrNumber(url)}`;
 // The coarse ci flag nextStep/rowAction read: 'failing', 'running' or null.
 export const ciOf = pipeline => ({ failed: 'failing', running: 'running', pending: 'running' })[pipeline?.status] ?? null;
 
@@ -102,10 +104,9 @@ export function mentionsMr(text, url, issue) {
         return true;
     }
 
-    const n = mrNumber(url);
     const ref = r => new RegExp(`(?<![\\w&!#])${r}(?!\\d)`).test(text);
 
-    return !!((n && ref(`${url.includes('/pull/') ? '#' : '!'}${n}`)) || (issue && ref(`#${issue}`)));
+    return !!((mrNumber(url) && ref(mrRef(url))) || (issue && ref(`#${issue}`)));
 }
 
 // Stale-while-revalidate so a slow CLI call never blocks the board after the first load.

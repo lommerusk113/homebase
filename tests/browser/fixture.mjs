@@ -10,7 +10,8 @@ export const IDS = {
     asker: 'aaaaaaaa-0000-4000-8000-000000000002', // beta, pending AskUserQuestion
     worker: 'aaaaaaaa-0000-4000-8000-000000000003', // alpha, open turn with a queued message
     gamma: 'aaaaaaaa-0000-4000-8000-000000000004', // gamma, whose forge calls fail
-    other: 'aaaaaaaa-0000-4000-8000-000000000005' // alpha, written to by the binding test
+    other: 'aaaaaaaa-0000-4000-8000-000000000005', // alpha, written to by the binding test
+    quiet: 'aaaaaaaa-0000-4000-8000-000000000006' // delta (no origin, never tracked by default): only a finished subagent
 };
 export const MR = n => `https://gitlab.com/acme/alpha/-/merge_requests/${n}`;
 
@@ -39,14 +40,14 @@ function session(home, project, id, entries, mtimeAgo) {
     return dir;
 }
 
-// A subagent of the master: meta.json plus transcript under <session>/subagents/.
-function agent(dir, id, meta, entries, mtimeAgo) {
+// A subagent of the master (or of parent): meta.json plus transcript under <session>/subagents/.
+function agent(dir, id, meta, entries, mtimeAgo, parent = IDS.master) {
 
-    const sub = join(dir, IDS.master, 'subagents');
+    const sub = join(dir, parent, 'subagents');
     mkdirSync(sub, { recursive: true });
     writeFileSync(join(sub, `${id}.meta.json`), JSON.stringify({ agentType: 'general-purpose', ...meta }));
     const path = join(sub, `${id}.jsonl`);
-    writeFileSync(path, jsonl(entries.map(e => ({ isSidechain: true, sessionId: IDS.master, cwd: join(dir, 'x'), ...e }))));
+    writeFileSync(path, jsonl(entries.map(e => ({ isSidechain: true, sessionId: parent, cwd: join(dir, 'x'), ...e }))));
     const t = new Date(Date.now() - mtimeAgo * 1000);
     utimesSync(path, t, t);
 }
@@ -100,10 +101,17 @@ export function buildFixture(root) {
     session(home, 'alpha', IDS.worker, [
         prompt('Refactor the session store', 60),
         tool('Bash', { command: 'npm test' }, 30),
-        { type: 'queue-operation', operation: 'enqueue', content: 'also update the docs', timestamp: ago(20) }
+        { type: 'queue-operation', operation: 'enqueue', content: 'also update the docs, then take on #7', timestamp: ago(20) }
     ], 1);
 
     session(home, 'gamma', IDS.gamma, [prompt('Tidy the README', 5000), said('Tidied.', 4990), done(4980)], 4980);
+    // delta: a git repo without origin, so the server names it by folder and makes no forge calls
+    execFileSync('git', ['init', '-q', join(home, 'repos', 'delta')]);
+    const delta = session(home, 'delta', IDS.quiet, [prompt('Tidy the changelog', 700), said('Handed it to a subagent.', 690), done(680)], 680);
+    agent(delta, 'agent-changelog', { description: 'Tidy the changelog', finished: true }, [
+        { type: 'user', timestamp: ago(690), message: { role: 'user', content: 'Tidy the changelog' } },
+        tool('SubagentHandback', { message: 'Changelog tidied.\n\nTLDR: done' }, 650)
+    ], 650, IDS.quiet);
     session(home, 'alpha', IDS.other, [prompt('Look into the build cache', 6000), said('The cache is fine.', 5990), done(5980)], 5980);
 
     agent(alpha, 'agent-run', { description: 'Implement !101' }, [

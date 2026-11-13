@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { MR } from './fixture.mjs';
+import { MR, IDS } from './fixture.mjs';
 
 const row = key => `document.querySelector('#masters tr[data-key="${key}"]')`;
-const groups = `Object.fromEntries([...document.querySelectorAll('#masters .group')].map(g => [g.className.match(/g-([\\w-]+)/)[1], [...g.querySelectorAll('tr[data-key]')].map(r => r.dataset.key)]))`;
+const groups = `Object.fromEntries([...document.querySelectorAll('#masters .group:not(.g-sessions)')].map(g => [g.className.match(/g-([\\w-]+)/)[1], [...g.querySelectorAll('tr[data-key]')].map(r => r.dataset.key)]))`;
 
 export default {
     'work rows land in the right groups': async ({ page, open }) => {
@@ -10,14 +10,14 @@ export default {
         await page.waitFor(`${row(MR(102))}`, { what: 'the !102 row' });
         assert.deepEqual(await page.ev(groups), {
             'needs-you': ['agent-stopped'],
-            doing: [MR(101)],
+            doing: [`starting:${IDS.worker}:7`, MR(101)],
             review: [MR(103)],
             ready: [MR(102)],
             finished: ['agent-notes'],
             done: [MR(100)]
         });
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters .g-head')].map(h => h.textContent)`),
-            ['Needs you · 1', 'Doing · 1', 'In review · 1', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
+            ['Sessions', 'Needs you · 1', 'Doing · 2', 'In review · 1', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.next').textContent`), 'Next: Agent stopped — check the chat');
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.act-btn').textContent`), 'Continue');
         assert.equal(await page.ev(`${row(MR(102))}.querySelector('.act-btn').textContent`), 'Merge + close issue');

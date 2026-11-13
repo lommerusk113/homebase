@@ -17,6 +17,18 @@ interface Session {
     status: string;
     lastPrompt: string;
     lastReply: string;
+    /** topic of Claude's newest reply that has one (▸ header) */
+    topic: string | null;
+    /** a question (AskUserQuestion) waits on the user */
+    asking: boolean;
+    /** start of the running turn; null when idle or unknown */
+    since: number | null;
+    /** the human prompt the running turn works on; null when idle */
+    now: string | null;
+    /** human prompts waiting in Claude Code's queue */
+    queued: string[];
+    /** running subagents, and those finished in the last 2h */
+    subagents: { running: number; finished: number };
     files: string[];
     updated: number;
     created: number;

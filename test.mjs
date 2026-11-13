@@ -1253,3 +1253,63 @@ import { fetchComments } from './server.mjs';
     assert.deepEqual((await fetchComments('https://example.com/a/b/issues/1')).items, []);
     console.log('ok corrupt meta, vanished transcript, unknown host');
 }
+
+import { latestTopic, queuedPrompts } from './server.mjs';
+{
+    const reply = (text, extra = {}) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] }, ...extra });
+    assert.equal(latestTopic([reply('**▸ Old**\nx'), reply('**▸ Perks simulator**\ny'), reply('no header'), { type: 'user', message: { content: 'q' } }]), 'Perks simulator', 'newest reply with a topic');
+    assert.equal(latestTopic([reply('**▸ Main**\nx'), reply('**▸ Side**\ny', { isSidechain: true })]), 'Main', 'sidechain replies are skipped');
+    assert.equal(latestTopic([reply('plain')]), null);
+    console.log('ok latestTopic');
+
+    // pracsys 13 Nov 10:56-10:57Z: "Implement #2244" starts a turn, "Implement #2225" is typed mid-turn (enqueue),
+    // absorbed into the running turn (remove + queued_command attachment); entry shapes trimmed to the fields read.
+    const sid = '5010a555', ts = s => `2026-11-13T10:${s}Z`;
+    const typed = { parentUuid: 'p0', isSidechain: false, type: 'user', message: { role: 'user', content: 'Implement #2244' }, uuid: 'u1', timestamp: ts('56:52.953'), origin: { kind: 'human' }, promptSource: 'typed', turnOrigin: 'human', turnPosition: { promptIndex: 76, turnIndex: 123 }, cwd: '/r/pracsys', sessionId: sid };
+    const tool = (uuid, at) => ({ parentUuid: 'x', isSidechain: false, type: 'assistant', message: { model: 'm', content: [{ type: 'tool_use', id: `t${uuid}`, name: 'Bash', input: {} }] }, uuid, timestamp: ts(at), sessionId: sid });
+    const result = (uuid, at) => ({ parentUuid: 'x', isSidechain: false, type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't', content: 'ok' }] }, uuid, timestamp: ts(at), sessionId: sid });
+    const enqueue = { type: 'queue-operation', operation: 'enqueue', timestamp: ts('57:03.798'), sessionId: sid, content: 'Implement #2225' };
+    const notify = { type: 'queue-operation', operation: 'enqueue', timestamp: ts('57:04.000'), sessionId: sid, content: '<task-notification>\n<task-id>a1</task-id>\n<status>completed</status>' };
+    const dequeue = { type: 'queue-operation', operation: 'dequeue', timestamp: ts('57:05.000'), sessionId: sid };
+    const remove = { type: 'queue-operation', operation: 'remove', timestamp: ts('57:15.989'), sessionId: sid, content: 'Implement #2225', reason: 'absorbed_mid_turn', commandUuid: 'ca2b', deliveryId: '9e67' };
+    const absorbed = { parentUuid: 'b808', isSidechain: false, attachment: { type: 'queued_command', prompt: 'Implement #2225', source_uuid: 'ca2b', delivery_id: '9e67', commandMode: 'prompt', origin: { kind: 'human' }, timestamp: ts('57:03.749'), humanTurn: true }, type: 'attachment', uuid: '0d72', timestamp: ts('57:03.749') };
+    const head = [typed, tool('a1', '56:57.472'), result('u2', '57:02.825')];
+
+    const waiting = [...head, enqueue, tool('a2', '57:15.371')];
+    assert.deepEqual(queuedPrompts(waiting).map(q => q.text), ['Implement #2225'], 'typed mid-turn, still queued');
+    assert.deepEqual(queuedPrompts([...waiting, notify]).map(q => q.text), ['Implement #2225'], 'task notifications are not human prompts');
+    assert.deepEqual(queuedPrompts([enqueue, notify, dequeue]).map(q => q.text), [], 'dequeue takes the head');
+    let s = summarize(waiting, 1_000);
+    assert.deepEqual([s.status, s.now, s.queued], ['working', 'Implement #2244', ['Implement #2225']]);
+
+    const taken = [...waiting, result('b808', '57:15.972'), remove, absorbed];
+    assert.deepEqual(queuedPrompts(taken), [], 'absorbed mid-turn leaves the queue');
+    s = summarize(taken, 1_000);
+    assert.deepEqual([s.status, s.now, s.queued], ['working', 'Implement #2225', []], 'the absorbed prompt is what the turn is on now');
+    s = summarize([...taken, { type: 'system', subtype: 'turn_duration', timestamp: ts('59:00.000'), isSidechain: false }], 1_000);
+    assert.deepEqual([s.status === 'working', s.now], [false, null], 'turn over, nothing now');
+    console.log('ok queuedPrompts');
+}
+
+import { sessionRows, sessionTopic, sessionState, startingIssues } from './public/list.js';
+{
+    const ses = (id, project, at, extra = {}) => /** @type {any} */ ({ id, project, lastActivity: at, cwd: `/r/${project}`, sidechain: false, ...extra });
+    const list = [ses('a', 'p', 1), ses('b', 'p', 3), ses('c', 'p', 2), ses('d', 'q', 5), ses('w', 'p', 9, { cwd: '/r/p/.claude/worktrees/x' }), ses('s', 'p', 9, { sidechain: true })];
+    assert.deepEqual(sessionRows(list).map(g => [g.project, g.shown.map(s => s.id), g.older]), [['q', ['d'], 0], ['p', ['b', 'c'], 1]]);
+    assert.deepEqual(sessionRows(list, new Set(['p'])).find(g => g.project === 'p').shown.map(s => s.id), ['b', 'c', 'a']);
+    assert.equal(sessionTopic({ topic: 'Perks simulator', lastPrompt: 'x' }), 'Perks simulator');
+    assert.equal(sessionTopic({ topic: null, lastPrompt: '**fix** the  build' }), 'fix the build');
+    assert.ok(sessionTopic({ topic: null, lastPrompt: 'word '.repeat(40) }).endsWith('…'));
+    const now = Date.now();
+    assert.deepEqual(sessionState(ses('x', 'p', now - 12 * 60_000, { status: 'idle' })), { kind: 'idle', text: 'idle · 12m' });
+    assert.deepEqual(sessionState(ses('x', 'p', now, { status: 'working', since: now - 5 * 60_000 })), { kind: 'working', text: 'working · 5m' });
+    assert.equal(sessionState(ses('x', 'p', now, { status: 'waiting', asking: true })).kind, 'asking');
+
+    const m = ses('m', 'p', now, { status: 'working', now: 'Implement #2225', queued: ['then #2230 and #2231', 'Implement #2225'] });
+    assert.deepEqual(startingIssues(m, []), ['2225', '2230', '2231']);
+    const items = /** @type {any[]} */ ([{ title: 'Implement #2230 foo', branch: null }, { title: 'x', branch: '2231-bar' }, { title: 'y', prState: { issue: '2225' } }]);
+    assert.deepEqual(startingIssues(m, items), [], 'a subagent title, branch or MR issue covers it');
+    assert.deepEqual(startingIssues({ ...m, status: 'idle', queued: [] }, []), [], 'turn over: no placeholder');
+    assert.deepEqual(startingIssues({ ...m, now: 'see !2225 and #22250', queued: [] }, [{ title: '#2225' }]), ['22250'], 'MR refs are not issues; #2225 does not cover #22250');
+    console.log('ok sessionRows');
+}

@@ -80,7 +80,7 @@ function confirmAction(x) {
     body.append('Sends this to the item\'s Claude session:', el('pre', 'keys-msg', x.action.message));
     const d = dialog(`${x.action.label}?`, body, [cancel, go]);
     cancel.onclick = () => { d.open = false; };
-    go.onclick = () => { d.open = false; rowOf(x.key)?.querySelector('.act-btn')?.click(); }; // the button's own path: cooldown, chat binding
+    go.onclick = () => { d.open = false; rowOf(x.key)?.querySelector('.act-btn')?.click(); }; // the button's own path: sent mark, chat binding
 }
 
 function onKey(e) {

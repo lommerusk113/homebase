@@ -31,7 +31,7 @@ export function gateBadge(g) {
 
 // Work items (one per MR, plus running/stopped agents without one), grouped by what they wait on; merged ones folded at the bottom.
 function renderItems() {
-    const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).sort((a, b) => b.updated - a.updated);
+    const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).map(x => optimistic(x)).sort((a, b) => b.updated - a.updated);
     const table = list => {
         const t = el('table', 'rows');
         t.setAttribute('role', 'grid');
@@ -41,6 +41,8 @@ function renderItems() {
             const what = el('td', 'what');
             const fresh = x.pr ? freshComments(x.comments, seenAt(x.pr)) : [];
             const next = el('small', 'next', `Next: ${x.next}${fresh.length ? ` · ${fresh.length} new comment${fresh.length === 1 ? '' : 's'}` : ''}`);
+            // before Next, so the ellipsis doesn't cut it
+            if (unanswered.has(x.key) && x.action && !x.sent && !x.requested) next.prepend(el('span', 'no-reply', 'No response yet — check the chat · '));
             if (x.comments?.count) next.prepend(commentBadge(x, fresh), ' ');
             what.append(el('b', null, x.title), next);
             if (x.milestone) what.firstChild.prepend(milestoneTag(x));
@@ -52,7 +54,9 @@ function renderItems() {
             }
             const pr = el('td', 'pr'); if (x.pr) pr.append(prChip(x), ...ciPill(x.prState?.pipeline), ...gateBadge(x.gate));
             const br = el('td', 'br'); if (x.branch) br.append(el('span', 'chip mono', x.branch));
-            const act = el('td', 'act'); act.append(...openButton(x)); if (x.action && x.sessionId) act.append(...actionButton(x));
+            const act = el('td', 'act'); act.append(...openButton(x));
+            if (x.sent || x.requested) act.append(sentPill(x));
+            else if (x.action && x.sessionId) act.append(...actionButton(x));
             tr.append(what, prog, pr, br, act, el('td', 'when', ago(x.updated)));
             tr.onclick = () => select(x);
             if (state.selected !== x.key) return [tr];
@@ -96,19 +100,40 @@ function commentBadge(x, fresh) {
 }
 const markAllSeen = () => { for (const x of state.sessions.flatMap(s => s.items || [])) if (x.pr) markSeen(x.pr); renderBoard(); updateTitle(); };
 
-// The row's one-click command (label and message from the server's rowAction): binds the chat to the item's session and sends there.
-const sentAt = new Map(); // item key -> last click, so a re-render keeps the button disabled
-const COOLDOWN_MS = 3000;
+// Optimistic "sent" marks: item key -> click time, in memory and sessionStorage, until the server reports the item
+// requested or doing, or SENT_MS pass without that (then the button comes back with a hint).
+const SENT_MS = 120_000;
+const sent = new Map((() => { try { return JSON.parse(sessionStorage.getItem('sent')) ?? []; } catch { return []; } })());
+const unanswered = new Set(); // keys whose mark timed out
+const saveSent = () => { try { sessionStorage.setItem('sent', JSON.stringify([...sent])); } catch {} };
+function optimistic(x, now = Date.now()) {
+    const at = sent.get(x.key);
+    if (at == null) return x;
+    if (x.requested || x.column === 'doing' || now - at > SENT_MS) {
+        sent.delete(x.key); saveSent();
+        if (!x.requested && x.column !== 'doing') unanswered.add(x.key);
+        return x;
+    }
+    return { ...x, sent: at, column: 'doing', next: 'Sent to Claude…' };
+}
+function sentPill(x) {
+    const p = el('span', 'sent-pill');
+    p.append(el('span', 'pulse'), x.sent ? 'Sent to Claude…' : 'Claude is on it…');
+    p.setAttribute('role', 'status');
+    return p;
+}
+
+// The row's one-click command (label and message from the server's rowAction): binds the chat to the item's session and sends
+// there; the row turns into an in-progress one at once, without the button, so it can't be sent twice.
 function actionButton(x) {
-    const cooling = () => Date.now() - (sentAt.get(x.key) ?? 0) < COOLDOWN_MS;
-    const b = waButton(x.action.label, 'act-btn', cooling() ? { disabled: true } : {});
-    b.onclick = e => {
+    const b = waButton(x.action.label, 'act-btn');
+    b.onclick = async e => {
         e.stopPropagation();
-        if (cooling()) return;
-        sentAt.set(x.key, Date.now());
+        if (sent.has(x.key)) return;
+        sent.set(x.key, Date.now()); saveSent(); unanswered.delete(x.key);
         if (x.sessionId !== chatSession()?.id) bindChat(x.sessionId); else renderBoard();
-        setTimeout(renderBoard, COOLDOWN_MS);
-        sendText(x.sessionId, x.action.message);
+        setTimeout(renderBoard, SENT_MS + 500);
+        if (!await sendText(x.sessionId, x.action.message)) { sent.delete(x.key); saveSent(); renderBoard(); } // sendText shows the error
     };
     return [b, tooltip(b, x.action.message)];
 }
@@ -184,7 +209,7 @@ function detail(x) {
 function stageBar(x) {
     const w = el('div', 'stage'), bar = el('div', 'bar');
     w.style.setProperty('--c', `var(${COL[x.column].color})`);
-    LIFECYCLE.forEach((name, i) => { const s = el('i', i < x.stage ? 'on' : i === x.stage ? (x.agentStatus === 'running' ? 'on now' : 'on') : ''); s.title = name; bar.append(s); });
+    LIFECYCLE.forEach((name, i) => { const s = el('i', i < x.stage ? 'on' : i === x.stage ? (x.agentStatus === 'running' || x.sent || x.requested ? 'on now' : 'on') : ''); s.title = name; bar.append(s); });
     w.append(bar, el('small', null, x.stageLabel));
     return w;
 }

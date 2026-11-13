@@ -5,17 +5,19 @@ import { renderBoard } from './list.js';
 // Subagent and worktree sessions never become the chat's master on their own.
 const isMaster = s => !s.sidechain && !/\/\.(claude\/)?worktrees\//.test(s.cwd || '');
 // The chat sticks to the bound session (chat:<project>, else the legacy global pick) and only moves on its own to a
-// Homebase /clear successor (clearedFrom). Nothing bound yet: the most recently active master. Never "whichever is
-// newest" on every poll, since an idle claude process still bumps its transcript's mtime with metadata lines.
+// Homebase /clear successor (clearedFrom). Nothing bound yet: the master with the latest real activity (lastActivity,
+// from the server), never file mtime, which an idle claude process still bumps with bookkeeping lines.
+const activity = s => s.lastActivity ?? s.created ?? 0;
 export function pickChat(visible, bound, legacy) {
     const byId = id => id && visible.find(s => s.id === id);
     let s = byId(bound) || byId(legacy);
     for (let next; s && (next = visible.find(x => x.clearedFrom === s.id)); s = next);
-    return s || visible.find(isMaster) || null;
+    return s || visible.filter(isMaster).sort((a, b) => activity(b) - activity(a))[0] || null;
 }
-// A master in the bound session's project started after it: offered as "Switch", never switched to on its own.
-export const newerSession = (visible, s) => (s && visible.filter(x => x.id !== s.id && x.project === s.project && isMaster(x) && x.created > s.created)
-    .sort((a, b) => b.created - a.created)[0]) || null;
+// A master in the bound session's project started after it and active since: offered as "Switch", never switched to
+// on its own. Uses created and lastActivity, not mtime.
+export const newerSession = (visible, s) => (s && visible.filter(x => x.id !== s.id && x.project === s.project && isMaster(x)
+    && x.created > s.created && activity(x) > activity(s)).sort((a, b) => activity(b) - activity(a))[0]) || null;
 const bindKey = () => `chat:${state.project}`;
 // only sessions in the selected project(s)
 export const chatSession = () => pickChat(visibleSessions(), store.get(bindKey()), state.chat);

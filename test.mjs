@@ -685,7 +685,21 @@ import { turnState } from './server.mjs';
     console.log('ok turn state');
 }
 
-import { findClearedSuccessor, tmuxFor } from './server.mjs';
+import { findClearedSuccessor, tmuxFor, lastActivity } from './server.mjs';
+{
+    const ts = s => `2026-11-13T10:${s}:00.000Z`;
+    const real = [
+        { type: 'user', timestamp: ts('00'), message: { role: 'user', content: 'hi' } },
+        { type: 'assistant', timestamp: ts('01'), message: { content: [{ type: 'tool_use', name: 'Bash' }] } },
+        { type: 'user', timestamp: ts('02'), message: { role: 'user', content: [{ type: 'tool_result', content: 'x' }] } },
+        { type: 'assistant', isSidechain: true, timestamp: ts('03'), message: { content: [{ type: 'text', text: 'side' }] } }
+    ];
+    const book = [{ type: 'cost-state' }, { type: 'bridge-session' }, { type: 'tools-used' }, { type: 'attachment', timestamp: ts('09'), attachment: { type: 'hook_success' } }];
+    assert.equal(lastActivity([...real, ...book]), Date.parse(ts('01')), 'bookkeeping, tool results and sidechains are not activity');
+    assert.equal(lastActivity([...real, { type: 'attachment', timestamp: ts('05'), attachment: { type: 'queued_command', prompt: 'q', origin: { kind: 'human' } } }]), Date.parse(ts('05')), 'a queued human prompt is');
+    assert.equal(lastActivity(book), null);
+    console.log('ok last activity');
+}
 {
     const c = { from: 'old', cwd: '/r', clearedAt: 1_000 };
     const ss = [
@@ -733,7 +747,7 @@ import { clearState, topicHue, TOPIC_HUES, pickChat, newerSession } from './publ
     const old = { id: 'f67f', project: 'tracker', cwd: T, created: 1 }, live = { id: 'e9c1', project: 'tracker', cwd: `${T}/frontend`, created: 2 };
     const wt = { id: 'wt', project: 'tracker', cwd: `${T}/.claude/worktrees/x`, created: 5 }, side = { id: 'sc', project: 'tracker', cwd: T, sidechain: true, created: 6 };
     assert.equal(pickChat([old, live], 'e9c1', 'other-project').id, 'e9c1', 'bound session sticks though another is newer');
-    assert.equal(pickChat([old, live], null, 'gone').id, 'f67f', 'unbound: most recently active master');
+    assert.equal(pickChat([old, live], null, 'gone').id, 'e9c1', 'unbound, no activity known: the later-created master');
     assert.equal(pickChat([wt, side, live], null, null).id, 'e9c1', 'worktree and subagent sessions are never auto-picked');
     assert.equal(pickChat([wt, live], 'wt', null).id, 'wt', 'an explicit pick of one still holds');
     const succ = { id: 'next', project: 'tracker', cwd: T, created: 3, clearedFrom: 'e9c1' };
@@ -742,6 +756,10 @@ import { clearState, topicHue, TOPIC_HUES, pickChat, newerSession } from './publ
     assert.equal(newerSession([wt, side, old, live], old).id, 'e9c1', 'newer master is offered');
     assert.equal(newerSession([wt, side, old, live], live), null, 'worktree/subagent sessions are not offered');
     assert.equal(newerSession([{ ...succ, project: 'other' }, live], live), null, 'other projects are not offered');
+    // fresh profile, nothing bound: /api/sessions lists the idle f67f first (newer mtime), but e9c1 was active last
+    const idle = { ...old, updated: 2000, lastActivity: 100 }, active = { ...live, updated: 1000, lastActivity: 900 };
+    assert.equal(pickChat([idle, active], null, null).id, 'e9c1', 'unbound: latest real activity, not mtime');
+    assert.equal(newerSession([idle, active], active), null, 'an idle older session is not offered as newer');
     console.log('ok chat binding');
 }
 {

@@ -229,6 +229,10 @@ assert.deepEqual(items.map(i => [i.key, i.sessionId, i.column, i.stageLabel, i.u
 ]);
 assert.deepEqual([items[0].title, items[0].tldr, items[0].activity.map(x => x.id)], ['One', 'new', ['impl1']]);
 assert.equal(items[1].next, 'Waiting for review by Ann');
+// tracker "Build faction perks simulator": done without an MR stays visible for 2 h as "finished", then drops
+const perks = now => workItems([{ id: 'm', project: 'tracker', prs: [], agents: [agent('perks', 0, { description: 'Build faction perks simulator' })] }], () => null, now);
+assert.deepEqual(perks(3600_000).map(i => [i.key, i.column, i.next]), [['perks', 'finished', 'Finished without an MR']]);
+assert.deepEqual(perks(3 * 3600_000), []);
 console.log('ok items');
 
 import { tmuxArgs } from './server.mjs';
@@ -1131,4 +1135,28 @@ import { issueOf, mentionsMr, turnPrompts, worksOnMr, requestFor } from './serve
     const cross = workItems([master([]), { id: 'o', project: 'other', prs: [], agents: [ag({ id: 'x', description: 'Implement #2219', branches: ['2219-auto-booked-creator'] })] }], () => pr, 0, new Map());
     assert.deepEqual(cross.map(i => [i.key, i.column]), [[url, 'needs-you'], ['x', 'doing']]);
     console.log('ok requested, agent links');
+}
+
+// tracker e9c15e3f: a ~900 KB tool_result line filled the 512 KB tail, so the chat showed one bubble and the 403 vanished
+import { readTail } from './server.mjs';
+{
+    const f = pjoin(mkdtempSync(pjoin(tmpdir(), 'hb-')), 't.jsonl');
+    const ts = '2026-11-13T10:15:47.041Z';
+    const lines = [
+        { type: 'user', message: { role: 'user', content: 'weight OC roles for new players' }, timestamp: '2026-11-13T10:10:00.000Z' },
+        { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Done, roles are weighted.' }] }, timestamp: '2026-11-13T10:12:00.000Z' },
+        { type: 'assistant', isApiErrorMessage: true, error: 'authentication_failed', apiErrorStatus: 403, message: { model: '<synthetic>', role: 'assistant', content: [{ type: 'text', text: 'Please run /login · API Error: 403 Attention Required! | Cloudflare' }] }, timestamp: ts },
+        { type: 'system', subtype: 'turn_duration', timestamp: ts },
+        { type: 'user', message: { role: 'user', content: 'try again' }, timestamp: '2026-11-13T10:28:41.000Z' },
+        { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'curl' } }] }, timestamp: '2026-11-13T10:28:51.000Z' },
+        { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'x'.repeat(900_000) }] }, timestamp: '2026-11-13T10:28:51.000Z' },
+        { type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'It still shows no booster cooldown.' }] }, timestamp: '2026-11-13T10:28:57.000Z' }
+    ];
+    writeFileSync(f, lines.map(l => JSON.stringify(l)).join('\n') + '\n');
+    const items = chatItems(await readTail(f, statSync(f).size));
+    assert.deepEqual(items.map(i => [i.role, i.text.slice(0, 17)]), [
+        ['user', 'weight OC roles f'], ['assistant', 'Done, roles are w'], ['error', 'Please run /login'],
+        ['user', 'try again'], ['tools', 'Ran 1 command'], ['assistant', 'It still shows no']
+    ]);
+    console.log('ok big-line tail, api error line');
 }

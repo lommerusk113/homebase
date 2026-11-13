@@ -19,12 +19,15 @@ const PORT = Number(process.env.PORT ?? 4321);
 const MAX_AGE_MS = Number(process.env.MAX_AGE_DAYS ?? 3) * 864e5;
 // ponytail: only the tail is parsed (transcripts reach 70+ MB); subagent token totals use the offset reader below
 const TAIL_BYTES = 512 * 1024;
+const TAIL_MIN_LINES = 200;
+const TAIL_MAX_BYTES = 16 * 1024 * 1024;
 const WORKING_MS = 10_000;
 const WAITING_MS = 30 * 60_000;
 const TURN_STALE_MS = 30 * 60_000; // an open turn with no transcript write this long is treated as dead
 
 const PR_TTL_MS = 60_000;
 const AGENT_TAIL_BYTES = 128 * 1024;
+const RECENT_DONE_MS = 2 * 3600_000;
 // Silence an unfinished subagent may keep before it counts as stopped, by what its transcript ends on.
 const AGENT_TOOL_MS = 30 * 60_000; // a tool call is still pending (long Bash, own background subagent)
 const AGENT_THINK_MS = 10 * 60_000; // last entry is a tool result or user message, so the model is thinking
@@ -220,16 +223,24 @@ export function column(status, pr, hasPr) {
     return status === 'waiting' ? 'needs-you' : 'idle';
 }
 
-async function readTail(path, size, max = TAIL_BYTES) {
+// A few huge lines (tool results, api-request blobs of ~1 MB) can fill the byte tail on their own, so it grows
+// until it holds TAIL_MIN_LINES lines, the whole file or `cap` bytes.
+export async function readTail(path, size, max = TAIL_BYTES, cap = TAIL_MAX_BYTES) {
 
     const fh = await open(path, 'r');
     try {
-        const len = Math.min(size, max);
-        const buf = Buffer.alloc(len);
-        await fh.read(buf, 0, len, size - len);
-        const lines = buf.toString('utf8').split('\n');
-        if (len < size) {
-            lines.shift(); // partial first line
+        let len = Math.min(size, max), lines;
+        for (;;) {
+            const buf = Buffer.alloc(len);
+            await fh.read(buf, 0, len, size - len);
+            lines = buf.toString('utf8').split('\n');
+            if (len < size) {
+                lines.shift(); // partial first line
+            }
+            if (lines.length >= TAIL_MIN_LINES || len >= size || len >= cap) {
+                break;
+            }
+            len = Math.min(size, len * 2);
         }
 
         return lines.flatMap(l => {
@@ -475,6 +486,13 @@ export function chatItems(entries, max = 60) {
             newTurn = true;
         }
         if (e.type !== 'assistant') {
+            continue;
+        }
+        // "Please run /login · API Error: 403 …": a red error line, not a Claude bubble
+        if (e.isApiErrorMessage) {
+            flush();
+            items.push({ role: 'error', text: textOf(e), at: e.timestamp });
+            newTurn = true;
             continue;
         }
 
@@ -912,7 +930,7 @@ async function agents(sessionDir, now) {
         let hit = cache.get(path);
         if (!hit || hit.mtimeMs !== st.mtimeMs) {
             const meta = JSON.parse(await readFile(join(sessionDir, name), 'utf8'));
-            hit = { mtimeMs: st.mtimeMs, meta, entries: (meta.spawnDepth ?? 1) > 1 ? [] : await readTail(path, st.size, AGENT_TAIL_BYTES) };
+            hit = { mtimeMs: st.mtimeMs, meta, entries: (meta.spawnDepth ?? 1) > 1 ? [] : await readTail(path, st.size, AGENT_TAIL_BYTES, AGENT_TAIL_BYTES) };
             cache.set(path, hit);
         }
         if ((hit.meta.spawnDepth ?? 1) > 1) {
@@ -1081,7 +1099,7 @@ export function itemColumn(prState, agent, hasPr) {
         return 'needs-you';
     }
 
-    return column('idle', prState, hasPr);
+    return !hasPr && agent?.status === 'done' ? 'finished' : column('idle', prState, hasPr);
 }
 
 // What has to happen next for a work item, as one deterministic line.
@@ -1240,7 +1258,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
 
             if (refs.size) {
                 refs.forEach(it => it.agents.push(own));
-            } else if (a.status !== 'done') {
+            } else if (a.status !== 'done' || now - a.updated < RECENT_DONE_MS) { // finished without an MR: shown a while so the user sees it completed
                 loose.push({ key: a.id, pr: null, project: s.project, agents: [own], linkedAt: 0, linkSession: null });
             }
         }
@@ -1282,7 +1300,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             files: agent?.files ?? [],
             activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
-            next: requested ? 'Claude is on it…' : nextStep(prState, agent),
+            next: requested ? 'Claude is on it…' : col === 'finished' ? 'Finished without an MR' : nextStep(prState, agent),
             action: requested ? null : rowAction(it.pr, prState, agent, title),
             gate: it.pr ? gateBadge(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
             tokens: total ? formatTokens(total) : null,

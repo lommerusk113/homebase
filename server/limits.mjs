@@ -47,6 +47,23 @@ export function peakLimits(peaks, dumps, now = Date.now()) {
     return out.fiveHour || out.sevenDay ? out : null;
 }
 
+// A session's context window use from its own dump (<session id>.json): { percent, at: dump mtime ms }, or null when
+// there is none yet (no status line has run for it) or it carries no percentage.
+export async function contextOf(id, dir = STATUS_DIR) {
+
+    if (!/^[0-9a-f-]{36}$/.test(id ?? '')) {
+        return null;
+    }
+    try {
+        const path = join(dir, `${id}.json`);
+        const percent = JSON.parse(await readFile(path, 'utf8'))?.context_window?.used_percentage;
+
+        return typeof percent === 'number' ? { percent, at: (await stat(path)).mtimeMs } : null;
+    } catch {
+        return null;
+    }
+}
+
 const limitPeaks = new Map();
 
 // Rate limits from every status-line dump (written by scripts/statusline.sh), plus when the newest one was written.

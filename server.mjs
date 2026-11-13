@@ -13,7 +13,7 @@ import { milestones, warmMilestones } from './server/milestones.mjs';
 import { limits } from './server/limits.mjs';
 import { log } from './server/log.mjs';
 import { MAX_SEND } from './server/tmux.mjs';
-import { send, interrupt, clearChat, editors, openInEditor } from './server/control.mjs';
+import { send, interrupt, clearChat, compactChat, editors, openInEditor } from './server/control.mjs';
 import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, COOKIE, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode, pairPage } from './server/security.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
 
@@ -27,10 +27,10 @@ export {
     column, gateFor, toGate, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf
 } from './server/items.mjs';
 export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones } from './server/milestones.mjs';
-export { limitsOf, peakLimits } from './server/limits.mjs';
+export { limitsOf, peakLimits, contextOf } from './server/limits.mjs';
 export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
 export { tmuxArgs, tmuxFor, findClearedSuccessor, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
-export { editorsFrom, openInEditor } from './server/control.mjs';
+export { editorsFrom, openInEditor, refuseIfBusy } from './server/control.mjs';
 export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode } from './server/security.mjs';
 export { vendorPath } from './server/static.mjs';
 
@@ -172,6 +172,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
             if (isPost('/api/clear')) {
                 await clearChat(url.searchParams.get('id'));
+                return res.end('ok');
+            }
+            if (isPost('/api/compact')) {
+                await compactChat(url.searchParams.get('id'));
                 return res.end('ok');
             }
             if (isPost('/api/interrupt')) {

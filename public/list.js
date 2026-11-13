@@ -1,5 +1,5 @@
 // Left column: work items grouped by what they wait on, and attention transitions.
-import { api, $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle } from './core.js';
+import { api, $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle, ctxLevel } from './core.js';
 import { chatSession, bindChat, sendText, isMaster } from './chat.js';
 import { milestoneTag } from './milestone.js';
 
@@ -117,6 +117,9 @@ function renderSessions() {
             if (suffix) {
                 r.append(el('span', 's-counts', suffix));
             }
+            if (s.context != null) {
+                r.append(el('span', `s-ctx${ctxLevel(s.context) && ` ${ctxLevel(s.context)}`}`, `ctx ${Math.round(s.context)}%`));
+            }
             if (s.id === bound) {
                 r.append(el('span', 's-chat', 'chat'));
             }
@@ -125,6 +128,7 @@ function renderSessions() {
             const tip = [
                 now && s.topic ? s.topic : null,
                 st.kind === 'idle' && `idle ${since === 'now' ? 'just now' : `for ${since}`}`,
+                s.context != null && `Context ${Math.round(s.context)}% used`,
                 agents && `Subagents: ${agents}`,
                 q.length && `Queued: ${q.map(t => excerpt(t, 80)).join(' · ')}`,
                 s.id === bound ? 'The chat is on this session' : 'Click to chat with this session'

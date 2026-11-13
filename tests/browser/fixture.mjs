@@ -22,6 +22,9 @@ const tool = (name, input, s, id = `t${s}`) => ({ type: 'assistant', uuid: `a${s
 const prompt = (text, s) => ({ type: 'user', uuid: `u${s}`, timestamp: ago(s), origin: { kind: 'human' }, promptSource: 'typed', turnPosition: { promptIndex: 1, turnIndex: 1 }, message: { role: 'user', content: text } });
 const result = (id, content, s) => ({ type: 'user', uuid: `r${s}`, timestamp: ago(s), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content }] } });
 const done = s => ({ type: 'system', subtype: 'turn_duration', durationMs: 4000, timestamp: ago(s) });
+// /compact keeps the session id: a boundary line, then the summary as a user message
+const compacted = s => [{ type: 'system', subtype: 'compact_boundary', content: 'Conversation compacted', uuid: `c${s}`, timestamp: ago(s), compactMetadata: { trigger: 'manual', preTokens: 150000 } },
+    { type: 'user', uuid: `s${s}`, timestamp: ago(s - 1), isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { role: 'user', content: 'This session is being continued from a previous conversation that ran out of context. SUMMARY-TEXT' } }];
 const link = (n, s) => ({ type: 'pr-link', prUrl: MR(n), timestamp: ago(s) });
 
 // Fields every entry of a session's transcript carries.
@@ -90,6 +93,12 @@ export function buildFixture(root) {
     git('checkout', '-q', 'main');
     commit(alphaRepo, 'Add a perks simulator', 100);
 
+    // status-line dumps (HOMEBASE_STATUSLINE_DIR): context % per session; master amber, asker red, worker under the gauge
+    mkdirSync(join(root, 'statusline'), { recursive: true });
+    for (const [id, pct] of [[IDS.master, 72], [IDS.asker, 90], [IDS.worker, 40]]) {
+        writeFileSync(join(root, 'statusline', `${id}.json`), JSON.stringify({ session_id: id, context_window: { used_percentage: pct } }));
+    }
+
     const stub = fileURLToPath(new URL('./forge-stub.mjs', import.meta.url));
     for (const cli of ['glab', 'gh']) {
         writeFileSync(join(bin, cli), `#!/bin/sh\nexec "${process.execPath}" "${stub}" ${cli} "$@"\n`, { mode: 0o755 });
@@ -100,6 +109,7 @@ export function buildFixture(root) {
         prompt('Fix the login redirect bug', 3000),
         said('**▸ Fix login · needs you**\nThe redirect drops the return URL. I need your call on the cookie scope before I change it.', 2990),
         done(2980),
+        ...compacted(2950),
         prompt('Use the narrow scope', 2900),
         tool('Bash', { command: 'git log -3' }, 2890, 'big'),
         result('big', 'x'.repeat(2_000_000), 2880), // bigger than the server's first tail read

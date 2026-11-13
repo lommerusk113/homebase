@@ -1526,3 +1526,54 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
     assert.deepEqual(groupByDay([], now), []);
     console.log('ok log');
 }
+
+// Context % and compacting
+{
+    const { contextOf, refuseIfBusy } = await import('./server.mjs');
+    const { isHumanPrompt } = await import('./server/transcripts.mjs');
+    const { mkdtempSync, writeFileSync, rmSync, utimesSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const { ctxLevel, canCompact, autoCompactDue, AUTO_COMPACT } = await import('./public/core.js');
+
+    const dir = mkdtempSync(join(tmpdir(), 'homebase-ctx-')), id = 'bbbbbbbb-0000-4000-8000-000000000001';
+    writeFileSync(join(dir, `${id}.json`), JSON.stringify({ context_window: { used_percentage: 72.5 } }));
+    utimesSync(join(dir, `${id}.json`), 1000, 1000);
+    assert.deepEqual(await contextOf(id, dir), { percent: 72.5, at: 1_000_000 });
+    assert.equal(await contextOf('bbbbbbbb-0000-4000-8000-000000000002', dir), null, 'no dump yet');
+    writeFileSync(join(dir, `${id}.json`), JSON.stringify({ context_window: { used_percentage: null } }));
+    assert.equal(await contextOf(id, dir), null, 'no percentage');
+    writeFileSync(join(dir, `${id}.json`), '{ torn');
+    assert.equal(await contextOf(id, dir), null, 'unreadable dump');
+    assert.equal(await contextOf('../../etc/passwd', dir), null, 'only session ids name a file');
+    rmSync(dir, { recursive: true, force: true });
+
+    assert.throws(() => refuseIfBusy({ status: 'working' }), { status: 409, message: 'busy' });
+    assert.throws(() => refuseIfBusy({ status: 'waiting', asking: true }), { status: 409, message: 'busy' });
+    assert.doesNotThrow(() => refuseIfBusy({ status: 'waiting', asking: false }));
+    assert.doesNotThrow(() => refuseIfBusy({ status: 'idle' }));
+
+    assert.deepEqual([0, 59.9, 60, 84.9, 85, 100].map(ctxLevel), ['', '', 'warn', 'warn', 'hot', 'hot']);
+    assert.deepEqual([canCompact({ status: 'idle' }), canCompact({ status: 'waiting' }), canCompact({ status: 'working' }), canCompact({ status: 'waiting', asking: true })], [true, true, false, false]);
+
+    // auto-compact: idle for 2 min, at 70%, not tried within the hour
+    const t = 10 * 3600_000, ready = { status: 'idle', context: 70, lastActivity: t - AUTO_COMPACT.idleMs };
+    assert.equal(autoCompactDue(ready, t, 0), true);
+    assert.equal(autoCompactDue({ ...ready, context: 69.9 }, t, 0), false, 'under the threshold');
+    assert.equal(autoCompactDue({ ...ready, context: null }, t, 0), false, 'no context reading');
+    assert.equal(autoCompactDue({ ...ready, lastActivity: t - AUTO_COMPACT.idleMs + 1 }, t, 0), false, 'idle under 2 min');
+    assert.equal(autoCompactDue({ ...ready, lastActivity: null, updated: t - 60_000 }, t, 0), false, 'falls back to updated');
+    assert.equal(autoCompactDue({ ...ready, status: 'working' }, t, 0), false, 'mid-turn');
+    assert.equal(autoCompactDue({ ...ready, asking: true }, t, 0), false, 'asking');
+    assert.equal(autoCompactDue(ready, t, t - AUTO_COMPACT.everyMs + 1), false, 'tried within the hour');
+    assert.equal(autoCompactDue(ready, t, t - AUTO_COMPACT.everyMs), true, 'an hour later');
+
+    // /compact keeps the session id: the boundary shows as a divider, its summary text not at all
+    const boundary = { type: 'system', subtype: 'compact_boundary', content: 'Conversation compacted', timestamp: '2026-11-09T14:52:22.148Z', compactMetadata: { trigger: 'manual' } };
+    const summary = { type: 'user', isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { role: 'user', content: 'This session is being continued from a previous conversation that ran out of context. Summary: ...' } };
+    const compacted = chatItems([{ type: 'user', message: { content: 'go' } }, say('Done.'), boundary, summary, say('Carrying on.')]);
+    assert.deepEqual(compacted.map(i => [i.role, i.text]), [['user', 'go'], ['assistant', 'Done.'], ['compact', 'Conversation compacted'], ['assistant', 'Carrying on.']]);
+    assert.equal(compacted[2].at, boundary.timestamp);
+    assert.equal(isHumanPrompt(summary), false, 'the summary is not a prompt');
+    console.log('ok context and compact');
+}

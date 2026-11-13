@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, readUsage, latestTopic, queuedPrompts, spawnPrompts } from './transcripts.mjs';
 import { loadStore, record, seeds, flush } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
+import { contextOf } from './limits.mjs';
 import { workItems, milestoneOf } from './items.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor } from './tmux.mjs';
 
@@ -414,7 +415,9 @@ async function sessionOf({ dir, file, path, st }, now) {
     const spawns = spawnPrompts(entries);
     const subagents = (await agents(join(ROOT, dir, id, 'subagents'), now)).map(a => ({ ...a, spawnedFor: spawns.get(a.toolUseId) ?? null }));
 
-    return { ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, agents: subagents };
+    const ctx = await contextOf(id);
+
+    return { ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, context: ctx?.percent ?? null, contextAt: ctx?.at ?? null, agents: subagents };
 }
 
 // The work items of all sessions (their PRs/MRs and agents), with PR/MR state, human comments and milestone.

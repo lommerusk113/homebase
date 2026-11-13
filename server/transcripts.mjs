@@ -67,7 +67,7 @@ export function textOf(entry) {
 }
 
 export function isHumanPrompt(e) {
-    return e.type === 'user' && !e.isMeta && !e.isSidechain && textOf(e) && !textOf(e).startsWith('<');
+    return e.type === 'user' && !e.isMeta && !e.isCompactSummary && !e.isSidechain && textOf(e) && !textOf(e).startsWith('<');
 }
 
 export const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
@@ -261,6 +261,13 @@ function entryKind(e) {
         return null;
     }
 
+    if (e.type === 'system' && e.subtype === 'compact_boundary') {
+        return { kind: 'compact' };
+    }
+    if (e.isCompactSummary) {
+        return null; // the summary text Claude Code writes after the boundary
+    }
+
     const human = e.type === 'user' && !e.isMeta ? unwrapPasted(textOf(e)) : '';
     if (INTERRUPTED.test(human)) {
         return { kind: 'interrupt' };
@@ -311,6 +318,10 @@ function rawItems(entries) {
         } else if (entry?.kind === 'prompt') {
             flush();
             items.push({ role: 'user', text: entry.text, at: e.timestamp });
+        } else if (entry?.kind === 'compact') {
+            flush();
+            items.push({ role: 'compact', text: 'Conversation compacted', at: e.timestamp });
+            newTurn = true;
         } else if (entry?.kind === 'turn') {
             newTurn = true;
         } else if (entry?.kind === 'error') {

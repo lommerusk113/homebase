@@ -19,7 +19,7 @@ import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './
 
 export {
     readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, quickReplies,
-    pendingAsk, pendingQuestion, turnState, turnPrompts, latestTopic, queuedPrompts, addUsage, readUsage, formatDuration, formatTokens
+    pendingAsk, pendingQuestion, turnState, turnPrompts, spawnPrompts, latestTopic, queuedPrompts, addUsage, readUsage, formatDuration, formatTokens
 } from './server/transcripts.mjs';
 export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, status, lastActivity, summarize, folderFor } from './server/sessions.mjs';
 export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments, swrEntry, swr, cached, refreshAll, refreshInfo } from './server/forge.mjs';

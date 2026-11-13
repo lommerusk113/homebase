@@ -65,6 +65,16 @@ assert.equal(st([call('a'), result('a'), ended], 1 * MIN).status, 'running');
 assert.equal(st([call('a'), result('a'), ended], 3 * MIN).status, 'stopped'); // ended its turn without handing back
 assert.equal(st([call('old'), result('x'), ended], 3 * MIN).status, 'stopped'); // an unanswered call from an earlier turn is not pending
 assert.deepEqual(st([call('a'), result('a'), { type: 'assistant', isApiErrorMessage: true, message: { content: [{ type: 'text', text: 'API Error' }] } }], 1_000), { status: 'stopped', stopReason: 'api-error' });
+// pracsys !1791: meta.finished flipped while the gate agent waited on its own background Cucumber run
+const bg = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: 'Command running in background with ID: b172vb7y2. Output is being written to: /tmp/tasks/b172vb7y2.output.' }] } };
+const child = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'v', content: [{ type: 'text', text: 'Async agent launched successfully. (internal metadata)\nagentId: a2da1ee3a8630e53c (internal ID)' }] }] } };
+const told = id => ({ type: 'attachment', attachment: { type: 'queued_command', prompt: `<task-notification>\n<task-id>${id}</task-id>\n<status>completed</status>\n</task-notification>` } });
+const onHold = say => ({ type: 'assistant', message: { content: [{ type: 'text', text: say }] } });
+assert.equal(st([call('a'), bg, onHold('Waiting on Cucumber.')], 3 * MIN, { finished: true }).status, 'running');
+assert.equal(st([call('a'), bg, onHold('Waiting on Cucumber.')], 31 * MIN, { finished: true }).status, 'done');
+assert.equal(st([call('a'), bg, onHold('Waiting on Cucumber.')], 3 * MIN).status, 'running'); // not stopped after 2 min idle
+assert.equal(st([call('a'), bg, call('v'), child, told('b172vb7y2'), onHold('Waiting on the validator.')], 3 * MIN, { finished: true }).status, 'running');
+assert.equal(st([call('a'), bg, call('v'), child, told('b172vb7y2'), told('a2da1ee3a8630e53c'), ended], 3 * MIN, { finished: true }).status, 'done');
 console.log('ok agents');
 
 import { splitTldr, splitTopic, toolSummary, chatItems, pendingQuestion, sendSteps } from './server.mjs';
@@ -1230,7 +1240,7 @@ import { saveDraft, restoreDraft } from './public/chat.js';
     console.log('ok token refresh, draft');
 }
 
-import { issueOf, mentionsMr, turnPrompts, worksOnMr, requestFor } from './server.mjs';
+import { issueOf, mentionsMr, turnPrompts, spawnPrompts, worksOnMr, requestFor } from './server.mjs';
 {
     const url = 'https://gitlab.com/tritt/accounting/pracsys/-/merge_requests/1785';
     assert.equal(issueOf('#2219 - Auto booked creator', ''), '2219');
@@ -1287,6 +1297,30 @@ import { issueOf, mentionsMr, turnPrompts, worksOnMr, requestFor } from './serve
     // no cross-project match: the same issue number and branch in another project's agent stays loose
     const cross = workItems([master([]), { id: 'o', project: 'other', prs: [], agents: [ag({ id: 'x', description: 'Implement #2219', branches: ['2219-auto-booked-creator'] })] }], () => pr, 0, new Map());
     assert.deepEqual(cross.map(i => [i.key, i.column]), [[url, 'needs-you'], ['x', 'doing']]);
+
+    // spawn links, from real shapes: the master's Agent tool_use, its launch result, and the subagent meta's toolUseId
+    const spawn = (s, id, description) => ({ type: 'assistant', isSidechain: false, timestamp: at(s), message: { content: [{ type: 'tool_use', id, name: 'Agent', input: { description, isolation: 'worktree', prompt: 'Run the review-gate skill.' } }] } });
+    const launched = (s, id, agentId) => ({ type: 'user', isSidechain: false, timestamp: at(s), message: { role: 'user', content: [{ tool_use_id: id, type: 'tool_result', content: [{ type: 'text', text: `Async agent launched successfully.\nagentId: ${agentId} (internal ID - do not mention to user.)` }] }] } });
+    const note = (s, agentId) => prompt(s, `<task-notification>\n<task-id>${agentId}</task-id>\n<output-file>/tmp/${agentId}.output</output-file>\n<status>completed</status>\n</task-notification>`, { origin: { kind: 'task-notification' } });
+    const url2 = 'https://gitlab.com/tritt/accounting/pracsys/-/merge_requests/1784';
+    const spawns = spawnPrompts([
+        td('11:00'), prompt('12:00', `Run review-gate on !1785 (${url}). If ready, merge it.`), spawn('12:01', 'toolu_gate', 'Gate: code review'), launched('12:02', 'toolu_gate', 'agate'), td('12:03'),
+        prompt('13:00', 'Merge !1784 and !1785'), spawn('13:01', 'toolu_both', 'Merge both'), td('13:02'),
+        prompt('14:00', 'Tidy the README'), spawn('14:01', 'toolu_other', 'Gate: rules compliance'), td('14:02'),
+        note('15:00', 'agate'), spawn('15:01', 'toolu_merge', 'Merge after the gate'), td('15:02')
+    ]);
+    assert.deepEqual([...spawns.keys()], ['toolu_gate', 'toolu_both', 'toolu_other', 'toolu_merge']);
+    assert.equal(spawns.get('toolu_merge'), spawns.get('toolu_gate')); // a task-notification turn inherits the notifying agent's prompt
+    const gateAgent = (toolUseId, extra) => ag({ description: 'Gate: code review', prompt: 'Review the diff in the worktree.', spawnedFor: spawns.get(toolUseId), ...extra });
+    assert.equal(worksOnMr(gateAgent('toolu_gate'), url, pr), true);
+    assert.deepEqual([url, url2].map(u => worksOnMr(gateAgent('toolu_both'), u, { ...pr, issue: null })), [true, true]);
+    assert.equal(worksOnMr(gateAgent('toolu_other'), url, pr), false);
+    assert.equal(worksOnMr(gateAgent('toolu_gate', { status: 'done' }), url, pr), false);
+    // the master's turn has ended, yet the MR stays doing while the gate it spawned runs
+    const ready = { ...pr, changes: false, ready: true };
+    const gated = one(master([], [gateAgent('toolu_gate')]), () => ready);
+    assert.deepEqual([gated.column, gated.next, gated.action, gated.agentStatus], ['doing', 'Gate: code review is implementing…', null, 'running']);
+    assert.equal(one(master([], [gateAgent('toolu_other')]), () => ready).action.label, 'Merge + close issue');
     console.log('ok requested, agent links');
 }
 

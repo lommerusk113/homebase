@@ -103,7 +103,13 @@ export function buildFixture(root) {
         tool('Skill', { skill: 'review-gate', args: `!102 ${MR(102)}` }, 2690),
         said('**Verdict: ready** for !102 at commit bbb2222.\n\nTLDR: ready', 2680),
         done(2670),
-        link(100, 2660), link(101, 2650), link(103, 2640), link(104, 2630),
+        link(100, 2660), link(101, 2650), link(103, 2640), link(104, 2630), link(105, 2620),
+        // a finished turn whose gate subagent (agent-gate) still runs, with a description that doesn't name !105
+        prompt(`Run review-gate on !105 (${MR(105)}). If the verdict is ready, merge it and close its issue.`, 260),
+        tool('Agent', { description: 'Gate: code review', prompt: 'Review the diff in the worktree.' }, 255, 'gate105'),
+        result('gate105', [{ type: 'text', text: 'Async agent launched successfully.\nagentId: agent-gate (internal ID)' }], 254),
+        said('The gate runs in the background.', 253),
+        done(252),
         prompt('Draft the release notes', 200),
         said('**▸ Release**\nThe fix is merged and the notes are drafted.\n\nThe notes cover the login redirect, the CSV export and the audit log, with links to each MR.\n\nTLDR: Should I tag the release now or wait for QA?', 120),
         done(110)
@@ -136,6 +142,10 @@ export function buildFixture(root) {
         { ...tool('Edit', { file_path: '/x/src/login.js', old_string: 'a', new_string: 'b' }, 400, 'e1'), gitBranch: '5-fix-login' },
         result('e1', 'ok', 390),
         tool('Bash', { command: 'npm test' }, 10, 'pending')
+    ], 5);
+    agent(alpha, 'agent-gate', { description: 'Gate: code review', toolUseId: 'gate105' }, [
+        { type: 'user', timestamp: ago(254), message: { role: 'user', content: 'Review the diff in the worktree.' } },
+        tool('Bash', { command: 'git diff main...' }, 10, 'g1')
     ], 5);
     agent(alpha, 'agent-ship', { description: 'Ship !102', finished: true }, [
         { type: 'user', timestamp: ago(1200), message: { role: 'user', content: 'Open the MR for the audit log' } },

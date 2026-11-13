@@ -251,6 +251,27 @@ interface HTMLElementEventMap {
 }
 
 /** Elements in index.html that $() callers use beyond HTMLElement. */
+// ---- /api/log?project=: LogResponse ----
+
+interface LogCommit {
+    hash: string;
+    short: string;
+    at: number;
+    subject: string;
+    /** the ref git log --source reached it by, shortened; the default branch for its unpushed commits */
+    branch: string;
+    /** null when the repo has no remote refs */
+    pushed: boolean | null;
+    /** on the default branch and on no remote */
+    unpushed: boolean;
+}
+interface LogAgent { kind: 'agent'; id: string; at: number; started: number | null; description: string; tldr: string | null; body: string; pr: string | null; prState: PrState | null; branches: string[]; time: string | null; tokens: string | null; commits: LogCommit[] }
+type LogEntry = LogAgent
+    | (LogCommit & { kind: 'commit' })
+    | { kind: 'topic'; at: number; topic: string; tldr: string | null }
+    | { kind: 'mr'; at: number; url: string; state: string; title: string | null };
+interface LogResponse { project: string; repo: string | null; defaultBranch: string | null; error: string | null; days: { label: string; entries: LogEntry[] }[] }
+
 interface PageIds {
     project: WaSelect;
     dlg: WaDialog;

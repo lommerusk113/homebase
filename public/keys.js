@@ -1,5 +1,5 @@
 // Keyboard navigation over work-item rows (after Contado): j/k move, Enter/Space expand, o opens the MR, a runs the row action.
-// The same j/k/Enter/o work on the Issues tab's cards; 1 and 2 switch tabs.
+// The same j/k/Enter/o work on the Issues tab's cards; 1, 2 and 3 switch tabs.
 // The focused row is tracked by item key, so it survives the 3s re-renders; list.js calls hooks.rendered after each one.
 import { $, el, state, hooks } from './core.js';
 import { select, renderBoard } from './list.js';
@@ -8,9 +8,9 @@ import { showTab, activeTab, collapseIssue } from './issues.js';
 export const SHORTCUTS = [
     ['j / ↓', 'Next item'], ['k / ↑', 'Previous item'], ['Enter / Space', 'Expand or collapse, chat with its session'],
     ['o', 'Open the MR in a new tab'], ['a', "Run the row's action (asks first)"], ['/ or c', 'Focus the chat input'],
-    ['Esc', 'Leave the input, or collapse the row'], ['1 / 2', 'Work tab / Issues tab'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['r', 'Refresh from GitLab/GitHub'], ['?', 'This overlay']
+    ['Esc', 'Leave the input, or collapse the row'], ['1 / 2 / 3', 'Work / Issues / Log tab'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['r', 'Refresh from GitLab/GitHub'], ['?', 'This overlay']
 ];
-const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', r: 'refresh', g: 'g', 1: 'work', 2: 'issues' };
+const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', r: 'refresh', g: 'g', 1: 'work', 2: 'issues', 3: 'log' };
 
 // Action for a keydown ({ key, metaKey, ctrlKey, altKey }); prev is 'g' when g was pressed just before.
 /** @param {Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey'>} e @param {string | null} prev @returns {string | null} */
@@ -112,6 +112,7 @@ function onKey(e) {
         escape: () => { if (activeTab() === 'issues') collapseIssue(); else if (state.selected) { state.selected = null; renderBoard(); } },
         work: () => showTab('work'),
         issues: () => showTab('issues'),
+        log: () => showTab('log'),
         help,
         project: () => { const p = $('project'); p.focus(); p.open = true; },
         milestone: () => { const m = /** @type {HTMLDetailsElement | null} */ (document.querySelector('.ms-pick:not([hidden])')); if (m) { m.open = true; m.querySelector('summary').focus(); } },

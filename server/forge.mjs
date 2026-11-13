@@ -92,7 +92,8 @@ async function fetchPr(url) {
         title: pr.title,
         branch: pr.headRefName,
         reviewers: [...new Set([...(pr.reviewRequests ?? []).map(r => r.login ?? r.name), ...reviews.map(r => r.author?.login)].filter(Boolean))],
-        ready: pr.reviewDecision === 'APPROVED' && !pr.isDraft,
+        // an empty reviewDecision means the repo requires no review (hobby repos without branch protection)
+        ready: (pr.reviewDecision === 'APPROVED' || !pr.reviewDecision) && !pr.isDraft,
         changes: pr.reviewDecision === 'CHANGES_REQUESTED',
         changesBy: reviews.filter(r => r.state === 'CHANGES_REQUESTED').map(r => r.author?.login).filter(Boolean),
         draft: pr.isDraft,

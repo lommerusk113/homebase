@@ -513,6 +513,13 @@ assert.deepEqual(cut.map(i => [i.role, i.text, i.interrupted]), [
 ]);
 assert.equal(chatItems([{ type: 'user', message: { content: '[Request interrupted by user]' } }]).length, 0); // nothing to mark
 assert.equal(chatItems([{ type: 'user', message: { content: '[Request interrupted by user] and more' } }])[0].role, 'user'); // only the exact marker
+// an interrupt after the second chunk of a reply flags the merged bubble; a tool result between chunks doesn't split it
+const toolResult = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't', content: 'x' }] } };
+assert.deepEqual(chatItems([say('A.'), toolResult, say('B.'), { type: 'user', message: { content: '[Request interrupted by user]' } }]).map(i => [i.role, i.text, i.interrupted]), [
+    ['assistant', 'A.\n\nB.', true]
+]);
+// a subagent's queue operations aren't the user's pending prompts
+assert.deepEqual(chatItems([{ type: 'queue-operation', operation: 'enqueue', content: 'side work', isSidechain: true, timestamp: 't1' }]), []);
 console.log('ok interrupted');
 
 import { peakLimits } from './server.mjs';

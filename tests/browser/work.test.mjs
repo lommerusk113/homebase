@@ -7,23 +7,35 @@ const groups = `Object.fromEntries([...document.querySelectorAll('#masters .grou
 export default {
     'work rows land in the right groups': async ({ page, open }) => {
         await open();
-        await page.waitFor(`${row(MR(102))}`, { what: 'the !102 row' });
+        await page.waitFor(`${row(MR(102))} && ${row(MR(106))}`, { what: 'the !102 row and the forge-seeded !106' });
         assert.deepEqual(await page.ev(groups), {
             'needs-you': ['agent-stopped', MR(104)],
             doing: [`starting:${IDS.worker}:7`, MR(101), MR(105)],
-            review: [MR(103)],
+            review: [MR(103), MR(107), MR(106)],
             ready: [MR(102)],
             finished: ['agent-notes'],
             done: [MR(100)]
         });
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters .g-head')].map(h => h.textContent)`),
-            ['Needs you · 2', 'Doing · 3', 'In review · 1', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
+            ['Needs you · 2', 'Doing · 3', 'In review · 3', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.next').textContent`), 'Next: Agent stopped — check the chat');
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.act-btn').textContent`), 'Continue');
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.next').textContent`), "💬 1 Next: Reply to Ann Reviewer's comment");
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.act-btn').textContent`), 'Fix & reply');
         assert.equal(await page.ev(`${row(MR(102))}.querySelector('.act-btn').textContent`), 'Merge + close issue');
         assert.ok(await page.ev(`${row(MR(101))}.querySelector('.ms-tag').textContent === '⚑ Sprint 12'`), 'milestone tag');
+    },
+
+    'an open MR only the forge lists (never in a transcript) is a row bound to the project\'s newest session': async ({ page, open }) => {
+        await open();
+        await page.waitFor(`${row(MR(106))}`, { what: 'the forge-only !106 row' });
+        assert.equal(await page.ev(`${row(MR(106))}.querySelector('.next').textContent`), 'Next: Waiting for review by Ann Reviewer');
+    },
+
+    'an MR only items.json remembers is a row, bound to its stored session': async ({ page, open }) => {
+        await open();
+        await page.waitFor(`${row(MR(107))}`, { what: 'the stored-only !107 row' });
+        assert.equal(await page.ev(`${row(MR(107))}.querySelector('.next').textContent`), 'Next: Needs a reviewer');
     },
 
     'a gate subagent links through the turn that spawned it, so its approved MR has no Merge button': async ({ page, open }) => {

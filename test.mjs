@@ -253,7 +253,65 @@ assert.equal(one(() => open({ ready: true })).stageLabel, 'Approved');
 assert.deepEqual((({ column, stageLabel, next }) => [column, stageLabel, next])(one(() => ({ state: 'closed' }))), ['done', 'Closed', 'Closed without merging']);
 const verifying = workItems([{ id: 's', project: 'p', prs: [], agents: [agent('v', 1, { status: 'running', stage: 2 })] }], () => null, 0, new Map());
 assert.deepEqual(verifying.map(i => i.stageLabel), ['Verify']);
+// forge-seeded MRs: deduped against transcript URLs, bound to the project's newest session, others' projects untouched
+const forged = workItems([
+    { id: 'old', project: 'p', updated: 1, prs: [{ url: mr(1), at: 5 }], agents: [] },
+    { id: 'new', project: 'p', updated: 9, prs: [], agents: [] },
+    { id: 'q', project: 'q', updated: 99, prs: [], agents: [] }
+], () => open(), 0, new Map(), [{ url: mr(1), project: 'p' }, { url: mr(7), project: 'p' }, { url: mr(7), project: 'p' }]);
+assert.deepEqual(forged.map(i => [i.key, i.sessionId, i.column]), [[mr(1), 'old', 'review'], [mr(7), 'new', 'review']]);
 console.log('ok items');
+
+import { loadStore, record, seeds, flush } from './server/store.mjs';
+{
+    const dir = mkdtempSync(join(tmpdir(), 'hb-store-'));
+    const file = join(dir, 'items.json');
+    const DAY = 864e5;
+    const item = (url, prState, extra) => ({ pr: url, project: 'p', title: 't', sessionId: 's1', branch: 'b', prState, agentLinks: [{ id: 'a1', description: 'Impl !1', finished: 5 }], ...extra });
+
+    // round trip: written once (mode 0600, no temp left), read back, throttled, and lastSeen alone is no change
+    const st = loadStore(file);
+    record(st, [item(mr(1), { state: 'open', title: 'One', issue: '9' }), item(mr(2), { state: 'merged' })], 1000);
+    flush(st, 20_000);
+    assert.equal(statSync(file).mode & 0o777, 0o600);
+    assert.deepEqual(readdirSync(dir), ['items.json']);
+    const back = loadStore(file);
+    assert.deepEqual(back.data.p[mr(1)], { title: 'One', issue: '9', branch: 'b', sessionId: 's1', firstSeen: 1000, lastSeen: 1000, state: 'open', mergedAt: null, agents: [{ id: 'a1', description: 'Impl !1', finished: 5 }] });
+    assert.equal(back.data.p[mr(2)].mergedAt, 1000);
+    record(back, [item(mr(1), { state: 'open', title: 'One', issue: '9' })], 2000);
+    assert.equal(back.dirty, false);
+    record(back, [item(mr(1), { state: 'merged' })], 3000);
+    assert.equal(back.dirty, true);
+    flush(back, 25_000); // within 10 s of nothing written yet by this store: writes
+    back.dirty = true;
+    const before = readFileSync(file, 'utf8');
+    record(back, [item(mr(1), { state: 'merged' }, { branch: 'other' })], 26_000);
+    flush(back, 26_000 + 5000);
+    assert.equal(readFileSync(file, 'utf8'), before, 'throttled to one write per 10 s');
+
+    // seeding: open ones, and merged ones only within the window
+    assert.deepEqual(seeds(loadStore(file), 4000, 3 * DAY).map(s => [s.url, s.sessionId, s.agents.length]).sort(), [[mr(1), 's1', 1], [mr(2), 's1', 1]]);
+    assert.deepEqual(seeds(loadStore(file), 4000 + 4 * DAY, 3 * DAY), []);
+
+    // pruning: merged/closed entries unseen for 30 days go, open ones stay
+    const old = loadStore(file);
+    record(old, [item(mr(3), { state: 'open' })], 1000);
+    record(old, [], 1000 + 31 * DAY);
+    assert.deepEqual(Object.keys(old.data.p), [mr(3)]);
+
+    // corrupt file: starts empty and keeps a .bak
+    writeFileSync(file, '{"p": ');
+    const bad = loadStore(file);
+    assert.deepEqual(bad.data, {});
+    assert.equal(readFileSync(`${file}.bak`, 'utf8'), '{"p": ');
+    rmSync(dir, { recursive: true });
+
+    // a stored MR no transcript mentions any more still seeds its row, with its finished agent and its session
+    const kept = workItems([{ id: 's1', project: 'p', updated: 1, prs: [], agents: [] }, { id: 's2', project: 'p', updated: 9, prs: [], agents: [] }], () => open(), 0, new Map(),
+        [{ url: mr(8), project: 'p', sessionId: 's1', agents: [{ id: 'gone', description: 'Impl !8', finished: 7 }] }]);
+    assert.deepEqual(kept.map(i => [i.key, i.sessionId, i.agentStatus, i.updated]), [[mr(8), 's1', 'done', 7]]);
+}
+console.log('ok store');
 
 import { tmuxArgs } from './server.mjs';
 assert.deepEqual(tmuxArgs(['send-keys', '-t', 'cc-1', 'Escape'], undefined), ['send-keys', '-t', 'cc-1', 'Escape']);

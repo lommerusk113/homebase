@@ -213,8 +213,9 @@ export function requestFor(sessions, project, url, prState) {
 
 // The work items' raw groups: one per PR/MR (deduped across sessions and agents), plus running or stopped agents with
 // no MR yet. Agents whose description names a known MR (!123) count as work on it; finished agents without an MR stay
-// for RECENT_DONE_MS, then drop out.
-function itemGroups(sessions, prOf, now) {
+// for RECENT_DONE_MS, then drop out. `seeds` are { url, project, sessionId?, agents? } MRs no transcript need mention:
+// the user's open MRs from the forge and the stored ones, with their stored finished agents.
+function itemGroups(sessions, prOf, now, seeds) {
 
     const byUrl = new Map();
     const add = (url, project) => {
@@ -239,6 +240,16 @@ function itemGroups(sessions, prOf, now) {
         }
     }
 
+    // seeded MRs bind to their stored session if it is still around, else the project's most recent one, so the chat and the action buttons work
+    const stored = new Map();
+    for (const { url, project, sessionId, agents = [] } of seeds) {
+        const it = add(url, project);
+        const inProject = sessions.filter(s => s.project === project);
+        const latest = inProject.toSorted((a, b) => (b.lastActivity ?? b.updated ?? 0) - (a.lastActivity ?? a.updated ?? 0))[0];
+        it.linkSession ??= inProject.find(s => s.id === sessionId)?.id ?? latest?.id ?? null;
+        stored.set(it, [...stored.get(it) ?? [], ...agents]);
+    }
+
     const loose = [];
     for (const s of sessions) {
         for (const a of s.agents ?? []) {
@@ -255,6 +266,14 @@ function itemGroups(sessions, prOf, now) {
             } else if (a.status !== 'done' || now - a.updated < RECENT_DONE_MS) { // finished without an MR: shown a while so the user sees it completed
                 loose.push({ key: a.id, pr: null, project: s.project, agents: [own], linkedAt: 0, linkSession: null });
             }
+        }
+    }
+
+    // agents that scrolled out of the transcripts keep their link, unless they are still live
+    const live = new Set(sessions.flatMap(s => (s.agents ?? []).map(a => a.id)));
+    for (const [it, agents] of stored) {
+        for (const a of agents.filter(a => !live.has(a.id))) {
+            it.agents.push({ id: a.id, description: a.description, status: 'done', stage: 4, updated: a.finished ?? 0, prs: [it.pr], sessionId: it.linkSession });
         }
     }
 
@@ -277,9 +296,9 @@ function agentUsage(agents, now) {
 }
 
 // One row per work item, newest agent first, with its column, stage, next step, action, gate badge and usage.
-export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads) {
+export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads, seeds = []) {
 
-    return itemGroups(sessions, prOf, now).map(it => {
+    return itemGroups(sessions, prOf, now, seeds).map(it => {
 
         const agents = it.agents.toSorted((a, b) => b.updated - a.updated);
         const agent = agents[0] ?? null;
@@ -309,6 +328,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             tldr: agent?.tldr ?? null,
             body: agent?.body ?? '',
             files: agent?.files ?? [],
+            agentLinks: agents.filter(a => a.status === 'done').map(a => ({ id: a.id, description: a.description, finished: a.updated })), // for the store; dropped before the response
             activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
             next: requested ? 'Claude is on it…' : col === 'finished' ? 'Finished without an MR' : nextStep(prState, agent),

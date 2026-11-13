@@ -4,21 +4,24 @@ import { chatSession, bindChat, sendText } from './chat.js';
 import { milestoneTag } from './milestone.js';
 
 
+/** @param {Column} key */
 const dot = key => { const d = el('span', 'dot' + (key === 'doing' ? ' live' : '')); d.style.setProperty('--c', `var(${COL[key].color})`); return d; };
 
 // CI pill next to the MR chip: ✓ passed, ✗ failed, ● running/pending, grey for the rest; nothing without a pipeline.
 const PIPE = { success: ['✓', 'passed'], failed: ['✗', 'failed'], running: ['●', 'running'], pending: ['●', 'pending'], created: ['●', 'pending'], preparing: ['●', 'pending'], waiting_for_resource: ['●', 'pending'], scheduled: ['●', 'scheduled'] };
+/** @param {Pipeline | null | undefined} p @returns {HTMLElement[]} */
 export function ciPill(p) {
     if (!p?.status) return [];
     const [icon, word] = PIPE[p.status] ?? ['–', p.status.replace(/_/g, ' ')];
     const a = el(p.url ? 'a' : 'span', `ci-pill ci-${p.status}`, icon);
-    if (p.url) { a.href = p.url; a.target = '_blank'; a.onclick = e => e.stopPropagation(); }
+    if (a instanceof HTMLAnchorElement) { a.href = p.url; a.target = '_blank'; a.onclick = e => e.stopPropagation(); }
     const when = p.at && ago(Date.parse(p.at));
     a.setAttribute('aria-label', `Pipeline ${word}`);
     return [a, tooltip(a, `Pipeline ${word}${when ? ` · ${when === 'now' ? 'just now' : `${when} ago`}` : ''}`)];
 }
 
 // review-gate badge next to the MR chip: ✓ gate (ready), ⚠ gate (fix first), gate stale once the MR head moved; nothing if it never ran.
+/** @param {Gate | null} g @returns {HTMLElement[]} */
 export function gateBadge(g) {
     if (!g) return [];
     const [cls, label] = g.stale ? ['stale', 'gate stale'] : g.verdict === 'ready' ? ['ready', '✓ gate'] : ['fix', '⚠ gate'];
@@ -32,6 +35,7 @@ export function gateBadge(g) {
 // Work items (one per MR, plus running/stopped agents without one), grouped by what they wait on; recently finished and merged ones folded at the bottom.
 function renderItems() {
     const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).map(x => optimistic(x)).sort((a, b) => b.updated - a.updated);
+    /** @param {WorkItem[]} list */
     const table = list => {
         const t = el('table', 'rows');
         t.setAttribute('role', 'grid');
@@ -45,7 +49,7 @@ function renderItems() {
             if (unanswered.has(x.key) && x.action && !x.sent && !x.requested) next.prepend(el('span', 'no-reply', 'No response yet — check the chat · '));
             if (x.comments?.count) next.prepend(commentBadge(x, fresh), ' ');
             what.append(el('b', null, x.title), next);
-            if (x.milestone) what.firstChild.prepend(milestoneTag(x));
+            if (x.milestone) what.firstElementChild.prepend(milestoneTag(x));
             const prog = el('td', 'prog'); prog.append(stageBar(x));
             if (x.tokens || x.time) {
                 const m = el('small', 'meta', [x.tokens, x.time].filter(Boolean).join(' · '));
@@ -67,6 +71,7 @@ function renderItems() {
         return t;
     };
     // Folded groups: Merged stays open for this page load once opened; Recently finished remembers per project, after a toggle.
+    /** @param {typeof COLUMNS[number]} c @param {WorkItem[]} list @param {boolean} isOpen @param {(open: boolean) => void} setOpen */
     const fold = (c, list, isOpen, setOpen) => {
         const f = el('wa-details', `group g-${c.key}`), sum = el('span', 'g-head');
         f.setAttribute('appearance', 'plain');
@@ -96,6 +101,7 @@ function renderItems() {
 }
 
 // "💬 2 new · Børre" in the accent colour, or a muted "💬 5" when none are new since last checked.
+/** @param {WorkItem} x @param {ReviewComment[]} fresh */
 function commentBadge(x, fresh) {
     const b = el('span', 'cm-badge' + (fresh.length ? ' new' : ''), fresh.length ? `💬 ${fresh.length} new · ${authorSummary(fresh)}` : `💬 ${x.comments.count}`);
     b.setAttribute('aria-label', fresh.length ? `${fresh.length} new comments` : `${x.comments.count} comments, none new`);
@@ -109,6 +115,7 @@ const SENT_MS = 120_000;
 const sent = new Map((() => { try { return JSON.parse(sessionStorage.getItem('sent')) ?? []; } catch { return []; } })());
 const unanswered = new Set(); // keys whose mark timed out
 const saveSent = () => { try { sessionStorage.setItem('sent', JSON.stringify([...sent])); } catch {} };
+/** @param {WorkItem} x @returns {WorkItem} */
 function optimistic(x, now = Date.now()) {
     const at = sent.get(x.key);
     if (at == null) return x;
@@ -119,6 +126,7 @@ function optimistic(x, now = Date.now()) {
     }
     return { ...x, sent: at, column: 'doing', next: 'Sent to Claude…' };
 }
+/** @param {WorkItem} x */
 function sentPill(x) {
     const p = el('span', 'sent-pill');
     p.append(el('span', 'pulse'), x.sent ? 'Sent to Claude…' : 'Claude is on it…');
@@ -128,6 +136,7 @@ function sentPill(x) {
 
 // The row's one-click command (label and message from the server's rowAction): binds the chat to the item's session and sends
 // there; the row turns into an in-progress one at once, without the button, so it can't be sent twice.
+/** @param {WorkItem} x */
 function actionButton(x) {
     const b = waButton(x.action.label, 'act-btn');
     b.onclick = async e => {
@@ -143,11 +152,12 @@ function actionButton(x) {
 
 // Open the item's folder (worktree, else repo; resolved on the server) in an editor. Several editors: a menu, last pick first.
 const CODE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/></svg>';
+/** @param {WorkItem} x @returns {HTMLElement[]} */
 function openButton(x) {
     const eds = state.editors ?? [];
     if (!x.folder || !eds.length) return [];
     const last = store.get('editor'), ordered = [...eds.filter(e => e.id === last), ...eds.filter(e => e.id !== last)];
-    const open = ed => { store.set('editor', ed.id); api(`/api/open?item=${encodeURIComponent(x.key)}&editor=${ed.id}`, { method: 'POST' }); };
+    const open = /** @param {Editor} ed */ ed => { store.set('editor', ed.id); api(`/api/open?item=${encodeURIComponent(x.key)}&editor=${ed.id}`, { method: 'POST' }); };
     const b = waButton('', 'open-btn', { appearance: 'plain', 'aria-label': ordered.length > 1 ? 'Open in editor' : `Open in ${ordered[0].name}` });
     b.innerHTML = CODE_ICON;
     const tip = tooltip(b, b.getAttribute('aria-label'));
@@ -164,12 +174,14 @@ function openButton(x) {
 }
 
 // Click toggles an inline detail (TLDR with Show more, other agents on the item, edited files) and binds the chat to the item's session.
+/** @param {WorkItem} x */
 export function select(x) {
     state.selected = state.selected === x.key ? null : x.key;
     // opening marks the MR seen; the detail still lists what was new until then
     if (state.selected && x.pr) { state.opened = { key: x.key, since: seenAt(x.pr) }; markSeen(x.pr); updateTitle(); }
     if (x.sessionId && x.sessionId !== chatSession()?.id) bindChat(x.sessionId); else renderBoard();
 }
+/** @param {WorkItem} x */
 function detail(x) {
     const d = el('div', 'detail');
     if (x.comments?.count) {
@@ -209,6 +221,7 @@ function detail(x) {
     return d;
 }
 // Lifecycle Implement → Verify → Review → Approved → Merged; the current segment pulses while an agent runs.
+/** @param {WorkItem} x */
 function stageBar(x) {
     const w = el('div', 'stage'), bar = el('div', 'bar');
     w.style.setProperty('--c', `var(${COL[x.column].color})`);
@@ -229,26 +242,32 @@ export function renderBoard() {
 
 // Transitions into an attention state since the previous poll, at most one per item, plus a comment event per item with
 // comments newer than both its seen time and the previous poll's newest. No previous poll (or comments not loaded then), no events.
+/**
+ * @param {WorkItem[] | undefined} prevItems
+ * @param {WorkItem[]} nextItems
+ * @param {(x: WorkItem) => number} [seen]
+ * @returns {AttentionEvent[]}
+ */
 export function attentionEvents(prevItems, nextItems, seen = () => 0) {
     if (!prevItems) return [];
     const before = new Map(prevItems.map(x => [x.key, x])), now = new Set(nextItems.map(x => x.key));
-    const failing = x => x?.prState?.ci === 'failing';
+    const failing = /** @param {WorkItem | undefined} x */ x => x?.prState?.ci === 'failing';
     const events = nextItems.flatMap(x => {
         const p = before.get(x.key), was = p?.column;
         const kind = x.column === 'needs-you' && was !== 'needs-you' ? 'needs-you'
             : x.column === 'ready' && was !== 'ready' ? 'ready'
             : was === 'doing' && (x.column === 'review' || x.column === 'done' || x.column === 'finished') ? 'finished'
             : failing(x) && !failing(p) ? 'failing' : null;
-        return kind ? [{ kind, item: x }] : [];
+        return kind ? [/** @type {AttentionEvent} */ ({ kind, item: x })] : [];
     });
     const comments = nextItems.flatMap(x => {
         const p = before.get(x.key);
         if (!x.pr || !x.comments || !p?.comments) return [];
         const fresh = freshComments(x.comments, Math.max(seen(x), Date.parse(p.comments.latestAt) || 0));
-        return fresh.length ? [{ kind: 'comment', item: x, comments: fresh }] : [];
+        return fresh.length ? [/** @type {AttentionEvent} */ ({ kind: 'comment', item: x, comments: fresh })] : [];
     });
     // one notification per item: a comment that moved it into needs-you is told as the comment
     const commented = new Set(comments.map(e => e.item.key));
     // finished agents without an MR drop off the board
-    return [...events.filter(e => !(e.kind === 'needs-you' && commented.has(e.item.key))), ...comments, ...prevItems.filter(p => p.column === 'doing' && !now.has(p.key)).map(item => ({ kind: 'finished', item }))];
+    return [...events.filter(e => !(e.kind === 'needs-you' && commented.has(e.item.key))), ...comments, ...prevItems.filter(p => p.column === 'doing' && !now.has(p.key)).map(item => /** @type {AttentionEvent} */ ({ kind: 'finished', item }))];
 }

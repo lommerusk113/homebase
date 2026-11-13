@@ -15,6 +15,30 @@ export function clearState(raw) {
     return v && typeof v === 'object' ? { at: Number(v.at) || 0, fresh: v.mode === 'new' } : { at: Number(v) || 0, fresh: false };
 }
 
+// The #msg draft and its selection per session in sessionStorage, so a reload doesn't lose typed text. Empty text
+// removes it. ta is a wa-textarea (selection lives on its inner .input) or anything with value/selectionStart/End.
+export function saveDraft(storage, sid, ta) {
+    try {
+        if (!sid) return;
+        const sel = ta.input ?? ta;
+        if (ta.value) storage.setItem(`draft:${sid}`, JSON.stringify({ text: ta.value, start: sel.selectionStart, end: sel.selectionEnd }));
+        else storage.removeItem(`draft:${sid}`);
+    } catch {}
+}
+// Fills an empty ta from the saved draft; the selection is set once the component has rendered the value.
+export async function restoreDraft(storage, sid, ta) {
+    try {
+        const d = JSON.parse(storage.getItem(`draft:${sid}`));
+        if (!d?.text || ta.value) return false;
+        ta.value = d.text;
+        await ta.updateComplete;
+        if (d.start != null) ta.setSelectionRange(d.start, d.end ?? d.start);
+        return true;
+    } catch { return false; }
+}
+let restored = false; // once per page load, for the first bound session
+const session = () => { try { return sessionStorage; } catch { return null; } };
+
 export function bindChat(id) {
     state.chat = id; store.set('chat', id);
     renderBoard(); refreshChat();
@@ -83,6 +107,7 @@ export async function refreshChat() {
     const next = following && state.sessions.find(x => x.clearedFrom === following);
     if (next) { following = null; state.chat = next.id; store.set('chat', next.id); renderBoard(); }
     const s = chatSession(), feed = $('feed');
+    if (s && !restored) { restored = true; restoreDraft(session(), s.id, $('msg')).then(ok => ok && syncSend()); }
     if (!s) { chatKey = null; state.asking = null; updateTitle(); setStatus(state.offline ? { error: true } : null); return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
     let data;
     try {
@@ -180,13 +205,14 @@ export async function sendText(sid, text, answerTo) {
 }
 
 export function initChat() {
-    $('msg').addEventListener('input', syncSend);
+    $('msg').addEventListener('input', () => { syncSend(); saveDraft(session(), chatSession()?.id, $('msg')); });
     $('send').onsubmit = async e => {
         e.preventDefault();
         const s = chatSession(), ta = $('msg'), text = ta.value.trim();
         if (!s || !text) return;
         ta.value = ''; syncSend(); // clear at once; the "sending…" bubble shows progress
         if (!await sendText(s.id, text) && !ta.value) { ta.value = text; syncSend(); } // give the text back so it isn't lost
+        else saveDraft(session(), s.id, ta); // sent: drops the draft, or keeps whatever was typed meanwhile
     };
     $('msg').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('send').requestSubmit(); } };
     $('c-menu').addEventListener('wa-select', e => {

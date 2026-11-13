@@ -18,17 +18,38 @@ export const state = { sessions: [], tracked: parse(store.get('tracked')), proje
 export const saveTracked = () => { store.set('tracked', JSON.stringify(state.tracked)); };
 
 // Every API call goes through here: the per-start token from index.html's meta tag, plus x-codetool on POSTs.
-// A 401 means the server restarted with a new token, so reload once to pick it up; the 30s guard stops a reload loop.
+// A 401 means the server restarted with a new token: read it from a fresh index.html (one fetch shared by concurrent
+// callers) and retry once. A 401 is rejected before any handler runs, so retrying a POST can't double-send.
+// Never reloads, so typed text and UI state survive; a second 401 goes back to the caller, which shows the offline
+// state and keeps polling.
+export const page = { token: null, build: null, updated: false };
+const metaOf = (html, name) => html.match(new RegExp(`<meta name="${name}" content="([^"]*)"`))?.[1];
+const ownMeta = name => globalThis.document?.querySelector(`meta[name="${name}"]`)?.content ?? null;
+let refreshing = null;
+export function refreshToken() {
+    return refreshing ??= fetch('/', { cache: 'no-store' })
+        .then(r => (r.ok ? r.text() : ''))
+        .then(html => {
+            const token = metaOf(html, 'homebase-token'), build = metaOf(html, 'homebase-build');
+            if (token) page.token = token;
+            page.build ??= ownMeta('homebase-build');
+            // new code under a running page: say so in the header, never reload on our own
+            if (build && page.build && build !== page.build && !page.updated) {
+                page.updated = true;
+                globalThis.document?.getElementById('updated')?.removeAttribute('hidden');
+            }
+            return page.token;
+        })
+        .catch(() => page.token)
+        .finally(() => { refreshing = null; });
+}
 export async function api(path, opts = {}) {
-    const token = document.querySelector('meta[name="homebase-token"]')?.content;
-    const headers = { ...opts.headers, 'x-homebase-token': token, ...(opts.method === 'POST' && { 'x-codetool': '1' }) };
-    const r = await fetch(path, { ...opts, headers });
-    if (r.status === 401) {
-        let last = 0;
-        try { last = Number(sessionStorage.getItem('reloadedAt')) || 0; sessionStorage.setItem('reloadedAt', Date.now()); } catch {}
-        if (Date.now() - last > 30_000) location.reload();
-    }
-    return r;
+    page.token ??= ownMeta('homebase-token');
+    const send = token => fetch(path, { ...opts, headers: { ...opts.headers, 'x-homebase-token': token, ...(opts.method === 'POST' && { 'x-codetool': '1' }) } });
+    const used = page.token, r = await send(used);
+    if (r.status !== 401) return r;
+    const token = page.token !== used ? page.token : await refreshToken(); // another caller may have the new one already
+    return token && token !== used ? send(token) : r;
 }
 
 export const $ = id => document.getElementById(id);

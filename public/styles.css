@@ -56,6 +56,8 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .quiet:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 .offline { margin-left:auto; color:var(--c-needs); font-size:12px; }
 .offline:not([hidden]) + #bell { margin-left:12px !important; }
+.updated { margin-left:auto; color:var(--muted); font-size:12px; }
+.updated:not([hidden]) ~ .offline, .updated:not([hidden]) ~ #bell { margin-left:12px !important; }
 #bell { margin-left:auto; display:grid; place-items:center; height:26px; }
 #bell .b-on, #bell.on .b-off { display:none; }
 #bell.on .b-on { display:inline; }

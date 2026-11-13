@@ -18,6 +18,17 @@ export function ciPill(p) {
     return [a, tooltip(a, `Pipeline ${word}${when ? ` · ${when === 'now' ? 'just now' : `${when} ago`}` : ''}`)];
 }
 
+// review-gate badge next to the MR chip: ✓ gate (ready), ⚠ gate (fix first), gate stale once the MR head moved; nothing if it never ran.
+export function gateBadge(g) {
+    if (!g) return [];
+    const [cls, label] = g.stale ? ['stale', 'gate stale'] : g.verdict === 'ready' ? ['ready', '✓ gate'] : ['fix', '⚠ gate'];
+    const b = el('span', `gate-badge gate-${cls}`, label);
+    const when = g.at && ago(g.at);
+    const tip = [`review-gate: ${g.verdict}${g.stale ? ' (MR changed since)' : ''}`, when && (when === 'now' ? 'just now' : `${when} ago`), plain(g.tldr)].filter(Boolean).join(' · ');
+    b.setAttribute('aria-label', tip);
+    return [b, tooltip(b, tip)];
+}
+
 // Work items (one per MR, plus running/stopped agents without one), grouped by what they wait on; merged ones folded at the bottom.
 function renderItems() {
     const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).sort((a, b) => b.updated - a.updated);
@@ -36,7 +47,7 @@ function renderItems() {
                 prog.append(m);
                 if (x.tokensTitle) prog.append(tooltip(m, x.tokensTitle));
             }
-            const pr = el('td', 'pr'); if (x.pr) pr.append(prChip(x), ...ciPill(x.prState?.pipeline));
+            const pr = el('td', 'pr'); if (x.pr) pr.append(prChip(x), ...ciPill(x.prState?.pipeline), ...gateBadge(x.gate));
             const br = el('td', 'br'); if (x.branch) br.append(el('span', 'chip mono', x.branch));
             const act = el('td', 'act'); act.append(...openButton(x)); if (x.action && x.sessionId) act.append(...actionButton(x));
             tr.append(what, prog, pr, br, act, el('td', 'when', ago(x.updated)));

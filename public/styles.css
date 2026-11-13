@@ -197,11 +197,13 @@ wa-details.group::part(icon) { color:var(--muted); font-size:12px; }
 .rows .what b, .rows .what .next { display:block; overflow:hidden; text-overflow:ellipsis; }
 .rows .what b { font-weight:500; }
 .rows .what .next { color:var(--muted); font-size:12px; }
-.rows .pr { width:170px; } .rows .br { width:22%; } .rows .act { width:186px; white-space:nowrap; text-align:right; padding-right:0; }
+.rows .pr { width:230px; } .rows .br { width:16%; } .rows .act { width:186px; white-space:nowrap; text-align:right; padding-right:0; }
 .ci-pill { --c:var(--c-idle); display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; margin-left:4px; border-radius:99px; font-size:11px; font-weight:700; line-height:1; text-decoration:none; vertical-align:middle; color:var(--c); background:color-mix(in srgb, var(--c) 15%, transparent); }
 .ci-success { --c:var(--c-ready); } .ci-failed { --c:var(--c-danger); }
 .ci-running, .ci-pending, .ci-created, .ci-preparing, .ci-waiting_for_resource, .ci-scheduled { --c:var(--c-warn); }
 .ci-running { animation:pulse 1.2s ease-in-out infinite; }
+.gate-badge { --c:var(--c-idle); display:inline-flex; align-items:center; height:18px; margin-left:4px; padding:0 6px; border-radius:99px; font-size:11px; font-weight:600; line-height:1; white-space:nowrap; vertical-align:middle; color:var(--c); background:color-mix(in srgb, var(--c) 15%, transparent); }
+.gate-ready { --c:var(--c-ready); } .gate-fix { --c:var(--c-warn); }
 .rows .when { width:60px; text-align:right; color:var(--muted); font-size:12px; padding-right:16px; }
 .rows tr.detail, .rows tr.detail:hover { background:var(--bg); cursor:default; }
 .rows tr.detail td { border-top:0; white-space:normal; overflow:visible; padding:0 16px 4px 16px; }

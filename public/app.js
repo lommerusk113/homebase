@@ -10,7 +10,9 @@ import { renderIssues, showTab } from './issues.js';
 let pillFor = null, milestone = null;
 hooks.inMilestone = x => inMilestone(x, milestone);
 function renderMilestone() {
-    if (pillFor === state.project) return;
+    if (pillFor === state.project) {
+        return;
+    }
     pillFor = state.project; milestone = null;
     renderIssues(pillFor === 'all' ? null : undefined);
     $('milestone-slot').replaceChildren(...(pillFor === 'all' ? [] : [milestoneSelector(pillFor, { onChange: m => { milestone = m; renderBoard(); }, onData: renderIssues, onBusy: b => $('issues').classList.toggle('stale', b) })]));
@@ -24,19 +26,25 @@ dark.addEventListener('change', syncTheme); syncTheme();
 // Rebuild options only when they changed, and never while the list is open: the open listbox would lose its options.
 /** @param {WaSelect} sel @param {[string, string][]} opts @param {string} value */
 function fillSelect(sel, opts, value) {
-    if (sel.open) return;
+    if (sel.open) {
+        return;
+    }
     const now = [...sel.querySelectorAll('wa-option')];
     if (!(now.length === opts.length && now.every((o, i) => o.value === opts[i][0] && o.textContent === opts[i][1]))) {
         sel.replaceChildren(...opts.map(([v, t]) => { const o = el('wa-option', null, t); o.setAttribute('value', v); return o; }));
     }
-    if (sel.value !== value) sel.value = value;
+    if (sel.value !== value) {
+        sel.value = value;
+    }
 }
 
 /** @returns {Record<string, number>} */
 const counts = () => { const c = /** @type {Record<string, number>} */ ({}); for (const s of state.sessions) c[s.project] = (c[s.project] || 0) + 1; return c; };
 
 function renderProjects() {
-    if (state.project !== 'all' && !state.tracked.includes(state.project)) state.project = 'all';
+    if (state.project !== 'all' && !state.tracked.includes(state.project)) {
+        state.project = 'all';
+    }
     const names = [...state.tracked].sort((a, b) => a.localeCompare(b));
     fillSelect($('project'), [['all', 'All my projects'], ...names.map(n => /** @type {[string, string]} */ ([n, n]))], state.project);
     renderMilestone();
@@ -76,14 +84,18 @@ function migrateTracked() {
 const notifyOn = () => store.get('notify') === '1' && window.Notification?.permission === 'granted';
 /** @param {AttentionEvent} e */
 function notify({ kind, item: x, comments }) {
-    if (!notifyOn() || (document.visibilityState === 'visible' && document.hasFocus())) return;
+    if (!notifyOn() || (document.visibilityState === 'visible' && document.hasFocus())) {
+        return;
+    }
     const ref = x.pr ? prLabel(x.pr) : x.title;
     const [title, body] = { 'needs-you': [`Needs you: ${x.title} — ${x.next}`], ready: [`Ready to merge: ${ref}`, x.title], finished: [`Agent finished: ${x.title}`, x.column === 'doing' ? undefined : x.next], failing: [`Pipeline failing: ${ref}`, x.title], comment: [`💬 ${authorSummary(comments ?? [])} commented on ${ref}`, comments?.[0]?.excerpt] }[kind];
     const n = new Notification(title, { body, tag: kind === 'comment' ? `${x.key}:comment` : x.key, icon: '/icon.svg' });
     n.onclick = () => {
         window.focus(); n.close();
         const it = state.sessions.flatMap(s => s.items || []).find(i => i.key === x.key);
-        if (it && state.selected !== it.key) select(it);
+        if (it && state.selected !== it.key) {
+            select(it);
+        }
         document.querySelector('.rows tr.sel')?.scrollIntoView({ block: 'center' });
     };
 }
@@ -96,7 +108,9 @@ bell.onclick = async () => {
     const on = !notifyOn() && await Notification.requestPermission() === 'granted';
     store.set('notify', on ? '1' : '0'); renderBell();
 };
-if (window.Notification) renderBell();
+if (window.Notification) {
+    renderBell();
+}
 
 // Refresh button (and r): the server refetches every GitLab/GitHub cache, keeping the old data meanwhile; the icon spins
 // until that is done, then the list and the milestone pill poll at once. Ignored while running and within 5 s of the last start.
@@ -107,7 +121,9 @@ const renderReload = () => {
     $('reload-tip').replaceChildren('Refresh from GitLab/GitHub (r)', ...(refreshedAt ? [el('br'), `Last refreshed ${when} ago`] : []));
 };
 hooks.refresh = async () => {
-    if (reload.classList.contains('spin') || Date.now() - refreshStarted < 5000) return;
+    if (reload.classList.contains('spin') || Date.now() - refreshStarted < 5000) {
+        return;
+    }
     refreshStarted = Date.now();
     reload.classList.add('spin'); reload.setAttribute('aria-busy', 'true');
     try { refreshedAt = /** @type {RefreshState} */ (await api('/api/refresh', { method: 'POST' }).then(r => r.json())).lastRefreshedAt; } catch {}
@@ -122,7 +138,9 @@ let lastSessions = '', lastRender = 0;
 async function refresh() {
     try {
         const r = await api('/api/sessions');
-        if (!r.ok) throw new Error(String(r.status));
+        if (!r.ok) {
+            throw new Error(String(r.status));
+        }
         const text = await r.text();
         // ponytail: skip identical re-renders so text in an open detail stays selectable; re-render each minute for the ages
         if (text !== lastSessions || Date.now() - lastRender > 60_000) {
@@ -173,10 +191,14 @@ const project = $('project');
 // catch up on option updates skipped while the list was open (tooltips' wa-after-hide bubble too, hence the target check)
 project.addEventListener('wa-after-hide', e => { if (e.target === project) renderProjects(); });
 project.addEventListener('change', () => {
-    if (!project.value || project.value === state.project) return;
+    if (!project.value || project.value === state.project) {
+        return;
+    }
     state.project = project.value; store.set('project', state.project); renderMilestone(); renderBoard(); refreshChat();
 });
-for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) b.onclick = () => showTab(b.dataset.tab);
+for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) {
+    b.onclick = () => showTab(b.dataset.tab);
+}
 showTab(store.get('tab'));
 initKeys(); // includes Esc collapsing the expanded row
 initChat();

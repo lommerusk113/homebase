@@ -38,7 +38,9 @@ export function refreshToken() {
         .then(r => (r.ok ? r.text() : ''))
         .then(html => {
             const token = metaOf(html, 'homebase-token'), build = metaOf(html, 'homebase-build');
-            if (token) page.token = token;
+            if (token) {
+                page.token = token;
+            }
             page.build ??= ownMeta('homebase-build');
             // new code under a running page: say so in the header, never reload on our own
             if (build && page.build && build !== page.build && !page.updated) {
@@ -59,7 +61,9 @@ export async function api(path, opts = {}) {
     page.token ??= ownMeta('homebase-token');
     const send = token => fetch(path, { ...opts, headers: { ...opts.headers, 'x-homebase-token': token, ...(opts.method === 'POST' && { 'x-codetool': '1' }) } });
     const used = page.token, r = await send(used);
-    if (r.status !== 401) return r;
+    if (r.status !== 401) {
+        return r;
+    }
     const token = page.token !== used ? page.token : await refreshToken(); // another caller may have the new one already
     return token && token !== used ? send(token) : r;
 }
@@ -85,7 +89,9 @@ export const el = (tag, cls, text) => { const e = /** @type {any} */ (document.c
 /** @param {string} text @param {string | null} [cls] @param {Record<string, any>} [attrs] */
 export const waButton = (text, cls, attrs = {}) => {
     const b = el('wa-button', cls, text);
-    for (const [k, v] of Object.entries(/** @type {Record<string, string | boolean>} */ ({ size: 's', appearance: 'outlined', ...attrs }))) b.setAttribute(k, v === true ? '' : v);
+    for (const [k, v] of Object.entries(/** @type {Record<string, string | boolean>} */ ({ size: 's', appearance: 'outlined', ...attrs }))) {
+        b.setAttribute(k, v === true ? '' : v);
+    }
     return b;
 };
 // A <wa-tooltip> for target (given an id if it has none); the caller places it next to the target.
@@ -114,9 +120,15 @@ export const limitLeft = (w, now = Date.now()) => {
 // (Claude waits on you); working counts from the turn start (`since`), else from your last message.
 /** @param {(Partial<Transcript> & { error?: boolean }) | null} d */
 export const chatStatus = (d, now = Date.now()) => {
-    if (d?.error) return { kind: 'error', text: 'Can’t reach Homebase — reconnecting…' };
-    if (d?.asking) return { kind: 'asking', text: 'Claude is asking — answer below' };
-    if (!d?.working) return { kind: 'idle', text: 'Idle — waiting for you' };
+    if (d?.error) {
+        return { kind: 'error', text: 'Can’t reach Homebase — reconnecting…' };
+    }
+    if (d?.asking) {
+        return { kind: 'asking', text: 'Claude is asking — answer below' };
+    }
+    if (!d?.working) {
+        return { kind: 'idle', text: 'Idle — waiting for you' };
+    }
     const at = d.since ?? Date.parse(d.items?.findLast(i => i.role === 'user' && !i.pending)?.at), m = (now - at) / 60000 | 0;
     return { kind: 'working', text: `Claude is working…${m > 0 ? ` · ${m < 60 ? m + 'm' : `${m / 60 | 0}h${m % 60 ? m % 60 + 'm' : ''}`}` : ''}` };
 };
@@ -146,10 +158,14 @@ function enrich(root) {
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement.closest('a, code, pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
     /** @type {Text[]} */
     const nodes = [];
-    while (walker.nextNode()) nodes.push(/** @type {Text} */ (walker.currentNode));
+    while (walker.nextNode()) {
+        nodes.push(/** @type {Text} */ (walker.currentNode));
+    }
     for (const n of nodes) {
         const t = n.textContent;
-        if (!t.match(TOKEN)) continue;
+        if (!t.match(TOKEN)) {
+            continue;
+        }
         const frag = document.createDocumentFragment();
         let last = 0;
         for (const m of t.matchAll(TOKEN)) {
@@ -171,9 +187,15 @@ function lead(text) {
     const s = line.replace(/^(#+|[-*+>]|\d+[.)])\s+/, '');
     let cut = s.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? s;
     const long = cut.length > 200;
-    if (long) cut = cut.slice(0, 200).replace(/\s+\S*$/, '');
-    if ((cut.match(/\*\*/g)?.length ?? 0) % 2) cut += '**';
-    if ((cut.match(/`/g)?.length ?? 0) % 2) cut += '`';
+    if (long) {
+        cut = cut.slice(0, 200).replace(/\s+\S*$/, '');
+    }
+    if ((cut.match(/\*\*/g)?.length ?? 0) % 2) {
+        cut += '**';
+    }
+    if ((cut.match(/`/g)?.length ?? 0) % 2) {
+        cut += '`';
+    }
     return long ? cut + '…' : cut;
 }
 // Collapsed: only the TLDR (or the lead sentence). Show more reveals the rest; open state survives re-renders via state.unfold.
@@ -181,7 +203,9 @@ function lead(text) {
 export function foldable(tldr, rest, key) {
     const head = tldr || lead(rest), more = tldr || rest?.trim() !== head ? rest?.trim() : '';
     const top = rich(head, true);
-    if (!more) return [top];
+    if (!more) {
+        return [top];
+    }
     const body = rich(more), btn = el('button', 'show');
     const set = open => { body.hidden = !open; if (!tldr) top.hidden = open; btn.textContent = open ? 'Show less' : 'Show more'; };
     set(state.unfold.has(key));

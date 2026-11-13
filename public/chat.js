@@ -42,10 +42,15 @@ export function clearState(raw) {
 /** @param {Storage | null} storage @param {string | undefined} sid @param {WaTextarea | HTMLTextAreaElement} ta */
 export function saveDraft(storage, sid, ta) {
     try {
-        if (!sid) return;
+        if (!sid) {
+            return;
+        }
         const sel = ('input' in ta && ta.input) || /** @type {HTMLTextAreaElement} */ (ta);
-        if (ta.value) storage.setItem(`draft:${sid}`, JSON.stringify({ text: ta.value, start: sel.selectionStart, end: sel.selectionEnd }));
-        else storage.removeItem(`draft:${sid}`);
+        if (ta.value) {
+            storage.setItem(`draft:${sid}`, JSON.stringify({ text: ta.value, start: sel.selectionStart, end: sel.selectionEnd }));
+        } else {
+            storage.removeItem(`draft:${sid}`);
+        }
     } catch {}
 }
 // Fills an empty ta from the saved draft; the selection is set once the component has rendered the value.
@@ -53,10 +58,14 @@ export function saveDraft(storage, sid, ta) {
 export async function restoreDraft(storage, sid, ta) {
     try {
         const d = JSON.parse(storage.getItem(`draft:${sid}`));
-        if (!d?.text || ta.value) return false;
+        if (!d?.text || ta.value) {
+            return false;
+        }
         ta.value = d.text;
         await ta.updateComplete;
-        if (d.start != null) ta.setSelectionRange(d.start, d.end ?? d.start);
+        if (d.start != null) {
+            ta.setSelectionRange(d.start, d.end ?? d.start);
+        }
         return true;
     } catch { return false; }
 }
@@ -74,7 +83,9 @@ export const TOPIC_HUES = 8;
 /** @param {string} topic */
 export function topicHue(topic) {
     let h = 2166136261; // FNV-1a; low bits alone only see the chars' low bits, so fold the high half in
-    for (const c of topic) h = Math.imul(h ^ c.codePointAt(0), 16777619);
+    for (const c of topic) {
+        h = Math.imul(h ^ c.codePointAt(0), 16777619);
+    }
     return ((h ^ (h >>> 16)) >>> 0) % TOPIC_HUES;
 }
 
@@ -83,41 +94,58 @@ export function topicHue(topic) {
 const seenStore = sid => { try { return JSON.parse(store.get(`needs-seen:${sid}`)) || null; } catch { return null; } };
 function markRead(sid, key, b) {
     const v = seenStore(sid) ?? { at: 0, keys: [] };
-    if (!v.keys.includes(key)) store.set(`needs-seen:${sid}`, JSON.stringify({ ...v, keys: [...v.keys, key].slice(-200) }));
+    if (!v.keys.includes(key)) {
+        store.set(`needs-seen:${sid}`, JSON.stringify({ ...v, keys: [...v.keys, key].slice(-200) }));
+    }
     b.querySelector('.unread')?.remove();
 }
 
 /** @param {ChatItem} i @param {string} sid @param {string | null} prevTopic @param {{ latest?: boolean, unread?: boolean }} [look] */
 function bubble(i, sid, prevTopic, look = {}) {
-    if (i.role === 'tools') return el('div', 'tools', i.text);
-    if (i.role === 'error') return el('div', 'tools api-error', i.text);
+    if (i.role === 'tools') {
+        return el('div', 'tools', i.text);
+    }
+    if (i.role === 'error') {
+        return el('div', 'tools api-error', i.text);
+    }
     const needs = i.role === 'assistant' && i.needsYou && !i.error;
     const kind = i.role !== 'assistant' || i.error ? '' : needs ? ' needs' : ` fyi${look.latest ? ' latest' : ''}`;
     const b = el('div', `bubble ${i.role}${kind}${i.error ? ' failed' : ''}${i.interrupted ? ' interrupted' : ''}`), key = `${sid}:${i.at}`;
     // the interrupted mark gets its own tooltip instead of the timestamp
-    if (i.at && !i.interrupted) b.title = new Date(i.at).toLocaleString();
+    if (i.at && !i.interrupted) {
+        b.title = new Date(i.at).toLocaleString();
+    }
     if (i.topic) { b.classList.add('topical'); b.style.setProperty('--tc', `var(--t${topicHue(i.topic)})`); }
     // topic header only where it changes from Claude's previous bubble, so a run on one task reads as one block
     const head = i.topic && i.topic !== prevTopic;
     if (head || needs) {
         const row = el('div', 'b-topic');
-        if (head) row.append(el('span', 'b-topic-name', i.topic));
+        if (head) {
+            row.append(el('span', 'b-topic-name', i.topic));
+        }
         if (needs) {
             const pill = el('span', 'need-pill', 'needs you');
-            if (look.unread) pill.prepend(el('span', 'unread'));
+            if (look.unread) {
+                pill.prepend(el('span', 'unread'));
+            }
             row.append(pill);
             b.addEventListener('click', () => markRead(sid, key, b));
         }
         b.append(row);
     }
-    if (i.role === 'assistant') b.append(...foldable(i.tldr, i.text, key));
-    else {
+    if (i.role === 'assistant') {
+        b.append(...foldable(i.tldr, i.text, key));
+    } else {
         const body = rich(i.text);
         if (!state.unfold.has(key)) body.classList.add('fold');
         b.append(body);
     }
-    if (i.answer) b.append(answerTag(i.answer));
-    if (i.interrupted) b.append(tooltip(b, 'Interrupted by you'));
+    if (i.answer) {
+        b.append(answerTag(i.answer));
+    }
+    if (i.interrupted) {
+        b.append(tooltip(b, 'Interrupted by you'));
+    }
     const note = i.error ? 'Not sent' : i.sending ? 'sending…' : i.pending ? 'queued' : null;
     if (note) {
         const n = el('div', 'b-note', note);
@@ -139,7 +167,9 @@ function answerTag(a) {
     const t = el('div', `answer${yes ? ' yes' : ''}${a.error ? ' failed' : ''}`);
     t.append(el('span', 'mark', a.error ? '!' : yes ? '✓' : '✕'), ` You: ${a.text}`);
     const note = a.error ? `Not sent: ${a.error}` : a.sending ? 'sending…' : a.queued ? 'queued' : null;
-    if (note) t.append(` · ${note}`);
+    if (note) {
+        t.append(` · ${note}`);
+    }
     return t;
 }
 
@@ -178,13 +208,17 @@ export async function refreshChat() {
     let data;
     try {
         const r = await api(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}`);
-        if (!r.ok) throw new Error(await r.text());
+        if (!r.ok) {
+            throw new Error(await r.text());
+        }
         data = await r.json();
     } catch {
         setOffline(true);
         return setStatus({ error: true });
     }
-    if (chatSession()?.id !== s.id) return; // switched while loading
+    if (chatSession()?.id !== s.id) {
+        return; // switched while loading
+    }
     setStatus(data);
     $('ask').hidden = !data.asking;
     state.asking = data.asking; updateTitle();
@@ -208,7 +242,9 @@ export async function refreshChat() {
         // a chip answer shows as the question's tag, not a bubble
         const q = o.answerTo && items.findIndex(x => x.role === 'assistant' && x.at === o.answerTo);
         if (q >= 0) {
-            if (!items[q].answer) items[q] = { ...items[q], answer: { text: o.text, sending: !o.error, error: o.error } };
+            if (!items[q].answer) {
+                items[q] = { ...items[q], answer: { text: o.text, sending: !o.error, error: o.error } };
+            }
             continue;
         }
         const i = items.findIndex(x => Date.parse(x.at) > Date.parse(o.at));
@@ -219,7 +255,9 @@ export async function refreshChat() {
     items.splice(0, hidden);
     const fresh = cut.fresh || !!s.clearedFrom; // a New conversation, before or after the successor is bound
     const key = s.id + JSON.stringify([items, data.asking, data.working, hidden]);
-    if (key === chatKey) return;
+    if (key === chatKey) {
+        return;
+    }
     const first = !chatKey?.startsWith(s.id), atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40, top = feed.scrollTop;
     chatKey = key;
     let topic = null;
@@ -230,14 +268,18 @@ export async function refreshChat() {
     const unread = /** @param {ChatItem} i @param {number} n */ (i, n) => i.needsYou && Date.parse(i.at) > seen.at && !seen.keys.includes(`${s.id}:${i.at}`) && !items.slice(n + 1).some(x => x.role === 'user');
     feed.replaceChildren(...items.map((i, n) => {
         const prev = topic;
-        if (i.role === 'assistant') topic = i.topic;
+        if (i.role === 'assistant') {
+            topic = i.topic;
+        }
         return bubble(i, s.id, prev, { latest: n === latest, unread: unread(i, n) });
     }));
     if (hidden && !cut.fresh) {
         const line = el('div', 'c-hidden', 'Earlier messages hidden · '), btn = el('button', 'show', 'Show');
         btn.onclick = () => { store.set(`cleared:${s.id}`, ''); refreshChat(); };
         line.append(btn); feed.prepend(line);
-    } else if (!items.length) feed.append(el('div', 'welcome', fresh ? 'New conversation — say something to Claude' : 'No messages yet.'));
+    } else if (!items.length) {
+        feed.append(el('div', 'welcome', fresh ? 'New conversation — say something to Claude' : 'No messages yet.'));
+    }
     // Quick replies under Claude's newest message when it ends with a question; an outbox bubble after it hides them.
     const last = items.at(-1);
     if (last?.replies?.length && (!last.answer || last.answer.error) && !data.asking && !data.working) {
@@ -255,7 +297,9 @@ async function sendNow(sid, key) {
     state.nudged.add(key); $('c-err').textContent = ''; refreshChat();
     try {
         const r = await api(`/api/interrupt?id=${encodeURIComponent(sid)}`, { method: 'POST' });
-        if (!r.ok) throw new Error(await r.text());
+        if (!r.ok) {
+            throw new Error(await r.text());
+        }
     } catch (err) {
         state.nudged.delete(key); $('c-err').textContent = err.message; refreshChat();
     }
@@ -274,7 +318,9 @@ export async function sendText(sid, text, answerTo) {
     refreshChat();
     try {
         const r = await api(`/api/send?id=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: text });
-        if (!r.ok) throw new Error(await r.text());
+        if (!r.ok) {
+            throw new Error(await r.text());
+        }
         out.okAt = Date.now();
         setTimeout(refreshChat, 1000);
         return true;
@@ -297,7 +343,9 @@ export function initChat() {
     $('send').onsubmit = async e => {
         e.preventDefault();
         const s = chatSession(), ta = $('msg'), text = ta.value.trim();
-        if (!s || !text) return;
+        if (!s || !text) {
+            return;
+        }
         ta.value = ''; syncSend(); // clear at once; the "sending…" bubble shows progress
         if (!await sendText(s.id, text) && !ta.value) { ta.value = text; syncSend(); } // give the text back so it isn't lost
         else saveDraft(session(), s.id, ta); // sent: drops the draft, or keeps whatever was typed meanwhile
@@ -305,17 +353,30 @@ export function initChat() {
     $('msg').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('send').requestSubmit(); } };
     $('c-menu').addEventListener('wa-select', e => {
         const s = chatSession();
-        if (!s) return;
-        if (e.detail.item.value === 'needs-only') return setNeedsOnly(store.get('needs-only') !== '1'); // from our state, not the item's own toggle
-        if (e.detail.item.value === 'view') { store.set(`cleared:${s.id}`, String(Date.now())); refreshChat(); } else $('clear-dlg').open = true;
+        if (!s) {
+            return;
+        }
+        if (e.detail.item.value === 'needs-only') {
+            return setNeedsOnly(store.get('needs-only') !== '1'); // from our state, not the item's own toggle
+        }
+        if (e.detail.item.value === 'view') {
+            store.set(`cleared:${s.id}`, String(Date.now()));
+            refreshChat();
+        } else {
+            $('clear-dlg').open = true;
+        }
     });
     $('clear-go').onclick = async () => {
         const s = chatSession();
         $('clear-dlg').open = false; $('c-err').textContent = '';
-        if (!s) return;
+        if (!s) {
+            return;
+        }
         try {
             const r = await api(`/api/clear?id=${encodeURIComponent(s.id)}`, { method: 'POST' });
-            if (!r.ok) throw new Error(await r.text());
+            if (!r.ok) {
+                throw new Error(await r.text());
+            }
             store.set(`cleared:${s.id}`, JSON.stringify({ at: Date.now(), mode: 'new' }));
             refreshChat();
         } catch (err) { $('c-err').textContent = err.message; }

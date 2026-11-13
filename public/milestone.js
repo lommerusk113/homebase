@@ -17,7 +17,9 @@ export function inMilestone(item, selected) {
 // Small tag for a work-item row whose MR belongs to a milestone (item.milestone { id, title } comes from the server).
 /** @param {WorkItem} item */
 export function milestoneTag(item) {
-    if (!item?.milestone) return null;
+    if (!item?.milestone) {
+        return null;
+    }
     const t = el('span', 'chip ms-tag', `⚑ ${item.milestone.title}`);
     t.title = `Milestone: ${item.milestone.title}`;
     return t;
@@ -29,7 +31,9 @@ export function milestoneTag(item) {
 export function pillLabel(ms) {
 
     const g = ms.groups, open = ms.total - ms.closed;
-    if (!g) return { text: ms.total == null ? 'loading…' : `${open} open`, tip: `${ms.title}: loading issues… · ${due(ms.due)}` };
+    if (!g) {
+        return { text: ms.total == null ? 'loading…' : `${open} open`, tip: `${ms.title}: loading issues… · ${due(ms.due)}` };
+    }
     const parts = [[g.doing, 'in progress'], [g.closable, 'can be closed'], [g.assigned, 'not started'], [g.unassigned, 'unassigned']]
         .filter(([l]) => l.length).map(([l, label]) => `${l.length} ${label}`);
 
@@ -42,7 +46,9 @@ export function pillLabel(ms) {
 export function toData(status, text, project = '') {
     try {
         const d = JSON.parse(text);
-        if (Array.isArray(d?.milestones)) return d;
+        if (Array.isArray(d?.milestones)) {
+            return d;
+        }
     } catch {}
     return { project, milestones: [], detected: [], me: null, selected: null, updating: false, loading: false, reason: 'error', error: text.trim() || `HTTP ${status}`, url: null };
 }
@@ -54,8 +60,12 @@ export const isLoading = d => !d.reason && !!(d.selected?.loading || d.updating)
 // Pill text and tooltip for a project without milestones to show (data.reason), null otherwise.
 /** @param {Milestones} d @returns {{ text: string, tip: string, err: boolean } | null} */
 export function emptyPill(d) {
-    if (!d.reason) return null;
-    if (d.reason === 'none') return { text: 'No milestones', tip: `No open milestones in ${d.project}`, err: false };
+    if (!d.reason) {
+        return null;
+    }
+    if (d.reason === 'none') {
+        return { text: 'No milestones', tip: `No open milestones in ${d.project}`, err: false };
+    }
     return { text: 'Milestones unavailable', tip: `${d.error ?? d.reason}\nRefresh (r) to retry`, err: true };
 }
 
@@ -100,7 +110,9 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
             summary.title = empty.tip;
             const info = el('div', 'info', empty.err ? `${empty.tip.replace('\n', '. ')}.` : empty.tip);
             menu.replaceChildren(info);
-            if (data.url) info.append(link(null, 'Milestones page ↗', data.url));
+            if (data.url) {
+                info.append(link(null, 'Milestones page ↗', data.url));
+            }
             return;
         }
         summary.replaceChildren(el('span', null, '⚑'), el('span', 't', ms ? ms.title : 'No milestone'));
@@ -119,16 +131,23 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
             summary.title = 'Show only work items of a milestone';
         }
 
-        if (ms?.loading || data.updating) summary.append(el('wa-spinner'));
+        if (ms?.loading || data.updating) {
+            summary.append(el('wa-spinner'));
+        }
 
         const parts = [];
-        if (ms?.loading) parts.push(el('div', 'info', 'Loading issues…'), el('hr'));
-        else if (ms?.error) parts.push(el('div', 'info', `Could not load the issues: ${ms.error}`), el('hr'));
+        if (ms?.loading) {
+            parts.push(el('div', 'info', 'Loading issues…'), el('hr'));
+        } else if (ms?.error) {
+            parts.push(el('div', 'info', `Could not load the issues: ${ms.error}`), el('hr'));
+        }
         if (ms?.groups) {
             const g = ms.groups, info = el('div', 'info');
             info.append(link(null, due(ms.due), ms.url));
             for (const [k, label] of [['doing', 'in progress'], ['assigned', 'assigned'], ['unassigned', 'unassigned']]) {
-                if (g[k].length) info.append(el('span', null, `${g[k].length} ${label}`));
+                if (g[k].length) {
+                    info.append(el('span', null, `${g[k].length} ${label}`));
+                }
             }
             parts.push(info);
             if (g.closable.length) {
@@ -146,7 +165,9 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
             const b = el('button', ms?.id === m.id ? 'on' : null);
             b.dataset.id = String(m.id);
             b.append(el('span', null, m.title), el('small', null, m.total == null ? '' : `${m.closed}/${m.total}`));
-            if (data.detected.includes(m.id)) b.title = 'Your MRs are in this milestone';
+            if (data.detected.includes(m.id)) {
+                b.title = 'Your MRs are in this milestone';
+            }
             b.onclick = () => choose(String(m.id));
             return b;
         }));
@@ -159,17 +180,27 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
     }
 
     async function tick() {
-        if (pick.isConnected) seen = true;
-        else if (seen) { clearInterval(timer); document.removeEventListener('click', outside); document.removeEventListener('homebase:refresh', now); return; }
+        if (pick.isConnected) {
+            seen = true;
+        } else if (seen) {
+            clearInterval(timer);
+            document.removeEventListener('click', outside);
+            document.removeEventListener('homebase:refresh', now);
+            return;
+        }
         const want = store.get(key) ?? '';
-        if (pending || (want === asked && Date.now() - at < (loading ? LOADING_MS : FETCH_MS))) return;
+        if (pending || (want === asked && Date.now() - at < (loading ? LOADING_MS : FETCH_MS))) {
+            return;
+        }
         pending = true;
         let ok = false;
         try {
             const r = await api(`/api/milestones?project=${encodeURIComponent(project)}&milestone=${encodeURIComponent(want)}`);
             const text = JSON.stringify(toData(r.status, await r.text(), project));
             ok = true;
-            if (busy === want) setBusy(null);
+            if (busy === want) {
+                setBusy(null);
+            }
             if (text && text !== json) { // redraw only on change, so an open menu stays put
                 json = text;
                 const data = /** @type {Milestones} */ (JSON.parse(text));
@@ -182,8 +213,11 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
         } catch {} finally {
             at = ok ? Date.now() : 0; asked = want; pending = false; // a failed call retries on the next tick
         }
-        if (loading) setTimeout(tick, LOADING_MS);
-        else if (want !== (store.get(key) ?? '')) tick(); // picked again while this call ran
+        if (loading) {
+            setTimeout(tick, LOADING_MS);
+        } else if (want !== (store.get(key) ?? '')) {
+            tick(); // picked again while this call ran
+        }
     }
 
     const timer = setInterval(tick, POLL_MS);

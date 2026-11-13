@@ -20,6 +20,7 @@ export const STATIC = {
     '/issues.js': ['issues.js', JS],
     '/keys.js': ['keys.js', JS],
     '/log.js': ['log.js', JS],
+    '/newproject.js': ['newproject.js', JS],
     '/icon.svg': ['icon.svg', 'image/svg+xml']
 };
 // Hash of the app files as of this start, in index.html's homebase-build meta: a page whose build differs from a

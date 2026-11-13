@@ -81,5 +81,17 @@
 <wa-dialog id="dlg" label="Projects on your board" light-dismiss>
   <div class="d-body" id="dlg-body"></div>
 </wa-dialog>
+<wa-dialog id="new-dlg" label="New project">
+  <form class="np" id="np-form" autocomplete="off">
+    <wa-input id="np-name" label="Name" size="s" spellcheck="false" autocapitalize="off"></wa-input>
+    <wa-textarea id="np-desc" label="Description" size="s" rows="2" resize="none" maxlength="350"></wa-textarea>
+    <wa-switch id="np-private" size="s" checked>Private</wa-switch>
+    <p class="np-note" id="np-note"></p>
+    <ol class="np-steps" id="np-steps" hidden></ol>
+    <div class="error" id="np-err" role="alert"></div>
+  </form>
+  <wa-button slot="footer" size="s" appearance="outlined" data-dialog="close">Cancel</wa-button>
+  <wa-button slot="footer" size="s" variant="brand" id="np-go" disabled>Create</wa-button>
+</wa-dialog>
 </body>
 </html>

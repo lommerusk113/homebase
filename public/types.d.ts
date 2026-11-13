@@ -219,6 +219,8 @@ declare const DOMPurify: { sanitize(html: string): string };
 // ---- Web Awesome: only what the page touches ----
 
 interface WaDialog extends HTMLElement { open: boolean }
+interface WaInput extends HTMLElement { value: string; hint: string; disabled: boolean }
+interface WaSwitch extends HTMLElement { checked: boolean; disabled: boolean }
 interface WaDetails extends HTMLElement { open: boolean }
 interface WaSelect extends HTMLElement { open: boolean; value: string }
 interface WaOption extends HTMLElement { value: string }
@@ -280,6 +282,12 @@ interface PageIds {
     project: WaSelect;
     dlg: WaDialog;
     'clear-dlg': WaDialog;
+    'new-dlg': WaDialog;
+    'np-name': WaInput;
+    'np-desc': WaTextarea;
+    'np-private': WaSwitch;
+    'np-form': HTMLFormElement;
+    'np-go': WaButton;
     'compact-dlg': WaDialog;
     msg: WaTextarea;
     'needs-only': WaDropdownItem;

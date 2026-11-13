@@ -1577,3 +1577,102 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
     assert.equal(isHumanPrompt(summary), false, 'the summary is not a prompt');
     console.log('ok context and compact');
 }
+
+{
+    const { validName, mergeConfig, createProject, NEW_PROJECT_DEFAULTS } = await import('./server.mjs');
+    const { homedir } = await import('node:os');
+
+    // name validation
+    for (const n of ['a', 'my-repo', 'a.b_c-1', 'x'.repeat(100)]) {
+        assert.equal(validName(n), true, n);
+    }
+    for (const n of ['', '.hidden', '..', 'a b', 'a/b', '../x', 'x'.repeat(101), 'é', 'a;rm', undefined, 42]) {
+        assert.equal(validName(n), false, String(n));
+    }
+
+    // config merging
+    assert.deepEqual(mergeConfig(undefined), { ...NEW_PROJECT_DEFAULTS, baseDir: `${homedir()}/IdeaProjects/Privat` });
+    const merged = mergeConfig({ newProject: { owner: 'someone', private: false, baseDir: '/tmp/x' } });
+    assert.deepEqual([merged.owner, merged.private, merged.baseDir, merged.sshHost], ['someone', false, '/tmp/x', 'github-personal']);
+    assert.throws(() => mergeConfig({ newProject: { owner: '-oProxyCommand=x' } }), /newProject.owner/);
+    assert.throws(() => mergeConfig({ newProject: { private: 'yes' } }), /newProject.private/);
+
+    // the step runner, with every command stubbed: no keychain, gh, git or tmux is ever touched
+    const TOKEN = 'ghp_SECRET_TOKEN_123';
+    const config = mergeConfig({ newProject: { baseDir: '/base' } });
+    const fake = ({ failOn, leak } = {}) => {
+        const calls = [];
+        const exec = async (file, args, opts = {}) => {
+            calls.push({ file, args, env: opts.env, timeout: opts.timeout });
+            if (file === 'security') {
+                return { stdout: `${TOKEN}\n` };
+            }
+            if (file === failOn) {
+                throw Object.assign(new Error(`Command failed: ${file} ${args.join(' ')}`), { stderr: leak ? `HTTP 403 for token ${TOKEN}\n` : 'HTTP 403: Resource not accessible\n' });
+            }
+            return { stdout: '' };
+        };
+        const tm = async args => {
+            calls.push({ file: 'tmux', args });
+            if (failOn === 'tmux') {
+                throw new Error('no server');
+            }
+        };
+        return { calls, deps: { config, exec, tmux: tm, exists: () => false, transcripts: async () => ['11111111-2222-3333-4444-555555555555.jsonl'], nap: async () => {}, waitMs: 1000 } };
+    };
+    const noToken = v => assert.ok(!JSON.stringify(v).includes(TOKEN), 'token must not appear');
+
+    {
+        const { calls, deps } = fake();
+        const r = await createProject({ name: 'my-repo', description: 'A thing', private: true }, deps);
+        assert.deepEqual(calls.map(c => c.file), ['security', 'gh', 'git', 'tmux']);
+        assert.deepEqual(calls[0].args, ['find-generic-password', '-s', 'gh-personal', '-w']);
+        assert.deepEqual(calls[1].args, ['repo', 'create', 'lommerusk113/my-repo', '--private', '--description', 'A thing', '--add-readme']);
+        assert.equal(calls[1].env.GH_TOKEN, TOKEN);
+        assert.equal('GITHUB_TOKEN' in calls[1].env, false, 'work token is removed');
+        assert.deepEqual(calls[2].args, ['clone', 'git@github-personal:lommerusk113/my-repo.git', '/base/my-repo']);
+        assert.ok(!JSON.stringify(calls[2]).includes(TOKEN) && !JSON.stringify(calls[3]).includes(TOKEN), 'only gh gets the token');
+        assert.ok(calls.every(c => c.file === 'tmux' || c.timeout > 0), 'every step has a timeout');
+        assert.deepEqual(calls[3].args, ['new-session', '-d', '-s', 'cc-new-my-repo', '-c', '/base/my-repo', 'zsh', '-lic', 'claude']);
+        assert.deepEqual([r.ok, r.sessionId, r.dir, r.steps.map(s => s.state)], [true, '11111111-2222-3333-4444-555555555555', '/base/my-repo', ['done', 'done', 'done']]);
+        noToken(r);
+    }
+    {
+        const { calls, deps } = fake();
+        const r = await createProject({ name: 'pub', private: false }, { ...deps, transcripts: async () => [] });
+        assert.ok(calls[1].args.includes('--public') && !calls[1].args.includes('--description'));
+        assert.equal(r.sessionId, null, 'no transcript in time: the chat is still starting');
+    }
+    {
+        const { calls, deps } = fake({ failOn: 'gh', leak: true });
+        const e = await createProject({ name: 'x' }, deps).catch(e => e);
+        assert.deepEqual([e.status, e.body.steps.map(s => s.state)], [502, ['failed', 'pending', 'pending']]);
+        assert.match(e.message, /HTTP 403 for token \[token\]/);
+        assert.deepEqual(calls.map(c => c.file), ['security', 'gh'], 'nothing further after gh fails');
+        assert.ok(!e.message.includes(TOKEN) && !JSON.stringify(e.body).includes(TOKEN));
+    }
+    {
+        const e = await createProject({ name: 'x' }, fake({ failOn: 'git' }).deps).catch(e => e);
+        assert.match(e.message, /github\.com\/lommerusk113\/x was created, but cloning to \/base\/x failed, so nothing is cloned/);
+        assert.deepEqual(e.body.steps.map(s => s.state), ['done', 'failed', 'pending']);
+        noToken(e.body);
+    }
+    {
+        const e = await createProject({ name: 'x' }, fake({ failOn: 'tmux' }).deps).catch(e => e);
+        assert.match(e.message, /was created and cloned to \/base\/x, but starting Claude failed/);
+        assert.deepEqual(e.body.steps.map(s => s.state), ['done', 'done', 'failed']);
+    }
+    {
+        const { deps } = fake();
+        const keychain = await createProject({ name: 'x' }, { ...deps, exec: async () => { throw new Error('item not found'); } }).catch(e => e);
+        assert.match(keychain.message, /could not read keychain item "gh-personal"/);
+        for (const [body, d, re] of [[{ name: '../x' }, deps, /Invalid name/], [{ name: 'x', description: 'd'.repeat(351) }, deps, /Description/], [{ name: 'x' }, { ...deps, exists: () => true }, /already exists/]]) {
+            const e = await createProject(body, d).catch(e => e);
+            assert.deepEqual([e.status, re.test(e.message)], [400, true], e.message);
+        }
+        const both = fake();
+        const [a, b] = await Promise.allSettled([createProject({ name: 'dup' }, both.deps), createProject({ name: 'dup' }, both.deps)]);
+        assert.deepEqual([a.status, b.reason?.status], ['fulfilled', 409], 'the same name twice at once');
+    }
+    console.log('ok new project');
+}

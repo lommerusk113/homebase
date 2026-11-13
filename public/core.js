@@ -130,8 +130,8 @@ export function foldable(tldr, rest, key) {
     return [top, body, btn];
 }
 
-// Plug-in point for list filters: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected).
-export const hooks = { inMilestone: () => true };
+// Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected), and hooks.refresh for keys.js's r.
+export const hooks = { inMilestone: () => true, refresh: () => {} };
 
 export const visibleSessions = () => state.sessions.filter(s => state.tracked.includes(s.project) && (state.project === 'all' || s.project === state.project));
 export const shown = x => state.tracked.includes(x.project) && (state.project === 'all' || x.project === state.project);

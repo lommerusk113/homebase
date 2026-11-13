@@ -25,5 +25,18 @@ export default {
         assert.equal(await page.ev(`document.querySelector('#issues .card.open .msg code').textContent`), 'Implement #6');
         await page.click('#issues .card[data-key="issue:6"] .tt');
         await page.waitFor(`!document.querySelector('#issues .card.open')`, { what: 'the card to close' });
+    },
+
+    'a slow answer for the old project never shows after switching': async ({ page, open, base, answerPosts }) => {
+        await open({ tab: 'issues' });
+        page.route = q => (q.url.includes('/api/milestones?project=alpha') ? { delay: 1500 } : answerPosts(q));
+        await page.goto(base);
+        await page.waitFor(`document.querySelector('#milestone-slot .ms-pick')?.textContent.includes('Loading')`, { what: 'the alpha pill loading' });
+        await page.ev(`(() => { const p = document.getElementById('project'); p.value = 'beta'; p.dispatchEvent(new Event('change')); })()`);
+        await page.waitFor(`document.querySelector('#milestone-slot .ms-pick')?.textContent.includes('No milestones')`, { what: 'the beta pill' });
+        await new Promise(r => setTimeout(r, 2500)); // past alpha's delayed answer
+        assert.equal(await page.ev(`document.querySelector('#milestone-slot .ms-pick summary').textContent`), '⚑No milestones');
+        assert.equal(await page.ev(`document.querySelectorAll('#issues .card').length`), 0, 'no alpha issue cards');
+        assert.match(await page.ev(`document.querySelector('#issues .welcome')?.textContent`), /^No open milestones in beta\./);
     }
 };

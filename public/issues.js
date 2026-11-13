@@ -86,6 +86,7 @@ const initials = n => n.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpper
 let data;
 let openIid = null, closedOpen = false;
 const sentAt = new Map(); // iid -> last send, so a re-render keeps the button showing it
+const SENT_MS = 3000; // how long "Sent ✓" shows; further sends of that issue are ignored meanwhile
 
 // Tabs: Work (the item list) and Issues. 1 and 2 switch (keys.js); the choice survives reloads.
 /** @param {string | null} tab */
@@ -263,17 +264,17 @@ function more(c) {
     if (c.desc) {
         box.append(el('div', 'desc', c.desc));
     }
-    const sent = Date.now() - (sentAt.get(c.iid) ?? 0) < 3000;
+    const sent = Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_MS;
     const send = waButton(sent ? 'Sent ✓' : 'Send to chat', null, { variant: 'brand', appearance: 'filled', ...(sent || !chatSession() ? { disabled: true } : {}) });
     send.onclick = e => {
         e.stopPropagation();
         const s = chatSession();
-        if (!s || Date.now() - (sentAt.get(c.iid) ?? 0) < 3000) {
+        if (!s || Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_MS) {
             return;
         }
         sentAt.set(c.iid, Date.now());
         renderIssues();
-        setTimeout(() => renderIssues(), 3000);
+        setTimeout(() => renderIssues(), SENT_MS);
         sendText(s.id, msg);
     };
     const note = el('span', 'msg', 'sends ');

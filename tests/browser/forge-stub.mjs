@@ -16,10 +16,12 @@ const MRS = {
     100: mr(100, { state: 'merged', title: '#8 - Cleanup', source_branch: '8-cleanup', detailed_merge_status: 'not_open', sha: 'aaa0000' }),
     101: mr(101, { title: '#5 - Fix login redirect', source_branch: '5-fix-login', detailed_merge_status: 'not_approved', head_pipeline: { status: 'failed', web_url: `${GL}/-/pipelines/1`, finished_at: ago(900) }, sha: 'aaa1111' }),
     102: mr(102, { title: 'Ship the audit log', source_branch: 'audit-log', detailed_merge_status: 'mergeable', head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/2`, finished_at: ago(600) }, sha: 'bbb2222abcdef' }),
-    103: mr(103, { title: 'Add CSV export', source_branch: '6-export', detailed_merge_status: 'not_approved', reviewers: [ann], head_pipeline: { status: 'running', web_url: `${GL}/-/pipelines/3`, updated_at: ago(60) }, sha: 'ccc3333' })
+    103: mr(103, { title: 'Add CSV export', source_branch: '6-export', detailed_merge_status: 'not_approved', reviewers: [ann], head_pipeline: { status: 'running', web_url: `${GL}/-/pipelines/3`, updated_at: ago(60) }, sha: 'ccc3333' }),
+    104: mr(104, { title: 'Tune the cache TTL', source_branch: 'cache-ttl', detailed_merge_status: 'not_approved', reviewers: [ann], head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/4`, finished_at: ago(800) }, sha: 'eee5555' })
 };
 const DISCUSSIONS = {
-    101: [{ notes: [{ id: 9001, system: false, author: ann, created_at: ago(3600), body: 'Please keep the **return URL** when redirecting.', resolvable: true, resolved: false }] }]
+    101: [{ notes: [{ id: 9001, system: false, author: ann, created_at: ago(3600), body: 'Please keep the **return URL** when redirecting.', resolvable: true, resolved: false }] }],
+    104: [{ notes: [{ id: 9002, system: false, author: ann, created_at: ago(500), body: 'On your question about the TTL: I think it matters more than it looks.', resolvable: false }] }]
 };
 const issue = (iid, title, o = {}) => ({ iid, title, state: 'opened', assignees: [], web_url: `${GL}/-/issues/${iid}`, milestone: sprint, description: `Details for ${title}.`, updated_at: ago(7200), ...o });
 const ISSUES = [

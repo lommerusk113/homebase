@@ -98,6 +98,10 @@ export const tooltip = (target, text) => {
     return t;
 };
 
+// A link that opens in a new tab.
+/** @param {string | null} cls @param {string} text @param {string} href */
+export const link = (cls, text, href) => { const a = el('a', cls, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a; };
+
 export const plain = t => (t || '').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim();
 export const ago = ms => { const s = (Date.now() - ms) / 1000; return s < 60 ? 'now' : s < 3600 ? `${s / 60 | 0}m` : s < 86400 ? `${s / 3600 | 0}h` : `${s / 86400 | 0}d`; };
 // Rate-limit window -> % left and time to reset, as Contado's footer shows it: "70%" and "1h20m" / "4d22h" / "45m".
@@ -162,7 +166,7 @@ function enrich(root) {
 export const rich = (text, inline) => { const d = el('div', inline ? 'lead' : 'body'); d.innerHTML = DOMPurify.sanitize(inline ? marked.parseInline(text) : marked.parse(text || '')); return enrich(d); };
 
 // First sentence of a message without a TLDR, capped near 200 chars, with dangling ** or ` closed.
-export function lead(text) {
+function lead(text) {
     const line = (text || '').split('\n').map(l => l.trim()).find(l => l && !/^(```|\||---|<)/.test(l)) || '';
     const s = line.replace(/^(#+|[-*+>]|\d+[.)])\s+/, '');
     let cut = s.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? s;
@@ -185,7 +189,8 @@ export function foldable(tldr, rest, key) {
     return [top, body, btn];
 }
 
-// Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected), and hooks.refresh for keys.js's r.
+// Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected) and hooks.refresh for keys.js's r;
+// keys.js sets hooks.rendered, which list.js and issues.js call after each render.
 /** @type {{ inMilestone: (x: WorkItem) => boolean, refresh: () => void, rendered?: (refocus: boolean) => void }} */
 export const hooks = { inMilestone: () => true, refresh: () => {} };
 
@@ -199,12 +204,12 @@ export const seenAt = pr => { const v = Number(store.get(`seen:${pr}`)); if (v) 
 export const markSeen = (pr, at = Date.now()) => store.set(`seen:${pr}`, at);
 /** @param {Comments | null} c @param {number} seen @returns {ReviewComment[]} */
 export const freshComments = (c, seen) => (c?.items ?? []).filter(i => Date.parse(i.at) > seen);
-const firstName = n => n.split(/\s+/)[0];
+export const firstName = n => n.split(/\s+/)[0];
 // "Børre" / "Børre, Ann" / "Børre, Ann +1": distinct first names, at most two
 /** @param {ReviewComment[]} items */
 export const authorSummary = items => { const n = [...new Set(items.map(i => firstName(i.author)))]; return n.slice(0, 2).join(', ') + (n.length > 2 ? ` +${n.length - 2}` : ''); };
 /** @param {WorkItem} x */
-export const newCount = x => (x.pr ? freshComments(x.comments, seenAt(x.pr)).length : 0);
+const newCount = x => (x.pr ? freshComments(x.comments, seenAt(x.pr)).length : 0);
 export function updateTitle() {
     const n = visibleSessions().flatMap(s => s.items || []).filter(x => x.column === 'needs-you' || x.column === 'ready' || newCount(x)).length + (state.asking ? 1 : 0);
     document.title = n ? `(${n}) Homebase` : 'Homebase';

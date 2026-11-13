@@ -110,20 +110,19 @@ hooks.refresh = async () => {
     if (reload.classList.contains('spin') || Date.now() - refreshStarted < 5000) return;
     refreshStarted = Date.now();
     reload.classList.add('spin'); reload.setAttribute('aria-busy', 'true');
-    try { refreshedAt = (await api('/api/refresh', { method: 'POST' }).then(r => r.json())).lastRefreshedAt; } catch {}
+    try { refreshedAt = /** @type {RefreshState} */ (await api('/api/refresh', { method: 'POST' }).then(r => r.json())).lastRefreshedAt; } catch {}
     reload.classList.remove('spin'); reload.removeAttribute('aria-busy');
     document.dispatchEvent(new Event('homebase:refresh')); // the milestone pill refetches
     refresh();
 };
 reload.onclick = () => hooks.refresh();
-api('/api/refresh').then(r => r.json()).then(d => { refreshedAt = d.lastRefreshedAt; renderReload(); }).catch(() => {});
+api('/api/refresh').then(r => r.json()).then(/** @param {RefreshState} d */ d => { refreshedAt = d.lastRefreshedAt; renderReload(); }).catch(() => {});
 
 let lastSessions = '', lastRender = 0;
 async function refresh() {
     try {
         const r = await api('/api/sessions');
-        // @ts-expect-error Error() stringifies the status; only the catch below sees it
-        if (!r.ok) throw new Error(r.status);
+        if (!r.ok) throw new Error(String(r.status));
         const text = await r.text();
         // ponytail: skip identical re-renders so text in an open detail stays selectable; re-render each minute for the ages
         if (text !== lastSessions || Date.now() - lastRender > 60_000) {

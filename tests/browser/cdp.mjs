@@ -121,10 +121,12 @@ export async function connect(port) {
                 page.posts.push({ url: q.url, body: q.postData ?? '' });
             }
             const r = page.route?.(q);
-            const answer = r
-                ? page.cmd('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: r.status ?? 200, responseHeaders: Object.entries(r.headers ?? { 'content-type': 'text/plain' }).map(([name, value]) => ({ name, value })), body: Buffer.from(r.body ?? '').toString('base64') })
-                : page.cmd('Fetch.continueRequest', { requestId: p.requestId });
-            return answer.catch(() => {}); // the page may have navigated away meanwhile
+            if (!r) {
+                return page.cmd('Fetch.continueRequest', { requestId: p.requestId }).catch(() => {}); // the page may have navigated away meanwhile
+            }
+            const responseHeaders = Object.entries(r.headers ?? { 'content-type': 'text/plain' }).map(([name, value]) => ({ name, value }));
+            const body = Buffer.from(r.body ?? '').toString('base64');
+            return page.cmd('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: r.status ?? 200, responseHeaders, body }).catch(() => {});
         }
         if (d.method === 'Runtime.exceptionThrown') {
             page.errors.push(p.exceptionDetails.exception?.description ?? p.exceptionDetails.text);

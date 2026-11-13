@@ -8,7 +8,21 @@ node test.mjs
 ./check-types.sh         # type-checks public/*.js (JSDoc + public/types.d.ts), no build
 ```
 
-Run `./check-types.sh` before merging.
+## Checks
+
+Every merge must pass these:
+
+```sh
+node test.mjs                  # unit tests
+node tests/browser/run.mjs     # headless browser tests (about 30 s)
+./check-types.sh               # type-checks public/*.js, no build
+```
+
+The browser tests need only Node and a local Chrome (set `CHROME=/path/to/chrome` if it isn't in the usual place).
+They start their own server on a free port over a throwaway HOME with fixture transcripts, and put stub `glab`/`gh` executables first on PATH, so they never touch your sessions, tmux, GitLab, GitHub or a running Homebase.
+POSTs from the page are answered by the test, so nothing is ever typed into a session.
+Pass words to run only the matching tests, e.g. `node tests/browser/run.mjs chat`.
+The fixtures are in `tests/browser/fixture.mjs` (transcripts) and `tests/browser/forge-stub.mjs` (canned GitLab/GitHub answers); a forge call the stub doesn't know is listed after the run.
 
 ## Security
 

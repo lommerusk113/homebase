@@ -14,7 +14,7 @@
     --c-doing:#4493f8; --c-needs:#db6d28; --c-review:#ab7df8; --c-ready:#3fb950; --c-done:#9198a1; --c-idle:#656c76;
     --c-warn:#d29922; --c-danger:#f85149;
     --shadow:0 8px 24px rgba(1,4,9,.75);
-    --t3:#db61a2; --t4:#2dd4bf; --t5:#a3e635; --t6:#818cf8; --t7:#22d3ee;
+    --t3:#db61a2; --t4:#2dd4bf; --t5:#a3e635; --t6:#b08968; --t7:#22d3ee;
   }
 }
 /* Web Awesome theme tokens mapped onto ours. Unlayered, so they win over the theme's layered values in light and dark. */

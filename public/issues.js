@@ -99,6 +99,16 @@ export function renderIssues(d = data) {
         return;
     }
     pane.removeAttribute('aria-busy');
+    if (d?.reason) {
+        const box = el('div', 'welcome', emptyText(d));
+        if (d.url) {
+            const a = el('a', null, 'Milestones page ↗');
+            a.href = d.url; a.target = '_blank'; a.rel = 'noopener';
+            box.append(' ', a);
+        }
+        pane.replaceChildren(box);
+        return;
+    }
     if (!ms?.groups) {
         pane.replaceChildren(el('div', 'welcome', d === null ? 'Pick a project in the header to see its milestone issues.'
             : ms?.error ? `Could not load the issues: ${ms.error}` : 'Pick a milestone in the header pill to see its issues.'));
@@ -108,6 +118,13 @@ export function renderIssues(d = data) {
     pane.replaceChildren(head(ms, d.updating && 'Updating…'), ...buildLanes(cards, ms.groups.done, d.me).map((l, n) => lane(l, n, ms)), closedLine(ms.groups.done),
         el('div', 'is-note', 'Read-only: Homebase never writes to GitLab. "Send to chat" only types into the chat on the right.'));
     hooks.rendered?.(hadFocus);
+}
+
+// The Issues tab's line for a project without milestones to show (d.reason from /api/milestones).
+export function emptyText(d) {
+    if (d.reason === 'none') return `No open milestones in ${d.project}.`;
+    if (d.reason === 'unsupported') return `Milestones aren't available for ${d.project}: ${d.error ?? 'unknown project'}.`;
+    return `Milestones unavailable for ${d.project}: ${d.error ?? 'unknown error'}. Press r or the refresh button to retry.`;
 }
 
 // hint: "Loading issues…" or "Updating…" next to the title, with a spinner.

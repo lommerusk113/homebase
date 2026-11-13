@@ -23,7 +23,7 @@ export {
     pendingAsk, pendingQuestion, turnState, turnPrompts, spawnPrompts, latestTopic, queuedPrompts, addUsage, readUsage, formatDuration, formatTokens
 } from './server/transcripts.mjs';
 export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, status, lastActivity, summarize, folderFor } from './server/sessions.mjs';
-export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments, swrEntry, swr, cached, refreshAll, refreshInfo } from './server/forge.mjs';
+export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments, signedIn, me, repoOfUrl, swrEntry, swr, cached, refreshAll, refreshInfo } from './server/forge.mjs';
 export {
     column, gateFor, toGate, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf
 } from './server/items.mjs';
@@ -35,6 +35,7 @@ export { editorsFrom, openInEditor, refuseIfBusy } from './server/control.mjs';
 export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode } from './server/security.mjs';
 export { validName, mergeConfig, loadConfig, createProject, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
 export { vendorPath } from './server/static.mjs';
+export { accountOf, readToken, ghRun, scrub } from './server/account.mjs';
 
 const PORT = Number(process.env.PORT ?? 4321);
 

@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { sameRepo } from './items.mjs';
 
 export const STORE_FILE = join(process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase'), 'items.json');
 const PRUNE_MS = 30 * 864e5;
@@ -24,6 +25,15 @@ export function loadStore(file = STORE_FILE) {
             throw new Error('not an object');
         }
         store.data = data;
+        // entries filed under another repo's project (an MR a session only quoted) don't belong
+        for (const [project, urls] of Object.entries(data)) {
+            for (const url of Object.keys(urls ?? {})) {
+                if (!sameRepo(url, project)) {
+                    delete urls[url];
+                    store.dirty = true;
+                }
+            }
+        }
     } catch (e) {
         console.error(`items.json is corrupt (${e.message}); starting empty, kept ${file}.bak`);
         try {

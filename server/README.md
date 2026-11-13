@@ -13,7 +13,8 @@
 | `limits.mjs` | Rate limits from the status-line dumps |
 | `tmux.mjs` | tmux plumbing: socket override, session names, `/clear` aliases, keystroke steps |
 | `control.mjs` | POST actions: send, interrupt, `/clear`, open in editor |
-| `newproject.mjs` | POST `/api/projects/new`: config merge, name check, the create/clone/start-chat steps with the keychain token kept out of every output |
+| `account.mjs` | which GitHub account a repo's gh calls run as (keychain token for personal repos), the shared token reader, config merge |
+| `newproject.mjs` | POST `/api/projects/new`: name check, the create/clone/start-chat steps with the keychain token kept out of every output |
 | `security.mjs` | Host/Origin/token checks, LAN pairing cookie and code, rate limiter |
 | `static.mjs` | App file map, build hash, CSP, `public/vendor` serving, revalidation |
 

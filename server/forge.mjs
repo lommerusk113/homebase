@@ -2,6 +2,7 @@
 // the stale-while-revalidate caches (prs, swr) and the refresh button.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { ghRun, accountOf, repoPaths } from './account.mjs';
 
 const run = promisify(execFile);
 
@@ -36,6 +37,17 @@ export const mrRef = url => `${url.includes('/pull/') ? '#' : '!'}${mrNumber(url
 // The coarse ci flag nextStep/rowAction read: 'failing', 'running' or null.
 export const ciOf = pipeline => ({ failed: 'failing', running: 'running', pending: 'running' })[pipeline?.status] ?? null;
 
+// { host, path } of the repo a PR/MR URL belongs to; a GitHub repo a session knows by its SSH host alias keeps the alias,
+// so its account is found although the URL says github.com.
+export function repoOfUrl(url) {
+
+    const m = url.match(/^https:\/\/([^/]+)\/(.+?)(?:\/-)?\/(?:merge_requests|pull)\//);
+    const repo = { host: m?.[1], path: m?.[2] };
+    const known = repoPaths.get(repo.path?.split('/').pop());
+
+    return known?.path === repo.path ? known : repo;
+}
+
 // Read-only PR/MR lookup via gh/glab. Returns { state: open|merged|closed, title, branch, reviewers, ready, changes, changesBy, draft, ci, pipeline } or null.
 async function fetchPr(url) {
 
@@ -66,7 +78,11 @@ async function fetchPr(url) {
         };
     }
 
-    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid']);
+    const repo = repoOfUrl(url);
+    const view = fields => ghRun(repo, ['pr', 'view', url, '--json', fields]);
+    const fields = 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid';
+    // a token without read:org (the personal one) can't read reviewRequests; the reviewers then come from the reviews alone
+    const { stdout } = await view(fields).catch(e => (/required scopes/.test(e.message) ? view(fields.replace('reviewRequests,', '')) : Promise.reject(e)));
     const pr = JSON.parse(stdout);
     const pipeline = pipelineOf(null, pr.statusCheckRollup, url);
     const reviews = pr.latestReviews ?? [];
@@ -248,10 +264,11 @@ const apiSlot = limiter(API_PARALLEL);
 const apiOnce = dedupe();
 export const api = (repo, path) => {
 
-    const cli = isGitLab(repo) ? 'glab' : 'gh';
+    const gitlab = isGitLab(repo);
+    const call = () => (gitlab ? run('glab', ['api', path], { timeout: API_CALL_TIMEOUT_MS }) : ghRun(repo, ['api', path], { timeout: API_CALL_TIMEOUT_MS }));
 
-    // the timeout kills a hung glab/gh, so it never holds a limiter slot for good
-    return apiOnce(`${cli} ${path}`, () => apiSlot(() => run(cli, ['api', path], { timeout: API_CALL_TIMEOUT_MS }))).then(({ stdout }) => JSON.parse(stdout));
+    // the timeout kills a hung glab/gh, so it never holds a limiter slot for good; the account is part of the key
+    return apiOnce(`${gitlab ? 'glab' : `gh:${accountOf(repo)}`} ${path}`, () => apiSlot(call)).then(({ stdout }) => JSON.parse(stdout));
 };
 
 // Every page of a list endpoint, 100 per page.
@@ -269,8 +286,27 @@ export async function pages(repo, path) {
 
 // { name, username } of a GitLab user or a GitHub login (GitHub's issue payload has no display name).
 export const person = u => ({ name: u.name ?? u.login, username: u.username ?? u.login });
-// The signed-in user of a forge host, or null when the lookup fails.
-export const signedIn = repo => cached(`me:${repo.host}`, 24 * 3600_000, () => api(repo, 'user').then(person)).catch(() => null);
+// The signed-in user of a repo's forge account, or null when the lookup fails. Cached 24 h per account and host; a failure
+// is never cached, so the next call asks again.
+const ME_TTL_MS = 24 * 3600_000;
+export const me = new Map(); // account:host -> { at, value }
+export async function signedIn(repo) {
+
+    const key = `${accountOf(repo)}:${repo.host}`;
+    const hit = me.get(key);
+    if (hit && Date.now() - hit.at < ME_TTL_MS) {
+        return hit.value;
+    }
+
+    try {
+        const value = person(await api(repo, 'user'));
+        me.set(key, { at: Date.now(), value });
+
+        return value;
+    } catch {
+        return null;
+    }
+}
 
 // Plain-text start of an issue description, about max chars, for the expanded card: markdown marks, links and headings dropped.
 export function excerpt(md, max = 300) {
@@ -345,7 +381,7 @@ export async function fetchComments(url) {
     if (!gl && !gh) {
         return humanComments([], null); // neither GitLab nor GitHub
     }
-    const repo = { host: (gl ?? gh)[1] };
+    const repo = repoOfUrl(url);
     const me = (await signedIn(repo))?.username;
     const author = u => ({ ...person(u), bot: u.bot, type: u.type });
 
@@ -370,7 +406,7 @@ export async function fetchComments(url) {
     const toThread = t => ({
         resolved: t.isResolved, notes: t.comments.nodes.map(c => ({ author: { name: c.author?.login, username: c.author?.login, type: c.author?.__typename } }))
     });
-    const threads = await apiOnce(`gh graphql threads ${url}`, () => apiSlot(() => run('gh', args, { timeout: API_CALL_TIMEOUT_MS })))
+    const threads = await apiOnce(`gh graphql threads ${url}`, () => apiSlot(() => ghRun(repo, args, { timeout: API_CALL_TIMEOUT_MS })))
         .then(({ stdout }) => JSON.parse(stdout).data.repository.pullRequest.reviewThreads.nodes.map(toThread))
         .catch(() => null);
 

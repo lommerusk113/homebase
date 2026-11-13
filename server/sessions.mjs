@@ -8,8 +8,9 @@ import { promisify } from 'node:util';
 import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, readUsage, latestTopic, queuedPrompts, spawnPrompts } from './transcripts.mjs';
 import { loadStore, record, seeds, flush } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
+import { repoPaths } from './account.mjs';
 import { contextOf } from './limits.mjs';
-import { workItems, milestoneOf } from './items.mjs';
+import { workItems, milestoneOf, sameRepo } from './items.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor } from './tmux.mjs';
 
 const run = promisify(execFile);
@@ -25,7 +26,7 @@ const AGENT_IDLE_MS = 2 * 60_000; // ended its turn with text but never handed b
 
 const store = loadStore();
 const projects = new Map(); // cwd -> repo name
-export const repoPaths = new Map(); // repo name -> { host, path }, from the origin URL
+export { repoPaths }; // repo name -> { host, path }, from the origin URL
 
 // Main repo name, so worktrees group under their repo. Read-only git call.
 export function repoName(url) {
@@ -316,14 +317,15 @@ export function status(lastTurn, ageMs, turn = { state: ageMs < WORKING_MS ? 'wo
 // Every PR/MR the session linked, with when it last did.
 function prLinks(entries) {
 
-    const at = new Map();
+    const at = new Map(); // url -> { at, repo }, repo being the entry's own prRepository (owner/name)
     for (const e of entries) {
         if (e.type === 'pr-link' && e.prUrl) {
-            at.set(e.prUrl, Math.max(at.get(e.prUrl) ?? 0, Date.parse(e.timestamp) || 0));
+            const old = at.get(e.prUrl);
+            at.set(e.prUrl, { at: Math.max(old?.at ?? 0, Date.parse(e.timestamp) || 0), repo: e.prRepository ?? old?.repo });
         }
     }
 
-    return [...at].map(([url, t]) => ({ url, at: t }));
+    return [...at].map(([url, v]) => ({ url, ...v }));
 }
 
 // When the session last really did something: a human prompt (typed or queued) or Claude's text/tool call. File mtime
@@ -428,7 +430,7 @@ async function itemsOf(out) {
         .flatMap(project => openMrUrls(project, repoPaths.get(project)).map(url => ({ url, project })));
     // MRs stored earlier, so a pr-link that scrolled out of a tail doesn't drop the item
     const seeded = [...forge, ...seeds(store, Date.now(), MAX_AGE_MS)];
-    const urls = new Set([...out.flatMap(s => [...s.prs.map(p => p.url), ...s.agents.flatMap(a => a.prs)]), ...seeded.map(f => f.url)]);
+    const urls = new Set([...out.flatMap(s => [...s.prs.filter(p => sameRepo(p.url, s.project, p.repo)).map(p => p.url), ...s.agents.flatMap(a => a.prs)]), ...seeded.map(f => f.url)]);
     const states = new Map(await Promise.all([...urls].map(async u => [u, await prState(u)])));
     // human comments on open MRs only; never waits, so the first poll after start has none yet
     const comments = new Map([...urls].filter(u => states.get(u)?.state === 'open')

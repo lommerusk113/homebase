@@ -7,13 +7,21 @@ import { initKeys } from './keys.js';
 import { renderIssues, showTab } from './issues.js';
 
 // One milestone pill for the selected project (none for "All"); it filters the list. Rebuilt only when the project changes.
-let pillFor = null, milestone = null;
+// The old pill stops (timers, in-flight fetch) the moment the project changes; data for another project is dropped.
+let pillFor = null, milestone = null, pillStop = new AbortController();
 hooks.inMilestone = x => inMilestone(x, milestone);
 function renderMilestone() {
     if (pillFor === state.project) return;
+    pillStop.abort(); pillStop = new AbortController();
     pillFor = state.project; milestone = null;
+    $('issues').classList.remove('stale');
     renderIssues(pillFor === 'all' ? null : undefined);
-    $('milestone-slot').replaceChildren(...(pillFor === 'all' ? [] : [milestoneSelector(pillFor, { onChange: m => { milestone = m; renderBoard(); }, onData: renderIssues, onBusy: b => $('issues').classList.toggle('stale', b) })]));
+    $('milestone-slot').replaceChildren(...(pillFor === 'all' ? [] : [milestoneSelector(pillFor, {
+        signal: pillStop.signal,
+        onChange: m => { milestone = m; renderBoard(); },
+        onData: d => { if (d.project === state.project) renderIssues(d); },
+        onBusy: b => $('issues').classList.toggle('stale', b)
+    })]));
 }
 
 // Web Awesome's dark theme is a class; follow the OS like the rest of the page does.

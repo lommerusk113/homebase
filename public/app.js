@@ -95,6 +95,26 @@ bell.onclick = async () => {
 };
 if (window.Notification) renderBell();
 
+// Refresh button (and r): the server refetches every GitLab/GitHub cache, keeping the old data meanwhile; the icon spins
+// until that is done, then the list and the milestone pill poll at once. Ignored while running and within 5 s of the last start.
+const reload = $('reload');
+let refreshedAt = 0, refreshStarted = 0;
+const renderReload = () => {
+    const s = (Date.now() - refreshedAt) / 1000 | 0, when = s < 60 ? `${s}s` : ago(refreshedAt);
+    $('reload-tip').replaceChildren('Refresh from GitLab/GitHub (r)', ...(refreshedAt ? [el('br'), `Last refreshed ${when} ago`] : []));
+};
+hooks.refresh = async () => {
+    if (reload.classList.contains('spin') || Date.now() - refreshStarted < 5000) return;
+    refreshStarted = Date.now();
+    reload.classList.add('spin'); reload.setAttribute('aria-busy', 'true');
+    try { refreshedAt = (await api('/api/refresh', { method: 'POST' }).then(r => r.json())).lastRefreshedAt; } catch {}
+    reload.classList.remove('spin'); reload.removeAttribute('aria-busy');
+    document.dispatchEvent(new Event('homebase:refresh')); // the milestone pill refetches
+    refresh();
+};
+reload.onclick = () => hooks.refresh();
+api('/api/refresh').then(r => r.json()).then(d => { refreshedAt = d.lastRefreshedAt; renderReload(); }).catch(() => {});
+
 let lastSessions = '', lastRender = 0;
 async function refresh() {
     try {
@@ -116,7 +136,7 @@ async function refresh() {
         setOffline(false);
         updateTitle();
     } catch { setOffline(true); }
-    refreshChat(); refreshLimits();
+    refreshChat(); refreshLimits(); renderReload();
 }
 
 // "Session ▬ 70%   Week ▬ 63%"; reset times live in each item's tooltip. Hidden without a dump.

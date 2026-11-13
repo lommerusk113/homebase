@@ -163,11 +163,8 @@ async function prState(url) {
         hit = { at: 0, value: null };
         prs.set(url, hit);
     }
-    if (Date.now() - hit.at > PR_TTL_MS && !hit.pending) {
-        hit.pending = fetchPr(url)
-            .then(v => { hit.value = v; })
-            .catch(() => {})
-            .finally(() => { hit.at = Date.now(); hit.pending = null; });
+    if (Date.now() - hit.at > PR_TTL_MS) {
+        refetch(hit, () => fetchPr(url));
     }
     if (!hit.at) {
         await hit.pending;
@@ -1073,15 +1070,49 @@ function refresh(key, ttl, fn) {
         hit = { at: 0, value: null };
         swr.set(key, hit);
     }
-    if (Date.now() - hit.at > ttl && !hit.pending) {
-        hit.pending = fn()
-            .then(v => { hit.value = v; hit.error = null; })
-            .catch(e => { hit.error = e; })
-            .finally(() => { hit.at = Date.now(); hit.pending = null; });
+    hit.fn = fn; // for refreshAll
+    if (Date.now() - hit.at > ttl) {
+        refetch(hit, fn);
     }
 
     return hit;
 }
+
+// Starts fn for a cache entry unless a fetch is already in flight, and returns that fetch. The old value keeps being
+// served until the new one lands; a failure keeps it too and sets error.
+export function refetch(hit, fn) {
+
+    hit.pending ??= fn()
+        .then(v => { hit.value = v; hit.error = null; })
+        .catch(e => { hit.error = e; })
+        .finally(() => { hit.at = Date.now(); hit.pending = null; });
+
+    return hit.pending;
+}
+
+// Manual refresh may start when none is running and the last one started at least gap ms ago.
+export const refreshDue = (running, startedAt, now = Date.now(), gap = 5000) => !running && now - startedAt >= gap;
+
+// The refresh button: every PR/MR state and every glab/gh cache entry (milestones, issues, linked MRs, me) refetches now
+// through the limiter, never cleared. Issue groups go second so they are built from the fresh linked MRs.
+// Concurrent calls share the running refresh; a call within 5 s of the last start returns at once.
+let refreshRun = null, refreshStartedAt = 0, lastRefreshedAt = 0;
+function refreshAll() {
+
+    if (!refreshDue(!!refreshRun, refreshStartedAt)) {
+        return refreshRun ?? Promise.resolve();
+    }
+    refreshStartedAt = Date.now();
+    const entries = [...swr];
+    const again = issues => Promise.all(entries.filter(([k, hit]) => hit.fn && k.startsWith('issues:') === issues).map(([, hit]) => refetch(hit, hit.fn)));
+    refreshRun = Promise.all([
+        ...[...prs].map(([url, hit]) => refetch(hit, () => apiSlot(() => fetchPr(url)))),
+        again(false).then(() => again(true))
+    ]).finally(() => { refreshRun = null; lastRefreshedAt = Date.now(); });
+
+    return refreshRun;
+}
+const refreshInfo = () => ({ refreshing: !!refreshRun, lastRefreshedAt });
 
 // Stale-while-revalidate like prState, for any key. Only the first load waits; a failed first load throws.
 async function cached(key, ttl, fn) {
@@ -1844,6 +1875,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             if (url.pathname === '/api/open' && req.method === 'POST' && req.headers['x-codetool'] === '1') {
                 await openInEditor(url.searchParams.get('item'), url.searchParams.get('editor'));
                 return res.end('ok');
+            }
+            // GET: { refreshing, lastRefreshedAt }; POST refreshes first and answers once the refetch is done
+            if (url.pathname === '/api/refresh' && (req.method === 'GET' || req.headers['x-codetool'] === '1')) {
+                if (req.method === 'POST') {
+                    await refreshAll();
+                }
+                res.setHeader('content-type', 'application/json');
+                return res.end(JSON.stringify(refreshInfo()));
             }
             if (url.pathname === '/api/editors') {
                 res.setHeader('content-type', 'application/json');

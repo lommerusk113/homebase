@@ -336,7 +336,7 @@ export function renderBoard() {
  */
 export function attentionEvents(prevItems, nextItems, seen = () => 0) {
     if (!prevItems) return [];
-    const before = new Map(prevItems.map(x => [x.key, x])), now = new Set(nextItems.map(x => x.key));
+    const before = new Map(prevItems.map(x => [x.key, x])), nextKeys = new Set(nextItems.map(x => x.key));
     const failing = /** @param {WorkItem | undefined} x */ x => x?.prState?.ci === 'failing';
     const events = nextItems.flatMap(x => {
         const p = before.get(x.key), was = p?.column;
@@ -355,5 +355,5 @@ export function attentionEvents(prevItems, nextItems, seen = () => 0) {
     // one notification per item: a comment that moved it into needs-you is told as the comment
     const commented = new Set(comments.map(e => e.item.key));
     // finished agents without an MR drop off the board
-    return [...events.filter(e => !(e.kind === 'needs-you' && commented.has(e.item.key))), ...comments, ...prevItems.filter(p => p.column === 'doing' && !now.has(p.key)).map(item => /** @type {AttentionEvent} */ ({ kind: 'finished', item }))];
+    return [...events.filter(e => !(e.kind === 'needs-you' && commented.has(e.item.key))), ...comments, ...prevItems.filter(p => p.column === 'doing' && !nextKeys.has(p.key)).map(item => /** @type {AttentionEvent} */ ({ kind: 'finished', item }))];
 }

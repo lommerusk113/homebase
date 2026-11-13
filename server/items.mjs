@@ -4,18 +4,18 @@ import { mentionsMr, mrNumber } from './forge.mjs';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
-export function column(status, pr, hasPr) {
+export function column(status, prState, hasPr) {
 
     if (status === 'working') {
         return 'doing';
     }
-    if (pr?.state === 'merged' || pr?.state === 'closed') {
+    if (prState?.state === 'merged' || prState?.state === 'closed') {
         return 'done';
     }
-    if (pr?.changes) {
+    if (prState?.changes) {
         return 'needs-you';
     }
-    if (pr?.ready) {
+    if (prState?.ready) {
         return 'ready';
     }
     if (hasPr) {
@@ -35,7 +35,7 @@ export function gateFor(runs, url, branch) {
 }
 
 // Stale once the MR head moved past the commit the gate checked; without a commit in the report, the head first seen alongside the run stands in.
-export function gateBadge(run, sha, heads = new Map()) {
+export function toGate(run, sha, heads = new Map()) {
 
     if (!run) {
         return null;
@@ -284,7 +284,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
             next: requested ? 'Claude is on it…' : col === 'finished' ? 'Finished without an MR' : nextStep(prState, agent),
             action: requested ? null : rowAction(it.pr, prState, agent, title),
-            gate: it.pr ? gateBadge(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
+            gate: it.pr ? toGate(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
             tokens: total ? formatTokens(total) : null,
             tokensTitle: total ? `input ${tokens.input.toLocaleString('en')} · output ${tokens.output.toLocaleString('en')} · cache read ${tokens.cacheRead.toLocaleString('en')} · cache write ${tokens.cacheWrite.toLocaleString('en')}` : null,
             time: timeMs > 0 ? formatDuration(timeMs) : null
@@ -295,9 +295,9 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
 export const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // Milestone { id, title } of an MR: its own milestone, else the listed one whose slug is its target branch (supplier-automation).
-export function milestoneOf(pr, list) {
+export function milestoneOf(prState, list) {
 
-    const m = pr && (pr.milestone ?? list.find(m => slug(m.title) === pr.target));
+    const m = prState && (prState.milestone ?? list.find(m => slug(m.title) === prState.target));
 
     return m ? { id: m.id, title: m.title } : null;
 }

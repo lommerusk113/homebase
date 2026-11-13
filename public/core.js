@@ -51,9 +51,9 @@ export const saveTracked = () => { store.set('tracked', JSON.stringify(state.tra
 export const page = { token: null, build: null, updated: false };
 const metaOf = (html, name) => html.match(new RegExp(`<meta name="${name}" content="([^"]*)"`))?.[1];
 const ownMeta = name => /** @type {HTMLMetaElement | null} */ (globalThis.document?.querySelector(`meta[name="${name}"]`))?.content ?? null;
-let refreshing = null;
+let tokenFetch = null;
 export function refreshToken() {
-    return refreshing ??= fetch('/', { cache: 'no-store' })
+    return tokenFetch ??= fetch('/', { cache: 'no-store' })
         .then(r => (r.ok ? r.text() : ''))
         .then(html => {
             const token = metaOf(html, 'homebase-token'), build = metaOf(html, 'homebase-build');
@@ -69,7 +69,7 @@ export function refreshToken() {
             return page.token;
         })
         .catch(() => page.token)
-        .finally(() => { refreshing = null; });
+        .finally(() => { tokenFetch = null; });
 }
 /**
  * @param {string} path
@@ -206,7 +206,7 @@ export const prChip = s => {
 
 // Scan aids on rendered markdown: PR/MR links become chips, !123/#123 become chips, file paths become inline code.
 const PR_HREF = /^https:\/\/\S+?\/(?:-\/merge_requests|pull)\/\d+\/?$/;
-const TOKEN = /(^|[\s(\[])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+\/?|[\w.@+-]+(?:\/[\w.@+-]+)+\.[a-z]\w{0,5}|[!#]\d+\b)/gi;
+const CHIP_OR_PATH = /(^|[\s(\[])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+\/?|[\w.@+-]+(?:\/[\w.@+-]+)+\.[a-z]\w{0,5}|[!#]\d+\b)/gi;
 function enrich(root) {
     for (const a of root.querySelectorAll('a')) {
         a.target = '_blank';
@@ -225,12 +225,12 @@ function enrich(root) {
     }
     for (const n of nodes) {
         const t = n.textContent;
-        if (!t.match(TOKEN)) {
+        if (!t.match(CHIP_OR_PATH)) {
             continue;
         }
         const frag = document.createDocumentFragment();
         let last = 0;
-        for (const m of t.matchAll(TOKEN)) {
+        for (const m of t.matchAll(CHIP_OR_PATH)) {
             const start = m.index + m[1].length, tok = m[2].replace(/[.,:;]+$/, '');
             frag.append(t.slice(last, start), /^[!#]/.test(tok) ? el('span', 'chip mono', tok) : el('code', null, tok));
             last = start + tok.length;
@@ -299,10 +299,11 @@ export function foldable(tldr, rest, key) {
 /** @type {{ inMilestone: (x: WorkItem) => boolean, refresh: () => void, rendered?: (refocus: boolean) => void }} */
 export const hooks = { inMilestone: () => true, refresh: () => {} };
 
-/** @returns {Session[]} */
-export const visibleSessions = () => state.sessions.filter(s => state.tracked.includes(s.project) && (state.project === 'all' || s.project === state.project));
+// In a tracked project and in the selected one (or "All").
 /** @param {{ project: string }} x */
-export const shown = x => state.tracked.includes(x.project) && (state.project === 'all' || x.project === state.project);
+export const inView = x => state.tracked.includes(x.project) && (state.project === 'all' || x.project === state.project);
+/** @returns {Session[]} */
+export const visibleSessions = () => state.sessions.filter(inView);
 // "Since last checked" per MR: seen:<mrUrl> in localStorage. An MR never seen before counts as seen now, so the first load doesn't flood.
 /** @param {string} pr @returns {number} */
 export const seenAt = pr => {

@@ -1,5 +1,5 @@
 // Milestones tab: open milestones, their issue groups and linked MRs, cached per project, warmed at start.
-import { api, pages, cached, refresh, swr, prs, isGitLab, person, signedIn, excerpt, pipelineOf } from './forge.mjs';
+import { api, pages, cached, swrEntry, swr, prs, isGitLab, person, signedIn, excerpt, pipelineOf } from './forge.mjs';
 import { sameRepo, milestoneOf } from './items.mjs';
 import { sessions, repoPaths } from './sessions.mjs';
 
@@ -137,7 +137,7 @@ export async function milestones(project, pick) {
     const ms = pick === 'none' ? null : list.find(m => String(m.id) === pick || m.title === pick) ?? list.find(m => m.id === detected[0]);
 
     // the issue groups never wait: until the first load is in, selected has the list's counts and loading: true
-    const issues = ms && refresh(`issues:${project}:${ms.id}`, MS_ISSUES_TTL_MS, () => milestoneIssues(project, repo, ms));
+    const issues = ms && swrEntry(`issues:${project}:${ms.id}`, MS_ISSUES_TTL_MS, () => milestoneIssues(project, repo, ms));
     const selected = !ms ? null : issues.value ? { ...ms, ...issues.value } : { ...ms, loading: !!issues.pending, error: issues.error?.message ?? null };
     const updating = !!(issues?.pending || swr.get(`ms:${project}`).pending);
 

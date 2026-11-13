@@ -89,7 +89,7 @@ export async function restoreDraft(storage, sid, ta) {
     }
 }
 let restored = false; // once per page load, for the first bound session
-const session = () => {
+const draftStorage = () => {
     try {
         return sessionStorage;
     } catch {
@@ -363,7 +363,7 @@ export async function refreshChat() {
     showNewer(s);
     if (s && !restored) {
         restored = true;
-        restoreDraft(session(), s.id, $('msg')).then(ok => ok && syncSend());
+        restoreDraft(draftStorage(), s.id, $('msg')).then(ok => ok && syncSend());
     }
     if (!s) {
         chatKey = null;
@@ -501,7 +501,7 @@ export function initChat() {
     setNeedsOnly(store.get('needs-only') === '1');
     $('msg').addEventListener('input', () => {
         syncSend();
-        saveDraft(session(), chatSession()?.id, $('msg'));
+        saveDraft(draftStorage(), chatSession()?.id, $('msg'));
     });
     $('send').onsubmit = async e => {
         e.preventDefault();
@@ -517,7 +517,7 @@ export function initChat() {
             ta.value = text;
             syncSend();
         } else {
-            saveDraft(session(), s.id, ta); // sent: drops the draft, or keeps whatever was typed meanwhile
+            saveDraft(draftStorage(), s.id, ta); // sent: drops the draft, or keeps whatever was typed meanwhile
         }
     };
     $('msg').onkeydown = e => {

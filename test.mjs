@@ -271,7 +271,7 @@ assert.equal(act({ state: 'merged' }, null), null);
 assert.equal(act(open({ draft: true }), null), null);
 assert.equal(act(null, null), null); // state unknown
 
-import { gateRuns, gateFor, gateBadge } from './server.mjs';
+import { gateRuns, gateFor, toGate } from './server.mjs';
 // shapes as in real transcripts: Skill tool_use { skill, args }, the skill's report as later assistant text
 const said = (ts, ...content) => ({ type: 'assistant', timestamp: ts, message: { content } });
 const skill = (name, args) => ({ type: 'tool_use', id: 'toolu_01', name: 'Skill', input: { skill: name, args } });
@@ -301,12 +301,12 @@ assert.equal(gateFor(runs, mr(9), 'kjn-gate'), runs[1]);
 assert.equal(gateFor(runs, mr(40), 'other'), null);
 assert.equal(gateFor([{ text: 'see #9', at: 1 }], 'https://github.com/o/r/pull/9', null).at, 1);
 // staleness: commit from the report, else the head first seen with the run
-assert.equal(gateBadge(runs[1], 'abc1234ffff').stale, false);
-assert.equal(gateBadge(runs[1], 'def5678ffff').stale, true);
+assert.equal(toGate(runs[1], 'abc1234ffff').stale, false);
+assert.equal(toGate(runs[1], 'def5678ffff').stale, true);
 const heads = new Map();
-assert.equal(gateBadge(runs[0], 'aaa111', heads).stale, false);
-assert.deepEqual(gateBadge(runs[0], 'bbb222', heads), { verdict: 'fix first', at: runs[0].at, tldr: runs[0].tldr, commit: null, stale: true });
-assert.equal(gateBadge(null, 'x'), null);
+assert.equal(toGate(runs[0], 'aaa111', heads).stale, false);
+assert.deepEqual(toGate(runs[0], 'bbb222', heads), { verdict: 'fix first', at: runs[0].at, tldr: runs[0].tldr, commit: null, stale: true });
+assert.equal(toGate(null, 'x'), null);
 const gated = workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: runs, agents: [] }], () => open({ ready: true, sha: 'abc' }), 0, new Map());
 assert.equal(gated[0].gate.verdict, 'fix first');
 console.log('ok review gate');

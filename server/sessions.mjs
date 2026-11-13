@@ -6,7 +6,7 @@ import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, readUsage, latestTopic, queuedPrompts } from './transcripts.mjs';
-import { PR_TTL_MS, prState, refresh, fetchComments, withThreads, swr } from './forge.mjs';
+import { PR_TTL_MS, prState, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { workItems, milestoneOf } from './items.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor } from './tmux.mjs';
 
@@ -383,7 +383,7 @@ export async function sessions() {
     const states = new Map(await Promise.all([...urls].map(async u => [u, await prState(u)])));
     // human comments on open MRs only; never waits, so the first poll after start has none yet
     const comments = new Map([...urls].filter(u => states.get(u)?.state === 'open')
-        .map(u => [u, refresh(`comments:${u}`, PR_TTL_MS, () => fetchComments(u)).value ?? null]));
+        .map(u => [u, swrEntry(`comments:${u}`, PR_TTL_MS, () => fetchComments(u)).value ?? null]));
     const items = workItems(out, u => withThreads(states.get(u) ?? null, comments.get(u)));
     for (const it of items) {
         // only an already fetched milestone list; /api/milestones fills it for the projects on the board

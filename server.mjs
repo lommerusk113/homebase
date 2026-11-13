@@ -23,7 +23,7 @@ export {
 export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, status, lastActivity, summarize, folderFor } from './server/sessions.mjs';
 export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments } from './server/forge.mjs';
 export {
-    column, gateFor, gateBadge, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf
+    column, gateFor, toGate, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf
 } from './server/items.mjs';
 export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones } from './server/milestones.mjs';
 export { limitsOf, peakLimits } from './server/limits.mjs';
@@ -85,7 +85,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (!bindOk(BIND, LAN)) {
         throw new Error(`refusing to listen on ${BIND}: Homebase binds to 127.0.0.1 unless HOMEBASE_LAN=1`);
     }
-    const { code: PAIR_CODE, session: SESSION } = lanSecrets();
+    const { code: PAIR_CODE, session: SESSION_SECRET } = lanSecrets();
     if (LAN) {
         console.log(`LAN mode: pairing code ${PAIR_CODE} (also in ${join(DATA_DIR, 'pairing-code')})`);
     }
@@ -115,7 +115,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             return deny(403, 'forbidden');
         }
         // Other machines (LAN mode only) pair once with the code; until then they get the pairing page and nothing else.
-        if (!isLoopback(req.socket.remoteAddress) && !cookieOk(req.headers.cookie, SESSION)) {
+        if (!isLoopback(req.socket.remoteAddress) && !cookieOk(req.headers.cookie, SESSION_SECRET)) {
             res.setHeader('cache-control', 'no-store');
             res.setHeader('content-security-policy', CSP); // the pairing page: a plain form POST, no scripts
             if (url.pathname === '/pair' && req.method === 'POST') {
@@ -130,7 +130,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     res.setHeader('content-type', 'text/html; charset=utf-8');
                     return deny(403, pairPage('Wrong code.'));
                 }
-                res.setHeader('set-cookie', `${COOKIE}=${SESSION}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${PAIR_COOKIE_MAX_AGE_S}`);
+                res.setHeader('set-cookie', `${COOKIE}=${SESSION_SECRET}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${PAIR_COOKIE_MAX_AGE_S}`);
                 res.setHeader('location', '/');
                 res.statusCode = 303;
                 return res.end();

@@ -621,6 +621,8 @@ assert.equal(keyAction(kev('/')), 'chat');
 assert.equal(keyAction(kev('?', { shiftKey: true })), 'help');
 assert.equal(keyAction(kev('p')), null);
 assert.equal(keyAction(kev('p'), 'g'), 'project');
+assert.equal(keyAction(kev('r')), 'refresh');
+assert.equal(keyAction(kev('r', { metaKey: true })), null); // Cmd+R stays the browser's reload
 assert.equal(keyAction(kev('j'), 'g'), 'next');
 assert.equal(keyAction(kev('k', { metaKey: true })), null); // browser and OS shortcuts pass through
 assert.equal(stepKey(['a', 'b', 'c'], 'b', 1), 'c');
@@ -697,6 +699,31 @@ import { localHosts, lanHosts, isPrivateIp, allowedHost, allowedOrigin, tokenOk,
 }
 console.log('ok access checks');
 
+import { refetch, refreshDue } from './server.mjs';
+{
+    // the old value serves until the new one lands; a second call while in flight shares the fetch
+    let calls = 0, release;
+    const hit = { at: 5, value: 'old' }, fn = () => { calls++; return new Promise(r => { release = r; }); };
+    const p = refetch(hit, fn);
+    assert.equal(refetch(hit, fn), p);
+    assert.equal(calls, 1);
+    assert.equal(hit.value, 'old');
+    release('new'); await p;
+    assert.equal(hit.value, 'new');
+    assert.equal(hit.pending, null);
+    assert.ok(hit.at > 5);
+    // a failure keeps the value and records the error
+    await refetch(hit, () => Promise.reject(new Error('down')));
+    assert.equal(hit.value, 'new');
+    assert.equal(hit.error.message, 'down');
+
+    assert.ok(refreshDue(false, 0, 10_000));
+    assert.ok(!refreshDue(true, 0, 10_000)); // one running
+    assert.ok(!refreshDue(false, 6_000, 10_000)); // started 4 s ago
+    assert.ok(refreshDue(false, 5_000, 10_000));
+}
+console.log('ok refresh');
+
 // Integration: real server on a random port, against a temp data dir and a tmux socket nobody uses. Only GETs and rejected POSTs.
 import { spawn } from 'node:child_process';
 import { request } from 'node:http';
@@ -756,6 +783,11 @@ import { join as pjoin } from 'node:path';
         assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token, 'sec-fetch-site': 'cross-site' }, body: 'hi' })).status, 403);
         assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token, origin: 'http://evil.com' }, body: 'hi' })).status, 403);
         assert.equal((await call(s.port, { path: '/pair', method: 'POST', body: 'code=x' })).status, 404); // no pairing outside LAN mode
+        assert.equal((await call(s.port, { path: '/api/refresh', method: 'POST', headers: { 'x-codetool': '1' } })).status, 401);
+        const refreshed = await call(s.port, { path: '/api/refresh', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token } });
+        assert.equal(refreshed.status, 200);
+        assert.equal(JSON.parse(refreshed.body).refreshing, false);
+        assert.ok(JSON.parse(refreshed.body).lastRefreshedAt > 0);
     } finally { s.stop(); }
     console.log('ok server access');
 

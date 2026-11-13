@@ -1,6 +1,6 @@
 // Left column: work items grouped by what they wait on, and attention transitions.
 import { api, $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle } from './core.js';
-import { chatSession, bindChat, sendText } from './chat.js';
+import { chatSession, bindChat, sendText, isMaster } from './chat.js';
 import { milestoneTag } from './milestone.js';
 
 
@@ -30,6 +30,86 @@ export function gateBadge(g) {
     const tip = [`review-gate: ${g.verdict}${g.stale ? ' (MR changed since)' : ''}`, when && (when === 'now' ? 'just now' : `${when} ago`), plain(g.tldr)].filter(Boolean).join(' · ');
     b.setAttribute('aria-label', tip);
     return [b, tooltip(b, tip)];
+}
+
+// Sessions strip: master sessions per project, most recently active first; the newest max shown (all for an unfolded project), the rest counted as older.
+/** @param {Session[]} visible @param {Set<string>} [unfolded] @param {number} [max] @returns {{ project: string, shown: Session[], older: number }[]} */
+export function sessionRows(visible, unfolded = new Set(), max = 2) {
+    /** @type {Map<string, Session[]>} */
+    const by = new Map();
+    for (const s of visible.filter(isMaster).sort((a, b) => (b.lastActivity ?? b.created ?? 0) - (a.lastActivity ?? a.created ?? 0))) {
+        if (!by.has(s.project)) by.set(s.project, []);
+        by.get(s.project).push(s);
+    }
+    return [...by].map(([project, list]) => {
+        const n = unfolded.has(project) ? list.length : max;
+        return { project, shown: list.slice(0, n), older: list.length - Math.min(n, list.length) };
+    });
+}
+// What the session is on: its newest reply's topic, else the start of its last prompt.
+/** @param {Pick<Session, 'topic' | 'lastPrompt'>} s */
+export function sessionTopic(s) {
+    if (s.topic) return s.topic;
+    return excerpt(s.lastPrompt) || 'No prompt yet';
+}
+// plain() would also drop the # of "#2225"; only markdown emphasis and leading heading marks go here
+const excerpt = (t, n = 80) => { const p = (t || '').replace(/[*_`>]+|^\s*#+\s+/g, '').replace(/\s+/g, ' ').trim(); return p.length > n ? p.slice(0, n).replace(/\s+\S*$/, '') + '…' : p; };
+// Issues (#N) the session's running or queued prompts name that no work item covers yet: placeholder rows in Doing.
+/** @param {Session} s @param {WorkItem[]} items the project's items @returns {string[]} */
+export function startingIssues(s, items) {
+    const asked = [s.status === 'working' ? s.now : null, ...(s.queued ?? [])].flatMap(t => [...(t ?? '').matchAll(/(?<![\w&!#])#(\d+)\b/g)].map(m => m[1]));
+    const covered = n => items.some(x => String(x.prState?.issue ?? '') === n || new RegExp(`#${n}(?!\\d)`).test(x.title ?? '') || x.branch?.startsWith(`${n}-`));
+    return [...new Set(asked)].filter(n => !covered(n));
+}
+// working (from the turn start), asking, or idle since the last activity.
+/** @param {Session} s @returns {{ kind: 'working' | 'asking' | 'idle', text: string }} */
+export function sessionState(s) {
+    if (s.asking) return { kind: 'asking', text: 'Claude is asking' };
+    const t = ago(s.status === 'working' ? s.since ?? s.lastActivity ?? s.updated : s.lastActivity ?? s.updated);
+    return s.status === 'working' ? { kind: 'working', text: `working${t === 'now' ? '' : ` · ${t}`}` } : { kind: 'idle', text: `idle · ${t}` };
+}
+function renderSessions() {
+    const unfolded = new Set([...state.unfold].filter(k => k.startsWith('sessions:')).map(k => k.slice(9)));
+    const groups = sessionRows(visibleSessions(), unfolded), bound = chatSession()?.id, all = state.project === 'all';
+    if (!groups.length) return null;
+    const sec = el('section', 'group g-sessions'), h = el('h2', 'g-head', 'Sessions');
+    sec.append(h);
+    for (const g of groups) {
+        if (all) sec.append(el('div', 's-proj', g.project));
+        for (const s of g.shown) {
+            const st = sessionState(s), r = el('div', `s-row s-${st.kind}${s.id === bound ? ' bound' : ''}`);
+            r.dataset.key = `session:${s.id}`;
+            r.setAttribute('role', 'button');
+            const n = s.subagents, counts = [n?.running && `${n.running} running`, n?.finished && `${n.finished} finished`].filter(Boolean).join(' · ');
+            const topic = el('span', 's-topic', sessionTopic(s));
+            if (st.kind === 'working' && s.now) topic.append(el('span', 's-now', ` · Now: ${excerpt(s.now, 60)}`));
+            r.append(el('span', 'pulse'), el('span', 's-state', st.text), topic, el('span', 's-counts', counts));
+            if (s.queued?.length) { const q = el('span', 'chip s-queued', `Queued: ${s.queued.length}`); r.append(q, tooltip(q, s.queued.map(t => excerpt(t, 120)).join(' · '))); }
+            if (s.id === bound) r.append(el('span', 'chip s-chat', 'chat'));
+            r.title = counts ? `Subagents: ${counts} (finished in the last 2h)` : '';
+            r.onclick = () => bindChat(s.id);
+            sec.append(r);
+        }
+        if (g.older) {
+            const b = el('button', 'show s-older', `+${g.older} older`);
+            b.onclick = e => { e.stopPropagation(); state.unfold.add(`sessions:${g.project}`); renderBoard(); };
+            sec.append(b);
+        }
+    }
+    return sec;
+}
+
+// "#2225 · starting…": the master took the issue on, but no subagent or MR shows it yet. Click chats with that session.
+/** @param {Session} s @param {string} n */
+function starting(s, n) {
+    const tr = el('tr', 'starting'), what = el('td', 'what'), b = el('b');
+    tr.dataset.key = `starting:${s.id}:${n}`;
+    b.append(el('span', 'pulse'), ` #${n} · starting…`);
+    what.append(b, el('small', 'next', s.status === 'working' && s.now?.includes(`#${n}`) ? 'The chat session is on it' : 'Queued in the chat session'));
+    what.colSpan = 6;
+    tr.append(what);
+    tr.onclick = () => bindChat(s.id);
+    return tr;
 }
 
 // Work items (one per MR, plus running/stopped agents without one), grouped by what they wait on; recently finished and merged ones folded at the bottom.
@@ -84,19 +164,23 @@ function renderItems() {
         f.append(sum, table(list));
         return f;
     };
+    const placeholders = visibleSessions().filter(isMaster).flatMap(s => startingIssues(s, visibleSessions().filter(o => o.project === s.project).flatMap(o => o.items || [])).map(n => starting(s, n)));
     const finishedKey = `fold:finished:${state.project}`;
     const groups = COLUMNS.map(c => {
-        const list = items.filter(x => x.column === c.key);
-        if (!list.length) return null;
+        const list = items.filter(x => x.column === c.key), extra = c.key === 'doing' ? placeholders : [];
+        if (!list.length && !extra.length) return null;
         if (c.key === 'done') return fold(c, list, !!state.showMerged, v => { state.showMerged = v; });
         if (c.key === 'finished') return fold(c, list, store.get(finishedKey) === 'open', v => store.set(finishedKey, v ? 'open' : 'closed'));
-        const h = el('h2', 'g-head'); h.append(dot(c.key), `${c.label} · ${list.length}`);
-        const sec = el('section', `group g-${c.key}`); sec.append(h, table(list));
+        const h = el('h2', 'g-head'); h.append(dot(c.key), `${c.label} · ${list.length + extra.length}`);
+        const t = table(list); t.prepend(...extra);
+        const sec = el('section', `group g-${c.key}`); sec.append(h, t);
         return sec;
     }).filter(Boolean);
     const hadFocus = $('masters').contains(document.activeElement); // replaceChildren drops it; keys.js puts it back
-    $('masters').replaceChildren(...groups);
-    if (!groups.length) $('masters').append(el('div', 'welcome', 'Nothing in flight.'));
+    const strip = renderSessions();
+    // nothing open (only the folded Recently finished / Merged, or nothing at all): a calm line under the strip
+    const empty = !groups.some(g => g.localName === 'section') && el('div', strip ? 'd-empty' : 'welcome', 'No MRs or subagents right now');
+    $('masters').replaceChildren(...[strip, empty, ...groups].filter(Boolean));
     hooks.rendered?.(hadFocus);
 }
 

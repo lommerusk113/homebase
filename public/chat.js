@@ -63,6 +63,7 @@ function markRead(sid, key, b) {
 
 function bubble(i, sid, prevTopic, look = {}) {
     if (i.role === 'tools') return el('div', 'tools', i.text);
+    if (i.role === 'error') return el('div', 'tools api-error', i.text);
     const needs = i.role === 'assistant' && i.needsYou && !i.error;
     const kind = i.role !== 'assistant' || i.error ? '' : needs ? ' needs' : ` fyi${look.latest ? ' latest' : ''}`;
     const b = el('div', `bubble ${i.role}${kind}${i.error ? ' failed' : ''}${i.interrupted ? ' interrupted' : ''}`), key = `${sid}:${i.at}`;

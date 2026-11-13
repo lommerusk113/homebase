@@ -265,15 +265,19 @@ const PR_URL = /https:\/\/[^\s)>\]`'"]+?\/(?:-\/merge_requests|pull)\/\d+/g;
 const TLDR = /^[ \t>*_]*TL;?DR\b[*_]*:?[*_]*[ \t]*(.+)$/gim;
 
 // "**▸ Topic**" / "**▸ Topic:**" / "▸ Topic" as the first non-empty line becomes the bubble's header.
+// A "· needs you" / "- needs you" / "(needs you)" suffix marks a reply that wants the user's decision, answer or action.
 const TOPIC = /^\s*(?:\*\*)?▸\s*(.+?):?\s*(?:\*\*)?[ \t]*(?:\n|$)/;
+const NEEDS_YOU = /\s*(?:[·\-–—]\s*needs you|\(needs you\))\s*$/i;
 export function splitTopic(text) {
 
     const m = text.match(TOPIC);
     if (!m) {
-        return { topic: null, text };
+        return { topic: null, needsYou: false, text };
     }
 
-    return { topic: m[1].replace(/\*\*$/, '').replace(/:$/, '').trim(), text: text.slice(m[0].length).trim() };
+    const raw = m[1].replace(/\*\*$/, '').replace(/:$/, '').trim(), needsYou = NEEDS_YOU.test(raw);
+
+    return { topic: raw.replace(NEEDS_YOU, '').trim() || null, needsYou, text: text.slice(m[0].length).trim() };
 }
 
 // Pulls the last "TLDR: ..." line out of a message so the page can show it as a callout.
@@ -499,9 +503,10 @@ export function chatItems(entries, max = 60) {
 
 function topicAndTldr(i) {
 
-    const { topic, text } = splitTopic(i.text);
+    const { topic, needsYou, text } = splitTopic(i.text), t = splitTldr(text);
 
-    return { ...i, topic, ...splitTldr(text) };
+    // no marker: a TLDR that ends in a question still needs the user
+    return { ...i, topic, needsYou: needsYou || /\?[*_\s]*$/.test(t.tldr ?? ''), ...t };
 }
 
 const SHORT_ANSWER = /^(?:yes|yeah|yep|sure|ok|okay|no|nope|do it|go ahead|do both)(?: please)?[.!]*$/i;

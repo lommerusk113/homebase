@@ -1113,6 +1113,10 @@ export function nextStep(prState, agent) {
     if (prState.ci === 'failing') {
         return 'Pipeline failing';
     }
+    if (prState.replied) {
+        const n = prState.replied;
+        return `Replied to ${n} thread${n === 1 ? '' : 's'} — waiting for ${prState.repliedTo?.join(', ') || 'the reviewer'} to resolve`;
+    }
     if (prState.ci === 'running') {
         return 'Pipeline running';
     }
@@ -1148,6 +1152,9 @@ export function rowAction(pr, prState, agent, title) {
     }
     if (prState.ci === 'failing') {
         return { label: 'Fix pipeline', message: `The pipeline on ${ref} is failing — find out why and fix it.` };
+    }
+    if (prState.replied) {
+        return null; // every open thread was last answered by me: the reviewer resolves them
     }
     if (prState.ready) {
         return { label: 'Merge + close issue', message: `Run review-gate on ${ref}. If the verdict is ready, merge it and close its issue. If it's fix first, show me the findings and don't merge.` };
@@ -1459,11 +1466,15 @@ export function excerpt(md, max = 300) {
 }
 
 // Unresolved human review threads on an open MR count as changes requested: GitLab reports not_approved, not
-// discussions_not_resolved, while approval is also missing.
+// discussions_not_resolved, while approval is also missing. Threads I answered last wait on the reviewer to resolve
+// them, so when those are all that is open, the review is no longer on me.
 export function withThreads(prState, comments) {
 
-    if (prState?.state !== 'open' || !comments?.unresolved) {
+    if (prState?.state !== 'open' || !(comments?.unresolved || comments?.replied)) {
         return prState;
+    }
+    if (!comments.unresolved) {
+        return { ...prState, changes: false, replied: comments.replied, repliedTo: comments.repliedTo };
     }
 
     return { ...prState, changes: true, unresolved: comments.unresolved, unresolvedBy: comments.unresolvedBy };
@@ -1472,19 +1483,31 @@ export function withThreads(prState, comments) {
 // Bots by flag (GitLab bot, GitHub type Bot) or name: GitHub's foo[bot], GitLab's project_1_bot_x tokens, *-bot / bot-*.
 export const isBot = a => !!(a?.bot || a?.type === 'Bot' || /\[bot\]$|(^|[-_])bot($|[-_])/i.test(a?.username ?? ''));
 
-// Comments by others than me and bots, newest first, at most max, with a plain-text excerpt.
-export function humanComments(raw, me, max = 10) {
+// Comments by others than me and bots, newest first, at most max, with a plain-text excerpt. With threads
+// ([{ resolved, notes: [{ author }] }], oldest note first), whose turn each unresolved one is: mine when another human
+// wrote in it and I wrote its last human note (replied), else theirs (unresolved). Without, unresolved notes count.
+export function humanComments(raw, me, max = 10, threads = null) {
 
-    const items = raw.filter(c => c.author.username !== me && !isBot(c.author) && c.body?.trim())
+    const human = a => a.username !== me && !isBot(a);
+    const items = raw.filter(c => human(c.author) && c.body?.trim())
         .toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at))
         .map(c => ({ id: c.id, author: c.author.name, at: c.at, excerpt: excerpt(c.body, 140), url: c.url, ...(c.resolved != null && { resolved: c.resolved }) }));
 
-    const open = items.filter(c => c.resolved === false);
+    if (!threads) {
+        const open = items.filter(c => c.resolved === false);
+        return { latestAt: items[0]?.at ?? null, count: items.length, items: items.slice(0, max), unresolved: open.length, unresolvedBy: [...new Set(open.map(c => c.author))], replied: 0, repliedTo: [] };
+    }
 
-    return { latestAt: items[0]?.at ?? null, count: items.length, items: items.slice(0, max), unresolved: open.length, unresolvedBy: [...new Set(open.map(c => c.author))] };
+    const turns = threads.filter(t => !t.resolved && t.notes.some(n => human(n.author)))
+        .map(t => ({ mine: t.notes.findLast(n => n.author.username === me || human(n.author)).author.username === me, by: t.notes.filter(n => human(n.author)).map(n => n.author.name) }));
+    const names = list => [...new Set(list.flatMap(t => t.by))];
+    const open = turns.filter(t => !t.mine);
+    const replied = turns.filter(t => t.mine);
+
+    return { latestAt: items[0]?.at ?? null, count: items.length, items: items.slice(0, max), unresolved: open.length, unresolvedBy: names(open), replied: replied.length, repliedTo: names(replied) };
 }
 
-// Read-only: one glab call per MR (notes carry resolvable/resolved, so no discussions call), three gh calls per PR.
+// Read-only: one glab call per MR (discussions nest the notes; more pages only past 100 discussions), four gh calls per PR.
 async function fetchComments(url) {
 
     const gl = url.match(/^https:\/\/([^/]+)\/(.+?)\/-\/merge_requests\/(\d+)/);
@@ -1494,10 +1517,12 @@ async function fetchComments(url) {
     const author = u => ({ ...person(u), bot: u.bot, type: u.type });
 
     if (gl) {
-        const notes = await api(repo, `projects/${encodeURIComponent(gl[2])}/merge_requests/${gl[3]}/notes?sort=desc&order_by=updated_at&per_page=50`);
-        return humanComments(notes.filter(n => !n.system).map(n => ({
-            id: n.id, author: author(n.author), at: n.created_at, body: n.body, url: `${url}#note_${n.id}`, resolved: n.resolvable ? n.resolved : null
-        })), me);
+        const discussions = (await pages(repo, `projects/${encodeURIComponent(gl[2])}/merge_requests/${gl[3]}/discussions`))
+            .map(d => d.notes.filter(n => !n.system).map(n => ({
+                id: n.id, author: author(n.author), at: n.created_at, body: n.body, url: `${url}#note_${n.id}`, resolvable: n.resolvable, resolved: n.resolvable ? n.resolved : null
+            }))).filter(notes => notes.length);
+        const threads = discussions.filter(notes => notes[0].resolvable).map(notes => ({ resolved: notes.every(n => n.resolved), notes }));
+        return humanComments(discussions.flat(), me, 10, threads);
     }
 
     // ponytail: first 100 of each list; a PR past that needs pages()
@@ -1505,8 +1530,15 @@ async function fetchComments(url) {
     const [issue, inline, reviews] = await Promise.all([`issues/${gh[3]}/comments`, `pulls/${gh[3]}/comments`, `pulls/${gh[3]}/reviews`]
         .map(p => api(repo, `${base}/${p}?per_page=100`)));
     const of = (c, at) => ({ id: c.id, author: author(c.user), at, body: c.body, url: c.html_url });
+    const [owner, name] = gh[2].split('/');
+    // ponytail: first 100 threads, last 50 comments each; review threads are only in GraphQL
+    const q = `query($o:String!,$n:String!,$p:Int!){repository(owner:$o,name:$n){pullRequest(number:$p){reviewThreads(first:100){nodes{isResolved comments(last:50){nodes{author{__typename login}}}}}}}}`;
+    const threads = await apiOnce(`gh graphql threads ${url}`, () => apiSlot(() => run('gh', ['api', 'graphql', '-f', `query=${q}`, '-F', `o=${owner}`, '-F', `n=${name}`, '-F', `p=${gh[3]}`], { timeout: MS_CALL_TIMEOUT_MS })))
+        .then(({ stdout }) => JSON.parse(stdout).data.repository.pullRequest.reviewThreads.nodes.map(t => ({
+            resolved: t.isResolved, notes: t.comments.nodes.map(c => ({ author: { name: c.author?.login, username: c.author?.login, type: c.author?.__typename } }))
+        }))).catch(() => null);
 
-    return humanComments([...issue.map(c => of(c, c.created_at)), ...inline.map(c => of(c, c.created_at)), ...reviews.filter(r => r.submitted_at).map(r => of(r, r.submitted_at))], me);
+    return humanComments([...issue.map(c => of(c, c.created_at)), ...inline.map(c => of(c, c.created_at)), ...reviews.filter(r => r.submitted_at).map(r => of(r, r.submitted_at))], me, 10, threads);
 }
 
 async function fetchIssues(repo, ms) {

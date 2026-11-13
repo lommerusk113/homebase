@@ -376,7 +376,33 @@ const nc = { ...cm('a', CT(2)), column: 'needs-you' };
 assert.deepEqual(cev([cm('a', CT(1))], [nc], S(0)), [['comment', 'a', 1]]);
 assert.ok(hc.items[0].excerpt.length <= 141);
 assert.equal(humanComments(raw, 'me', 1).items.length, 1);
-assert.deepEqual(humanComments([], 'me'), { latestAt: null, count: 0, items: [], unresolved: 0, unresolvedBy: [] });
+assert.deepEqual(humanComments([], 'me'), { latestAt: null, count: 0, items: [], unresolved: 0, unresolvedBy: [], replied: 0, repliedTo: [] });
+// whose turn per GitLab thread: the last human note decides; replied threads wait on the reviewer
+const B = { name: 'Børre', username: 'borre' }, ME = { name: 'Joakim', username: 'me' }, BOT = { name: 'Bot', username: 'gitlab-bot' };
+const th = (...authors) => ({ resolved: false, notes: authors.map(author => ({ author })) });
+const turn = (...threads) => humanComments([], 'me', 10, threads);
+const mine = turn(th(B, ME), th(B, ME, BOT)); // last note by me (my Claude posts as me), a bot after me doesn't count
+assert.deepEqual([mine.unresolved, mine.replied, mine.repliedTo], [0, 2, ['Børre']]);
+const wr = withThreads({ ...waiting, changes: true }, mine); // GitLab's discussions_not_resolved set changes
+assert.equal(itemColumn(wr, null, true), 'review');
+assert.equal(nextStep(wr, null), 'Replied to 2 threads — waiting for Børre to resolve');
+assert.equal(rowAction(mr(4), wr, null, 'T'), null);
+assert.equal(rowAction(mr(4), { ...wr, reviewers: [] }, null, 'T'), null); // no Request review either
+assert.equal(rowAction(mr(4), { ...wr, ci: 'failing' }, null, 'T').label, 'Fix pipeline'); // only a failing pipeline beats it
+assert.equal(nextStep({ ...wr, ci: 'running' }, null), 'Replied to 2 threads — waiting for Børre to resolve');
+const theirs = turn(th(B), th(ME, B));
+assert.deepEqual([theirs.unresolved, theirs.unresolvedBy, theirs.replied], [2, ['Børre'], 0]);
+assert.equal(itemColumn(withThreads(waiting, theirs), null, true), 'needs-you');
+const mix = withThreads(waiting, turn(th(B), th(B, ME)));
+assert.equal(itemColumn(mix, null, true), 'needs-you');
+assert.equal(nextStep(mix, null), 'Address 1 unresolved comment from Børre');
+assert.equal(rowAction(mr(4), mix, null, 'T').label, 'Fix & reply');
+const done = turn({ ...th(B), resolved: true }, th(ME), th(BOT)); // resolved, my own, bot-only threads don't count
+assert.deepEqual([done.unresolved, done.replied], [0, 0]);
+assert.equal(withThreads(waiting, done), waiting);
+// a non-resolvable general comment is a new comment, not a thread
+const gen = humanComments([{ id: 9, author: B, at: CT(1), body: 'LGTM', url: 'u#9', resolved: null }], 'me', 10, []);
+assert.deepEqual([gen.count, gen.unresolved, gen.replied], [1, 0, 0]);
 console.log('ok comments');
 import { quickReplies, pendingAsk } from './server.mjs';
 const YN = ['Yes', 'No'], YBN = ['Yes', 'Do both', 'No'];

@@ -126,11 +126,12 @@ async function fetchPr(url) {
             ci: { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? ciOf(pipeline),
             pipeline,
             milestone: mr.milestone ? { id: mr.milestone.id, title: mr.milestone.title, due_date: mr.milestone.due_date } : null,
-            target: mr.target_branch
+            target: mr.target_branch,
+            sha: mr.sha ?? mr.diff_refs?.head_sha ?? null
         };
     }
 
-    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,title,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup']);
+    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,title,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid']);
     const pr = JSON.parse(stdout);
     const pipeline = pipelineOf(null, pr.statusCheckRollup, url);
     const reviews = pr.latestReviews ?? [];
@@ -147,7 +148,8 @@ async function fetchPr(url) {
         ci: ciOf(pipeline),
         pipeline,
         milestone: pr.milestone ? { id: pr.milestone.number, title: pr.milestone.title, due_date: pr.milestone.dueOn?.slice(0, 10) ?? null } : null,
-        target: pr.baseRefName
+        target: pr.baseRefName,
+        sha: pr.headRefOid ?? null
     };
 }
 
@@ -279,6 +281,64 @@ export function splitTldr(text) {
     }
 
     return { tldr, text: (text.slice(0, m.index) + text.slice(m.index + m[0].length)).trim() };
+}
+
+// review-gate's verdict line ("**Verdict: fix first** — ...") or its bold TLDR ("**ready**").
+const VERDICT = /(?:verdict:?[*_\s]*|\*\*)(ready|fix[- ]first)\b/i;
+const GATE = /review[- ]gate/i;
+const COMMIT = /\b(?:commit|head|sha)\b[\s:`@]*([0-9a-f]{7,40})\b/i;
+
+// review-gate runs in a transcript tail: a Skill tool_use for review-gate (or a subagent briefed with it, via `brief`),
+// then the first assistant text or handback naming a verdict. text = the skill args or brief plus the report, for gateFor.
+export function gateRuns(entries, brief = null) {
+
+    const runs = [];
+    let armed = brief && GATE.test(brief) ? brief : null;
+    for (const e of entries) {
+        if (e.type !== 'assistant' || !Array.isArray(e.message?.content)) {
+            continue;
+        }
+        for (const b of e.message.content) {
+            if (b.type === 'tool_use' && b.name === 'Skill' && /(?:^|:)review-gate$/.test(b.input?.skill ?? '')) {
+                armed = String(b.input.args ?? '');
+                continue;
+            }
+            const said = b.type === 'text' ? b.text : b.type === 'tool_use' && b.name === 'SubagentHandback' ? b.input?.message : null;
+            const v = armed !== null && said?.match(VERDICT);
+            if (v) {
+                const text = `${armed}\n${said}`;
+                runs.push({ verdict: v[1].toLowerCase().replace('-', ' '), at: Date.parse(e.timestamp) || 0, tldr: splitTldr(said).tldr, commit: text.match(COMMIT)?.[1] ?? null, text });
+                armed = null;
+            }
+        }
+    }
+
+    return runs;
+}
+
+// The newest gate run that names this MR by URL, !N / #N, or its branch.
+export function gateFor(runs, url, branch) {
+
+    const n = url.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
+    const ref = new RegExp(`(?<![\\w/])${url.includes('/pull/') ? '#' : '!'}${n}\\b`);
+
+    return runs.filter(r => r.text.includes(url) || ref.test(r.text) || (branch && r.text.includes(branch))).toSorted((a, b) => b.at - a.at)[0] ?? null;
+}
+
+// Stale once the MR head moved past the commit the gate checked; without a commit in the report, the head first seen alongside the run stands in.
+export function gateBadge(run, sha, heads = new Map()) {
+
+    if (!run) {
+        return null;
+    }
+
+    const key = `${run.at}:${run.text.length}`;
+    if (sha && !heads.has(key)) {
+        heads.set(key, sha); // ponytail: in memory, so a push before a Homebase restart goes unnoticed
+    }
+    const checked = run.commit ?? heads.get(key);
+
+    return { verdict: run.verdict, at: run.at, tldr: run.tldr, commit: run.commit, stale: !!(sha && checked && !sha.startsWith(checked) && !checked.startsWith(sha)) };
 }
 
 const TOOL_KIND = { Bash: 'cmd', Edit: 'edit', Write: 'edit', MultiEdit: 'edit', NotebookEdit: 'edit', Read: 'read', Grep: 'search', Glob: 'search', Agent: 'agent', Task: 'agent', WebFetch: 'web', WebSearch: 'web' };
@@ -593,7 +653,8 @@ export function summarizeAgent(meta, entries, ageMs, id) {
         branch: entries.findLast(e => e.gitBranch)?.gitBranch ?? meta.worktreeBranch ?? null,
         worktreePath: meta.worktreePath ?? null,
         model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? meta.pickedEffortModel ?? null,
-        files: filesTouched(entries, meta.worktreePath ?? entries.findLast(e => e.cwd)?.cwd)
+        files: filesTouched(entries, meta.worktreePath ?? entries.findLast(e => e.cwd)?.cwd),
+        gates: gateRuns(entries, `${meta.description ?? ''}\n${textOf(entries.find(e => e.type === 'user'))}`)
     };
 }
 
@@ -759,7 +820,8 @@ export function summarize(entries, ageMs) {
         status: status(lastTurn, ageMs),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
-        files: filesTouched(entries, meta.cwd)
+        files: filesTouched(entries, meta.cwd),
+        gates: gateRuns(entries)
     };
 }
 
@@ -806,6 +868,7 @@ async function sessions() {
         s.items = items.filter(i => i.sessionId === s.id);
         s.items.forEach(i => { i.folder = folderFor(i.worktreePath, s.cwd); });
         delete s.agents; // folded into items
+        delete s.gates;
     }
 
     // /clear sent from Homebase: the new transcript keeps typing into the old tmux session
@@ -921,7 +984,7 @@ export function rowAction(pr, prState, agent, title) {
         return { label: 'Fix pipeline', message: `The pipeline on ${ref} is failing — find out why and fix it.` };
     }
     if (prState.ready) {
-        return { label: 'Merge + close issue', message: `Merge ${ref} and close its issue.` };
+        return { label: 'Merge + close issue', message: `Run review-gate on ${ref}. If the verdict is ready, merge it and close its issue. If it's fix first, show me the findings and don't merge.` };
     }
     if (!prState.reviewers?.length && !prState.draft) {
         return { label: 'Request review', message: `Assign a reviewer to ${ref} — suggest who.` };
@@ -937,7 +1000,9 @@ export function sameRepo(url, project) {
     return url.match(/^https:\/\/[^/]+\/(.+?)(?:\/-)?\/(?:merge_requests|pull)\//)?.[1].split('/').pop() === project;
 }
 
-export function workItems(sessions, prOf = () => null, now = Date.now()) {
+const gateHeads = new Map(); // gate run -> MR head sha first seen with it
+
+export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads) {
 
     const byUrl = new Map();
     const add = (url, project) => {
@@ -988,6 +1053,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now()) {
         const agents = it.agents.toSorted((a, b) => b.updated - a.updated);
         const agent = agents[0] ?? null;
         const prState = it.pr ? prOf(it.pr) : null;
+        const gates = it.pr ? sessions.filter(s => s.project === it.project).flatMap(s => [...s.gates ?? [], ...(s.agents ?? []).flatMap(a => a.gates ?? [])]) : [];
         const stage = lifecycle(it.pr, prState, agent);
         const col = itemColumn(prState, agent, !!it.pr);
         const title = prState?.title ?? agent?.description ?? it.pr;
@@ -1016,6 +1082,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now()) {
             activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             next: nextStep(prState, agent),
             action: rowAction(it.pr, prState, agent, title),
+            gate: it.pr ? gateBadge(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
             tokens: total ? formatTokens(total) : null,
             tokensTitle: total ? `input ${tokens.input.toLocaleString('en')} · output ${tokens.output.toLocaleString('en')} · cache read ${tokens.cacheRead.toLocaleString('en')} · cache write ${tokens.cacheWrite.toLocaleString('en')}` : null,
             time: timeMs > 0 ? formatDuration(timeMs) : null

@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, setOffline } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, setOffline, ctxLevel, canCompact, autoCompactDue } from './core.js';
 import { renderBoard } from './list.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
@@ -141,6 +141,9 @@ function bubble(i, sid, prevTopic, look = {}) {
     }
     if (i.role === 'error') {
         return el('div', 'tools api-error', i.text);
+    }
+    if (i.role === 'compact') {
+        return el('div', 'tools compact', i.text);
     }
     const needs = i.role === 'assistant' && i.needsYou && !i.error;
     const kind = i.role !== 'assistant' || i.error ? '' : needs ? ' needs' : ` fyi${look.latest ? ' latest' : ''}`;
@@ -366,6 +369,8 @@ export async function refreshChat() {
         restoreDraft(draftStorage(), s.id, $('msg')).then(ok => ok && syncSend());
     }
     if (!s) {
+        $('compact-item').disabled = true;
+        $('compact-nudge').hidden = true;
         chatKey = null;
         state.asking = null;
         updateTitle();
@@ -391,6 +396,7 @@ export async function refreshChat() {
 
     setStatus(data);
     showAsk(s, data);
+    compactUi(s, data);
 
     const { items, hidden, cut } = feedItems(s, data);
     const fresh = cut.fresh || !!s.clearedFrom; // a New conversation, before or after the successor is bound
@@ -463,6 +469,36 @@ async function sendNow(sid, key) {
     }
 }
 
+// The menu item and the "Compact?" nudge follow the bound session; the auto mode piggybacks on the same poll.
+/** @param {Session} s @param {Transcript} data */
+function compactUi(s, data) {
+
+    const idle = canCompact(s) && !data.working && !data.asking;
+    $('compact-item').disabled = !idle;
+    $('compact-nudge').hidden = !(idle && ctxLevel(s.context ?? 0));
+    if (idle && store.get('auto-compact') === '1') {
+        const key = `auto-compacted:${s.id}`, now = Date.now();
+        if (autoCompactDue(s, now, Number(store.get(key)) || 0)) {
+            store.set(key, String(now)); // before the POST, so a slow or failed one is not retried within the hour
+            compact(s.id);
+        }
+    }
+}
+
+/** @param {string} sid */
+async function compact(sid) {
+    $('c-err').textContent = '';
+    try {
+        const r = await api(`/api/compact?id=${encodeURIComponent(sid)}`, { method: 'POST' });
+        if (!r.ok) {
+            throw new Error(await r.text());
+        }
+        setTimeout(refreshChat, 1000);
+    } catch (err) {
+        $('c-err').textContent = err.message;
+    }
+}
+
 const syncSend = () => { $('send-btn').disabled = !$('msg').value?.trim(); };
 
 // Types text into a session as an outbox bubble ("sending…", then gone once the transcript has it); false if it failed.
@@ -497,8 +533,14 @@ function setNeedsOnly(on) {
     $('needs-only').checked = on;
 }
 
+function setAutoCompact(on) {
+    store.set('auto-compact', on ? '1' : '');
+    $('auto-compact').checked = on;
+}
+
 export function initChat() {
     setNeedsOnly(store.get('needs-only') === '1');
+    setAutoCompact(store.get('auto-compact') === '1');
     $('msg').addEventListener('input', () => {
         syncSend();
         saveDraft(draftStorage(), chatSession()?.id, $('msg'));
@@ -534,6 +576,12 @@ export function initChat() {
         if (e.detail.item.value === 'needs-only') {
             return setNeedsOnly(store.get('needs-only') !== '1'); // from our state, not the item's own toggle
         }
+        if (e.detail.item.value === 'auto-compact') {
+            return setAutoCompact(store.get('auto-compact') !== '1');
+        }
+        if (e.detail.item.value === 'compact') {
+            return void ($('compact-dlg').open = true);
+        }
         if (e.detail.item.value === 'view') {
             store.set(`cleared:${s.id}`, String(Date.now()));
             refreshChat();
@@ -541,6 +589,14 @@ export function initChat() {
             $('clear-dlg').open = true;
         }
     });
+    $('compact-nudge').onclick = () => { $('compact-dlg').open = true; };
+    $('compact-go').onclick = () => {
+        $('compact-dlg').open = false;
+        const s = chatSession();
+        if (s) {
+            compact(s.id);
+        }
+    };
     $('clear-go').onclick = async () => {
         const s = chatSession();
         $('clear-dlg').open = false;

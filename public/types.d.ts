@@ -37,6 +37,10 @@ interface Session {
     /** the transcript was written by a subagent */
     sidechain: boolean;
     items: WorkItem[];
+    /** context window used, % (from the status-line dump); null when there is none */
+    context: number | null;
+    /** when that dump was written, ms */
+    contextAt: number | null;
     tmux?: string;
     /** set on the session a /clear started: the id of the one it replaced */
     clearedFrom?: string;
@@ -126,7 +130,7 @@ interface AttentionEvent { kind: 'needs-you' | 'ready' | 'finished' | 'failing' 
 interface Answer { text: string; at?: string; queued?: boolean; sending?: boolean; error?: string }
 
 interface ChatItem {
-    role: 'user' | 'assistant' | 'tools' | 'error';
+    role: 'user' | 'assistant' | 'tools' | 'error' | 'compact';
     text: string;
     at?: string;
     topic?: string | null;
@@ -219,7 +223,7 @@ interface WaDetails extends HTMLElement { open: boolean }
 interface WaSelect extends HTMLElement { open: boolean; value: string }
 interface WaOption extends HTMLElement { value: string }
 interface WaDropdown extends HTMLElement { open: boolean }
-interface WaDropdownItem extends HTMLElement { value: string; checked: boolean }
+interface WaDropdownItem extends HTMLElement { value: string; checked: boolean; disabled: boolean }
 interface WaButton extends HTMLElement { disabled: boolean }
 interface WaTextarea extends HTMLElement {
     value: string;
@@ -276,8 +280,12 @@ interface PageIds {
     project: WaSelect;
     dlg: WaDialog;
     'clear-dlg': WaDialog;
+    'compact-dlg': WaDialog;
     msg: WaTextarea;
     'needs-only': WaDropdownItem;
+    'auto-compact': WaDropdownItem;
+    'compact-item': WaDropdownItem;
+    'compact-nudge': HTMLButtonElement;
     'c-menu': WaDropdown;
     send: HTMLFormElement;
     'send-btn': HTMLButtonElement;

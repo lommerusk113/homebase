@@ -1,4 +1,4 @@
-// The POST actions on a session: type into its tmux session, interrupt, /clear, and open its folder in an editor.
+// The POST actions on a session: type into its tmux session, interrupt, /clear, /compact, and open its folder in an editor.
 import { readdir, stat, access } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
@@ -122,6 +122,22 @@ export async function interrupt(id) {
     }
 
     await tmux(['send-keys', '-t', name, 'Escape']);
+}
+
+// /compact needs an idle Claude: mid-turn it would queue behind the work, and while asking it would answer the question.
+export function refuseIfBusy(s) {
+    if (s.status === 'working' || s.asking) {
+        throw Object.assign(new Error('busy'), { status: 409 });
+    }
+}
+
+// Types /compact (same checks as send). Unlike /clear the session id stays, so nothing is remembered.
+export async function compactChat(id) {
+
+    const s = await resumable(id);
+    refuseIfBusy(s);
+
+    await send(id, '/compact', s);
 }
 
 // Types /clear (same checks as send) and remembers it, so the next session list maps the new transcript to this tmux session.

@@ -180,6 +180,19 @@ export const chatStatus = (d, now = Date.now()) => {
 
     return { kind: 'working', text: `Claude is working…${m > 0 ? ` · ${hoursMinutes(m)}` : ''}` };
 };
+// Context window use, as a level for the gauge colour: amber from 60%, red from 85%.
+/** @param {number} p @returns {'' | 'warn' | 'hot'} */
+export const ctxLevel = p => (p >= 85 ? 'hot' : p >= 60 ? 'warn' : '');
+// /compact only runs on an idle Claude: no open turn, nothing asking (the server refuses otherwise).
+/** @param {Session} s */
+export const canCompact = s => s.status !== 'working' && !s.asking;
+// Auto-compact: idle for 2 min, context at 70%, and not tried for an hour (lastAt: when this page last sent it for this session).
+export const AUTO_COMPACT = { percent: 70, idleMs: 2 * 60_000, everyMs: 3600_000 };
+/** @param {Session} s @param {number} now @param {number} lastAt */
+export const autoCompactDue = (s, now, lastAt) => canCompact(s)
+    && (s.context ?? 0) >= AUTO_COMPACT.percent
+    && now - (s.lastActivity ?? s.updated) >= AUTO_COMPACT.idleMs
+    && now - lastAt >= AUTO_COMPACT.everyMs;
 // Limits strip item: "Session 70%" at a glance, details in the tooltip; the countdown shows inline only once under 20% is left.
 /** @param {boolean | number} week @param {LimitWindow} w */
 export const limitView = (week, w, now = Date.now()) => {

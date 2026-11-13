@@ -22,7 +22,7 @@ export function ciPill(p) {
 
 // review-gate badge next to the MR chip: ✓ gate (ready), ⚠ gate (fix first), gate stale once the MR head moved; nothing if it never ran.
 /** @param {Gate | null} g @returns {HTMLElement[]} */
-export function gateBadge(g) {
+function gateBadge(g) {
     if (!g) return [];
     const [cls, label] = g.stale ? ['stale', 'gate stale'] : g.verdict === 'ready' ? ['ready', '✓ gate'] : ['fix', '⚠ gate'];
     const b = el('span', `gate-badge gate-${cls}`, label);

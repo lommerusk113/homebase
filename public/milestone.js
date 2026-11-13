@@ -1,49 +1,11 @@
 // Milestone pill for the header: progress of the chosen milestone, a menu to switch it, and the list filter it drives.
 // Read-only towards GitLab/GitHub: the menu only links out.
-import { api } from './core.js';
+import { api, el, store, link } from './core.js';
 const FETCH_MS = 30_000; // the server caches the glab calls; this only bounds how stale the pill gets
 const POLL_MS = 3000;
 const LOADING_MS = 1000; // while the server is still loading the issues, or refreshing stale ones
 
-const CSS = `
-  .ms-pick { position:relative; font-size:12.5px; }
-  .ms-pick > summary { list-style:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px; padding:2px 10px; border:1px solid var(--line); border-radius:99px; white-space:nowrap; color:var(--fg); }
-  .ms-pick > summary::-webkit-details-marker { display:none; }
-  .ms-pick > summary:hover { background:var(--hover); }
-  .ms-pick > summary .t { font-weight:600; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
-  .ms-pick > summary .n { color:var(--muted); }
-  .ms-bar { width:40px; height:4px; border-radius:2px; background:var(--line-soft); overflow:hidden; }
-  .ms-bar b { display:block; height:100%; background:var(--c-ready); }
-  .ms-menu { position:absolute; z-index:20; top:calc(100% + 4px); left:0; width:320px; max-height:70vh; overflow:auto; background:var(--bg); border:1px solid var(--line); border-radius:8px; box-shadow:var(--shadow); padding:6px 0; }
-  .ms-menu h5 { margin:6px 12px 4px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; }
-  .ms-menu .info { padding:0 12px 6px; color:var(--muted); display:flex; flex-wrap:wrap; gap:4px 10px; }
-  .ms-menu .info a { color:var(--accent); text-decoration:none; }
-  .ms-menu .hot { color:var(--c-needs); }
-  .ms-menu .chips { display:flex; flex-wrap:wrap; gap:4px; padding:0 12px 6px; }
-  .ms-menu .chips a.chip { max-width:100%; background:color-mix(in srgb, var(--c-needs) 16%, var(--bg)); color:var(--c-needs); }
-  .ms-menu hr { border:0; border-top:1px solid var(--line-soft); margin:4px 0; }
-  .ms-menu button { display:flex; gap:8px; width:100%; text-align:left; appearance:none; border:0; background:none; font:inherit; color:var(--fg); padding:4px 12px; cursor:pointer; }
-  .ms-menu button:hover { background:var(--hover); }
-  .ms-menu button.on { font-weight:600; }
-  .ms-menu button span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .ms-menu button small { color:var(--muted); font-weight:400; }
-  .ms-pick wa-spinner { font-size:11px; --track-width:2px; }
-  .ms-pick > summary .ld { color:var(--muted); }
-  .ms-pick.busy > summary > :not(wa-spinner), .ms-pick.busy .ms-menu > :not(button) { opacity:.5; }
-  .ms-menu button wa-spinner { align-self:center; }
-  .ms-pick.off > summary { color:var(--muted); border-style:dashed; }
-  .ms-pick.off.err > summary { color:var(--c-needs); }
-  .ms-tag { margin-right:6px; font-size:10.5px; font-weight:500; vertical-align:1px; }
-`;
-
-const store = {
-    get: k => { try { return localStorage.getItem(k); } catch { return null; } },
-    set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }
-};
-const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const due = d => (d ? `due ${new Date(d + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : 'no due date');
-const link = (cls, text, href) => { const a = el('a', cls, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a; };
-let styled = false;
 
 // Whether a work item stays in the list for the selected milestone ({ id } or null): items with an MR of that
 // milestone, plus items without an MR (running or stopped agents). No selection keeps everything.
@@ -107,7 +69,6 @@ export function emptyPill(d) {
  * @param {{ onChange?: (m: { id: number, title: string } | null) => void, onData?: (d: Milestones) => void, onBusy?: (busy: boolean) => void }} [opts]
  */
 export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
-    if (!styled) { document.head.append(el('style', null, CSS)); styled = true; }
     const key = `milestone:${project}`, pick = el('details', 'ms-pick'), summary = el('summary'), menu = el('div', 'ms-menu');
     pick.append(summary, menu);
     summary.append(el('span', null, '⚑'), el('span', 'ld', 'Loading…'), el('wa-spinner'));
@@ -183,7 +144,7 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
         }
         parts.push(...data.milestones.map(m => {
             const b = el('button', ms?.id === m.id ? 'on' : null);
-            b.dataset.id = m.id;
+            b.dataset.id = String(m.id);
             b.append(el('span', null, m.title), el('small', null, m.total == null ? '' : `${m.closed}/${m.total}`));
             if (data.detected.includes(m.id)) b.title = 'Your MRs are in this milestone';
             b.onclick = () => choose(String(m.id));
@@ -208,7 +169,7 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
             const r = await api(`/api/milestones?project=${encodeURIComponent(project)}&milestone=${encodeURIComponent(want)}`);
             const text = JSON.stringify(toData(r.status, await r.text(), project));
             ok = true;
-            if (ok && busy === want) setBusy(null);
+            if (busy === want) setBusy(null);
             if (text && text !== json) { // redraw only on change, so an open menu stays put
                 json = text;
                 const data = /** @type {Milestones} */ (JSON.parse(text));

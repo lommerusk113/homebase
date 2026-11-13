@@ -1,10 +1,10 @@
 // Issues tab: the selected milestone's open issues in one lane per person (you first, then A–Z, then Unassigned).
 // Read-only towards GitLab; "Send to chat" only types into the bound chat session. Draws from milestone.js's /api/milestones data.
-import { $, el, ago, prChip, tooltip, waButton, store, hooks } from './core.js';
+import { $, el, link, ago, prChip, tooltip, waButton, store, hooks, firstName } from './core.js';
 import { ciPill } from './list.js';
 import { chatSession, sendText } from './chat.js';
 
-export const STATES = { doing: 'in progress', closable: 'can be closed', todo: 'not started', free: 'unassigned' };
+const STATES = { doing: 'in progress', closable: 'can be closed', todo: 'not started', free: 'unassigned' };
 
 // Open issues as cards with their state, in lane order: in progress, can be closed, not started, unassigned.
 /** @typedef {Issue & { st: keyof typeof STATES }} Card */
@@ -66,7 +66,6 @@ export const shortTitle = (title, milestone) => {
 };
 
 const COLOURS = ['#0969da', '#8250df', '#1a7f37', '#9a6700', '#bf3989', '#0a7b83'];
-const first = n => n.split(' ')[0];
 const initials = n => n.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 
 /** @type {Milestones | null | undefined} */
@@ -116,9 +115,7 @@ export function renderIssues(d = data) {
     if (d?.reason) {
         const box = el('div', 'welcome', emptyText(d));
         if (d.url) {
-            const a = el('a', null, 'Milestones page ↗');
-            a.href = d.url; a.target = '_blank'; a.rel = 'noopener';
-            box.append(' ', a);
+            box.append(' ', link(null, 'Milestones page ↗', d.url));
         }
         pane.replaceChildren(box);
         return;
@@ -146,8 +143,7 @@ export function emptyText(d) {
 /** @param {SelectedMilestone & { groups: IssueGroups }} ms @param {string | false} [hint] */
 function head(ms, hint) {
     const g = ms.groups, open = ms.total - ms.closed, h = el('div', 'is-head');
-    const title = el('div', 'is-title'), gl = el('a', null, 'GitLab ↗');
-    gl.href = ms.url; gl.target = '_blank'; gl.rel = 'noopener';
+    const title = el('div', 'is-title'), gl = link(null, 'GitLab ↗', ms.url);
     title.append(el('b', null, `⚑ ${ms.title}`), gl);
     if (hint) {
         const s = el('span', 'is-hint');
@@ -177,7 +173,7 @@ function lane({ who, me, list, closed }, n, ms) {
     const sec = el('section', 'lane' + (who ? '' : ' free')), side = el('div', 'who'), name = el('div', 'name');
     const av = el('span', 'av', who ? initials(who.name) : '?');
     if (who) av.style.background = COLOURS[n % COLOURS.length];
-    name.append(av, who ? first(who.name) : 'Unassigned');
+    name.append(av, who ? firstName(who.name) : 'Unassigned');
     if (who) name.title = `${who.name} (@${who.username})`;
     if (me) name.append(el('span', 'you', 'you'));
     const count = st => list.filter(c => c.st === st).length;
@@ -222,7 +218,7 @@ function more(c) {
         sendText(s.id, msg);
     };
     const note = el('span', 'msg', 'sends '); note.append(el('code', null, msg));
-    const gl = el('a', 'gl', 'Open in GitLab ↗'); gl.href = c.url; gl.target = '_blank'; gl.rel = 'noopener';
+    const gl = link('gl', 'Open in GitLab ↗', c.url);
     acts.append(send, tooltip(send, chatSession() ? `Types "${msg}" into the chat on the right` : 'No chat session to send to'), note, gl);
     box.append(acts);
     box.onclick = e => e.stopPropagation();
@@ -232,9 +228,9 @@ function more(c) {
 /** @param {Issue[]} done */
 function closedLine(done) {
     const d = el('details', 'is-closed'), s = el('summary');
-    s.append(el('b', null, `Closed · ${done.length}`), el('span', null, closedBy(done).map(([who, n]) => `${who === 'unassigned' ? who : first(who)} ${n}`).join(' · ')));
+    s.append(el('b', null, `Closed · ${done.length}`), el('span', null, closedBy(done).map(([who, n]) => `${who === 'unassigned' ? who : firstName(who)} ${n}`).join(' · ')));
     const chips = el('div', 'chips');
-    chips.append(...done.map(i => { const a = el('a', 'chip', `#${i.iid} ${i.title}`); a.href = i.url; a.target = '_blank'; a.rel = 'noopener'; a.title = i.title; return a; }));
+    chips.append(...done.map(i => { const a = link('chip', `#${i.iid} ${i.title}`, i.url); a.title = i.title; return a; }));
     d.append(s, chips);
     d.open = closedOpen;
     d.ontoggle = () => { closedOpen = d.open; };

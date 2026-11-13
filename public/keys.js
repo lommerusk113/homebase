@@ -1,11 +1,11 @@
 // Keyboard navigation over work-item rows (after Contado): j/k move, Enter/Space expand, o opens the MR, a runs the row action.
 // The same j/k/Enter/o work on the Issues tab's cards; 1 and 2 switch tabs.
-// The focused row is tracked by item key, so it survives the 3s re-renders; list.js calls hooks.rendered after each one.
-import { $, el, state, hooks } from './core.js';
+// The focused row is tracked by item key, so it survives the 3s re-renders; list.js and issues.js call hooks.rendered after each one.
+import { $, el, waButton, state, hooks } from './core.js';
 import { select, renderBoard } from './list.js';
 import { showTab, activeTab, collapseIssue } from './issues.js';
 
-export const SHORTCUTS = [
+const SHORTCUTS = [
     ['j / ↓', 'Next item'], ['k / ↑', 'Previous item'], ['Enter / Space', 'Expand or collapse, chat with its session'],
     ['o', 'Open the MR in a new tab'], ['a', "Run the row's action (asks first)"], ['/ or c', 'Focus the chat input'],
     ['Esc', 'Leave the input, or collapse the row'], ['1 / 2', 'Work tab / Issues tab'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['r', 'Refresh from GitLab/GitHub'], ['?', 'This overlay']
@@ -77,10 +77,8 @@ function help() {
 // so a stray Enter or a second a does nothing, and only a click (or Tab to Send) sends.
 /** @param {WorkItem} x */
 function confirmAction(x) {
-    const cancel = el('wa-button', null, 'Cancel'), go = el('wa-button', null, `Send "${x.action.label}"`);
+    const cancel = waButton('Cancel'), go = waButton(`Send "${x.action.label}"`, null, { variant: 'brand', appearance: 'accent' });
     cancel.slot = go.slot = 'footer';
-    cancel.setAttribute('size', 's'); cancel.setAttribute('appearance', 'outlined');
-    go.setAttribute('size', 's'); go.setAttribute('variant', 'brand');
     const body = el('div');
     body.append('Sends this to the item\'s Claude session:', el('pre', 'keys-msg', x.action.message));
     const d = dialog(`${x.action.label}?`, body, [cancel, go]);

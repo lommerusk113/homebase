@@ -70,7 +70,7 @@ function renderItems() {
         const list = items.filter(x => x.column === c.key);
         if (!list.length) return null;
         const h = el('h2', 'g-head'); h.append(dot(c.key), `${c.label} · ${list.length}`);
-        const sec = el('section', 'group'); sec.append(h, table(list));
+        const sec = el('section', `group g-${c.key}`); sec.append(h, table(list));
         return sec;
     }).filter(Boolean);
     const merged = items.filter(x => x.column === 'done');
@@ -234,7 +234,7 @@ export function attentionEvents(prevItems, nextItems, seen = () => 0) {
         const p = before.get(x.key), was = p?.column;
         const kind = x.column === 'needs-you' && was !== 'needs-you' ? 'needs-you'
             : x.column === 'ready' && was !== 'ready' ? 'ready'
-            : was === 'doing' && (x.column === 'review' || x.column === 'done') ? 'finished'
+            : was === 'doing' && (x.column === 'review' || x.column === 'done' || x.column === 'finished') ? 'finished'
             : failing(x) && !failing(p) ? 'failing' : null;
         return kind ? [{ kind, item: x }] : [];
     });

@@ -128,11 +128,12 @@ async function fetchPr(url) {
             pipeline,
             milestone: mr.milestone ? { id: mr.milestone.id, title: mr.milestone.title, due_date: mr.milestone.due_date } : null,
             target: mr.target_branch,
+            issue: issueOf(mr.title, mr.description),
             sha: mr.sha ?? mr.diff_refs?.head_sha ?? null
         };
     }
 
-    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,title,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid']);
+    const { stdout } = await run('gh', ['pr', 'view', url, '--json', 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid']);
     const pr = JSON.parse(stdout);
     const pipeline = pipelineOf(null, pr.statusCheckRollup, url);
     const reviews = pr.latestReviews ?? [];
@@ -150,8 +151,30 @@ async function fetchPr(url) {
         pipeline,
         milestone: pr.milestone ? { id: pr.milestone.number, title: pr.milestone.title, due_date: pr.milestone.dueOn?.slice(0, 10) ?? null } : null,
         target: pr.baseRefName,
+        issue: issueOf(pr.title, pr.body),
         sha: pr.headRefOid ?? null
     };
+}
+
+// The issue an MR works on: "#2219 - …" in its title, else "Closes #2219" in its description.
+export function issueOf(title, body) {
+    return title?.match(/#(\d+)/)?.[1] ?? body?.match(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i)?.[1] ?? null;
+}
+
+// Whether text names an MR: its URL, `!N` (`#N` on GitHub), or its issue as `#N`.
+export function mentionsMr(text, url, issue) {
+
+    if (!text || !url) {
+        return false;
+    }
+    if (text.includes(url)) {
+        return true;
+    }
+
+    const n = url.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
+    const ref = r => new RegExp(`(?<![\\w&!#])${r}(?!\\d)`).test(text);
+
+    return !!((n && ref(`${url.includes('/pull/') ? '#' : '!'}${n}`)) || (issue && ref(`#${issue}`)));
 }
 
 // Stale-while-revalidate so a slow CLI call never blocks the board after the first load.
@@ -623,6 +646,31 @@ export function turnState(entries, ageMs) {
     return { state: working ? 'working' : 'idle', since: working && known ? Date.parse(start?.timestamp) || null : null };
 }
 
+// The human prompts of the open turn (the one that started it, typed or queued, and any queued into it), as [{ at, text }].
+export function turnPrompts(entries, ageMs) {
+
+    if (turnState(entries, ageMs).state !== 'working') {
+        return [];
+    }
+
+    let prompts = [];
+    for (const e of entries) {
+        if (e.isSidechain) {
+            continue;
+        }
+        const a = e.type === 'attachment' ? e.attachment : null;
+        if (e.type === 'system' && e.subtype === 'turn_duration') {
+            prompts = [];
+        } else if (e.type === 'user' && e.turnPosition) {
+            prompts = isHumanPrompt(e) ? [{ at: e.timestamp, text: unwrapPasted(textOf(e)) }] : [];
+        } else if (a?.type === 'queued_command' && a.origin?.kind === 'human') {
+            prompts.push({ at: e.timestamp, text: unwrapPasted(typeof a.prompt === 'string' ? a.prompt : textOf({ message: { content: a.prompt } })) });
+        }
+    }
+
+    return prompts;
+}
+
 // Background subagents a master session started (depth 1 only; their own helpers are noise).
 export const STAGES = ['Explore', 'Implement', 'Verify', 'Ship', 'Done'];
 // Matched against each command of a Bash call, so they are anchored to its start.
@@ -800,6 +848,44 @@ export function formatTokens(n) {
     return `${+(n / d).toFixed(n >= 10 * d || d === 1 ? 0 : 1)}${unit} tok`;
 }
 
+// The branch checked out in a git worktree, from its `.git` file and HEAD; null when gone or detached.
+async function worktreeHead(path) {
+
+    try {
+        const gitdir = (await readFile(join(path, '.git'), 'utf8')).trim().replace(/^gitdir: /, '');
+        return (await readFile(join(gitdir, 'HEAD'), 'utf8')).match(/^ref: refs\/heads\/(.+)/)?.[1] ?? null;
+    } catch {
+        return null;
+    }
+}
+
+const prompts = new Map(); // subagent transcript path -> its first prompt, which falls out of the tail
+const PROMPT_BYTES = 32 * 1024;
+
+// A subagent's prompt is its transcript's first line; a longer line is kept as raw JSON, which still holds the refs.
+async function firstPrompt(path) {
+
+    if (!prompts.has(path)) {
+        const fh = await open(path, 'r');
+        try {
+            const buf = Buffer.alloc(PROMPT_BYTES);
+            const { bytesRead } = await fh.read(buf, 0, PROMPT_BYTES, 0);
+            const line = buf.toString('utf8', 0, bytesRead).split('\n')[0];
+            let text;
+            try {
+                text = textOf(JSON.parse(line));
+            } catch {
+                text = line;
+            }
+            prompts.set(path, text);
+        } finally {
+            await fh.close();
+        }
+    }
+
+    return prompts.get(path);
+}
+
 async function agents(sessionDir, now) {
 
     let names;
@@ -838,7 +924,10 @@ async function agents(sessionDir, now) {
             hit.meta = JSON.parse(await readFile(join(sessionDir, name), 'utf8'));
         }
 
-        out.push({ id, started: st.birthtimeMs, updated: st.mtimeMs, usage: await readUsage(path, st.size), ...summarizeAgent(hit.meta, hit.entries, now - st.mtimeMs, id) });
+        const a = summarizeAgent(hit.meta, hit.entries, now - st.mtimeMs, id);
+        // transcript gitBranch is the parent checkout's branch, not the worktree's, so ask the worktree
+        const head = a.status === 'done' ? null : await worktreeHead(hit.meta.worktreePath);
+        out.push({ id, started: st.birthtimeMs, updated: st.mtimeMs, usage: await readUsage(path, st.size), prompt: await firstPrompt(path), branches: [head ?? a.branch, hit.meta.worktreeBranch].filter(Boolean), ...a });
     }
 
     const rank = { running: 0, stopped: 1, done: 2 };
@@ -887,6 +976,7 @@ export function summarize(entries, ageMs) {
         prs: prLinks(entries),
         model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? null,
         status: status(lastTurn, ageMs, turnState(entries, ageMs)),
+        openPrompts: turnPrompts(entries, ageMs),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
         files: filesTouched(entries, meta.cwd),
@@ -940,6 +1030,7 @@ async function sessions() {
         s.items.forEach(i => { i.folder = folderFor(i.worktreePath, s.cwd); });
         delete s.agents; // folded into items
         delete s.gates;
+        delete s.openPrompts;
     }
 
     // /clear sent from Homebase: the new transcript keeps typing into the old tmux session
@@ -1077,6 +1168,33 @@ export function sameRepo(url, project) {
 
 const gateHeads = new Map(); // gate run -> MR head sha first seen with it
 
+// A prompt's first MR URL, first `!N` and first `#N`: what it is about, not the other issues it lists for context.
+const leadRefs = text => [PR_URL, /(?<![\w&!#])!\d+/, /(?<![\w&!#])#\d+/].map(re => text.match(re)?.[0]).filter(Boolean).join(' ');
+
+// An agent works on an MR when its description names `!N`, or, while not done, it is on the MR's branch, its
+// description names the MR or its issue, or its prompt's first MR or issue ref is it.
+export function worksOnMr(agent, url, prState) {
+
+    const n = url.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
+    if (new RegExp(`!${n}(?!\\d)`).test(agent.description ?? '')) {
+        return true;
+    }
+    if (agent.status === 'done') {
+        return false;
+    }
+
+    return (!!prState?.branch && (agent.branches ?? [agent.branch]).includes(prState.branch))
+        || mentionsMr(`${agent.description ?? ''} ${leadRefs(agent.prompt ?? '')}`, url, prState?.issue);
+}
+
+// The newest human prompt of an open turn in a session of the project that names the MR, as { at, text }, else null.
+export function requestFor(sessions, project, url, prState) {
+
+    const hits = sessions.filter(s => s.project === project).flatMap(s => s.openPrompts ?? []).filter(p => mentionsMr(p.text, url, prState?.issue));
+
+    return hits.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
+}
+
 export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads) {
 
     const byUrl = new Map();
@@ -1102,15 +1220,13 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         }
     }
 
-    const byRef = new Map([...byUrl.values()].map(it => [`${it.project}!${it.pr.match(/merge_requests\/(\d+)/)?.[1]}`, it]));
     const loose = [];
     for (const s of sessions) {
         for (const a of s.agents ?? []) {
             const own = { ...a, sessionId: s.id };
             const refs = new Set((a.prs ?? []).filter(u => sameRepo(u, s.project)).map(u => byUrl.get(u)).filter(Boolean));
-            for (const m of (a.description ?? '').matchAll(/!(\d+)/g)) {
-                const it = byRef.get(`${s.project}!${m[1]}`);
-                if (it) {
+            for (const it of byUrl.values()) {
+                if (it.project === s.project && worksOnMr(a, it.pr, prOf(it.pr))) {
                     refs.add(it);
                 }
             }
@@ -1130,7 +1246,10 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const prState = it.pr ? prOf(it.pr) : null;
         const gates = it.pr ? sessions.filter(s => s.project === it.project).flatMap(s => [...s.gates ?? [], ...(s.agents ?? []).flatMap(a => a.gates ?? [])]) : [];
         const stage = lifecycle(it.pr, prState, agent);
-        const col = itemColumn(prState, agent, !!it.pr);
+        // asked in the master's open turn but no agent runs for it yet: show it as in progress, without the button
+        const requested = it.pr && agent?.status !== 'running' && prState?.state !== 'merged' && prState?.state !== 'closed'
+            ? requestFor(sessions, it.project, it.pr, prState) : null;
+        const col = requested ? 'doing' : itemColumn(prState, agent, !!it.pr);
         const title = prState?.title ?? agent?.description ?? it.pr;
         const tokens = Object.fromEntries(Object.keys(USAGE_KEYS).map(k => [k, agents.reduce((n, a) => n + (a.usage?.[k] ?? 0), 0)]));
         const total = Object.values(tokens).reduce((a, b) => a + b, 0);
@@ -1155,8 +1274,9 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             body: agent?.body ?? '',
             files: agent?.files ?? [],
             activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
-            next: nextStep(prState, agent),
-            action: rowAction(it.pr, prState, agent, title),
+            requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
+            next: requested ? 'Claude is on it…' : nextStep(prState, agent),
+            action: requested ? null : rowAction(it.pr, prState, agent, title),
             gate: it.pr ? gateBadge(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
             tokens: total ? formatTokens(total) : null,
             tokensTitle: total ? `input ${tokens.input.toLocaleString('en')} · output ${tokens.output.toLocaleString('en')} · cache read ${tokens.cacheRead.toLocaleString('en')} · cache write ${tokens.cacheWrite.toLocaleString('en')}` : null,

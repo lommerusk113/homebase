@@ -5,6 +5,7 @@ import { refreshChat, initChat } from './chat.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
 import { initKeys } from './keys.js';
 import { renderIssues, showTab } from './issues.js';
+import { refreshLog } from './log.js';
 
 // One milestone pill for the selected project (none for "All"); it filters the list. Rebuilt only when the project changes.
 let pillFor = null, milestone = null;
@@ -140,7 +141,7 @@ async function refresh() {
         setOffline(false);
         updateTitle();
     } catch { setOffline(true); }
-    refreshChat(); refreshLimits(); renderReload();
+    refreshChat(); refreshLimits(); renderReload(); refreshLog();
 }
 
 // "Session ▬ 70%   Week ▬ 63%"; reset times live in each item's tooltip. Hidden without a dump.
@@ -175,7 +176,7 @@ const project = $('project');
 project.addEventListener('wa-after-hide', e => { if (e.target === project) renderProjects(); });
 project.addEventListener('change', () => {
     if (!project.value || project.value === state.project) return;
-    state.project = project.value; store.set('project', state.project); renderMilestone(); renderBoard(); refreshChat();
+    state.project = project.value; store.set('project', state.project); renderMilestone(); renderBoard(); refreshChat(); refreshLog();
 });
 for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) b.onclick = () => showTab(b.dataset.tab);
 showTab(store.get('tab'));

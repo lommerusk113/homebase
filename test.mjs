@@ -1361,14 +1361,15 @@ import { sessionRows, sessionTopic, sessionState, startingIssues } from './publi
 {
     const ses = (id, project, at, extra = {}) => /** @type {any} */ ({ id, project, lastActivity: at, cwd: `/r/${project}`, sidechain: false, ...extra });
     const list = [ses('a', 'p', 1), ses('b', 'p', 3), ses('c', 'p', 2), ses('d', 'q', 5), ses('w', 'p', 9, { cwd: '/r/p/.claude/worktrees/x' }), ses('s', 'p', 9, { sidechain: true })];
-    assert.deepEqual(sessionRows(list).map(g => [g.project, g.shown.map(s => s.id), g.older]), [['q', ['d'], 0], ['p', ['b', 'c'], 1]]);
-    assert.deepEqual(sessionRows(list, new Set(['p'])).find(g => g.project === 'p').shown.map(s => s.id), ['b', 'c', 'a']);
+    assert.deepEqual(sessionRows(list).map(g => [g.project, g.shown.map(s => s.id), g.hidden]), [['q', ['d'], 0], ['p', ['b'], 2]], 'folded: the newest');
+    assert.deepEqual(sessionRows(list, new Set(), 'a').find(g => g.project === 'p').shown.map(s => s.id), ['a'], 'folded: the chat session');
+    assert.deepEqual(sessionRows(list, new Set(['p'])).map(g => [g.project, g.shown.map(s => s.id), g.hidden]), [['q', ['d'], 0], ['p', ['b', 'c', 'a'], 0]]);
     assert.equal(sessionTopic({ topic: 'Perks simulator', lastPrompt: 'x' }), 'Perks simulator');
     assert.equal(sessionTopic({ topic: null, lastPrompt: '**fix** the  build' }), 'fix the build');
     assert.ok(sessionTopic({ topic: null, lastPrompt: 'word '.repeat(40) }).endsWith('…'));
     const now = Date.now();
-    assert.deepEqual(sessionState(ses('x', 'p', now - 12 * 60_000, { status: 'idle' })), { kind: 'idle', text: 'idle · 12m' });
-    assert.deepEqual(sessionState(ses('x', 'p', now, { status: 'working', since: now - 5 * 60_000 })), { kind: 'working', text: 'working · 5m' });
+    assert.deepEqual(sessionState(ses('x', 'p', now - 12 * 60_000, { status: 'idle' })), { kind: 'idle', text: 'idle' });
+    assert.deepEqual(sessionState(ses('x', 'p', now, { status: 'working', since: now - 5 * 60_000 })), { kind: 'working', text: 'working 5m' });
     assert.equal(sessionState(ses('x', 'p', now, { status: 'waiting', asking: true })).kind, 'asking');
 
     const m = ses('m', 'p', now, { status: 'working', now: 'Implement #2225', queued: ['then #2230 and #2231', 'Implement #2225'] });

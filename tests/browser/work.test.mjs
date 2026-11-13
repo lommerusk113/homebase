@@ -17,7 +17,7 @@ export default {
             done: [MR(100)]
         });
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters .g-head')].map(h => h.textContent)`),
-            ['Sessions', 'Needs you · 1', 'Doing · 2', 'In review · 1', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
+            ['Needs you · 1', 'Doing · 2', 'In review · 1', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.next').textContent`), 'Next: Agent stopped — check the chat');
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.act-btn').textContent`), 'Continue');
         assert.equal(await page.ev(`${row(MR(102))}.querySelector('.act-btn').textContent`), 'Merge + close issue');

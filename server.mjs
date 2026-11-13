@@ -105,7 +105,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             return res.end(JSON.stringify(value));
         };
         // POST + custom header: a cross-origin page can't send this without a preflight we never answer
-        const post = path => url.pathname === path && req.method === 'POST' && req.headers['x-codetool'] === '1';
+        const isPost = path => url.pathname === path && req.method === 'POST' && req.headers['x-codetool'] === '1';
         const hosts = LAN ? lanHosts(PORT) : localHosts(PORT);
         if (!allowedHost(req.headers.host, hosts) || !allowedOrigin(req.headers.origin, hosts)) {
             return deny(403, 'forbidden');
@@ -164,19 +164,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             if (url.pathname === '/api/sessions') {
                 return json(await sessions());
             }
-            if (post('/api/send')) {
+            if (isPost('/api/send')) {
                 await send(url.searchParams.get('id'), await readBody(req, MAX_SEND));
                 return res.end('ok');
             }
-            if (post('/api/clear')) {
+            if (isPost('/api/clear')) {
                 await clearChat(url.searchParams.get('id'));
                 return res.end('ok');
             }
-            if (post('/api/interrupt')) {
+            if (isPost('/api/interrupt')) {
                 await interrupt(url.searchParams.get('id'));
                 return res.end('ok');
             }
-            if (post('/api/open')) {
+            if (isPost('/api/open')) {
                 await openInEditor(url.searchParams.get('item'), url.searchParams.get('editor'));
                 return res.end('ok');
             }

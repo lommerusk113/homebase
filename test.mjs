@@ -213,6 +213,7 @@ assert.equal(nextStep(open(), null), 'Needs a reviewer');
 assert.equal(nextStep(open({ ready: true }), null), 'Approved — merge it');
 assert.equal(nextStep(open({ ci: 'failing' }), null), 'Pipeline failing');
 assert.equal(nextStep(open({ ci: 'running' }), null), 'Pipeline running');
+assert.equal(nextStep(open({ draft: true }), null), 'Draft — mark it ready for review');
 console.log('ok next');
 
 const mr = n => `https://gitlab.com/g/p/-/merge_requests/${n}`;
@@ -237,6 +238,11 @@ assert.equal(items[1].next, 'Waiting for review by Ann');
 const perks = now => workItems([{ id: 'm', project: 'tracker', prs: [], agents: [agent('perks', 0, { description: 'Build faction perks simulator' })] }], () => null, now);
 assert.deepEqual(perks(3600_000).map(i => [i.key, i.column, i.next]), [['perks', 'finished', 'Finished without an MR']]);
 assert.deepEqual(perks(3 * 3600_000), []);
+const one = prOf => workItems([{ id: 's', project: 'p', prs: [{ url: mr(5), at: 1 }], agents: [] }], prOf, 0, new Map())[0];
+assert.equal(one(() => open({ ready: true })).stageLabel, 'Approved');
+assert.deepEqual((({ column, stageLabel, next }) => [column, stageLabel, next])(one(() => ({ state: 'closed' }))), ['done', 'Closed', 'Closed without merging']);
+const verifying = workItems([{ id: 's', project: 'p', prs: [], agents: [agent('v', 1, { status: 'running', stage: 2 })] }], () => null, 0, new Map());
+assert.deepEqual(verifying.map(i => i.stageLabel), ['Verify']);
 console.log('ok items');
 
 import { tmuxArgs } from './server.mjs';
@@ -322,6 +328,7 @@ assert.deepEqual(ev([it('a', 'review')], [it('a', 'ready')]), [['ready', 'a']]);
 assert.deepEqual(ev([it('a', 'doing')], [it('a', 'ready')]), [['ready', 'a']]); // one event per item
 assert.deepEqual(ev([it('a', 'doing'), it('b', 'doing')], [it('a', 'review'), it('b', 'done')]), [['finished', 'a'], ['finished', 'b']]);
 assert.deepEqual(ev([it('a', 'doing')], []), [['finished', 'a']]); // agent without an MR drops off
+assert.deepEqual(ev([it('a', 'doing')], [it('a', 'finished')]), [['finished', 'a']]);
 assert.deepEqual(ev([it('a', 'review')], []), []);
 assert.deepEqual(ev([it('a', 'review')], [it('a', 'review', 'failing')]), [['failing', 'a']]);
 assert.deepEqual(ev([it('a', 'review', 'failing')], [it('a', 'review', 'failing')]), []);
@@ -378,6 +385,10 @@ assert.equal(rowAction(mr(4), t2, null, 'T').label, 'Fix & reply');
 assert.equal(itemColumn(withThreads(waiting, thr(0)), null, true), 'review'); // all resolved, no approval yet
 assert.equal(nextStep(withThreads(waiting, thr(0)), null), 'Waiting for review by Børre Stellander');
 assert.equal(withThreads(waiting, null), waiting); // no comments data yet
+// a stopped agent needs you even when its MR is ready; a finished one without an MR is "finished"
+assert.equal(itemColumn(open({ ready: true }), { status: 'stopped' }, true), 'needs-you');
+assert.equal(itemColumn(null, { status: 'stopped' }, false), 'needs-you');
+assert.equal(itemColumn(null, { status: 'done' }, false), 'finished');
 assert.equal(withThreads({ state: 'merged' }, thr(2)).changes, undefined);
 // the comment that moves an item into needs-you notifies once
 const nc = { ...cm('a', CT(2)), column: 'needs-you' };
@@ -979,6 +990,16 @@ import { createServer as netServer } from 'node:net';
         assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token, origin: 'http://evil.com' }, body: 'hi' })).status, 403);
         assert.equal((await call(s.port, { path: '/pair', method: 'POST', body: 'code=x' })).status, 404); // no pairing outside LAN mode
         assert.equal((await call(s.port, { path: '/api/refresh', method: 'POST', headers: { 'x-codetool': '1' } })).status, 401);
+        // without x-codetool a POST matches no route, even with the token
+        assert.equal((await call(s.port, { path: '/api/send?id=x', method: 'POST', headers: { 'x-homebase-token': token }, body: 'hi' })).status, 404);
+        assert.equal((await call(s.port, { path: '/api/refresh', method: 'POST', headers: { 'x-homebase-token': token } })).status, 404);
+        // only known sessions and plain transcript folders; HOME is empty, so nothing reaches tmux
+        const authed = { 'x-homebase-token': token };
+        for (const dir of ['..', 'a%2Fb']) {
+            assert.deepEqual((({ status, body }) => [status, body])(await call(s.port, { path: `/api/transcript?dir=${dir}&id=x`, headers: authed })), [500, 'bad path'], dir);
+        }
+        const sent = await call(s.port, { path: '/api/send?id=..%2Fx', method: 'POST', headers: { ...authed, 'x-codetool': '1' }, body: 'hi' });
+        assert.deepEqual([sent.status, sent.body], [500, 'bad id']);
         const refreshed = await call(s.port, { path: '/api/refresh', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token } });
         assert.equal(refreshed.status, 200);
         assert.equal(JSON.parse(refreshed.body).refreshing, false);
@@ -1067,10 +1088,11 @@ import { api, page, refreshToken } from './public/core.js';
 import { saveDraft, restoreDraft } from './public/chat.js';
 {
     // A stub server: /api/* wants the current token, / serves the page with the token and build it has now.
-    const real = globalThis.fetch, calls = [];
+    const real = globalThis.fetch, calls = [], codetool = [];
     let current = 'new', serveToken = 'new', build = 'b2';
     globalThis.fetch = async (path, opts = {}) => {
         calls.push(path);
+        codetool.push([path, opts.headers?.['x-codetool']]);
         await new Promise(r => setTimeout(r, 2));
         if (path === '/') return new Response(`<meta name="homebase-token" content="${serveToken}"><meta name="homebase-build" content="${build}">`);
         return new Response('ok', { status: opts.headers['x-homebase-token'] === current ? 200 : 401 });
@@ -1083,6 +1105,8 @@ import { saveDraft, restoreDraft } from './public/chat.js';
         assert.deepEqual(rs.map(r => r.status), [200, 200, 200]);
         assert.equal(count('/'), 1);
         assert.deepEqual([count('/api/a'), count('/api/b'), count('/api/c')], [2, 2, 2]);
+        // the retried POST still carries x-codetool, the GETs never do
+        assert.deepEqual(codetool.filter(([p]) => p.startsWith('/api/')).map(([p, h]) => `${p}:${h}`).sort(), ['/api/a:undefined', '/api/a:undefined', '/api/b:undefined', '/api/b:undefined', '/api/c:1', '/api/c:1']);
         assert.equal(page.token, 'new');
         assert.equal(page.updated, true, 'a different build id flags the update');
         // the new token works: no refresh

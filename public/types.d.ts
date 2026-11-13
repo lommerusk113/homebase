@@ -20,6 +20,10 @@ interface Session {
     files: string[];
     updated: number;
     created: number;
+    /** last human prompt or Claude text/tool call, not file mtime; null when the transcript has none */
+    lastActivity: number | null;
+    /** the transcript was written by a subagent */
+    sidechain: boolean;
     items: WorkItem[];
     tmux?: string;
     /** set on the session a /clear started: the id of the one it replaced */

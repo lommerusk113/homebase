@@ -3,11 +3,14 @@ import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable,
 import { renderBoard } from './list.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
+/** @param {Session} s */
 const isMaster = s => !s.sidechain && !/\/\.(claude\/)?worktrees\//.test(s.cwd || '');
 // The chat sticks to the bound session (chat:<project>, else the legacy global pick) and only moves on its own to a
 // Homebase /clear successor (clearedFrom). Nothing bound yet: the master with the latest real activity (lastActivity,
 // from the server), never file mtime, which an idle claude process still bumps with bookkeeping lines.
+/** @param {Session} s @returns {number} */
 const activity = s => s.lastActivity ?? s.created ?? 0;
+/** @param {Session[]} visible @param {string | null} bound @param {string | null} legacy @returns {Session | null} */
 export function pickChat(visible, bound, legacy) {
     const byId = id => id && visible.find(s => s.id === id);
     let s = byId(bound) || byId(legacy);
@@ -16,6 +19,7 @@ export function pickChat(visible, bound, legacy) {
 }
 // A master in the bound session's project started after it and active since: offered as "Switch", never switched to
 // on its own. Uses created and lastActivity, not mtime.
+/** @param {Session[]} visible @param {Session | null} s @returns {Session | null} */
 export const newerSession = (visible, s) => (s && visible.filter(x => x.id !== s.id && x.project === s.project && isMaster(x)
     && x.created > s.created && activity(x) > activity(s)).sort((a, b) => activity(b) - activity(a))[0]) || null;
 const bindKey = () => `chat:${state.project}`;

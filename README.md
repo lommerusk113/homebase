@@ -8,6 +8,8 @@ node server.mjs          # http://localhost:4321 (set PORT to change)
 
 The rate limits in the header come from `scripts/statusline.sh`: set it as Claude Code's `statusLine` command.
 
+Homebase remembers the MRs/PRs it has seen in `~/.claude/homebase/items.json` (`HOMEBASE_DIR` moves it), so the Work tab doesn't lose one when its link scrolls out of a transcript; deleting the file is safe.
+
 ## Checks
 
 Every merge must pass these:

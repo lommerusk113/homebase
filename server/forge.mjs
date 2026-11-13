@@ -376,3 +376,27 @@ export async function fetchComments(url) {
 
     return humanComments([...issue.map(c => ({ ...of(c, c.created_at), general: true })), ...inline.map(c => of(c, c.created_at)), ...reviews.filter(r => r.submitted_at).map(r => of(r, r.submitted_at))], me, 10, threads);
 }
+
+export const OPEN_MRS_TTL_MS = 120_000;
+
+// URLs of the signed-in user's open MRs (author or, on GitLab, assignee) or open PRs (author) in a project; read-only.
+// ponytail: first 100 of each list, no paging
+export async function openMrs(repo) {
+
+    const me = await signedIn(repo);
+    if (!me) {
+        return [];
+    }
+    if (!isGitLab(repo)) {
+        const q = encodeURIComponent(`repo:${repo.path} is:pr is:open author:${me.username}`);
+
+        return (await api(repo, `search/issues?per_page=100&q=${q}`)).items.map(i => i.html_url);
+    }
+    const base = `projects/${encodeURIComponent(repo.path)}/merge_requests?state=opened&per_page=100`;
+    const lists = await Promise.all(['author', 'assignee'].map(k => api(repo, `${base}&${k}_username=${me.username}`)));
+
+    return [...new Set(lists.flat().map(m => m.web_url))];
+}
+
+// The cached open-MR URLs of a project; never waits, so the first poll after start may lack them.
+export const openMrUrls = (project, repo) => swrEntry(`open:${project}`, OPEN_MRS_TTL_MS, () => openMrs(repo)).value ?? [];

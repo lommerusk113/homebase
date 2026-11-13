@@ -18,8 +18,12 @@ const MRS = {
     102: mr(102, { title: 'Ship the audit log', source_branch: 'audit-log', detailed_merge_status: 'mergeable', head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/2`, finished_at: ago(600) }, sha: 'bbb2222abcdef' }),
     103: mr(103, { title: 'Add CSV export', source_branch: '6-export', detailed_merge_status: 'not_approved', reviewers: [ann], head_pipeline: { status: 'running', web_url: `${GL}/-/pipelines/3`, updated_at: ago(60) }, sha: 'ccc3333' }),
     104: mr(104, { title: 'Tune the cache TTL', source_branch: 'cache-ttl', detailed_merge_status: 'not_approved', reviewers: [ann], head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/4`, finished_at: ago(800) }, sha: 'eee5555' }),
-    105: mr(105, { title: 'Credit note is not a payment', source_branch: '9-credit-note', detailed_merge_status: 'mergeable', head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/5`, finished_at: ago(700) }, sha: 'fff6666' })
+    105: mr(105, { title: 'Credit note is not a payment', source_branch: '9-credit-note', detailed_merge_status: 'mergeable', head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/5`, finished_at: ago(700) }, sha: 'fff6666' }),
+    106: mr(106, { title: 'Forge-only: never in a transcript', source_branch: 'forge-only', detailed_merge_status: 'not_approved', reviewers: [ann], head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/6`, finished_at: ago(500) }, sha: 'ggg7777' }),
+    107: mr(107, { title: 'Stored-only: scrolled out of every tail', source_branch: 'stored-only', detailed_merge_status: 'not_approved', head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/7`, finished_at: ago(400) }, sha: 'hhh8888' })
 };
+// the user's open MRs as the list endpoint returns them: authored (the merged one is not open), plus one only assigned
+const OPEN_AUTHORED = [101, 102, 103, 104, 106], OPEN_ASSIGNED = [102, 105];
 const DISCUSSIONS = {
     101: [{ notes: [{ id: 9001, system: false, author: ann, created_at: ago(3600), body: 'Please keep the **return URL** when redirecting.', resolvable: true, resolved: false }] }],
     104: [{ notes: [{ id: 9002, system: false, author: ann, created_at: ago(500), body: 'On your question about the TTL: I think it matters more than it looks.', resolvable: false }] }]
@@ -47,6 +51,12 @@ function glab(path) {
     }
     if (p === 'user') {
         return out(me);
+    }
+    if (p === 'projects/acme%2Falpha/merge_requests') {
+        const q = new URLSearchParams(path.split('?')[1]);
+        const ids = q.get('state') === 'opened' && q.get('author_username') === 'tester' ? OPEN_AUTHORED : q.get('assignee_username') === 'tester' ? OPEN_ASSIGNED : null;
+
+        return ids ? out(ids.map(i => MRS[i])) : fail(`stub: unexpected MR list ${path}`);
     }
     if (p === 'projects/acme%2Falpha/milestones') {
         return out([{ ...sprint, web_url: `${GL}/-/milestones/11`, group_id: null }]);
@@ -87,6 +97,9 @@ function gh(rest) {
     const [p] = rest[1].split('?');
     if (p === 'user') {
         return out({ login: 'tester', type: 'User' });
+    }
+    if (p === 'search/issues') {
+        return out({ items: [{ html_url: 'https://github.com/acme/beta/pull/7' }] });
     }
     if (p === 'repos/acme/beta/milestones') {
         return out([]);

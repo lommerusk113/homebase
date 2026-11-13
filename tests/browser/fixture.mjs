@@ -64,6 +64,14 @@ export function buildFixture(root) {
     const home = join(root, 'home'), bin = join(root, 'bin');
     mkdirSync(bin, { recursive: true });
 
+    // Homebase's own record (items.json): !107 is open but in no transcript and not in the forge's open list
+    mkdirSync(join(root, 'homebase'), { recursive: true });
+    writeFileSync(join(root, 'homebase', 'items.json'), JSON.stringify({ alpha: { [MR(107)]: {
+        title: 'Stored-only: scrolled out of every tail', issue: null, branch: 'stored-only', sessionId: IDS.master,
+        firstSeen: Date.now() - 86400_000, lastSeen: Date.now() - 3600_000, state: 'open', mergedAt: null,
+        agents: [{ id: 'agent-scrolled', description: 'Implement the stored thing', finished: Date.now() - 7200_000 }]
+    } } }));
+
     // git repos only so the server's `git remote get-url origin` names the project and its forge
     for (const [name, origin] of [['alpha', 'git@gitlab.com:acme/alpha.git'], ['beta', 'https://github.com/acme/beta.git'], ['gamma', 'git@gitlab.com:acme/gamma.git']]) {
         const repo = join(home, 'repos', name);

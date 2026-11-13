@@ -6,7 +6,8 @@ import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, readUsage, latestTopic, queuedPrompts, spawnPrompts } from './transcripts.mjs';
-import { PR_TTL_MS, prState, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
+import { loadStore, record, seeds, flush } from './store.mjs';
+import { PR_TTL_MS, openMrUrls, prState, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { workItems, milestoneOf } from './items.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor } from './tmux.mjs';
 
@@ -21,6 +22,7 @@ const AGENT_TOOL_MS = 30 * 60_000; // a tool call is still pending (long Bash, o
 const AGENT_THINK_MS = 10 * 60_000; // last entry is a tool result or user message, so the model is thinking
 const AGENT_IDLE_MS = 2 * 60_000; // ended its turn with text but never handed back
 
+const store = loadStore();
 const projects = new Map(); // cwd -> repo name
 export const repoPaths = new Map(); // repo name -> { host, path }, from the origin URL
 
@@ -418,18 +420,26 @@ async function sessionOf({ dir, file, path, st }, now) {
 // The work items of all sessions (their PRs/MRs and agents), with PR/MR state, human comments and milestone.
 async function itemsOf(out) {
 
-    const urls = new Set(out.flatMap(s => [...s.prs.map(p => p.url), ...s.agents.flatMap(a => a.prs)]));
+    // the user's open MRs from the forge, for projects with sessions: found even when no transcript names them
+    const forge = [...new Set(out.map(s => s.project))].filter(p => repoPaths.has(p))
+        .flatMap(project => openMrUrls(project, repoPaths.get(project)).map(url => ({ url, project })));
+    // MRs stored earlier, so a pr-link that scrolled out of a tail doesn't drop the item
+    const seeded = [...forge, ...seeds(store, Date.now(), MAX_AGE_MS)];
+    const urls = new Set([...out.flatMap(s => [...s.prs.map(p => p.url), ...s.agents.flatMap(a => a.prs)]), ...seeded.map(f => f.url)]);
     const states = new Map(await Promise.all([...urls].map(async u => [u, await prState(u)])));
     // human comments on open MRs only; never waits, so the first poll after start has none yet
     const comments = new Map([...urls].filter(u => states.get(u)?.state === 'open')
         .map(u => [u, swrEntry(`comments:${u}`, PR_TTL_MS, () => fetchComments(u)).value ?? null]));
 
-    const items = workItems(out, u => withThreads(states.get(u) ?? null, comments.get(u)));
+    const items = workItems(out, u => withThreads(states.get(u) ?? null, comments.get(u)), Date.now(), undefined, seeded);
     for (const it of items) {
         // only an already fetched milestone list; /api/milestones fills it for the projects on the board
         it.milestone = milestoneOf(it.prState, swr.get(`ms:${it.project}`)?.value ?? []);
         it.comments = comments.get(it.pr) ?? null;
     }
+    record(store, items);
+    flush(store);
+    items.forEach(i => { delete i.agentLinks; });
 
     return items;
 }

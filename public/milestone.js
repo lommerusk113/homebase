@@ -98,15 +98,16 @@ export function emptyPill(d) {
 }
 
 // The header pill for one project: "⚑ Supplier automation · 11 open" with a mini bar; its menu switches milestones.
-// The element polls /api/milestones itself while it is in the page and stops once removed.
+// The element polls /api/milestones itself until signal aborts (or it leaves the page), which also cancels an
+// in-flight fetch; an answer for another project or after the abort never reaches render or the callbacks.
 // onChange({ id, title } | null) runs when the selected milestone is known or changes. The choice is kept per project.
 // onData(response) runs with every changed /api/milestones response (the Issues tab draws from it).
 // onBusy(true|false) runs when a picked milestone starts and stops loading, so a view can dim its old data.
 /**
  * @param {string} project
- * @param {{ onChange?: (m: { id: number, title: string } | null) => void, onData?: (d: Milestones) => void, onBusy?: (busy: boolean) => void }} [opts]
+ * @param {{ signal?: AbortSignal, onChange?: (m: { id: number, title: string } | null) => void, onData?: (d: Milestones) => void, onBusy?: (busy: boolean) => void }} [opts]
  */
-export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
+export function milestoneSelector(project, { signal, onChange, onData, onBusy } = {}) {
     if (!styled) { document.head.append(el('style', null, CSS)); styled = true; }
     const key = `milestone:${project}`, pick = el('details', 'ms-pick'), summary = el('summary'), menu = el('div', 'ms-menu');
     pick.append(summary, menu);
@@ -197,16 +198,23 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
         menu.replaceChildren(...parts);
     }
 
+    const ctl = new AbortController();
+    const stop = () => { ctl.abort(); clearInterval(timer); document.removeEventListener('click', outside); document.removeEventListener('homebase:refresh', now); };
+    signal?.addEventListener('abort', stop);
+
     async function tick() {
         if (pick.isConnected) seen = true;
-        else if (seen) { clearInterval(timer); document.removeEventListener('click', outside); document.removeEventListener('homebase:refresh', now); return; }
+        else if (seen) stop();
+        if (ctl.signal.aborted) return;
         const want = store.get(key) ?? '';
         if (pending || (want === asked && Date.now() - at < (loading ? LOADING_MS : FETCH_MS))) return;
         pending = true;
         let ok = false;
         try {
-            const r = await api(`/api/milestones?project=${encodeURIComponent(project)}&milestone=${encodeURIComponent(want)}`);
-            const text = JSON.stringify(toData(r.status, await r.text(), project));
+            const r = await api(`/api/milestones?project=${encodeURIComponent(project)}&milestone=${encodeURIComponent(want)}`, { signal: ctl.signal });
+            const body = toData(r.status, await r.text(), project);
+            if (ctl.signal.aborted || body.project !== project) return; // a late answer after unmount, or for another project
+            const text = JSON.stringify(body);
             ok = true;
             if (ok && busy === want) setBusy(null);
             if (text && text !== json) { // redraw only on change, so an open menu stays put

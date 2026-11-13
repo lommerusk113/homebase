@@ -551,7 +551,56 @@ assert.equal(chatStatus({ working: true, asking: 'Pick one?', items: [] }).kind,
 const askedAt = new Date(now - 125 * 60_000).toISOString();
 assert.equal(chatStatus({ working: true, items: [{ role: 'user', at: askedAt }, { role: 'user', at: new Date(now).toISOString(), pending: true }] }, now).text, 'Claude is working… · 2h5m');
 assert.equal(chatStatus({ working: true, items: [] }, now).text, 'Claude is working…');
+assert.equal(chatStatus({ working: true, since: now - 2 * 60_000, items: [{ role: 'user', at: askedAt }] }, now).text, 'Claude is working… · 2m'); // turn start wins
 console.log('ok chat status');
+
+// Turn state, from real entry shapes (Claude Code 2.1.3xx).
+import { turnState } from './server.mjs';
+{
+    const at = s => `2026-11-13T09:${s}.000Z`;
+    const prompt = (uuid, s, origin = 'human', extra = {}) => ({ type: 'user', uuid, timestamp: at(s), origin: { kind: origin }, turnOrigin: origin, promptSource: 'typed', turnPosition: { promptIndex: 1, turnIndex: 1 }, message: { role: 'user', content: 'fix it' }, ...extra });
+    const reply = (uuid, s, extra = {}) => ({ type: 'assistant', uuid, timestamp: at(s), message: { content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn' }, ...extra });
+    const tool = (uuid, s, name = 'Bash') => ({ type: 'assistant', uuid, timestamp: at(s), message: { content: [{ type: 'tool_use', id: `t-${uuid}`, name, input: {} }], stop_reason: 'tool_use' } });
+    const td = s => ({ type: 'system', subtype: 'turn_duration', durationMs: 23240, timestamp: at(s), isMeta: false });
+    const interrupt = (parentUuid, s) => ({ type: 'user', parentUuid, timestamp: at(s), interruptedMessageId: 'msg_1', message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user]' }] } });
+    const queued = (s, mode = 'prompt') => ({ type: 'attachment', timestamp: at(s), attachment: { type: 'queued_command', commandMode: mode, prompt: 'also this' } });
+    const hour = 3_600_000;
+    const state = (entries, ageMs = 60_000) => turnState(entries, ageMs).state;
+
+    // a normal turn: working until turn_duration, idle after; elapsed counts from the prompt
+    const turn = [td('50:00'), prompt('p', '55:20'), tool('a', '55:30'), reply('b', '55:39')];
+    assert.deepEqual(turnState(turn, 1_000), { state: 'working', since: Date.parse(at('55:20')) });
+    assert.equal(state([...turn, td('55:43')], 1_000), 'idle');
+    // a long thinking gap: no write for 5 minutes and no turn_duration yet is still working; 30+ minutes is stale
+    assert.equal(state([td('40:00'), prompt('p', '50:00')], 5 * 60_000), 'working');
+    assert.equal(state([td('40:00'), prompt('p', '50:00')], hour), 'idle');
+    // Esc interrupt ends the turn without a turn_duration
+    assert.equal(state([...turn, interrupt('b', '55:41')]), 'idle');
+    // a prompt sent mid-turn interrupts it: the marker is parented on the new prompt, and the new turn goes on
+    assert.equal(state([...turn, prompt('q', '55:45', 'human', { promptSource: 'queued' }), interrupt('q', '55:45')]), 'working');
+    // an API error ends the turn (turn_duration follows, but the error alone is enough)
+    assert.equal(state([...turn, reply('e', '55:41', { isApiErrorMessage: true })]), 'idle');
+    // a turn retried after /login (assistant output after the end) is working again
+    assert.equal(state([...turn, reply('e', '55:41', { isApiErrorMessage: true }), td('55:41'), tool('r', '56:00')]), 'working');
+    // a task notification or peer message starts a turn; a notification user entry without turnPosition (already handled) doesn't
+    assert.equal(state([...turn, td('55:43'), prompt('n', '55:47', 'peer', { isMeta: true }), tool('c', '55:48')]), 'working');
+    assert.equal(state([...turn, td('55:43'), prompt('n', '55:47', 'task-notification')]), 'working');
+    assert.equal(state([...turn, td('55:43'), { type: 'user', timestamp: at('55:51'), origin: { kind: 'task-notification' }, message: { content: '<task-notification>…' } }]), 'idle');
+    // queued messages mid-turn don't end it, and the elapsed time stays on the turn's prompt
+    const q = turnState([...turn, queued('55:40'), queued('55:41', 'task-notification'), tool('c', '55:42')], 1_000);
+    assert.deepEqual(q, { state: 'working', since: Date.parse(at('55:20')) });
+    // asking: a pending AskUserQuestion
+    assert.equal(state([...turn, tool('k', '55:42', 'AskUserQuestion')]), 'asking');
+    // no turn markers (older Claude Code): the 10 s mtime heuristic
+    const old = [{ type: 'user', timestamp: at('55:20'), message: { content: 'fix it' } }, reply('b', '55:39')];
+    assert.deepEqual(turnState(old, 1_000), { state: 'working', since: null });
+    assert.equal(state(old, 60_000), 'idle');
+    // the session list uses it too
+    assert.equal(status(turn.at(-1), 5 * 60_000, turnState(turn, 5 * 60_000)), 'working');
+    assert.equal(status(turn.at(-1), 5 * 60_000, { state: 'asking' }), 'waiting');
+    assert.equal(summarize([...turn, td('55:43')], 1_000).status, 'waiting');
+    console.log('ok turn state');
+}
 
 import { findClearedSuccessor, tmuxFor } from './server.mjs';
 {

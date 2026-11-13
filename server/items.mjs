@@ -1,6 +1,6 @@
 // Work-item rules (pure): one item per MR or loose agent, its column, lifecycle stage, next step, row action, gate badge and milestone.
 import { PR_URL, USAGE_KEYS, formatDuration, formatTokens } from './transcripts.mjs';
-import { mentionsMr } from './forge.mjs';
+import { mentionsMr, mrNumber } from './forge.mjs';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
@@ -28,7 +28,7 @@ export function column(status, pr, hasPr) {
 // The newest gate run that names this MR by URL, !N / #N, or its branch.
 export function gateFor(runs, url, branch) {
 
-    const n = url.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
+    const n = mrNumber(url);
     const ref = new RegExp(`(?<![\\w/])${url.includes('/pull/') ? '#' : '!'}${n}\\b`);
 
     return runs.filter(r => r.text.includes(url) || ref.test(r.text) || (branch && r.text.includes(branch))).toSorted((a, b) => b.at - a.at)[0] ?? null;
@@ -146,7 +146,7 @@ export function rowAction(pr, prState, agent, title) {
         return null;
     }
 
-    const n = pr.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
+    const n = mrNumber(pr);
     const ref = `${pr.includes('/pull/') ? '#' : '!'}${n} (${pr})`;
     if (prState.changes) {
         return { label: 'Fix & reply', message: `Address the review comments on ${ref}, push, and reply in each thread.` };
@@ -167,8 +167,6 @@ export function rowAction(pr, prState, agent, title) {
     return null;
 }
 
-// One item per PR/MR (deduped across sessions and agents), plus running or stopped agents with no MR yet.
-// Agents whose description names a known MR (!123) count as work on it; finished agents without an MR are dropped.
 // A report that merely quotes another repo's MR (e.g. a Homebase agent citing a pracsys MR) isn't work on this project.
 export function sameRepo(url, project) {
     return url.match(/^https:\/\/[^/]+\/(.+?)(?:\/-)?\/(?:merge_requests|pull)\//)?.[1].split('/').pop() === project;
@@ -183,7 +181,7 @@ const leadRefs = text => [PR_URL, /(?<![\w&!#])!\d+/, /(?<![\w&!#])#\d+/].map(re
 // description names the MR or its issue, or its prompt's first MR or issue ref is it.
 export function worksOnMr(agent, url, prState) {
 
-    const n = url.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
+    const n = mrNumber(url);
     if (new RegExp(`!${n}(?!\\d)`).test(agent.description ?? '')) {
         return true;
     }
@@ -203,6 +201,8 @@ export function requestFor(sessions, project, url, prState) {
     return hits.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
 }
 
+// One item per PR/MR (deduped across sessions and agents), plus running or stopped agents with no MR yet.
+// Agents whose description names a known MR (!123) count as work on it; finished agents without an MR are dropped.
 export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads) {
 
     const byUrl = new Map();

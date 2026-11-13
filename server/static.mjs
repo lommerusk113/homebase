@@ -91,7 +91,6 @@ export async function serveVendor(rel, req, res) {
     }
 
     res.setHeader('content-type', VENDOR_TYPES[extname(file)]);
-    res.setHeader('x-content-type-options', 'nosniff');
     sendRevalidated(req, res, await readFile(file));
 
     return true;

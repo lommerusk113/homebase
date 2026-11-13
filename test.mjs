@@ -1210,7 +1210,7 @@ import { readTail } from './server.mjs';
 // A half-written agent .meta.json or a transcript deleted mid-poll skips that one entry, not the whole /api/sessions
 import { mkdirSync as mkdirS, symlinkSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { fetchComments } from './server/forge.mjs';
+import { fetchComments } from './server.mjs';
 {
     const home = mkdtempSync(pjoin(tmpdir(), 'hb-home-'));
     const dir = pjoin(home, '.claude', 'projects', 'p');

@@ -17,13 +17,13 @@ import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, COOKIE, cook
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
 
 export {
-    readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, pairAnswers, quickReplies,
+    readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, quickReplies,
     pendingAsk, pendingQuestion, turnState, turnPrompts, addUsage, readUsage, formatDuration, formatTokens
 } from './server/transcripts.mjs';
-export { repoName, repoPath, STAGES, runs, agentStage, agentStatus, summarizeAgent, status, lastActivity, summarize, folderFor } from './server/sessions.mjs';
-export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments } from './server/forge.mjs';
+export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, status, lastActivity, summarize, folderFor } from './server/sessions.mjs';
+export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments } from './server/forge.mjs';
 export {
-    column, gateFor, gateBadge, LIFECYCLE, lifecycle, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, slug, milestoneOf
+    column, gateFor, gateBadge, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf
 } from './server/items.mjs';
 export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones } from './server/milestones.mjs';
 export { limitsOf, peakLimits } from './server/limits.mjs';
@@ -91,7 +91,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     warmMilestones();
     createServer(async (req, res) => {
         const url = new URL(req.url, 'http://x');
-        for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+        for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
+            res.setHeader(k, v);
+        }
         const deny = (code, msg) => { res.statusCode = code; res.end(msg); };
         const hosts = LAN ? lanHosts(PORT) : localHosts(PORT);
         if (!allowedHost(req.headers.host, hosts) || !allowedOrigin(req.headers.origin, hosts)) {

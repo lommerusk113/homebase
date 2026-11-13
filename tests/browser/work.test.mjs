@@ -10,20 +10,27 @@ export default {
         await page.waitFor(`${row(MR(102))}`, { what: 'the !102 row' });
         assert.deepEqual(await page.ev(groups), {
             'needs-you': ['agent-stopped', MR(104)],
-            doing: [`starting:${IDS.worker}:7`, MR(101)],
+            doing: [`starting:${IDS.worker}:7`, MR(101), MR(105)],
             review: [MR(103)],
             ready: [MR(102)],
             finished: ['agent-notes'],
             done: [MR(100)]
         });
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters .g-head')].map(h => h.textContent)`),
-            ['Needs you · 2', 'Doing · 2', 'In review · 1', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
+            ['Needs you · 2', 'Doing · 3', 'In review · 1', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.next').textContent`), 'Next: Agent stopped — check the chat');
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.act-btn').textContent`), 'Continue');
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.next').textContent`), "💬 1 Next: Reply to Ann Reviewer's comment");
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.act-btn').textContent`), 'Fix & reply');
         assert.equal(await page.ev(`${row(MR(102))}.querySelector('.act-btn').textContent`), 'Merge + close issue');
         assert.ok(await page.ev(`${row(MR(101))}.querySelector('.ms-tag').textContent === '⚑ Sprint 12'`), 'milestone tag');
+    },
+
+    'a gate subagent links through the turn that spawned it, so its approved MR has no Merge button': async ({ page, open }) => {
+        await open();
+        await page.waitFor(`document.querySelector('#masters .g-doing tr[data-key="${MR(105)}"]')`, { what: 'the !105 row in Doing' });
+        assert.equal(await page.ev(`${row(MR(105))}.querySelector('.next').textContent`), 'Next: Gate: code review is exploring…');
+        assert.equal(await page.ev(`${row(MR(105))}.querySelector('.act-btn')`), null, 'no Merge button');
     },
 
     'badges: CI, comments and review gate': async ({ page, open }) => {

@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, readUsage, latestTopic, queuedPrompts } from './transcripts.mjs';
+import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, readUsage, latestTopic, queuedPrompts, spawnPrompts } from './transcripts.mjs';
 import { PR_TTL_MS, prState, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { workItems, milestoneOf } from './items.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor } from './tmux.mjs';
@@ -106,11 +106,36 @@ export function agentStage(uses, report, done) {
     return stage;
 }
 
+const LAUNCHED = /Command running in background with ID: (\w+)|Async agent launched successfully[\s\S]*?agentId: (\w+)/;
+const NOTIFIED = /<task-notification>\s*<task-id>(\w+)<\/task-id>/;
+
+// Background commands and subagents the agent launched that haven't sent their task notification yet.
+// ponytail: only the parsed tail; a launch older than it is missed
+export function backgroundTasks(entries) {
+
+    const open = new Set();
+    for (const e of entries) {
+        const blocks = e.type === 'user' && Array.isArray(e.message?.content) ? e.message.content : [];
+        for (const b of blocks.filter(b => b.type === 'tool_result')) {
+            const m = (typeof b.content === 'string' ? b.content : textOf({ message: { content: b.content } })).match(LAUNCHED);
+            if (m) {
+                open.add(m[1] ?? m[2]);
+            }
+        }
+        const told = e.type === 'attachment' && e.attachment?.type === 'queued_command' ? textOf({ message: { content: e.attachment.prompt } }) : e.type === 'user' ? textOf(e) : '';
+        open.delete(told.match(NOTIFIED)?.[1]);
+    }
+
+    return open;
+}
+
 // Status from the transcript tail: pending tool calls and thinking may be silent for long; an API error stops it at once.
+// meta.finished flips when the agent ends its turn, even while it waits on its own background work to resume it.
 export function agentStatus(meta, entries, ageMs) {
 
+    const waiting = backgroundTasks(entries).size > 0;
     if (meta.finished) {
-        return { status: 'done' };
+        return { status: waiting && ageMs < AGENT_TOOL_MS ? 'running' : 'done' };
     }
 
     const turns = entries.filter(e => e.type === 'assistant' || e.type === 'user');
@@ -134,7 +159,7 @@ export function agentStatus(meta, entries, ageMs) {
         prev = e.type;
     }
 
-    const limit = pending.size ? AGENT_TOOL_MS : last?.type === 'assistant' ? AGENT_IDLE_MS : AGENT_THINK_MS;
+    const limit = pending.size || waiting ? AGENT_TOOL_MS : last?.type === 'assistant' ? AGENT_IDLE_MS : AGENT_THINK_MS;
 
     return { status: ageMs < limit ? 'running' : 'stopped' };
 }
@@ -262,7 +287,7 @@ async function agents(sessionDir, now) {
             const a = summarizeAgent(hit.meta, hit.entries, now - st.mtimeMs, id);
             // transcript gitBranch is the parent checkout's branch, not the worktree's, so ask the worktree
             const head = a.status === 'done' ? null : await worktreeHead(hit.meta.worktreePath);
-            out.push({ id, started: st.birthtimeMs, updated: st.mtimeMs, usage: await readUsage(path, st.size), prompt: await firstPrompt(path), branches: [head ?? a.branch, hit.meta.worktreeBranch].filter(Boolean), ...a });
+            out.push({ id, toolUseId: hit.meta.toolUseId ?? null, started: st.birthtimeMs, updated: st.mtimeMs, usage: await readUsage(path, st.size), prompt: await firstPrompt(path), branches: [head ?? a.branch, hit.meta.worktreeBranch].filter(Boolean), ...a });
         } catch {
             continue;
         }
@@ -384,7 +409,10 @@ async function sessionOf({ dir, file, path, st }, now) {
     const s = summarize(entries, now - st.mtimeMs);
     const id = s.id ?? file.replace('.jsonl', '');
 
-    return { ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, agents: await agents(join(ROOT, dir, id, 'subagents'), now) };
+    const spawns = spawnPrompts(entries);
+    const subagents = (await agents(join(ROOT, dir, id, 'subagents'), now)).map(a => ({ ...a, spawnedFor: spawns.get(a.toolUseId) ?? null }));
+
+    return { ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, agents: subagents };
 }
 
 // The work items of all sessions (their PRs/MRs and agents), with PR/MR state, human comments and milestone.

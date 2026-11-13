@@ -37,7 +37,7 @@ export async function connect(port) {
         external: [], // requests that would have left localhost (failed instead)
         posts: [], // { url, body } of every POST, answered by route or passed through
         navigations: 0, // main-frame navigations
-        route: null, // (request) => { status, body, headers } to answer it here, or null to pass it on
+        route: null, // (request) => { status, body, headers } to answer it here, { delay } to pass it on after delay ms, or null to pass it on
 
         cmd(method, params = {}) {
             return new Promise((ok, fail) => {
@@ -121,6 +121,9 @@ export async function connect(port) {
                 page.posts.push({ url: q.url, body: q.postData ?? '' });
             }
             const r = page.route?.(q);
+            if (r?.delay) {
+                return sleep(r.delay).then(() => page.cmd('Fetch.continueRequest', { requestId: p.requestId })).catch(() => {});
+            }
             if (!r) {
                 return page.cmd('Fetch.continueRequest', { requestId: p.requestId }).catch(() => {}); // the page may have navigated away meanwhile
             }

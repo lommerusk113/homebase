@@ -90,15 +90,32 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
         busy = v;
         pick.classList.toggle('busy', v != null);
         onBusy?.(v != null);
-        if (v == null) { pick.querySelectorAll('wa-spinner.picked').forEach(s => s.remove()); return; }
+        if (v == null) {
+            pick.querySelectorAll('wa-spinner.picked').forEach(s => s.remove());
+            return;
+        }
         summary.append(el('wa-spinner', 'picked'));
         menu.querySelector(`button[data-id="${v}"]`)?.append(el('wa-spinner', 'picked'));
     };
-    const choose = v => { store.set(key, v); setBusy(v); pick.open = false; tick(); };
+    const choose = v => {
+        store.set(key, v);
+        setBusy(v);
+        pick.open = false;
+        tick();
+    };
     // a details menu doesn't close on outside clicks by itself
-    const outside = e => { if (pick.open && !e.composedPath().includes(pick)) pick.open = false; };
+    const outside = e => {
+        if (pick.open && !e.composedPath().includes(pick)) {
+            pick.open = false;
+        }
+    };
     document.addEventListener('click', outside);
-    pick.addEventListener('keydown', e => { if (e.key === 'Escape') { pick.open = false; e.stopPropagation(); } });
+    pick.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+            pick.open = false;
+            e.stopPropagation();
+        }
+    });
 
     /** @param {Milestones} data */
     function render(data) {
@@ -208,10 +225,15 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
                 render(data);
                 onData?.(data);
                 const sel = data.selected ? { id: data.selected.id, title: data.selected.title } : null;
-                if (sel?.id !== selectedId) { selectedId = sel?.id; onChange?.(sel); }
+                if (sel?.id !== selectedId) {
+                    selectedId = sel?.id;
+                    onChange?.(sel);
+                }
             }
         } catch {} finally {
-            at = ok ? Date.now() : 0; asked = want; pending = false; // a failed call retries on the next tick
+            at = ok ? Date.now() : 0;
+            asked = want;
+            pending = false; // a failed call retries on the next tick
         }
         if (loading) {
             setTimeout(tick, LOADING_MS);
@@ -222,7 +244,10 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
 
     const timer = setInterval(tick, POLL_MS);
     // the refresh button: fetch now instead of waiting out FETCH_MS
-    const now = () => { at = 0; tick(); };
+    const now = () => {
+        at = 0;
+        tick();
+    };
     document.addEventListener('homebase:refresh', now);
     tick();
     return pick;

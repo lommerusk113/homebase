@@ -1,7 +1,8 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
 import { api, $, el, state, store, saveTracked, inView, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks, setOffline, seenAt, authorSummary } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
-import { refreshChat, initChat } from './chat.js';
+import { refreshChat, initChat, bindChat, isMaster } from './chat.js';
+import { openNewProject, initNewProject } from './newproject.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
 import { initKeys } from './keys.js';
 import { renderIssues, showTab } from './issues.js';
@@ -100,7 +101,15 @@ function renderDialog() {
         return r;
     };
     const others = Object.keys(c).filter(p => !state.tracked.includes(p)).sort((a, b) => c[b] - c[a]);
+    const add = waButton('New project…', 'd-new-btn', { variant: 'brand', appearance: 'outlined' });
+    add.onclick = () => {
+        $('dlg').open = false;
+        openNewProject();
+    };
+    const top = el('div', 'd-new');
+    top.append(add);
     body.replaceChildren(
+        top,
         el('h4', null, 'On board'),
         ...(state.tracked.length ? [...state.tracked].sort().map(p => row(p, 'rm')) : [el('div', 'd-empty', 'None yet.')]),
         el('h4', null, 'Seen in recent sessions'),
@@ -111,6 +120,25 @@ $('manage').onclick = () => {
     renderDialog();
     $('dlg').open = true;
 };
+
+// A project made by "New project…": tracked, selected, and its chat bound as soon as its session is known.
+initNewProject(({ name, dir, sessionId }) => {
+    if (!state.tracked.includes(name)) {
+        state.tracked = [...state.tracked, name];
+        saveTracked();
+    }
+    state.project = name;
+    store.set('project', name);
+    renderProjects();
+    renderBoard();
+    if (sessionId) {
+        bindChat(sessionId);
+    } else {
+        state.starting = dir; // poll() binds the chat once a session in that folder shows up
+        refreshChat();
+    }
+    refreshLog();
+});
 
 // Projects are named after their git repo now; map saved names that were folder names (e.g. codetool → homebase).
 function migrateTracked() {
@@ -220,6 +248,11 @@ async function poll() {
             try {
                 sessionStorage.setItem('sessions', text);
             } catch {}
+            const started = state.starting && state.sessions.find(s => s.cwd === state.starting && isMaster(s));
+            if (started) {
+                state.starting = null;
+                bindChat(started.id);
+            }
             renderProjects();
             renderBoard();
             // diffed over all items, then filtered, so changing the project filter doesn't read as transitions

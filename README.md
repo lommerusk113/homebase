@@ -10,6 +10,27 @@ The rate limits in the header come from `scripts/statusline.sh`: set it as Claud
 
 Homebase remembers the MRs/PRs it has seen in `~/.claude/homebase/items.json` (`HOMEBASE_DIR` moves it), so the Work tab doesn't lose one when its link scrolls out of a transcript; deleting the file is safe.
 
+## New project
+
+The ☰ dialog's "New project…" button asks for a name, creates a GitHub repo for your personal account, clones it, starts a Claude chat in tmux (`cc-new-<name>`) and adds the project to your board.
+It needs a fine-grained token in the macOS keychain (`security add-generic-password -s gh-personal -a "$USER" -w`) that may create repositories.
+The token is read when you press Create, kept in memory, handed only to `gh` as `GH_TOKEN` (with `GITHUB_TOKEN` removed), and scrubbed from any error shown.
+If creating the repo fails nothing else happens; if cloning or starting the chat fails, the error says what already exists.
+
+The defaults can be overridden in `~/.claude/homebase/config.json` (`HOMEBASE_DIR` moves it). The file is optional and Homebase never writes it:
+
+```json
+{ "newProject": { "owner": "lommerusk113", "keychainService": "gh-personal", "sshHost": "github-personal", "baseDir": "~/IdeaProjects/Privat", "private": true } }
+```
+
+* `owner`: the GitHub account the repo is created under.
+* `keychainService`: the keychain item that holds the token.
+* `sshHost`: the SSH host alias used to clone (`git@<sshHost>:<owner>/<name>.git`).
+* `baseDir`: where the clone goes (`~` is expanded).
+* `private`: the default of the "Private" switch.
+
+Only the keys you give are overridden.
+
 ## Checks
 
 Every merge must pass these:

@@ -14,7 +14,7 @@ Files are copied unmodified.
 
 ## What was copied
 
-* `webawesome/` from `package/dist-cdn/`: `webawesome.loader.js`, the components the page uses (button, dialog, dropdown, dropdown-item, select, option, textarea, tooltip, badge, details, input, icon) plus those they render (spinner, popup, tag), every chunk those files import, and `styles/themes/default.css` with its `@import`s.
+* `webawesome/` from `package/dist-cdn/`: `webawesome.loader.js`, the components the page uses (button, dialog, dropdown, dropdown-item, select, option, textarea, tooltip, badge, details, input, icon, switch) plus those they render (spinner, popup, tag), every chunk those files import, and `styles/themes/default.css` with its `@import`s.
   Built-in icons are the `system` library, which is inline `data:` SVG, so no icon files are needed.
   The page sets the loader's base path with `data-webawesome="/vendor/webawesome"`.
 * `marked/marked.min.js` from `package/marked.min.js`.

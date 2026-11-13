@@ -13,6 +13,7 @@ import { milestones, warmMilestones } from './server/milestones.mjs';
 import { limits } from './server/limits.mjs';
 import { log } from './server/log.mjs';
 import { MAX_SEND } from './server/tmux.mjs';
+import { createProject, publicConfig } from './server/newproject.mjs';
 import { send, interrupt, clearChat, compactChat, editors, openInEditor } from './server/control.mjs';
 import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, COOKIE, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode, pairPage } from './server/security.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
@@ -32,6 +33,7 @@ export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
 export { tmuxArgs, tmuxFor, findClearedSuccessor, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
 export { editorsFrom, openInEditor, refuseIfBusy } from './server/control.mjs';
 export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode } from './server/security.mjs';
+export { validName, mergeConfig, loadConfig, createProject, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
 export { vendorPath } from './server/static.mjs';
 
 const PORT = Number(process.env.PORT ?? 4321);
@@ -185,6 +187,18 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             if (isPost('/api/open')) {
                 await openInEditor(url.searchParams.get('item'), url.searchParams.get('editor'));
                 return res.end('ok');
+            }
+            if (isPost('/api/projects/new')) {
+                let input;
+                try {
+                    input = JSON.parse(await readBody(req, 4096));
+                } catch {
+                    return deny(400, 'expected a JSON body');
+                }
+                return json(await createProject(input));
+            }
+            if (url.pathname === '/api/projects/config') {
+                return json(publicConfig());
             }
             // GET: { refreshing, lastRefreshedAt }; POST refreshes first and answers once the refetch is done
             if (url.pathname === '/api/refresh' && (req.method === 'GET' || req.headers['x-codetool'] === '1')) {

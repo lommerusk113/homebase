@@ -375,7 +375,7 @@ export async function refreshChat() {
         state.asking = null;
         updateTitle();
         setStatus(state.offline ? { error: true } : null);
-        return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.'));
+        return feed.replaceChildren(el('div', 'welcome', state.starting ? 'Chat starting…' : 'No session to chat with yet.'));
     }
 
     /** @type {Transcript} */

@@ -170,7 +170,7 @@ export function dedupe() {
 }
 
 // Starts a refresh when the entry is stale and returns the entry ({ value, pending, error }) without waiting.
-export function refresh(key, ttl, fn) {
+export function swrEntry(key, ttl, fn) {
 
     let hit = swr.get(key);
     if (!hit) {
@@ -228,7 +228,7 @@ export const refreshInfo = () => ({ refreshing: !!refreshRun, lastRefreshedAt })
 // Stale-while-revalidate like prState, for any key. Only the first load waits; a failed first load throws.
 export async function cached(key, ttl, fn) {
 
-    const hit = refresh(key, ttl, fn);
+    const hit = swrEntry(key, ttl, fn);
     if (hit.value === null) {
         await hit.pending;
     }

@@ -1,5 +1,5 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { api, $, el, state, store, saveTracked, shown, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks, setOffline, seenAt, authorSummary } from './core.js';
+import { api, $, el, state, store, saveTracked, inView, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks, setOffline, seenAt, authorSummary } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat } from './chat.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
@@ -185,7 +185,7 @@ hooks.refresh = async () => {
     reload.classList.remove('spin');
     reload.removeAttribute('aria-busy');
     document.dispatchEvent(new Event('homebase:refresh')); // the milestone pill refetches
-    refresh();
+    poll();
 };
 reload.onclick = () => hooks.refresh();
 api('/api/refresh').then(r => r.json()).then(/** @param {RefreshState} d */ d => {
@@ -194,7 +194,7 @@ api('/api/refresh').then(r => r.json()).then(/** @param {RefreshState} d */ d =>
 }).catch(() => {});
 
 let lastSessions = '', lastRender = 0;
-async function refresh() {
+async function poll() {
     try {
         const r = await api('/api/sessions');
         if (!r.ok) {
@@ -214,7 +214,7 @@ async function refresh() {
             renderBoard();
             // diffed over all items, then filtered, so changing the project filter doesn't read as transitions
             const items = state.sessions.flatMap(s => s.items || []);
-            attentionEvents(state.items, items, x => seenAt(x.pr)).filter(e => shown(e.item)).forEach(notify);
+            attentionEvents(state.items, items, x => seenAt(x.pr)).filter(e => inView(e.item)).forEach(notify);
             state.items = items;
         }
         setOffline(false);
@@ -293,5 +293,5 @@ try {
     renderProjects();
     renderBoard();
 } catch {}
-refresh();
-setInterval(refresh, 3000);
+poll();
+setInterval(poll, 3000);

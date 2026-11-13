@@ -3,6 +3,7 @@
 import { $, el, link, ago, prChip, tooltip, waButton, store, hooks, firstName } from './core.js';
 import { ciPill } from './list.js';
 import { chatSession, sendText } from './chat.js';
+import { refreshLog } from './log.js';
 
 const STATES = { doing: 'in progress', closable: 'can be closed', todo: 'not started', free: 'unassigned' };
 
@@ -88,18 +89,20 @@ let openIid = null, closedOpen = false;
 const sentAt = new Map(); // iid -> last send, so a re-render keeps the button showing it
 const SENT_SHOWN_MS = 3000; // how long "Sent ✓" shows; further sends of that issue are ignored meanwhile
 
-// Tabs: Work (the item list) and Issues. 1 and 2 switch (keys.js); the choice survives reloads.
+// Tabs: Work (the item list), Issues and Log. 1, 2 and 3 switch (keys.js); the choice survives reloads.
 /** @param {string | null} tab */
 export function showTab(tab) {
-    tab = tab === 'issues' ? 'issues' : 'work';
+    tab = tab === 'issues' || tab === 'log' ? tab : 'work';
     store.set('tab', tab);
     for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) {
         b.setAttribute('aria-selected', b.dataset.tab === tab);
     }
     $('masters').hidden = tab !== 'work';
     $('issues').hidden = tab !== 'issues';
+    $('log').hidden = tab !== 'log';
+    refreshLog();
 }
-export const activeTab = () => ($('issues').hidden ? 'work' : 'issues');
+export const activeTab = () => (!$('issues').hidden ? 'issues' : !$('log').hidden ? 'log' : 'work');
 
 // Grey placeholder lanes while the issues load: three lanes of a few cards.
 function skeleton() {

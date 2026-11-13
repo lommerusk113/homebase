@@ -11,6 +11,7 @@ import { sessions } from './server/sessions.mjs';
 import { refreshAll, refreshInfo } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
 import { limits } from './server/limits.mjs';
+import { log } from './server/log.mjs';
 import { MAX_SEND } from './server/tmux.mjs';
 import { send, interrupt, clearChat, editors, openInEditor } from './server/control.mjs';
 import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, COOKIE, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode, pairPage } from './server/security.mjs';
@@ -27,6 +28,7 @@ export {
 } from './server/items.mjs';
 export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones } from './server/milestones.mjs';
 export { limitsOf, peakLimits } from './server/limits.mjs';
+export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
 export { tmuxArgs, tmuxFor, findClearedSuccessor, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
 export { editorsFrom, openInEditor } from './server/control.mjs';
 export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode } from './server/security.mjs';
@@ -192,6 +194,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
             if (url.pathname === '/api/milestones') {
                 return json(await milestones(url.searchParams.get('project'), url.searchParams.get('milestone')));
+            }
+            if (url.pathname === '/api/log') {
+                return json(await log(url.searchParams.get('project')));
             }
             if (url.pathname === '/api/limits') {
                 return json(await limits());

@@ -43,7 +43,7 @@ export function repoPath(url) {
     return m ? { host: m[1], path: m[2] } : null;
 }
 
-async function projectOf(cwd) {
+export async function projectOf(cwd) {
 
     if (!cwd) {
         return '—';

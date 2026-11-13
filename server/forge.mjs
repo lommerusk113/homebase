@@ -30,6 +30,8 @@ export function pipelineOf(gl, checks, prUrl) {
 }
 
 // The coarse ci flag nextStep/rowAction read: 'failing', 'running' or null.
+// The MR/PR number in its URL, as a string.
+export const mrNumber = url => url.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
 export const ciOf = pipeline => ({ failed: 'failing', running: 'running', pending: 'running' })[pipeline?.status] ?? null;
 
 // Read-only PR/MR lookup via gh/glab. Returns { state: open|merged|closed, title, branch, reviewers, ready, changes, changesBy, draft, ci, pipeline } or null.
@@ -100,7 +102,7 @@ export function mentionsMr(text, url, issue) {
         return true;
     }
 
-    const n = url.match(/(?:merge_requests|pull)\/(\d+)/)?.[1];
+    const n = mrNumber(url);
     const ref = r => new RegExp(`(?<![\\w&!#])${r}(?!\\d)`).test(text);
 
     return !!((n && ref(`${url.includes('/pull/') ? '#' : '!'}${n}`)) || (issue && ref(`#${issue}`)));
@@ -237,7 +239,7 @@ export async function cached(key, ttl, fn) {
 
 export const isGitLab = repo => repo.host.includes('gitlab');
 // Every glab/gh call goes through one limiter, and an identical call already in flight is shared.
-export const apiSlot = limiter(MS_PARALLEL);
+const apiSlot = limiter(MS_PARALLEL);
 const apiOnce = dedupe();
 export const api = (repo, path) => {
 
@@ -262,6 +264,8 @@ export async function pages(repo, path) {
 
 // { name, username } of a GitLab user or a GitHub login (GitHub's issue payload has no display name).
 export const person = u => ({ name: u.name ?? u.login, username: u.username ?? u.login });
+// The signed-in user of a forge host, or null when the lookup fails.
+export const signedIn = repo => cached(`me:${repo.host}`, 24 * 3600_000, () => api(repo, 'user').then(person)).catch(() => null);
 
 // Plain-text start of an issue description, about max chars, for the expanded card: markdown marks, links and headings dropped.
 export function excerpt(md, max = 300) {
@@ -326,7 +330,7 @@ export async function fetchComments(url) {
         return humanComments([], null); // neither GitLab nor GitHub
     }
     const repo = { host: (gl ?? gh)[1] };
-    const me = (await cached(`me:${repo.host}`, 24 * 3600_000, () => api(repo, 'user').then(person)).catch(() => null))?.username;
+    const me = (await signedIn(repo))?.username;
     const author = u => ({ ...person(u), bot: u.bot, type: u.type });
 
     if (gl) {

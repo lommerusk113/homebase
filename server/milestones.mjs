@@ -1,5 +1,5 @@
 // Milestones tab: open milestones, their issue groups and linked MRs, cached per project, warmed at start.
-import { api, pages, cached, refresh, swr, prs, isGitLab, person, excerpt, pipelineOf } from './forge.mjs';
+import { api, pages, cached, refresh, swr, prs, isGitLab, person, signedIn, excerpt, pipelineOf } from './forge.mjs';
 import { sameRepo, milestoneOf } from './items.mjs';
 import { sessions, repoPaths } from './sessions.mjs';
 
@@ -124,7 +124,7 @@ export async function milestones(project, pick) {
     try {
         [list, me] = await Promise.race([late, Promise.all([
             cached(`ms:${project}`, MS_LIST_TTL_MS, () => fetchMilestones(repo)),
-            cached(`me:${repo.host}`, 24 * 3600_000, () => api(repo, 'user').then(person)).catch(() => null)
+            signedIn(repo)
         ])]);
     } catch (e) {
         return noMilestones(project, repo, 'error', e.stderr?.trim() || e.message);

@@ -6,6 +6,7 @@ export const COLUMNS = [
     { key: 'doing', label: 'Doing', color: '--c-doing' },
     { key: 'review', label: 'In review', color: '--c-review' },
     { key: 'ready', label: 'Ready to merge', color: '--c-ready' },
+    { key: 'finished', label: 'Recently finished', color: '--c-done' },
     { key: 'done', label: 'Merged', color: '--c-done' }
 ];
 export const COL = Object.fromEntries(COLUMNS.map(c => [c.key, c]));

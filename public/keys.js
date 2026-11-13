@@ -30,7 +30,7 @@ export function stepKey(keys, current, dir) {
 }
 
 let focusKey = null, prev = null, prevAt = 0;
-const ROWS = '#masters tr[data-key], #issues .card[data-key]'; // work rows and issue cards; the hidden tab's are skipped below
+const ROWS = '#masters tr[data-key], #masters .s-row[data-key], #issues .card[data-key]'; // work rows, session rows and issue cards; the hidden tab's are skipped below
 /** @returns {HTMLElement[]} */
 const rows = () => [.../** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(ROWS))].filter(r => r.checkVisibility()); // skips the folded Merged group
 const rowOf = key => rows().find(r => r.dataset.key === key);
@@ -101,12 +101,12 @@ function onKey(e) {
     if (!action) return;
     // Enter/Space on a link or button inside the page keep their native meaning
     if (action === 'toggle' && e.target !== document.body && !/** @type {Element} */ (e.target).matches?.(ROWS)) return;
-    const x = itemOf(focusKey), card = focusKey?.startsWith('issue:') ? rowOf(focusKey) : null;
+    const x = itemOf(focusKey), card = /^(issue|session):/.test(focusKey ?? '') ? rowOf(focusKey) : null;
     const run = {
         next: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, 1)),
         prev: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, -1)),
         toggle: () => (card ? card.click() : x && rowOf(x.key) && select(x)),
-        open: () => (card ? window.open(card.dataset.url, '_blank', 'noopener') : x?.pr && window.open(x.pr, '_blank', 'noopener')),
+        open: () => (card ? card.dataset.url && window.open(card.dataset.url, '_blank', 'noopener') : x?.pr && window.open(x.pr, '_blank', 'noopener')),
         act: () => x?.action && x.sessionId && rowOf(x.key)?.querySelector('.act-btn') && confirmAction(x),
         chat: () => $('msg').focus(),
         escape: () => { if (activeTab() === 'issues') collapseIssue(); else if (state.selected) { state.selected = null; renderBoard(); } },

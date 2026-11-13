@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, readUsage } from './transcripts.mjs';
+import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, readUsage, latestTopic, queuedPrompts } from './transcripts.mjs';
 import { PR_TTL_MS, prState, refresh, fetchComments, withThreads, swr } from './forge.mjs';
 import { workItems, milestoneOf } from './items.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor } from './tmux.mjs';
@@ -14,6 +14,7 @@ const run = promisify(execFile);
 
 const MAX_AGE_MS = Number(process.env.MAX_AGE_DAYS ?? 3) * 864e5;
 const WAITING_MS = 30 * 60_000;
+const FINISHED_MS = 2 * 3600_000; // a finished subagent counts on the Sessions strip this long
 const AGENT_TAIL_BYTES = 128 * 1024;
 // Silence an unfinished subagent may keep before it counts as stopped, by what its transcript ends on.
 const AGENT_TOOL_MS = 30 * 60_000; // a tool call is still pending (long Bash, own background subagent)
@@ -315,6 +316,8 @@ export function summarize(entries, ageMs) {
     const turns = entries.filter(e => (e.type === 'user' || e.type === 'assistant') && !e.isSidechain);
     const meta = entries.findLast(e => e.cwd) ?? {};
     const lastTurn = turns.at(-1);
+    const turn = turnState(entries, ageMs);
+    const openPrompts = turnPrompts(entries, ageMs);
 
     return {
         id: meta.sessionId,
@@ -324,8 +327,13 @@ export function summarize(entries, ageMs) {
         pr: last('pr-link')?.prUrl ?? null,
         prs: prLinks(entries),
         model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? null,
-        status: status(lastTurn, ageMs, turnState(entries, ageMs)),
-        openPrompts: turnPrompts(entries, ageMs),
+        status: status(lastTurn, ageMs, turn),
+        asking: turn.state === 'asking',
+        since: turn.since,
+        topic: latestTopic(entries),
+        openPrompts,
+        now: openPrompts.at(-1)?.text ?? null, // the human prompt the running turn works on (newest absorbed one wins)
+        queued: queuedPrompts(entries).map(q => q.text),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
         sidechain: !!entries.find(e => e.type === 'user' || e.type === 'assistant')?.isSidechain, // a transcript a subagent wrote
@@ -384,6 +392,7 @@ export async function sessions() {
     }
     for (const s of out) {
         s.items = items.filter(i => i.sessionId === s.id);
+        s.subagents = { running: s.agents.filter(a => a.status === 'running').length, finished: s.agents.filter(a => a.status === 'done' && now - a.updated < FINISHED_MS).length };
         s.items.forEach(i => { i.folder = folderFor(i.worktreePath, s.cwd); });
         delete s.agents; // folded into items
         delete s.gates;

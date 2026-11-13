@@ -18,7 +18,7 @@ import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './
 
 export {
     readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, pairAnswers, quickReplies,
-    pendingAsk, pendingQuestion, turnState, turnPrompts, addUsage, readUsage, formatDuration, formatTokens
+    pendingAsk, pendingQuestion, turnState, turnPrompts, latestTopic, queuedPrompts, addUsage, readUsage, formatDuration, formatTokens
 } from './server/transcripts.mjs';
 export { repoName, repoPath, STAGES, runs, agentStage, agentStatus, summarizeAgent, status, lastActivity, summarize, folderFor } from './server/sessions.mjs';
 export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments } from './server/forge.mjs';

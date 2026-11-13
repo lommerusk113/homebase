@@ -63,11 +63,17 @@ assert.equal(st([call('old'), result('x'), ended], 3 * MIN).status, 'stopped'); 
 assert.deepEqual(st([call('a'), result('a'), { type: 'assistant', isApiErrorMessage: true, message: { content: [{ type: 'text', text: 'API Error' }] } }], 1_000), { status: 'stopped', stopReason: 'api-error' });
 console.log('ok agents');
 
-import { splitTldr, toolSummary, chatItems, pendingQuestion, sendSteps } from './server.mjs';
+import { splitTldr, splitTopic, toolSummary, chatItems, pendingQuestion, sendSteps } from './server.mjs';
 assert.deepEqual(splitTldr('Long text.\n\n**TLDR:** It works.'), { tldr: 'It works.', text: 'Long text.' });
 assert.equal(splitTldr('a\n**TLDR**: fixed **now**').tldr, 'fixed **now**');
 assert.equal(splitTldr('**TL;DR: shipped**').tldr, 'shipped');
 assert.equal(splitTldr('we use tldraw here').tldr, null);
+assert.deepEqual(splitTopic('**▸ Chat topic headers**\n\nBody.\n\n**TLDR:** done'), { topic: 'Chat topic headers', text: 'Body.\n\n**TLDR:** done' });
+assert.deepEqual(splitTopic('\n  ▸ Plain topic\nBody'), { topic: 'Plain topic', text: 'Body' });
+assert.equal(splitTopic('**▸ Colon topic:**\nx').topic, 'Colon topic');
+assert.equal(splitTopic('**▸ Colon outside**:\nx').topic, 'Colon outside');
+assert.deepEqual(splitTopic('Body first\n**▸ Not a topic**'), { topic: null, text: 'Body first\n**▸ Not a topic**' });
+assert.deepEqual(splitTopic('**▸ Only topic**'), { topic: 'Only topic', text: '' });
 assert.equal(splitTldr('a\nTLDR: plain').tldr, 'plain');
 assert.equal(splitTldr('a\ntldr: lower').tldr, 'lower');
 assert.equal(splitTldr('a\n**TLDR:** bold label').tldr, 'bold label');
@@ -89,6 +95,8 @@ const chat = chatItems([
 assert.deepEqual(chat.map(i => [i.role, i.text, i.tldr]), [
     ['user', 'do it', undefined], ['assistant', 'On it.', null], ['tools', 'Ran 1 command · read 1 file', undefined], ['assistant', 'Done.', 'shipped']
 ]);
+const topical = chatItems([{ type: 'user', message: { content: 'go' } }, say('**▸ Topic headers**\n\nDone.\n\n**TLDR:** shipped')]).at(-1);
+assert.deepEqual([topical.topic, topical.text, topical.tldr], ['Topic headers', 'Done.', 'shipped']);
 // Two replies with only an agent message / task notification between them stay separate bubbles, each with its own TLDR.
 const twoTurns = chatItems([
     { type: 'user', message: { content: 'security issues?' } },

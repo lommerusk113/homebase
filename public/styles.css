@@ -111,6 +111,7 @@ a.chip:hover { text-decoration:underline; }
 .bubble.user { align-self:flex-end; max-width:85%; background:var(--accent-bg); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-bottom-right-radius:4px; }
 .bubble.interrupted { border-left:3px solid var(--c-interrupted); background:color-mix(in srgb, var(--c-interrupted) 7%, var(--bg)); }
 .bubble .body.fold { max-height:9.6em; overflow:hidden; -webkit-mask-image:linear-gradient(#000 60%, transparent); mask-image:linear-gradient(#000 60%, transparent); }
+.bubble .b-topic { font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); margin:6px 0 -4px; }
 .bubble .b-note { font-size:11px; color:var(--muted); margin:-6px 0 6px; }
 .bubble.failed { border-color:var(--c-needs); }
 .bubble.failed .b-note { color:var(--c-needs); }

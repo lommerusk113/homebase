@@ -120,7 +120,7 @@ async function fetchPr(url) {
             reviewers: (mr.reviewers ?? []).map(r => r.name),
             ready: status === 'mergeable',
             // ponytail: the MR payload doesn't say which reviewer blocked; the /reviewers endpoint would
-            changes: status === 'requested_changes' || status === 'discussions_not_resolved',
+            changes: status === 'requested_changes' || status === 'discussions_not_resolved' || mr.blocking_discussions_resolved === false,
             changesBy: [],
             draft: !!mr.draft,
             ci: { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? ciOf(pipeline),
@@ -795,12 +795,14 @@ async function sessions() {
 
     const urls = new Set(out.flatMap(s => [...s.prs.map(p => p.url), ...s.agents.flatMap(a => a.prs)]));
     const states = new Map(await Promise.all([...urls].map(async u => [u, await prState(u)])));
-    const items = workItems(out, u => states.get(u) ?? null);
+    // human comments on open MRs only; never waits, so the first poll after start has none yet
+    const comments = new Map([...urls].filter(u => states.get(u)?.state === 'open')
+        .map(u => [u, refresh(`comments:${u}`, PR_TTL_MS, () => fetchComments(u)).value ?? null]));
+    const items = workItems(out, u => withThreads(states.get(u) ?? null, comments.get(u)));
     for (const it of items) {
         // only an already fetched milestone list; /api/milestones fills it for the projects on the board
         it.milestone = milestoneOf(it.prState, swr.get(`ms:${it.project}`)?.value ?? []);
-        // human comments on open MRs only; never waits, so the first poll after start has none yet
-        it.comments = it.prState?.state === 'open' ? refresh(`comments:${it.pr}`, PR_TTL_MS, () => fetchComments(it.pr)).value : null;
+        it.comments = comments.get(it.pr) ?? null;
     }
     for (const s of out) {
         s.items = items.filter(i => i.sessionId === s.id);
@@ -876,6 +878,10 @@ export function nextStep(prState, agent) {
     }
     if (!prState) {
         return 'Open the MR to check its state';
+    }
+    if (prState.unresolved) {
+        const n = prState.unresolved;
+        return `Address ${n} unresolved comment${n === 1 ? '' : 's'}${prState.unresolvedBy?.length ? ` from ${prState.unresolvedBy.join(', ')}` : ''}`;
     }
     if (prState.changes) {
         const by = prState.changesBy?.length ? prState.changesBy : prState.reviewers ?? [];
@@ -1159,6 +1165,17 @@ export function excerpt(md, max = 300) {
     return t.slice(0, max).replace(/\s+\S*$/, '') + '…';
 }
 
+// Unresolved human review threads on an open MR count as changes requested: GitLab reports not_approved, not
+// discussions_not_resolved, while approval is also missing.
+export function withThreads(prState, comments) {
+
+    if (prState?.state !== 'open' || !comments?.unresolved) {
+        return prState;
+    }
+
+    return { ...prState, changes: true, unresolved: comments.unresolved, unresolvedBy: comments.unresolvedBy };
+}
+
 // Bots by flag (GitLab bot, GitHub type Bot) or name: GitHub's foo[bot], GitLab's project_1_bot_x tokens, *-bot / bot-*.
 export const isBot = a => !!(a?.bot || a?.type === 'Bot' || /\[bot\]$|(^|[-_])bot($|[-_])/i.test(a?.username ?? ''));
 
@@ -1169,7 +1186,9 @@ export function humanComments(raw, me, max = 10) {
         .toSorted((a, b) => Date.parse(b.at) - Date.parse(a.at))
         .map(c => ({ id: c.id, author: c.author.name, at: c.at, excerpt: excerpt(c.body, 140), url: c.url, ...(c.resolved != null && { resolved: c.resolved }) }));
 
-    return { latestAt: items[0]?.at ?? null, count: items.length, items: items.slice(0, max) };
+    const open = items.filter(c => c.resolved === false);
+
+    return { latestAt: items[0]?.at ?? null, count: items.length, items: items.slice(0, max), unresolved: open.length, unresolvedBy: [...new Set(open.map(c => c.author))] };
 }
 
 // Read-only: one glab call per MR (notes carry resolvable/resolved, so no discussions call), three gh calls per PR.

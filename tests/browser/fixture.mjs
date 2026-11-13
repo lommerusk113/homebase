@@ -103,7 +103,7 @@ export function buildFixture(root) {
         tool('Skill', { skill: 'review-gate', args: `!102 ${MR(102)}` }, 2690),
         said('**Verdict: ready** for !102 at commit bbb2222.\n\nTLDR: ready', 2680),
         done(2670),
-        link(100, 2660), link(101, 2650), link(103, 2640),
+        link(100, 2660), link(101, 2650), link(103, 2640), link(104, 2630),
         prompt('Draft the release notes', 200),
         said('**▸ Release**\nThe fix is merged and the notes are drafted.\n\nThe notes cover the login redirect, the CSV export and the audit log, with links to each MR.\n\nTLDR: Should I tag the release now or wait for QA?', 120),
         done(110)

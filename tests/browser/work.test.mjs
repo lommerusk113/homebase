@@ -9,7 +9,7 @@ export default {
         await open();
         await page.waitFor(`${row(MR(102))}`, { what: 'the !102 row' });
         assert.deepEqual(await page.ev(groups), {
-            'needs-you': ['agent-stopped'],
+            'needs-you': ['agent-stopped', MR(104)],
             doing: [`starting:${IDS.worker}:7`, MR(101)],
             review: [MR(103)],
             ready: [MR(102)],
@@ -17,9 +17,11 @@ export default {
             done: [MR(100)]
         });
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters .g-head')].map(h => h.textContent)`),
-            ['Needs you · 1', 'Doing · 2', 'In review · 1', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
+            ['Needs you · 2', 'Doing · 2', 'In review · 1', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.next').textContent`), 'Next: Agent stopped — check the chat');
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.act-btn').textContent`), 'Continue');
+        assert.equal(await page.ev(`${row(MR(104))}.querySelector('.next').textContent`), "💬 1 Next: Reply to Ann Reviewer's comment");
+        assert.equal(await page.ev(`${row(MR(104))}.querySelector('.act-btn').textContent`), 'Fix & reply');
         assert.equal(await page.ev(`${row(MR(102))}.querySelector('.act-btn').textContent`), 'Merge + close issue');
         assert.ok(await page.ev(`${row(MR(101))}.querySelector('.ms-tag').textContent === '⚑ Sprint 12'`), 'milestone tag');
     },

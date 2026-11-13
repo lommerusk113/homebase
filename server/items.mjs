@@ -98,11 +98,23 @@ export function nextStep(prState, agent) {
     if (!prState) {
         return 'Open the MR to check its state';
     }
-    if (prState.unresolved) {
-        const n = prState.unresolved;
-        const comments = `comment${n === 1 ? '' : 's'}${prState.unresolvedBy?.length ? ` from ${prState.unresolvedBy.join(', ')}` : ''}`;
+    if (prState.unresolved || prState.unanswered) {
+        const u = prState.unresolved ?? 0, g = prState.unanswered ?? 0;
+        const by = [...new Set([...prState.unresolvedBy ?? [], ...prState.unansweredBy ?? []])];
+        const from = by.length ? ` from ${by.join(', ')}` : '';
+        const comments = n => `comment${n === 1 ? '' : 's'}`;
 
-        return prState.ready ? `Approved — ${n} unanswered ${comments}` : `Address ${n} unresolved ${comments}`;
+        if (prState.ready) {
+            return `Approved — ${u + g} unanswered ${comments(u + g)}${from}`;
+        }
+        if (!g) {
+            return `Address ${u} unresolved ${comments(u)}${from}`;
+        }
+        if (!u) {
+            return g === 1 && by.length ? `Reply to ${by[0]}'s comment` : `Answer ${g} ${comments(g)}${from}`;
+        }
+
+        return `Address ${u} unresolved thread${u === 1 ? '' : 's'} and answer ${g} ${comments(g)}${from}`;
     }
     if (prState.changes) {
         const by = prState.changesBy?.length ? prState.changesBy : prState.reviewers ?? [];

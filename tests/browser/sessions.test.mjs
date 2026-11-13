@@ -11,8 +11,8 @@ export default {
         assert.equal(await page.ev(`document.querySelector('#masters .g-sessions .g-head')`), null, 'no heading');
         assert.equal(await page.ev(`document.querySelectorAll('#masters .s-row').length`), 1, 'only the bound session');
         assert.equal(await page.ev(`${srow(IDS.master)}.querySelector('.s-topic').textContent`), 'Release');
-        assert.equal(await page.ev(`${srow(IDS.master)}.querySelector('.s-counts').textContent`), '1 running', 'finished subagents only in the tooltip');
-        assert.match(await page.ev(`document.querySelector('wa-tooltip[for="' + ${srow(IDS.master)}.id + '"]').textContent`), /Subagents: 1 running, 2 finished/);
+        assert.equal(await page.ev(`${srow(IDS.master)}.querySelector('.s-counts').textContent`), '2 running', 'finished subagents only in the tooltip');
+        assert.match(await page.ev(`document.querySelector('wa-tooltip[for="' + ${srow(IDS.master)}.id + '"]').textContent`), /Subagents: 2 running, 2 finished/);
         assert.equal(await page.ev(`${srow(IDS.master)}.querySelector('.s-chat')?.textContent`), 'chat', 'the bound session is marked');
         assert.equal(await page.ev(`document.querySelector('#masters .s-more').textContent`), '+2 sessions');
         await page.click('#masters .s-more');

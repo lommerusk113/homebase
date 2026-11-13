@@ -859,7 +859,9 @@ console.log('ok vendor');
 for (const f of readdirSync(new URL('./public', import.meta.url)).filter(f => f.endsWith('.js') && f !== 'core.js')) {
     const src = readFileSync(new URL(`./public/${f}`, import.meta.url), 'utf8');
     assert.doesNotMatch(src, /\bfetch\(/, `${f} uses fetch() instead of api()`);
-    if (/\bapi\(/.test(src)) assert.match(src, /import \{[^}]*\bapi\b[^}]*\} from '\.\/core\.js'/, `${f} calls api() without importing it`);
+    if (/\bapi\(/.test(src)) {
+        assert.match(src, /import \{[^}]*\bapi\b[^}]*\} from '\.\/core\.js'/, `${f} calls api() without importing it`);
+    }
 }
 console.log('ok api wrapper');
 
@@ -890,13 +892,19 @@ import { localHosts, lanHosts, isPrivateIp, allowedHost, allowedOrigin, tokenOk,
     assert.ok(!cookieOk('homebase_session=', undefined));
     assert.ok(isLoopback('127.0.0.1') && isLoopback('::1') && !isLoopback('192.168.1.5'));
     assert.ok(bindOk('127.0.0.1', false) && !bindOk('0.0.0.0', false) && bindOk('0.0.0.0', true) && !bindOk('192.168.1.5', true));
-    for (const ip of ['10.0.0.1', '172.16.0.1', '172.31.255.255', '192.168.1.5']) assert.ok(isPrivateIp(ip), ip);
-    for (const ip of ['172.15.0.1', '172.32.0.1', '8.8.8.8', '127.0.0.1', 'fe80::1', undefined]) assert.ok(!isPrivateIp(ip), ip);
+    for (const ip of ['10.0.0.1', '172.16.0.1', '172.31.255.255', '192.168.1.5']) {
+        assert.ok(isPrivateIp(ip), ip);
+    }
+    for (const ip of ['172.15.0.1', '172.32.0.1', '8.8.8.8', '127.0.0.1', 'fe80::1', undefined]) {
+        assert.ok(!isPrivateIp(ip), ip);
+    }
     const ifaces = { lo0: [{ address: '127.0.0.1' }], en0: [{ address: 'fe80::1' }, { address: '192.168.1.5' }], utun: [{ address: '100.64.0.1' }] };
     assert.deepEqual(lanHosts(4321, 'Mac', ifaces), [...local, 'mac.local:4321', '192.168.1.5:4321']);
     assert.deepEqual(lanHosts(4321, 'Mac.local', {}), [...local, 'mac.local:4321']);
     const hit = rateLimiter(5, 60_000, 900_000);
-    for (let i = 0; i < 5; i++) assert.ok(hit('a', 1000));
+    for (let i = 0; i < 5; i++) {
+        assert.ok(hit('a', 1000));
+    }
     assert.ok(!hit('a', 1000)); // 6th try locks out
     assert.ok(hit('b', 1000)); // per key
     assert.ok(!hit('a', 70_000)); // still locked after the window
@@ -1047,7 +1055,9 @@ import { createServer as netServer } from 'node:net';
             assert.equal((await call(l.port, { ...lan, path: '/api/limits', headers: { cookie: jar, 'x-homebase-token': token } })).status, 200);
             assert.equal((await call(l.port, { ...lan, path: '/api/limits', headers: { 'x-homebase-token': token } })).status, 401); // token alone isn't enough off-machine
             assert.ok(meta((await call(l.port)).body), 'loopback needs no pairing');
-            for (let i = 0; i < 3; i++) assert.equal((await call(l.port, { ...lan, path: '/pair', method: 'POST', headers: form, body: 'code=WRONG123' })).status, 403);
+            for (let i = 0; i < 3; i++) {
+                assert.equal((await call(l.port, { ...lan, path: '/pair', method: 'POST', headers: form, body: 'code=WRONG123' })).status, 403);
+            }
             assert.equal((await call(l.port, { ...lan, path: '/pair', method: 'POST', headers: form, body: `code=${code}` })).status, 429); // 6th try: locked out, even with the right code
         } finally { l.stop(); }
         console.log('ok LAN pairing');
@@ -1063,7 +1073,9 @@ import { limiter, dedupe } from './server.mjs';
         started.push(n); peak = Math.max(peak, ++active);
         await new Promise(r => setTimeout(r, 5));
         active--;
-        if (fail) throw new Error(`job ${n}`);
+        if (fail) {
+            throw new Error(`job ${n}`);
+        }
         return n;
     });
     const results = await Promise.allSettled([job(1), job(2, true), job(3), job(4), job(5)]);
@@ -1094,7 +1106,9 @@ import { saveDraft, restoreDraft } from './public/chat.js';
         calls.push(path);
         codetool.push([path, opts.headers?.['x-codetool']]);
         await new Promise(r => setTimeout(r, 2));
-        if (path === '/') return new Response(`<meta name="homebase-token" content="${serveToken}"><meta name="homebase-build" content="${build}">`);
+        if (path === '/') {
+            return new Response(`<meta name="homebase-token" content="${serveToken}"><meta name="homebase-build" content="${build}">`);
+        }
         return new Response('ok', { status: opts.headers['x-homebase-token'] === current ? 200 : 401 });
     };
     const count = p => calls.filter(c => c === p).length;

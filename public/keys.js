@@ -68,16 +68,22 @@ function focusRow(key) {
     if (!r) {
         return;
     }
-    focusKey = key; syncRows();
+    focusKey = key;
+    syncRows();
     r.focus({ preventScroll: true });
     r.scrollIntoView({ block: 'nearest' });
 }
 
 function dialog(label, body, footer = []) {
     const d = el('wa-dialog');
-    d.setAttribute('label', label); d.setAttribute('light-dismiss', '');
+    d.setAttribute('label', label);
+    d.setAttribute('light-dismiss', '');
     d.append(body, ...footer);
-    d.addEventListener('wa-after-hide', e => { if (e.target === d) d.remove(); });
+    d.addEventListener('wa-after-hide', e => {
+        if (e.target === d) {
+            d.remove();
+        }
+    });
     document.body.append(d);
     d.open = true;
     return d;
@@ -111,7 +117,8 @@ function onKey(e) {
         return;
     }
     const action = keyAction(e, Date.now() - prevAt < 1500 ? prev : null);
-    prev = e.key; prevAt = Date.now();
+    prev = e.key;
+    prevAt = Date.now();
     if (!action) {
         return;
     }
@@ -127,12 +134,29 @@ function onKey(e) {
         open: () => (card ? card.dataset.url && window.open(card.dataset.url, '_blank', 'noopener') : x?.pr && window.open(x.pr, '_blank', 'noopener')),
         act: () => x?.action && x.sessionId && rowOf(x.key)?.querySelector('.act-btn') && confirmAction(x),
         chat: () => $('msg').focus(),
-        escape: () => { if (activeTab() === 'issues') collapseIssue(); else if (state.selected) { state.selected = null; renderBoard(); } },
+        escape: () => {
+            if (activeTab() === 'issues') {
+                collapseIssue();
+            } else if (state.selected) {
+                state.selected = null;
+                renderBoard();
+            }
+        },
         work: () => showTab('work'),
         issues: () => showTab('issues'),
         help,
-        project: () => { const p = $('project'); p.focus(); p.open = true; },
-        milestone: () => { const m = /** @type {HTMLDetailsElement | null} */ (document.querySelector('.ms-pick:not([hidden])')); if (m) { m.open = true; m.querySelector('summary').focus(); } },
+        project: () => {
+            const p = $('project');
+            p.focus();
+            p.open = true;
+        },
+        milestone: () => {
+            const m = /** @type {HTMLDetailsElement | null} */ (document.querySelector('.ms-pick:not([hidden])'));
+            if (m) {
+                m.open = true;
+                m.querySelector('summary').focus();
+            }
+        },
         refresh: () => hooks.refresh(),
         g: () => {}
     }[action];
@@ -142,6 +166,11 @@ function onKey(e) {
 
 export function initKeys() {
     hooks.rendered = syncRows;
-    document.addEventListener('focusin', e => { const r = /** @type {HTMLElement | null} */ (e.target instanceof Element ? e.target.closest(ROWS) : null); if (r) focusKey = r.dataset.key; });
+    document.addEventListener('focusin', e => {
+        const r = /** @type {HTMLElement | null} */ (e.target instanceof Element ? e.target.closest(ROWS) : null);
+        if (r) {
+            focusKey = r.dataset.key;
+        }
+    });
     document.addEventListener('keydown', onKey);
 }

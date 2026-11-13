@@ -119,7 +119,8 @@ const NO_GROUPS = { closable: [], doing: [], assigned: [], unassigned: [], done:
 export function renderIssues(d = data) {
     data = d;
     const badge = $('tab-free'), free = d?.selected?.groups?.unassigned.length ?? 0;
-    badge.hidden = !free; badge.textContent = `${free} unassigned`;
+    badge.hidden = !free;
+    badge.textContent = `${free} unassigned`;
     const pane = $('issues'), hadFocus = pane.contains(document.activeElement);
     const ms = d?.selected;
     if (d === undefined || ms?.loading) {
@@ -179,10 +180,17 @@ function head(ms, hint) {
         if (!n) {
             continue;
         }
-        const i = el('i'); i.style.flex = String(n); i.style.background = `var(${c})`; bar.append(i);
-        const s = el('span'); s.style.setProperty('--c', `var(${c})`); s.append(el('i', 'sw'), `${n} ${label}`); legend.append(s);
+        const i = el('i');
+        i.style.flex = String(n);
+        i.style.background = `var(${c})`;
+        bar.append(i);
+        const s = el('span');
+        s.style.setProperty('--c', `var(${c})`);
+        s.append(el('i', 'sw'), `${n} ${label}`);
+        legend.append(s);
     }
-    const mid = el('div'); mid.append(bar, legend);
+    const mid = el('div');
+    mid.append(bar, legend);
     const due = el('div', 'is-due');
     if (ms.due) {
         due.append('due ', el('b', null, new Date(ms.due + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })));
@@ -220,7 +228,8 @@ function lane({ who, me, list, closed }, n, ms) {
 /** @param {Card} c @param {SelectedMilestone} ms */
 function card(c, ms) {
     const open = openIid === c.iid, a = el('article', `card ${c.st}${open ? ' open' : ''}`);
-    a.dataset.key = `issue:${c.iid}`; a.dataset.url = c.url;
+    a.dataset.key = `issue:${c.iid}`;
+    a.dataset.url = c.url;
     a.setAttribute('aria-expanded', open);
     const top = el('div', 'top');
     top.append(el('span', 'mono', `#${c.iid}`), el('span', 'st', STATES[c.st]), el('span', 'age', c.updated ? ago(Date.parse(c.updated)) : ''));
@@ -241,7 +250,10 @@ function card(c, ms) {
     if (open) {
         a.append(more(c));
     }
-    a.onclick = () => { openIid = open ? null : c.iid; renderIssues(); };
+    a.onclick = () => {
+        openIid = open ? null : c.iid;
+        renderIssues();
+    };
     return a;
 }
 
@@ -259,10 +271,13 @@ function more(c) {
         if (!s || Date.now() - (sentAt.get(c.iid) ?? 0) < 3000) {
             return;
         }
-        sentAt.set(c.iid, Date.now()); renderIssues(); setTimeout(() => renderIssues(), 3000);
+        sentAt.set(c.iid, Date.now());
+        renderIssues();
+        setTimeout(() => renderIssues(), 3000);
         sendText(s.id, msg);
     };
-    const note = el('span', 'msg', 'sends '); note.append(el('code', null, msg));
+    const note = el('span', 'msg', 'sends ');
+    note.append(el('code', null, msg));
     const gl = link('gl', 'Open in GitLab ↗', c.url);
     acts.append(send, tooltip(send, chatSession() ? `Types "${msg}" into the chat on the right` : 'No chat session to send to'), note, gl);
     box.append(acts);
@@ -275,7 +290,11 @@ function closedLine(done) {
     const d = el('details', 'is-closed'), s = el('summary');
     s.append(el('b', null, `Closed · ${done.length}`), el('span', null, closedBy(done).map(([who, n]) => `${who === 'unassigned' ? who : firstName(who)} ${n}`).join(' · ')));
     const chips = el('div', 'chips');
-    chips.append(...done.map(i => { const a = link('chip', `#${i.iid} ${i.title}`, i.url); a.title = i.title; return a; }));
+    chips.append(...done.map(i => {
+        const a = link('chip', `#${i.iid} ${i.title}`, i.url);
+        a.title = i.title;
+        return a;
+    }));
     d.append(s, chips);
     d.open = closedOpen;
     d.ontoggle = () => { closedOpen = d.open; };
@@ -287,6 +306,7 @@ export function collapseIssue() {
     if (openIid == null) {
         return false;
     }
-    openIid = null; renderIssues();
+    openIid = null;
+    renderIssues();
     return true;
 }

@@ -13,8 +13,27 @@ export const COLUMNS = [
 export const COL = Object.fromEntries(COLUMNS.map(c => [c.key, c]));
 export const LIFECYCLE = ['Implement', 'Verify', 'Review', 'Approved', 'Merged'];
 
-export const store = { get: k => { try { return window.localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { window.localStorage.setItem(k, v); } catch {} } };
-const parse = v => { try { return JSON.parse(v) || []; } catch { return []; } };
+export const store = {
+    get: k => {
+        try {
+            return window.localStorage.getItem(k);
+        } catch {
+            return null;
+        }
+    },
+    set: (k, v) => {
+        try {
+            window.localStorage.setItem(k, v);
+        } catch {}
+    }
+};
+const parse = v => {
+    try {
+        return JSON.parse(v) || [];
+    } catch {
+        return [];
+    }
+};
 // ponytail: tracked list lives in this browser's localStorage; move to a projects.json if you want it across browsers
 /**
  * @type {{ sessions: Session[], tracked: string[], project: string, selected: string | null, chat: string | null, unfold: Set<string>,
@@ -76,7 +95,11 @@ export async function api(path, opts = {}) {
  */
 export const $ = id => /** @type {any} */ (document.getElementById(id));
 // Failed poll (network, 401, non-OK): header "Offline", list dimmed with its "Disconnected" note. The next good poll clears it.
-export const setOffline = off => { state.offline = off; $('offline').hidden = !off; document.body.classList.toggle('disconnected', off); };
+export const setOffline = off => {
+    state.offline = off;
+    $('offline').hidden = !off;
+    document.body.classList.toggle('disconnected', off);
+};
 /**
  * @template {string} K
  * @param {K} tag
@@ -84,7 +107,16 @@ export const setOffline = off => { state.offline = off; $('offline').hidden = !o
  * @param {string | number | null} [text]
  * @returns {K extends keyof HTMLElementTagNameMap ? HTMLElementTagNameMap[K] : HTMLElement}
  */
-export const el = (tag, cls, text) => { const e = /** @type {any} */ (document.createElement(tag)); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+export const el = (tag, cls, text) => {
+    const e = /** @type {any} */ (document.createElement(tag));
+    if (cls) {
+        e.className = cls;
+    }
+    if (text != null) {
+        e.textContent = text;
+    }
+    return e;
+};
 // Web Awesome button; attributes rather than properties so it works before the element is upgraded.
 /** @param {string} text @param {string | null} [cls] @param {Record<string, any>} [attrs] */
 export const waButton = (text, cls, attrs = {}) => {
@@ -106,10 +138,19 @@ export const tooltip = (target, text) => {
 
 // A link that opens in a new tab.
 /** @param {string | null} cls @param {string} text @param {string} href */
-export const link = (cls, text, href) => { const a = el('a', cls, text); a.href = href; a.target = '_blank'; a.rel = 'noopener'; return a; };
+export const link = (cls, text, href) => {
+    const a = el('a', cls, text);
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    return a;
+};
 
 export const plain = t => (t || '').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim();
-export const ago = ms => { const s = (Date.now() - ms) / 1000; return s < 60 ? 'now' : s < 3600 ? `${s / 60 | 0}m` : s < 86400 ? `${s / 3600 | 0}h` : `${s / 86400 | 0}d`; };
+export const ago = ms => {
+    const s = (Date.now() - ms) / 1000;
+    return s < 60 ? 'now' : s < 3600 ? `${s / 60 | 0}m` : s < 86400 ? `${s / 3600 | 0}h` : `${s / 86400 | 0}d`;
+};
 // Rate-limit window -> % left and time to reset, as Contado's footer shows it: "70%" and "1h20m" / "4d22h" / "45m".
 /** @param {LimitWindow} w */
 export const limitLeft = (w, now = Date.now()) => {
@@ -143,17 +184,31 @@ export const limitView = (week, w, now = Date.now()) => {
         tip: `${left}% left of your ${week ? 'weekly' : '5-hour'} limit · resets in ${until} (${when})`,
     };
 };
-export const prLabel = url => { const m = url.match(/merge_requests\/(\d+)/) || url.match(/pull\/(\d+)/); return m ? (url.includes('merge_requests') ? '!' : '#') + m[1] : 'PR'; };
+export const prLabel = url => {
+    const m = url.match(/merge_requests\/(\d+)/) || url.match(/pull\/(\d+)/);
+    return m ? (url.includes('merge_requests') ? '!' : '#') + m[1] : 'PR';
+};
 /** @param {{ pr: string, prState?: PrState | null }} s */
-export const prChip = s => { const a = el('a', 'chip mono', `${prLabel(s.pr)}${s.prState ? ' · ' + s.prState.state : ''}`); a.href = s.pr; a.target = '_blank'; a.onclick = e => e.stopPropagation(); return a; };
+export const prChip = s => {
+    const a = el('a', 'chip mono', `${prLabel(s.pr)}${s.prState ? ' · ' + s.prState.state : ''}`);
+    a.href = s.pr;
+    a.target = '_blank';
+    a.onclick = e => e.stopPropagation();
+    return a;
+};
 
 // Scan aids on rendered markdown: PR/MR links become chips, !123/#123 become chips, file paths become inline code.
 const PR_HREF = /^https:\/\/\S+?\/(?:-\/merge_requests|pull)\/\d+\/?$/;
 const TOKEN = /(^|[\s(\[])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+\/?|[\w.@+-]+(?:\/[\w.@+-]+)+\.[a-z]\w{0,5}|[!#]\d+\b)/gi;
 function enrich(root) {
     for (const a of root.querySelectorAll('a')) {
-        a.target = '_blank'; a.rel = 'noopener';
-        if (PR_HREF.test(a.href) && a.textContent.startsWith('http')) { a.textContent = prLabel(a.href); a.className = 'chip mono'; a.title = a.href; }
+        a.target = '_blank';
+        a.rel = 'noopener';
+        if (PR_HREF.test(a.href) && a.textContent.startsWith('http')) {
+            a.textContent = prLabel(a.href);
+            a.className = 'chip mono';
+            a.title = a.href;
+        }
     }
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement.closest('a, code, pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
     /** @type {Text[]} */
@@ -179,7 +234,11 @@ function enrich(root) {
     return root;
 }
 /** @param {string} text @param {boolean} [inline] */
-export const rich = (text, inline) => { const d = el('div', inline ? 'lead' : 'body'); d.innerHTML = DOMPurify.sanitize(inline ? marked.parseInline(text) : marked.parse(text || '')); return enrich(d); };
+export const rich = (text, inline) => {
+    const d = el('div', inline ? 'lead' : 'body');
+    d.innerHTML = DOMPurify.sanitize(inline ? marked.parseInline(text) : marked.parse(text || ''));
+    return enrich(d);
+};
 
 // First sentence of a message without a TLDR, capped near 200 chars, with dangling ** or ` closed.
 function lead(text) {
@@ -207,9 +266,24 @@ export function foldable(tldr, rest, key) {
         return [top];
     }
     const body = rich(more), btn = el('button', 'show');
-    const set = open => { body.hidden = !open; if (!tldr) top.hidden = open; btn.textContent = open ? 'Show less' : 'Show more'; };
+    const set = open => {
+        body.hidden = !open;
+        if (!tldr) {
+            top.hidden = open;
+        }
+        btn.textContent = open ? 'Show less' : 'Show more';
+    };
     set(state.unfold.has(key));
-    btn.onclick = e => { e.stopPropagation(); const open = !state.unfold.has(key); open ? state.unfold.add(key) : state.unfold.delete(key); set(open); };
+    btn.onclick = e => {
+        e.stopPropagation();
+        const open = !state.unfold.has(key);
+        if (open) {
+            state.unfold.add(key);
+        } else {
+            state.unfold.delete(key);
+        }
+        set(open);
+    };
     return [top, body, btn];
 }
 
@@ -224,14 +298,25 @@ export const visibleSessions = () => state.sessions.filter(s => state.tracked.in
 export const shown = x => state.tracked.includes(x.project) && (state.project === 'all' || x.project === state.project);
 // "Since last checked" per MR: seen:<mrUrl> in localStorage. An MR never seen before counts as seen now, so the first load doesn't flood.
 /** @param {string} pr @returns {number} */
-export const seenAt = pr => { const v = Number(store.get(`seen:${pr}`)); if (v) return v; const now = Date.now(); store.set(`seen:${pr}`, now); return now; };
+export const seenAt = pr => {
+    const v = Number(store.get(`seen:${pr}`));
+    if (v) {
+        return v;
+    }
+    const now = Date.now();
+    store.set(`seen:${pr}`, now);
+    return now;
+};
 export const markSeen = (pr, at = Date.now()) => store.set(`seen:${pr}`, at);
 /** @param {Comments | null} c @param {number} seen @returns {ReviewComment[]} */
 export const freshComments = (c, seen) => (c?.items ?? []).filter(i => Date.parse(i.at) > seen);
 export const firstName = n => n.split(/\s+/)[0];
 // "Børre" / "Børre, Ann" / "Børre, Ann +1": distinct first names, at most two
 /** @param {ReviewComment[]} items */
-export const authorSummary = items => { const n = [...new Set(items.map(i => firstName(i.author)))]; return n.slice(0, 2).join(', ') + (n.length > 2 ? ` +${n.length - 2}` : ''); };
+export const authorSummary = items => {
+    const n = [...new Set(items.map(i => firstName(i.author)))];
+    return n.slice(0, 2).join(', ') + (n.length > 2 ? ` +${n.length - 2}` : '');
+};
 /** @param {WorkItem} x */
 const newCount = x => (x.pr ? freshComments(x.comments, seenAt(x.pr)).length : 0);
 export function updateTitle() {

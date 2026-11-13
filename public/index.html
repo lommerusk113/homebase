@@ -42,10 +42,12 @@
     <nav class="tabs" id="tabs" role="tablist">
       <button role="tab" data-tab="work" aria-selected="true" title="Work items (1)">Work</button>
       <button role="tab" data-tab="issues" aria-selected="false" title="Milestone issues by person (2)">Issues <span class="count hot" id="tab-free" hidden></span></button>
+      <button role="tab" data-tab="log" aria-selected="false" title="What happened in the last 7 days (3)">Log</button>
     </nav>
     <div class="stale-note" role="status">Disconnected — showing the last known data</div>
     <div class="masters" id="masters" role="tabpanel"></div>
     <div class="masters issues" id="issues" role="tabpanel" hidden></div>
+    <div class="masters log" id="log" role="tabpanel" hidden></div>
     <div class="limits" id="limits" hidden></div>
   </div>
   <aside id="chat">

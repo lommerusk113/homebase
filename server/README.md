@@ -9,6 +9,7 @@
 | `items.mjs` | Work-item rules (pure): columns, lifecycle, next step, row action, gate badge, milestone of an MR |
 | `forge.mjs` | glab/gh calls: PR/MR state, comments and threads, limiter, dedupe, the `prs` and `swr` caches, refresh button |
 | `milestones.mjs` | Milestones tab: milestone lists, issue groups, linked MRs, start-up warm-up |
+| `log.mjs` | Log tab: finished subagents, git commits, chat topics and closed MRs of a project's last 7 days, `log()` for `/api/log` |
 | `limits.mjs` | Rate limits from the status-line dumps |
 | `tmux.mjs` | tmux plumbing: socket override, session names, `/clear` aliases, keystroke steps |
 | `control.mjs` | POST actions: send, interrupt, `/clear`, open in editor |
@@ -20,6 +21,7 @@ Imports only go one way, with no cycles:
 `items` → transcripts, forge.
 `sessions` → transcripts, forge, items, tmux.
 `milestones` → forge, items, sessions.
+`log` → transcripts, forge, sessions.
 `control` → sessions, tmux.
 
 Module state (caches, maps) lives in exactly one module and is imported, never copied.

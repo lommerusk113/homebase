@@ -1372,3 +1372,38 @@ import { sessionRows, sessionTopic, sessionState, startingIssues } from './publi
     assert.deepEqual(startingIssues({ ...m, now: 'see !2225 and #22250', queued: [] }, [{ title: '#2225' }]), ['22250'], 'MR refs are not issues; #2225 does not cover #22250');
     console.log('ok sessionRows');
 }
+
+import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server.mjs';
+{
+    const US = '\x1f';
+    const out = [['a'.repeat(40), 'aaaaaaa', '1700000300', 'refs/heads/main', 'Add perks simulator'], ['b'.repeat(40), 'bbbbbbb', '1700000200', 'refs/remotes/origin/main', `Fix a${US}b`],
+        ['c'.repeat(40), 'ccccccc', '1700000100', 'refs/heads/worktree-agent-x', 'Agent work']].map(f => f.join(US)).join('\n') + '\n';
+    const parsed = parseLog(out);
+    assert.deepEqual(parsed.map(c => [c.short, c.at, c.subject]), [['aaaaaaa', 1700000300000, 'Add perks simulator'], ['bbbbbbb', 1700000200000, `Fix a${US}b`], ['ccccccc', 1700000100000, 'Agent work']]);
+    assert.deepEqual(['refs/heads/a/b', 'refs/remotes/origin/main', 'refs/tags/v1', 'HEAD'].map(branchOf), ['a/b', 'main', 'v1', 'HEAD']);
+
+    // local-only: a (on main) and c (agent branch); only a is on main
+    const marked = markPushed(parsed, `${'a'.repeat(40)}\n${'c'.repeat(40)}\n`, `${'a'.repeat(40)}\n`, 'main', true);
+    assert.deepEqual(marked.map(c => [c.branch, c.pushed, c.unpushed]), [['main', false, true], ['main', true, false], ['worktree-agent-x', false, false]]);
+    assert.deepEqual(markPushed(parsed, '', '', 'main', false).map(c => [c.pushed, c.unpushed]), [[null, false], [null, false], [null, false]], 'no remote refs: no badges');
+
+    assert.deepEqual(chatMilestones([
+        { at: 1, topic: null, tldr: 'before any topic' }, { at: 2, topic: 'Login', tldr: null }, { at: 3, topic: 'Login', tldr: 'fixed' },
+        { at: 4, topic: null, tldr: 'pushed' }, { at: 5, topic: 'Release', tldr: 'tagged' }, { at: 6, topic: 'Login', tldr: null }
+    ]), [{ at: 4, topic: 'Login', tldr: 'pushed' }, { at: 5, topic: 'Release', tldr: 'tagged' }, { at: 6, topic: 'Login', tldr: null }], 'one line per topic change, newest TLDR');
+
+    const H = 3600_000, c = (hash, at, branch) => ({ hash: hash.repeat(40), short: hash.repeat(7), at, branch });
+    const agents = [
+        { id: 'build', started: 10 * H, at: 11 * H, branches: ['worktree-agent-x'], report: 'committed as `ccccccc`', commits: [] },
+        { id: 'merge', started: 12 * H, at: 12.1 * H, branches: [], report: 'main is at `ddddddd`, right after `eeeeeee` and `ccccccc`', commits: [] }
+    ];
+    const left = nestCommits(agents, [c('c', 10.5 * H, 'worktree-agent-x'), c('d', 12.05 * H, 'main'), c('e', 2 * H, 'main'), c('f', 12.05 * H, 'main')]);
+    assert.deepEqual(agents.map(a => [a.id, a.commits.map(x => x.hash[0])]), [['build', ['c']], ['merge', ['d']]], 'branch first, then a hash named in the report while it ran');
+    assert.deepEqual(left.map(x => x.hash[0]), ['e', 'f'], 'an older commit the merge agent only refers to stays loose');
+
+    const now = new Date(2026, 10, 13, 12).getTime(), at = (d, h) => new Date(2026, 10, d, h).getTime();
+    const days = groupByDay([{ at: at(11, 9) }, { at: at(13, 8) }, { at: at(12, 23) }, { at: at(13, 11) }], now);
+    assert.deepEqual(days.map(d => [d.label, d.entries.map(e => new Date(e.at).getHours())]), [['Today', [11, 8]], ['Yesterday', [23]], ['Wednesday 11 Nov', [9]]]);
+    assert.deepEqual(groupByDay([], now), []);
+    console.log('ok log');
+}

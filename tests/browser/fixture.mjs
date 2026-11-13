@@ -27,6 +27,13 @@ const link = (n, s) => ({ type: 'pr-link', prUrl: MR(n), timestamp: ago(s) });
 // Fields every entry of a session's transcript carries.
 const entryBase = (home, project, id) => ({ isSidechain: false, cwd: join(home, 'repos', project), sessionId: id, version: '2.1.322', gitBranch: 'main' });
 
+// An empty commit s seconds ago, with no user config, signing or hooks from the machine running the tests.
+function commit(repo, msg, s) {
+    const date = `${Math.round(Date.now() / 1000 - s)} +0000`;
+    execFileSync('git', ['-C', repo, '-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', 'commit', '-q', '--allow-empty', '-m', msg],
+        { env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } });
+}
+
 function session(home, project, id, entries, mtimeAgo) {
 
     const dir = join(home, '.claude', 'projects', `-fx-${project}`);
@@ -64,6 +71,16 @@ export function buildFixture(root) {
         execFileSync('git', ['init', '-q', repo]);
         execFileSync('git', ['-C', repo, 'remote', 'add', 'origin', origin]);
     }
+    // alpha's history for the Log tab: a pushed commit two days back (origin/main is a fake remote ref, nothing is
+    // fetched), a local-only one on main, and one on the worktree branch of the finished agent-notes subagent.
+    const alphaRepo = join(home, 'repos', 'alpha'), git = (...args) => execFileSync('git', ['-C', alphaRepo, ...args]);
+    git('symbolic-ref', 'HEAD', 'refs/heads/main');
+    commit(alphaRepo, 'Add the audit log', 2 * 86400);
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    git('checkout', '-q', '-b', 'worktree-agent-notes');
+    commit(alphaRepo, 'Draft NOTES.md', 400);
+    git('checkout', '-q', 'main');
+    commit(alphaRepo, 'Add a perks simulator', 100);
 
     const stub = fileURLToPath(new URL('./forge-stub.mjs', import.meta.url));
     for (const cli of ['glab', 'gh']) {
@@ -129,7 +146,7 @@ export function buildFixture(root) {
         tool('Bash', { command: 'npm test -- auth' }, 1300, 'f1'),
         result('f1', 'FAIL auth.test.js', 1200)
     ], 1200);
-    agent(alpha, 'agent-notes', { description: 'Write release notes', finished: true }, [
+    agent(alpha, 'agent-notes', { description: 'Write release notes', finished: true, worktreeBranch: 'worktree-agent-notes' }, [
         { type: 'user', timestamp: ago(900), message: { role: 'user', content: 'Draft the release notes' } },
         tool('SubagentHandback', { message: 'Notes drafted in NOTES.md.\n\nTLDR: notes ready' }, 300)
     ], 300);

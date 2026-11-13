@@ -209,6 +209,16 @@ async function firstPrompt(path) {
     return prompts.get(path);
 }
 
+// A subagent's .meta.json, or fallback (the last good one) while it is half-written or gone.
+async function readMeta(path, fallback) {
+
+    try {
+        return JSON.parse(await readFile(path, 'utf8'));
+    } catch {
+        return fallback;
+    }
+}
+
 async function agents(sessionDir, now) {
 
     let names;
@@ -222,35 +232,39 @@ async function agents(sessionDir, now) {
     for (const name of names) {
         const id = name.replace('.meta.json', '');
         const path = join(sessionDir, `${id}.jsonl`);
-        let st;
+        const metaPath = join(sessionDir, name);
+        // a half-written meta or a transcript deleted mid-poll skips this agent for this poll, not the whole list
         try {
-            st = await stat(path);
+            const st = await stat(path);
+            if (now - st.mtimeMs > MAX_AGE_MS) {
+                continue;
+            }
+
+            let hit = cache.get(path);
+            if (!hit || hit.mtimeMs !== st.mtimeMs) {
+                const meta = await readMeta(metaPath, hit?.meta);
+                if (!meta) {
+                    continue;
+                }
+                hit = { mtimeMs: st.mtimeMs, meta, entries: (meta.spawnDepth ?? 1) > 1 ? [] : await readTail(path, st.size, AGENT_TAIL_BYTES, AGENT_TAIL_BYTES) };
+                cache.set(path, hit);
+            }
+            if ((hit.meta.spawnDepth ?? 1) > 1) {
+                continue;
+            }
+
+            // meta.finished flips after the last transcript write, so re-read it while the agent isn't done
+            if (!hit.meta.finished) {
+                hit.meta = await readMeta(metaPath, hit.meta);
+            }
+
+            const a = summarizeAgent(hit.meta, hit.entries, now - st.mtimeMs, id);
+            // transcript gitBranch is the parent checkout's branch, not the worktree's, so ask the worktree
+            const head = a.status === 'done' ? null : await worktreeHead(hit.meta.worktreePath);
+            out.push({ id, started: st.birthtimeMs, updated: st.mtimeMs, usage: await readUsage(path, st.size), prompt: await firstPrompt(path), branches: [head ?? a.branch, hit.meta.worktreeBranch].filter(Boolean), ...a });
         } catch {
             continue;
         }
-        if (now - st.mtimeMs > MAX_AGE_MS) {
-            continue;
-        }
-
-        let hit = cache.get(path);
-        if (!hit || hit.mtimeMs !== st.mtimeMs) {
-            const meta = JSON.parse(await readFile(join(sessionDir, name), 'utf8'));
-            hit = { mtimeMs: st.mtimeMs, meta, entries: (meta.spawnDepth ?? 1) > 1 ? [] : await readTail(path, st.size, AGENT_TAIL_BYTES, AGENT_TAIL_BYTES) };
-            cache.set(path, hit);
-        }
-        if ((hit.meta.spawnDepth ?? 1) > 1) {
-            continue;
-        }
-
-        // meta.finished flips after the last transcript write, so re-read it while the agent isn't done
-        if (!hit.meta.finished) {
-            hit.meta = JSON.parse(await readFile(join(sessionDir, name), 'utf8'));
-        }
-
-        const a = summarizeAgent(hit.meta, hit.entries, now - st.mtimeMs, id);
-        // transcript gitBranch is the parent checkout's branch, not the worktree's, so ask the worktree
-        const head = a.status === 'done' ? null : await worktreeHead(hit.meta.worktreePath);
-        out.push({ id, started: st.birthtimeMs, updated: st.mtimeMs, usage: await readUsage(path, st.size), prompt: await firstPrompt(path), branches: [head ?? a.branch, hit.meta.worktreeBranch].filter(Boolean), ...a });
     }
 
     const rank = { running: 0, stopped: 1, done: 2 };
@@ -336,12 +350,18 @@ export async function sessions() {
 
         for (const f of files) {
             const path = join(ROOT, dir, f);
-            const st = await stat(path);
-            if (now - st.mtimeMs > MAX_AGE_MS) {
-                continue;
+            let st, entries;
+            try {
+                st = await stat(path);
+                if (now - st.mtimeMs > MAX_AGE_MS) {
+                    continue;
+                }
+                entries = await tailOf(path, st);
+            } catch {
+                continue; // deleted between readdir and read
             }
 
-            const s = summarize(await tailOf(path, st), now - st.mtimeMs);
+            const s = summarize(entries, now - st.mtimeMs);
             const id = s.id ?? f.replace('.jsonl', '');
             out.push({ ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, agents: await agents(join(ROOT, dir, id, 'subagents'), now) });
         }

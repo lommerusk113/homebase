@@ -44,11 +44,13 @@ export function bindChat(id) {
     renderBoard(); refreshChat();
 }
 
-function bubble(i, sid) {
+function bubble(i, sid, prevTopic) {
     if (i.role === 'tools') return el('div', 'tools', i.text);
     const b = el('div', `bubble ${i.role}${i.error ? ' failed' : ''}${i.interrupted ? ' interrupted' : ''}`), key = `${sid}:${i.at}`;
     // the interrupted mark gets its own tooltip instead of the timestamp
     if (i.at && !i.interrupted) b.title = new Date(i.at).toLocaleString();
+    // topic header only where it changes from Claude's previous bubble, so a run on one task reads as one block
+    if (i.topic && i.topic !== prevTopic) b.append(el('div', 'b-topic', i.topic));
     if (i.role === 'assistant') b.append(...foldable(i.tldr, i.text, key));
     else {
         const body = rich(i.text);
@@ -155,7 +157,8 @@ export async function refreshChat() {
     if (key === chatKey) return;
     const first = !chatKey?.startsWith(s.id), atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40, top = feed.scrollTop;
     chatKey = key;
-    feed.replaceChildren(...items.map(i => bubble(i, s.id)));
+    let topic = null;
+    feed.replaceChildren(...items.map(i => { const prev = topic; if (i.role === 'assistant') topic = i.topic; return bubble(i, s.id, prev); }));
     if (hidden && !cut.fresh) {
         const line = el('div', 'c-hidden', 'Earlier messages hidden · '), btn = el('button', 'show', 'Show');
         btn.onclick = () => { store.set(`cleared:${s.id}`, ''); refreshChat(); };

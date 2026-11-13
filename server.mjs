@@ -21,6 +21,7 @@ const MAX_AGE_MS = Number(process.env.MAX_AGE_DAYS ?? 3) * 864e5;
 const TAIL_BYTES = 512 * 1024;
 const WORKING_MS = 10_000;
 const WAITING_MS = 30 * 60_000;
+const TURN_STALE_MS = 30 * 60_000; // an open turn with no transcript write this long is treated as dead
 
 const PR_TTL_MS = 60_000;
 const AGENT_TAIL_BYTES = 128 * 1024;
@@ -551,6 +552,53 @@ export function pendingQuestion(entries) {
     return questions && (questions[0]?.question || 'Claude asked a question.');
 }
 
+// Turn state from the entries, not the mtime: thinking, long replies and long tool calls write nothing for minutes.
+// A turn starts at a user entry with `turnPosition` (human prompt, peer message, task notification; queued_command
+// attachments only land mid-turn) and ends at `turn_duration`, an API error, or an Esc interrupt. An interrupt
+// parented on the newest start is the marker of a prompt that interrupted the previous turn, so that turn goes on.
+// Assistant output after an end (a turn retried after /login) reopens it.
+// Returns { state: 'working' | 'asking' | 'idle', since: turn start ms | null }.
+export function turnState(entries, ageMs) {
+
+    if (pendingAsk(entries)) {
+        return { state: 'asking', since: null };
+    }
+
+    let start = null;
+    let open = false;
+    let known = false; // this Claude Code writes turn markers
+    for (const e of entries) {
+        if (e.isSidechain) {
+            continue;
+        }
+        if (e.type === 'system' && e.subtype === 'turn_duration') {
+            known = true;
+            open = false;
+        } else if (e.type === 'user' && e.turnPosition) {
+            known = true;
+            start = e;
+            open = true;
+        } else if (e.type === 'attachment' && e.attachment?.type === 'queued_command') {
+            start = open ? start : e;
+            open = true;
+        } else if (e.type === 'assistant' && e.isApiErrorMessage) {
+            open = false;
+        } else if (e.type === 'assistant') {
+            if (!open) {
+                start = e;
+            }
+            open = true;
+        } else if (e.type === 'user' && INTERRUPTED.test(textOf(e).trim()) && e.parentUuid !== start?.uuid) {
+            open = false;
+        }
+    }
+
+    // ponytail: a tail with no turn markers at all (older Claude Code, or one turn longer than the tail) falls back to the mtime
+    const working = known ? open && ageMs < TURN_STALE_MS : ageMs < WORKING_MS;
+
+    return { state: working ? 'working' : 'idle', since: working && known ? Date.parse(start?.timestamp) || null : null };
+}
+
 // Background subagents a master session started (depth 1 only; their own helpers are noise).
 export const STAGES = ['Explore', 'Implement', 'Verify', 'Ship', 'Done'];
 // Matched against each command of a Bash call, so they are anchored to its start.
@@ -774,12 +822,12 @@ async function agents(sessionDir, now) {
     return out.sort((a, b) => rank[a.status] - rank[b.status] || b.updated - a.updated);
 }
 
-export function status(lastTurn, ageMs) {
+export function status(lastTurn, ageMs, turn = { state: ageMs < WORKING_MS ? 'working' : 'idle' }) {
 
-    if (ageMs < WORKING_MS) {
+    if (turn.state === 'working') {
         return 'working';
     }
-    if (lastTurn?.type === 'assistant' && ageMs < WAITING_MS) {
+    if (turn.state === 'asking' || (lastTurn?.type === 'assistant' && ageMs < WAITING_MS)) {
         return 'waiting';
     }
 
@@ -814,7 +862,7 @@ export function summarize(entries, ageMs) {
         pr: last('pr-link')?.prUrl ?? null,
         prs: prLinks(entries),
         model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? null,
-        status: status(lastTurn, ageMs),
+        status: status(lastTurn, ageMs, turnState(entries, ageMs)),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
         files: filesTouched(entries, meta.cwd),
@@ -1523,7 +1571,9 @@ async function transcript(dir, id) {
     const st = await stat(path);
     const entries = await tailOf(path, st);
 
-    return { items: chatItems(entries), asking: pendingQuestion(entries), questions: pendingAsk(entries), working: Date.now() - st.mtimeMs < WORKING_MS };
+    const turn = turnState(entries, Date.now() - st.mtimeMs);
+
+    return { items: chatItems(entries), asking: pendingQuestion(entries), questions: pendingAsk(entries), working: turn.state === 'working', since: turn.since };
 }
 
 // Open in editor: the item's agent worktree if it's still there, else its session's cwd. Absolute paths only, so none reads as a flag.

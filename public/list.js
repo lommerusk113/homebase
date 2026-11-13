@@ -29,7 +29,7 @@ export function gateBadge(g) {
     return [b, tooltip(b, tip)];
 }
 
-// Work items (one per MR, plus running/stopped agents without one), grouped by what they wait on; merged ones folded at the bottom.
+// Work items (one per MR, plus running/stopped agents without one), grouped by what they wait on; recently finished and merged ones folded at the bottom.
 function renderItems() {
     const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).map(x => optimistic(x)).sort((a, b) => b.updated - a.updated);
     const table = list => {
@@ -66,26 +66,29 @@ function renderItems() {
         }));
         return t;
     };
-    const groups = COLUMNS.filter(c => c.key !== 'done').map(c => {
+    // Folded groups: Merged stays open for this page load once opened; Recently finished remembers per project, after a toggle.
+    const fold = (c, list, isOpen, setOpen) => {
+        const f = el('wa-details', `group g-${c.key}`), sum = el('span', 'g-head');
+        f.setAttribute('appearance', 'plain');
+        f.toggleAttribute('open', isOpen);
+        sum.slot = 'summary';
+        sum.append(dot(c.key), `${c.label} (${list.length})`);
+        // tooltips inside also fire wa-show/wa-hide, and those bubble
+        f.addEventListener('wa-show', e => { if (e.target === f) setOpen(true); });
+        f.addEventListener('wa-hide', e => { if (e.target === f) setOpen(false); });
+        f.append(sum, table(list));
+        return f;
+    };
+    const finishedKey = `fold:finished:${state.project}`;
+    const groups = COLUMNS.map(c => {
         const list = items.filter(x => x.column === c.key);
         if (!list.length) return null;
+        if (c.key === 'done') return fold(c, list, !!state.showMerged, v => { state.showMerged = v; });
+        if (c.key === 'finished') return fold(c, list, store.get(finishedKey) === 'open', v => store.set(finishedKey, v ? 'open' : 'closed'));
         const h = el('h2', 'g-head'); h.append(dot(c.key), `${c.label} · ${list.length}`);
         const sec = el('section', `group g-${c.key}`); sec.append(h, table(list));
         return sec;
     }).filter(Boolean);
-    const merged = items.filter(x => x.column === 'done');
-    if (merged.length) {
-        const fold = el('wa-details', 'group merged'), sum = el('span', 'g-head');
-        fold.setAttribute('appearance', 'plain');
-        fold.toggleAttribute('open', !!state.showMerged);
-        sum.slot = 'summary';
-        sum.append(dot('done'), `Merged (${merged.length})`);
-        // tooltips inside also fire wa-show/wa-hide, and those bubble
-        fold.addEventListener('wa-show', e => { if (e.target === fold) state.showMerged = true; });
-        fold.addEventListener('wa-hide', e => { if (e.target === fold) state.showMerged = false; });
-        fold.append(sum, table(merged));
-        groups.push(fold);
-    }
     const hadFocus = $('masters').contains(document.activeElement); // replaceChildren drops it; keys.js puts it back
     $('masters').replaceChildren(...groups);
     if (!groups.length) $('masters').append(el('div', 'welcome', 'Nothing in flight.'));

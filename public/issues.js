@@ -18,7 +18,9 @@ export function issueCards(groups) {
 // Who a card belongs to: its assignees, else the authors of its MRs (an in-progress issue nobody assigned).
 /** @param {Card | Issue} card @returns {Person[]} */
 export function owners(card) {
-    if (card.assignees.length) return card.assignees;
+    if (card.assignees.length) {
+        return card.assignees;
+    }
     return [...new Map(card.mrs.filter(m => m.author).map(m => [m.author.username, m.author])).values()];
 }
 
@@ -30,14 +32,22 @@ export function buildLanes(cards, done, me) {
     const lanes = new Map();
     for (const c of cards) {
         for (const p of owners(c)) {
-            if (!lanes.has(p.username)) lanes.set(p.username, { who: p, me: p.username === me?.username, list: [], closed: 0 });
+            if (!lanes.has(p.username)) {
+                lanes.set(p.username, { who: p, me: p.username === me?.username, list: [], closed: 0 });
+            }
             lanes.get(p.username).list.push(c);
         }
     }
     const free = { who: null, me: false, list: cards.filter(c => !owners(c).length), closed: 0 };
     for (const i of done) {
-        if (!i.assignees.length) free.closed++;
-        for (const p of i.assignees) if (lanes.has(p.username)) lanes.get(p.username).closed++;
+        if (!i.assignees.length) {
+            free.closed++;
+        }
+        for (const p of i.assignees) {
+            if (lanes.has(p.username)) {
+                    lanes.get(p.username).closed++;
+                }
+        }
     }
     return [...[...lanes.values()].sort((a, b) => b.me - a.me || a.who.name.localeCompare(b.who.name)), free];
 }
@@ -46,7 +56,11 @@ export function buildLanes(cards, done, me) {
 /** @param {Issue[]} done @returns {[string, number][]} */
 export function closedBy(done) {
     const n = new Map();
-    for (const i of done) for (const k of i.assignees.length ? i.assignees.map(p => p.name) : ['unassigned']) n.set(k, (n.get(k) ?? 0) + 1);
+    for (const i of done) {
+        for (const k of i.assignees.length ? i.assignees.map(p => p.name) : ['unassigned']) {
+                n.set(k, (n.get(k) ?? 0) + 1);
+            }
+    }
     // @ts-expect-error boolean minus boolean is 0/1/-1 at runtime, the intended sort key
     return [...n].sort((a, b) => (a[0] === 'unassigned') - (b[0] === 'unassigned') || a[0].localeCompare(b[0]));
 }
@@ -78,7 +92,9 @@ const sentAt = new Map(); // iid -> last send, so a re-render keeps the button s
 export function showTab(tab) {
     tab = tab === 'issues' ? 'issues' : 'work';
     store.set('tab', tab);
-    for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) b.setAttribute('aria-selected', b.dataset.tab === tab);
+    for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) {
+        b.setAttribute('aria-selected', b.dataset.tab === tab);
+    }
     $('masters').hidden = tab !== 'work';
     $('issues').hidden = tab !== 'issues';
 }
@@ -134,8 +150,12 @@ export function renderIssues(d = data) {
 // The Issues tab's line for a project without milestones to show (d.reason from /api/milestones).
 /** @param {Milestones} d */
 export function emptyText(d) {
-    if (d.reason === 'none') return `No open milestones in ${d.project}.`;
-    if (d.reason === 'unsupported') return `Milestones aren't available for ${d.project}: ${d.error ?? 'unknown project'}.`;
+    if (d.reason === 'none') {
+        return `No open milestones in ${d.project}.`;
+    }
+    if (d.reason === 'unsupported') {
+        return `Milestones aren't available for ${d.project}: ${d.error ?? 'unknown project'}.`;
+    }
     return `Milestones unavailable for ${d.project}: ${d.error ?? 'unknown error'}. Press r or the refresh button to retry.`;
 }
 
@@ -156,14 +176,19 @@ function head(ms, hint) {
         [g.assigned.length, '--c-idle', 'not started'], [g.unassigned.length, '--c-needs', 'unassigned']];
     const bar = el('div', 'is-bar'), legend = el('div', 'is-legend');
     for (const [n, c, label] of segs) {
-        if (!n) continue;
+        if (!n) {
+            continue;
+        }
         const i = el('i'); i.style.flex = String(n); i.style.background = `var(${c})`; bar.append(i);
         const s = el('span'); s.style.setProperty('--c', `var(${c})`); s.append(el('i', 'sw'), `${n} ${label}`); legend.append(s);
     }
     const mid = el('div'); mid.append(bar, legend);
     const due = el('div', 'is-due');
-    if (ms.due) due.append('due ', el('b', null, new Date(ms.due + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })));
-    else due.append(el('b', null, 'No due date'));
+    if (ms.due) {
+        due.append('due ', el('b', null, new Date(ms.due + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })));
+    } else {
+        due.append(el('b', null, 'No due date'));
+    }
     h.append(title, big, mid, due);
     return h;
 }
@@ -172,10 +197,16 @@ function head(ms, hint) {
 function lane({ who, me, list, closed }, n, ms) {
     const sec = el('section', 'lane' + (who ? '' : ' free')), side = el('div', 'who'), name = el('div', 'name');
     const av = el('span', 'av', who ? initials(who.name) : '?');
-    if (who) av.style.background = COLOURS[n % COLOURS.length];
+    if (who) {
+        av.style.background = COLOURS[n % COLOURS.length];
+    }
     name.append(av, who ? firstName(who.name) : 'Unassigned');
-    if (who) name.title = `${who.name} (@${who.username})`;
-    if (me) name.append(el('span', 'you', 'you'));
+    if (who) {
+        name.title = `${who.name} (@${who.username})`;
+    }
+    if (me) {
+        name.append(el('span', 'you', 'you'));
+    }
     const count = st => list.filter(c => c.st === st).length;
     const parts = who ? [['doing', 'in progress'], ['closable', 'can close'], ['todo', 'not started'], ['free', 'unassigned']].map(([st, l]) => count(st) && `${count(st)} ${l}`).filter(Boolean)
         : [`${list.length} up for grabs`];
@@ -193,13 +224,23 @@ function card(c, ms) {
     a.setAttribute('aria-expanded', open);
     const top = el('div', 'top');
     top.append(el('span', 'mono', `#${c.iid}`), el('span', 'st', STATES[c.st]), el('span', 'age', c.updated ? ago(Date.parse(c.updated)) : ''));
-    if (c.updated) /** @type {HTMLElement} */ (top.lastChild).title = `Updated ${new Date(c.updated).toLocaleString()}`;
+    if (c.updated) {
+        /** @type {HTMLElement} */ (top.lastChild).title = `Updated ${new Date(c.updated).toLocaleString()}`;
+    }
     const ft = el('div', 'ft');
-    for (const m of c.mrs) ft.append(prChip({ pr: m.url }), ...ciPill(m.pipeline));
-    if (!c.mrs.length) ft.append(el('span', 'chip', 'no MR'));
+    for (const m of c.mrs) {
+        ft.append(prChip({ pr: m.url }), ...ciPill(m.pipeline));
+    }
+    if (!c.mrs.length) {
+        ft.append(el('span', 'chip', 'no MR'));
+    }
     a.append(top, el('div', 'tt', open ? c.title : shortTitle(c.title, ms.title)), ft);
-    if (!open) a.title = c.title;
-    if (open) a.append(more(c));
+    if (!open) {
+        a.title = c.title;
+    }
+    if (open) {
+        a.append(more(c));
+    }
     a.onclick = () => { openIid = open ? null : c.iid; renderIssues(); };
     return a;
 }
@@ -207,13 +248,17 @@ function card(c, ms) {
 /** @param {Card} c */
 function more(c) {
     const box = el('div', 'more'), msg = chatMessage(c), acts = el('div', 'acts');
-    if (c.desc) box.append(el('div', 'desc', c.desc));
+    if (c.desc) {
+        box.append(el('div', 'desc', c.desc));
+    }
     const sent = Date.now() - (sentAt.get(c.iid) ?? 0) < 3000;
     const send = waButton(sent ? 'Sent ✓' : 'Send to chat', null, { variant: 'brand', appearance: 'filled', ...(sent || !chatSession() ? { disabled: true } : {}) });
     send.onclick = e => {
         e.stopPropagation();
         const s = chatSession();
-        if (!s || Date.now() - (sentAt.get(c.iid) ?? 0) < 3000) return;
+        if (!s || Date.now() - (sentAt.get(c.iid) ?? 0) < 3000) {
+            return;
+        }
         sentAt.set(c.iid, Date.now()); renderIssues(); setTimeout(() => renderIssues(), 3000);
         sendText(s.id, msg);
     };
@@ -239,7 +284,9 @@ function closedLine(done) {
 
 // Esc in the Issues tab folds the open card; false when there was none.
 export function collapseIssue() {
-    if (openIid == null) return false;
+    if (openIid == null) {
+        return false;
+    }
     openIid = null; renderIssues();
     return true;
 }

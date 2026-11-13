@@ -15,17 +15,25 @@ const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 
 // Action for a keydown ({ key, metaKey, ctrlKey, altKey }); prev is 'g' when g was pressed just before.
 /** @param {Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey'>} e @param {string | null} prev @returns {string | null} */
 export function keyAction(e, prev) {
-    if (e.metaKey || e.ctrlKey || e.altKey) return null;
-    if (prev === 'g' && e.key === 'p') return 'project';
+    if (e.metaKey || e.ctrlKey || e.altKey) {
+        return null;
+    }
+    if (prev === 'g' && e.key === 'p') {
+        return 'project';
+    }
     return KEYS[e.key] ?? null;
 }
 
 // Key after (dir 1) or before (dir -1) current among the visible keys; clamps at the ends, starts at an end when current is gone.
 /** @param {string[]} keys @param {string | null} current @param {number} dir @returns {string | null} */
 export function stepKey(keys, current, dir) {
-    if (!keys.length) return null;
+    if (!keys.length) {
+        return null;
+    }
     const i = keys.indexOf(current);
-    if (i < 0) return dir > 0 ? keys[0] : keys.at(-1);
+    if (i < 0) {
+        return dir > 0 ? keys[0] : keys.at(-1);
+    }
     return keys[Math.max(0, Math.min(keys.length - 1, i + dir))];
 }
 
@@ -46,14 +54,20 @@ function syncRows(refocus) {
     all.forEach(r => {
         r.tabIndex = r === first ? 0 : -1;
         r.setAttribute('aria-selected', r === cur);
-        if (r.localName === 'tr') r.setAttribute('aria-expanded', r.dataset.key === state.selected);
+        if (r.localName === 'tr') {
+            r.setAttribute('aria-expanded', r.dataset.key === state.selected);
+        }
     });
-    if (refocus && cur) cur.focus({ preventScroll: true });
+    if (refocus && cur) {
+        cur.focus({ preventScroll: true });
+    }
 }
 
 function focusRow(key) {
     const r = key && rowOf(key);
-    if (!r) return;
+    if (!r) {
+        return;
+    }
     focusKey = key; syncRows();
     r.focus({ preventScroll: true });
     r.scrollIntoView({ block: 'nearest' });
@@ -89,16 +103,22 @@ function confirmAction(x) {
 /** @param {KeyboardEvent} e */
 function onKey(e) {
     const path = e.composedPath();
-    if (menuOpen(path)) return;
+    if (menuOpen(path)) {
+        return;
+    }
     if (typing(path)) {
         if (e.key === 'Escape') { /** @type {HTMLElement | null} */ (document.activeElement)?.blur(); rowOf(focusKey)?.focus({ preventScroll: true }); }
         return;
     }
     const action = keyAction(e, Date.now() - prevAt < 1500 ? prev : null);
     prev = e.key; prevAt = Date.now();
-    if (!action) return;
+    if (!action) {
+        return;
+    }
     // Enter/Space on a link or button inside the page keep their native meaning
-    if (action === 'toggle' && e.target !== document.body && !/** @type {Element} */ (e.target).matches?.(ROWS)) return;
+    if (action === 'toggle' && e.target !== document.body && !/** @type {Element} */ (e.target).matches?.(ROWS)) {
+        return;
+    }
     const x = itemOf(focusKey), card = focusKey?.startsWith('issue:') ? rowOf(focusKey) : null;
     const run = {
         next: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, 1)),

@@ -68,12 +68,16 @@ assert.deepEqual(splitTldr('Long text.\n\n**TLDR:** It works.'), { tldr: 'It wor
 assert.equal(splitTldr('a\n**TLDR**: fixed **now**').tldr, 'fixed **now**');
 assert.equal(splitTldr('**TL;DR: shipped**').tldr, 'shipped');
 assert.equal(splitTldr('we use tldraw here').tldr, null);
-assert.deepEqual(splitTopic('**▸ Chat topic headers**\n\nBody.\n\n**TLDR:** done'), { topic: 'Chat topic headers', text: 'Body.\n\n**TLDR:** done' });
-assert.deepEqual(splitTopic('\n  ▸ Plain topic\nBody'), { topic: 'Plain topic', text: 'Body' });
+assert.deepEqual(splitTopic('**▸ Chat topic headers**\n\nBody.\n\n**TLDR:** done'), { topic: 'Chat topic headers', needsYou: false, text: 'Body.\n\n**TLDR:** done' });
+assert.deepEqual(splitTopic('\n  ▸ Plain topic\nBody'), { topic: 'Plain topic', needsYou: false, text: 'Body' });
+for (const line of ['**▸ Pick a port · needs you**', '**▸ Pick a port · Needs You**', '**▸ Pick a port - needs you**', '**▸ Pick a port (needs you)**', '**▸ Pick a port · needs you:**']) {
+    assert.deepEqual(splitTopic(`${line}\nBody`), { topic: 'Pick a port', needsYou: true, text: 'Body' }, line);
+}
+assert.equal(splitTopic('**▸ What needs you to know**\nx').needsYou, false);
 assert.equal(splitTopic('**▸ Colon topic:**\nx').topic, 'Colon topic');
 assert.equal(splitTopic('**▸ Colon outside**:\nx').topic, 'Colon outside');
-assert.deepEqual(splitTopic('Body first\n**▸ Not a topic**'), { topic: null, text: 'Body first\n**▸ Not a topic**' });
-assert.deepEqual(splitTopic('**▸ Only topic**'), { topic: 'Only topic', text: '' });
+assert.deepEqual(splitTopic('Body first\n**▸ Not a topic**'), { topic: null, needsYou: false, text: 'Body first\n**▸ Not a topic**' });
+assert.deepEqual(splitTopic('**▸ Only topic**'), { topic: 'Only topic', needsYou: false, text: '' });
 assert.equal(splitTldr('a\nTLDR: plain').tldr, 'plain');
 assert.equal(splitTldr('a\ntldr: lower').tldr, 'lower');
 assert.equal(splitTldr('a\n**TLDR:** bold label').tldr, 'bold label');
@@ -96,7 +100,12 @@ assert.deepEqual(chat.map(i => [i.role, i.text, i.tldr]), [
     ['user', 'do it', undefined], ['assistant', 'On it.', null], ['tools', 'Ran 1 command · read 1 file', undefined], ['assistant', 'Done.', 'shipped']
 ]);
 const topical = chatItems([{ type: 'user', message: { content: 'go' } }, say('**▸ Topic headers**\n\nDone.\n\n**TLDR:** shipped')]).at(-1);
-assert.deepEqual([topical.topic, topical.text, topical.tldr], ['Topic headers', 'Done.', 'shipped']);
+assert.deepEqual([topical.topic, topical.text, topical.tldr, topical.needsYou], ['Topic headers', 'Done.', 'shipped', false]);
+// needs-you: the topic marker, or (no marker) a TLDR ending in "?"
+const needy = text => chatItems([{ type: 'user', message: { content: 'go' } }, say(text)]).at(-1);
+assert.deepEqual([needy('**▸ Ports · needs you**\n\nX.\n\n**TLDR:** pick one').topic, needy('**▸ Ports · needs you**\n\nX.\n\n**TLDR:** pick one').needsYou], ['Ports', true]);
+assert.equal(needy('**▸ Ports**\n\nX.\n\n**TLDR:** **Use 4478?**').needsYou, true);
+assert.equal(needy('Is it? Yes.\n\nTLDR: done').needsYou, false);
 // Two replies with only an agent message / task notification between them stay separate bubbles, each with its own TLDR.
 const twoTurns = chatItems([
     { type: 'user', message: { content: 'security issues?' } },
@@ -677,7 +686,17 @@ import { pipelineOf, ciOf } from './server.mjs';
 }
 console.log('ok pipeline');
 
-import { clearState } from './public/chat.js';
+import { clearState, topicHue, TOPIC_HUES } from './public/chat.js';
+{
+    const topics = ['Chat topic headers', 'Attention colours', 'CI pills', 'Milestone empty states', 'ø', 'x'.repeat(500)];
+    for (const t of topics) {
+        const h = topicHue(t);
+        assert.ok(Number.isInteger(h) && h >= 0 && h < TOPIC_HUES, t);
+        assert.equal(topicHue(t), h, 'stable');
+    }
+    assert.ok(new Set(topics.map(topicHue)).size > 2, 'spreads over hues');
+    console.log('ok topic hue');
+}
 assert.deepEqual(clearState(null), { at: 0, fresh: false });
 assert.deepEqual(clearState(''), { at: 0, fresh: false }); // "Show" resets the key to ''
 assert.deepEqual(clearState('1700000000000'), { at: 1700000000000, fresh: false }); // Clear view, old format

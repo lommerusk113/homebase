@@ -177,8 +177,9 @@ export function rowAction(pr, prState, agent, title) {
 }
 
 // A report that merely quotes another repo's MR (e.g. a Homebase agent citing a pracsys MR) isn't work on this project.
-export function sameRepo(url, project) {
-    return url.match(/^https:\/\/[^/]+\/(.+?)(?:\/-)?\/(?:merge_requests|pull)\//)?.[1].split('/').pop() === project;
+// A pr-link's own prRepository ("owner/name"), when it has one, says which repo it is for better than the URL does.
+export function sameRepo(url, project, repo) {
+    return (repo ?? url.match(/^https:\/\/[^/]+\/(.+?)(?:\/-)?\/(?:merge_requests|pull)\//)?.[1])?.split('/').pop() === project;
 }
 
 const gateHeads = new Map(); // gate run -> MR head sha first seen with it
@@ -227,7 +228,7 @@ function itemGroups(sessions, prOf, now, seeds) {
     };
 
     for (const s of sessions) {
-        for (const { url, at } of s.prs ?? []) {
+        for (const { url, at } of (s.prs ?? []).filter(p => sameRepo(p.url, s.project, p.repo))) {
             const it = add(url, s.project);
             if (!it.linkSession || at > it.linkedAt) {
                 Object.assign(it, { linkedAt: at, linkSession: s.id });

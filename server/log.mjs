@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { ROOT, readTail, readUsage, textOf, splitTopic, splitTldr, USAGE_KEYS, formatDuration, formatTokens } from './transcripts.mjs';
 import { projectOf, summarizeAgent } from './sessions.mjs';
 import { prState } from './forge.mjs';
+import { sameRepo } from './items.mjs';
 
 const run = promisify(execFile);
 
@@ -130,7 +131,7 @@ async function cwdOf(path) {
 
 // Topic/TLDR replies and MR links of a master transcript, reading only bytes appended since the last call. Only lines
 // that can hold one are parsed, so a first read of a 70 MB transcript stays cheap.
-const chats = new Map(); // transcript path -> { offset, notes, links }
+const chats = new Map(); // transcript path -> { offset, notes, links (url -> at), repos (url -> prRepository) }
 function noteLines(c, text) {
 
     for (const line of text.split('\n')) {
@@ -146,6 +147,9 @@ function noteLines(c, text) {
         const at = Date.parse(e.timestamp) || 0;
         if (e.type === 'pr-link' && e.prUrl) {
             c.links.set(e.prUrl, Math.max(c.links.get(e.prUrl) ?? 0, at));
+            if (e.prRepository) {
+                c.repos.set(e.prUrl, e.prRepository);
+            }
         } else if (e.type === 'assistant' && !e.isSidechain && textOf(e)) {
             const { topic, text } = splitTopic(textOf(e)), { tldr } = splitTldr(text);
             if (topic || tldr) {
@@ -159,7 +163,7 @@ async function scanChat(path, size) {
 
     let c = chats.get(path);
     if (!c || size < c.offset) {
-        c = { offset: 0, notes: [], links: new Map() };
+        c = { offset: 0, notes: [], links: new Map(), repos: new Map() };
         chats.set(path, c);
     }
 
@@ -319,8 +323,10 @@ export async function log(project, now = Date.now()) {
     const loose = nestCommits(agents, found.list).map(c => ({ kind: 'commit', ...c }));
 
     // MRs the chats linked or the agents opened; one an agent opened shows as that agent's chip instead
-    const links = new Map(chatsOf.flatMap(c => [...c.links]));
-    agents.forEach(a => a.prs.forEach(u => links.set(u, Math.max(links.get(u) ?? 0, a.at))));
+    // only this project's: a chat or report may quote another repo's MR
+    const repos = new Map(chatsOf.flatMap(c => [...c.repos]));
+    const links = new Map(chatsOf.flatMap(c => [...c.links]).filter(([u]) => sameRepo(u, project, repos.get(u))));
+    agents.forEach(a => a.prs.filter(u => sameRepo(u, project)).forEach(u => links.set(u, Math.max(links.get(u) ?? 0, a.at))));
     const states = new Map(await Promise.all([...links.keys()].map(async u => [u, await prState(u).catch(() => null)])));
     const byAgent = new Set(agents.flatMap(a => a.prs));
     const mrs = [...links].filter(([u, at]) => at >= since && !byAgent.has(u) && ['merged', 'closed'].includes(states.get(u)?.state))

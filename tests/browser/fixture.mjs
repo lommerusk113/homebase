@@ -11,8 +11,13 @@ export const IDS = {
     worker: 'aaaaaaaa-0000-4000-8000-000000000003', // alpha, open turn with a queued message
     gamma: 'aaaaaaaa-0000-4000-8000-000000000004', // gamma, whose forge calls fail
     other: 'aaaaaaaa-0000-4000-8000-000000000005', // alpha, written to by the binding test
-    quiet: 'aaaaaaaa-0000-4000-8000-000000000006' // delta (no origin, never tracked by default): only a finished subagent
+    quiet: 'aaaaaaaa-0000-4000-8000-000000000006', // delta (no origin, never tracked by default): only a finished subagent
+    tracker: 'aaaaaaaa-0000-4000-8000-000000000007' // tracker, a personal GitHub repo (SSH host alias): its PR needs the keychain token
 };
+// what the fake `security` prints for service gh-personal; forge-stub.mjs only serves tracker's PRs to gh with this as GH_TOKEN
+export const PERSONAL_TOKEN = 'ghp_fixture_personal_token';
+export const TRACKER_PR = 'https://github.com/lommerusk113/tracker/pull/32';
+export const OTHER_PR = 'https://github.com/lommerusk113/homebase/pull/2'; // another repo's PR a tracker session merely quoted
 export const MR = n => `https://gitlab.com/acme/alpha/-/merge_requests/${n}`;
 
 const ago = s => new Date(Date.now() - s * 1000).toISOString();
@@ -76,7 +81,7 @@ export function buildFixture(root) {
     } } }));
 
     // git repos only so the server's `git remote get-url origin` names the project and its forge
-    for (const [name, origin] of [['alpha', 'git@gitlab.com:acme/alpha.git'], ['beta', 'https://github.com/acme/beta.git'], ['gamma', 'git@gitlab.com:acme/gamma.git']]) {
+    for (const [name, origin] of [['alpha', 'git@gitlab.com:acme/alpha.git'], ['beta', 'https://github.com/acme/beta.git'], ['gamma', 'git@gitlab.com:acme/gamma.git'], ['tracker', 'git@github-personal:lommerusk113/tracker.git']]) {
         const repo = join(home, 'repos', name);
         mkdirSync(repo, { recursive: true });
         execFileSync('git', ['init', '-q', repo]);
@@ -103,6 +108,8 @@ export function buildFixture(root) {
     for (const cli of ['glab', 'gh']) {
         writeFileSync(join(bin, cli), `#!/bin/sh\nexec "${process.execPath}" "${stub}" ${cli} "$@"\n`, { mode: 0o755 });
     }
+    // the keychain: only the personal service has an item, as on the real machine
+    writeFileSync(join(bin, 'security'), `#!/bin/sh\n[ "$3" = gh-personal ] && echo ${PERSONAL_TOKEN} || exit 44\n`, { mode: 0o755 });
 
     const alpha = session(home, 'alpha', IDS.master, [
         { type: 'ai-title', aiTitle: 'Login work' },
@@ -144,6 +151,14 @@ export function buildFixture(root) {
         tool('Bash', { command: 'npm test' }, 30),
         { type: 'queue-operation', operation: 'enqueue', content: 'also update the docs, then take on #7', timestamp: ago(20) }
     ], 1);
+
+    session(home, 'tracker', IDS.tracker, [
+        { type: 'pr-link', prUrl: TRACKER_PR, prRepository: 'lommerusk113/tracker', timestamp: ago(800) },
+        { type: 'pr-link', prUrl: OTHER_PR, prRepository: 'lommerusk113/homebase', timestamp: ago(700) },
+        prompt('Ship the tracker fix', 600),
+        said('Opened the PR.', 590),
+        done(580)
+    ], 580);
 
     session(home, 'gamma', IDS.gamma, [prompt('Tidy the README', 5000), said('Tidied.', 4990), done(4980)], 4980);
     // delta: a git repo without origin, so the server names it by folder and makes no forge calls

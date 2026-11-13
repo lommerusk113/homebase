@@ -579,6 +579,7 @@ assert.equal(inMilestone(row('u', null), null), true); // no milestone selected
     const bare = toData(500, 'Command failed: gh api …\n');
     assert.deepEqual([bare.reason, bare.error, bare.milestones, bare.selected], ['error', 'Command failed: gh api …', [], null]);
     assert.equal(toData(502, '').error, 'HTTP 502');
+    assert.equal(toData(500, '', 'p').project, 'p'); // the Issues tab names the project in the error
     // fast polling stops on a final state, even while a refresh of the list runs in the background
     assert.equal(isLoading({ ...err, updating: true }), false);
     assert.equal(isLoading({ reason: null, selected: { loading: true }, updating: false }), true);

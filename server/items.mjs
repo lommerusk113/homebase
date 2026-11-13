@@ -199,7 +199,8 @@ export function requestFor(sessions, project, url, prState) {
 }
 
 // The work items' raw groups: one per PR/MR (deduped across sessions and agents), plus running or stopped agents with
-// no MR yet. Agents whose description names a known MR (!123) count as work on it; finished agents without an MR are dropped.
+// no MR yet. Agents whose description names a known MR (!123) count as work on it; finished agents without an MR stay
+// for RECENT_DONE_MS, then drop out.
 function itemGroups(sessions, prOf, now) {
 
     const byUrl = new Map();

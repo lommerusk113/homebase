@@ -3,12 +3,14 @@ import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable,
 import { renderBoard } from './list.js';
 
 // only sessions in the selected project(s); falls back to the most recent one there
+/** @returns {Session | null} */
 export const chatSession = () => { const v = visibleSessions(); return v.find(s => s.id === state.chat) || v[0] || null; };
 let chatKey = null;
 let stick = false; // set by a send: the next render scrolls to the bottom even if the user had scrolled up
 let following = null; // session id a /clear was sent to: the chat moves to its successor once the server has mapped it
 
 // cleared:<id> holds a timestamp (Clear view) or {"at","mode":"new"} (New conversation: the same cut, but not a "hidden" one)
+/** @param {string | null} raw @returns {{ at: number, fresh: boolean }} */
 export function clearState(raw) {
     let v;
     try { v = JSON.parse(raw); } catch { return { at: 0, fresh: false }; }
@@ -17,15 +19,17 @@ export function clearState(raw) {
 
 // The #msg draft and its selection per session in sessionStorage, so a reload doesn't lose typed text. Empty text
 // removes it. ta is a wa-textarea (selection lives on its inner .input) or anything with value/selectionStart/End.
+/** @param {Storage | null} storage @param {string | undefined} sid @param {WaTextarea | HTMLTextAreaElement} ta */
 export function saveDraft(storage, sid, ta) {
     try {
         if (!sid) return;
-        const sel = ta.input ?? ta;
+        const sel = ('input' in ta && ta.input) || /** @type {HTMLTextAreaElement} */ (ta);
         if (ta.value) storage.setItem(`draft:${sid}`, JSON.stringify({ text: ta.value, start: sel.selectionStart, end: sel.selectionEnd }));
         else storage.removeItem(`draft:${sid}`);
     } catch {}
 }
 // Fills an empty ta from the saved draft; the selection is set once the component has rendered the value.
+/** @param {Storage | null} storage @param {string} sid @param {WaTextarea} ta @returns {Promise<boolean>} */
 export async function restoreDraft(storage, sid, ta) {
     try {
         const d = JSON.parse(storage.getItem(`draft:${sid}`));
@@ -39,6 +43,7 @@ export async function restoreDraft(storage, sid, ta) {
 let restored = false; // once per page load, for the first bound session
 const session = () => { try { return sessionStorage; } catch { return null; } };
 
+/** @param {string} id */
 export function bindChat(id) {
     state.chat = id; store.set('chat', id);
     renderBoard(); refreshChat();
@@ -46,6 +51,7 @@ export function bindChat(id) {
 
 // Stable colour per topic: one of TOPIC_HUES --t<n> tokens in styles.css, so bubbles on one task share a colour.
 export const TOPIC_HUES = 8;
+/** @param {string} topic */
 export function topicHue(topic) {
     let h = 2166136261; // FNV-1a; low bits alone only see the chars' low bits, so fold the high half in
     for (const c of topic) h = Math.imul(h ^ c.codePointAt(0), 16777619);
@@ -61,6 +67,7 @@ function markRead(sid, key, b) {
     b.querySelector('.unread')?.remove();
 }
 
+/** @param {ChatItem} i @param {string} sid @param {string | null} prevTopic @param {{ latest?: boolean, unread?: boolean }} [look] */
 function bubble(i, sid, prevTopic, look = {}) {
     if (i.role === 'tools') return el('div', 'tools', i.text);
     if (i.role === 'error') return el('div', 'tools api-error', i.text);
@@ -106,6 +113,7 @@ function bubble(i, sid, prevTopic, look = {}) {
 }
 
 // The user's short reply to this question, outside the fold so it shows when collapsed to the TLDR.
+/** @param {Answer} a */
 function answerTag(a) {
     const yes = !/^(no|nope)\b/i.test(a.text);
     const t = el('div', `answer${yes ? ' yes' : ''}${a.error ? ' failed' : ''}`);
@@ -130,6 +138,7 @@ function addShowMore(feed) {
 }
 
 // Fixed-height line above the input (in the fixed-height dock): changing it never resizes the feed, so the scroll position stays put.
+/** @param {Parameters<typeof chatStatus>[0]} data */
 function setStatus(data) {
     const { kind, text } = chatStatus(data);
     $('status').className = `c-status ${kind}`; $('status-text').textContent = text;
@@ -143,6 +152,7 @@ export async function refreshChat() {
     const s = chatSession(), feed = $('feed');
     if (s && !restored) { restored = true; restoreDraft(session(), s.id, $('msg')).then(ok => ok && syncSend()); }
     if (!s) { chatKey = null; state.asking = null; updateTitle(); setStatus(state.offline ? { error: true } : null); return feed.replaceChildren(el('div', 'welcome', 'No session to chat with yet.')); }
+    /** @type {Transcript} */
     let data;
     try {
         const r = await api(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}`);
@@ -164,12 +174,13 @@ export async function refreshChat() {
     $('ask-cmd').textContent = `tmux attach -t ${s.tmux ?? `cc-${s.id.slice(0, 8)}`}`;
     // Optimistic bubbles go once any user/queued/pending item has the same text (sent no earlier than 10s before),
     // or 30s after the send succeeded: the transcript is the source of truth.
-    const landed = o => data.items.some(i => (i.role === 'user' && norm(i.text) === norm(o.text) && !(Date.parse(i.at) < Date.parse(o.at) - 10_000))
+    const landed = /** @param {OutboxItem} o */ o => data.items.some(i => (i.role === 'user' && norm(i.text) === norm(o.text) && !(Date.parse(i.at) < Date.parse(o.at) - 10_000))
         || (i.answer && norm(i.answer.text) === norm(o.text) && !(Date.parse(i.answer.at) < Date.parse(o.at) - 10_000)));
     state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !(landed(o) || Date.now() - o.okAt > 30_000));
     // placed by send time, so one sent before a queued message stays above it
     // a queued item whose Send now was clicked shows "sending…" until the queue entry resolves
     state.nudged = new Set(data.items.filter(i => i.pending).map(i => `${s.id}:${i.at}`).filter(k => state.nudged.has(k)));
+    /** @type {ChatItem[]} */
     const items = data.items.map(i => (i.pending && state.nudged.has(`${s.id}:${i.at}`) ? { ...i, sending: true } : i));
     for (const o of state.outbox.filter(o => o.sid === s.id)) {
         // a chip answer shows as the question's tag, not a bubble
@@ -194,7 +205,7 @@ export async function refreshChat() {
     let seen = seenStore(s.id);
     if (!seen) { seen = { at: Date.parse(items.at(-1)?.at) || Date.now(), keys: [] }; store.set(`needs-seen:${s.id}`, JSON.stringify(seen)); }
     // unread: newer than the first load, not opened, and no message from the user after it
-    const unread = (i, n) => i.needsYou && Date.parse(i.at) > seen.at && !seen.keys.includes(`${s.id}:${i.at}`) && !items.slice(n + 1).some(x => x.role === 'user');
+    const unread = /** @param {ChatItem} i @param {number} n */ (i, n) => i.needsYou && Date.parse(i.at) > seen.at && !seen.keys.includes(`${s.id}:${i.at}`) && !items.slice(n + 1).some(x => x.role === 'user');
     feed.replaceChildren(...items.map((i, n) => {
         const prev = topic;
         if (i.role === 'assistant') topic = i.topic;
@@ -217,6 +228,7 @@ export async function refreshChat() {
     stick = false;
 }
 
+/** @param {string} sid @param {string} key */
 async function sendNow(sid, key) {
     state.nudged.add(key); $('c-err').textContent = ''; refreshChat();
     try {
@@ -230,8 +242,10 @@ async function sendNow(sid, key) {
 const syncSend = () => { $('send-btn').disabled = !$('msg').value?.trim(); };
 
 // Types text into a session as an outbox bubble ("sending…", then gone once the transcript has it); false if it failed.
+/** @param {string} sid @param {string} text @param {string} [answerTo] @returns {Promise<boolean>} */
 export async function sendText(sid, text, answerTo) {
     $('c-err').textContent = '';
+    /** @type {OutboxItem} */
     const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo };
     state.outbox = [...state.outbox.filter(o => !o.error), out];
     stick = true;

@@ -47,11 +47,13 @@ let styled = false;
 
 // Whether a work item stays in the list for the selected milestone ({ id } or null): items with an MR of that
 // milestone, plus items without an MR (running or stopped agents). No selection keeps everything.
+/** @param {WorkItem} item @param {{ id: number } | null} selected */
 export function inMilestone(item, selected) {
     return !selected || !item.pr || item.milestone?.id === selected.id;
 }
 
 // Small tag for a work-item row whose MR belongs to a milestone (item.milestone { id, title } comes from the server).
+/** @param {WorkItem} item */
 export function milestoneTag(item) {
     if (!item?.milestone) return null;
     const t = el('span', 'chip ms-tag', `⚑ ${item.milestone.title}`);
@@ -61,6 +63,7 @@ export function milestoneTag(item) {
 
 // Pill text and tooltip for a selected milestone (groups from the server's groupIssues): "11 open", the full breakdown in the tooltip.
 // Before the server has the issues (ms.loading, no groups) the counts come from the milestone list.
+/** @param {SelectedMilestone} ms @returns {{ text: string, tip: string }} */
 export function pillLabel(ms) {
 
     const g = ms.groups, open = ms.total - ms.closed;
@@ -73,18 +76,21 @@ export function pillLabel(ms) {
 
 // An /api/milestones answer (status, body) as the pill's data. A body without a milestone list (a bare 500 from an
 // older server, a proxy page) becomes the error state, so the pill never waits on it.
-export function toData(status, text) {
+/** @param {number} status @param {string} text @param {string} [project] @returns {Milestones} */
+export function toData(status, text, project = '') {
     try {
         const d = JSON.parse(text);
         if (Array.isArray(d?.milestones)) return d;
     } catch {}
-    return { milestones: [], detected: [], me: null, selected: null, updating: false, loading: false, reason: 'error', error: text.trim() || `HTTP ${status}`, url: null };
+    return { project, milestones: [], detected: [], me: null, selected: null, updating: false, loading: false, reason: 'error', error: text.trim() || `HTTP ${status}`, url: null };
 }
 
 // Whether to poll fast: the issues still load or a refresh runs. A reason (none, error, unsupported) is final.
+/** @param {Milestones} d */
 export const isLoading = d => !d.reason && !!(d.selected?.loading || d.updating);
 
 // Pill text and tooltip for a project without milestones to show (data.reason), null otherwise.
+/** @param {Milestones} d @returns {{ text: string, tip: string, err: boolean } | null} */
 export function emptyPill(d) {
     if (!d.reason) return null;
     if (d.reason === 'none') return { text: 'No milestones', tip: `No open milestones in ${d.project}`, err: false };
@@ -96,6 +102,10 @@ export function emptyPill(d) {
 // onChange({ id, title } | null) runs when the selected milestone is known or changes. The choice is kept per project.
 // onData(response) runs with every changed /api/milestones response (the Issues tab draws from it).
 // onBusy(true|false) runs when a picked milestone starts and stops loading, so a view can dim its old data.
+/**
+ * @param {string} project
+ * @param {{ onChange?: (m: { id: number, title: string } | null) => void, onData?: (d: Milestones) => void, onBusy?: (busy: boolean) => void }} [opts]
+ */
 export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
     if (!styled) { document.head.append(el('style', null, CSS)); styled = true; }
     const key = `milestone:${project}`, pick = el('details', 'ms-pick'), summary = el('summary'), menu = el('div', 'ms-menu');
@@ -119,6 +129,7 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
     document.addEventListener('click', outside);
     pick.addEventListener('keydown', e => { if (e.key === 'Escape') { pick.open = false; e.stopPropagation(); } });
 
+    /** @param {Milestones} data */
     function render(data) {
         const ms = data.selected, empty = emptyPill(data);
         pick.classList.toggle('off', !!empty);
@@ -195,12 +206,12 @@ export function milestoneSelector(project, { onChange, onData, onBusy } = {}) {
         let ok = false;
         try {
             const r = await api(`/api/milestones?project=${encodeURIComponent(project)}&milestone=${encodeURIComponent(want)}`);
-            const text = JSON.stringify(toData(r.status, await r.text()));
+            const text = JSON.stringify(toData(r.status, await r.text(), project));
             ok = true;
             if (ok && busy === want) setBusy(null);
             if (text && text !== json) { // redraw only on change, so an open menu stays put
                 json = text;
-                const data = JSON.parse(text);
+                const data = /** @type {Milestones} */ (JSON.parse(text));
                 loading = isLoading(data);
                 render(data);
                 onData?.(data);

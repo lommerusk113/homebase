@@ -91,6 +91,8 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 wa-button[size="s"] { --wa-form-control-height:26px; --wa-form-control-padding-inline:10px; font-size:12px; }
 wa-button.act-btn::part(base) { color:var(--muted); }
 wa-button.act-btn:hover:not([disabled])::part(base) { color:var(--fg); }
+.sent-pill { display:inline-flex; align-items:center; gap:6px; padding:2px 10px; border-radius:999px; font-size:12px; color:var(--c-doing); background:color-mix(in srgb, var(--c-doing) 14%, transparent); vertical-align:middle; }
+.no-reply { color:var(--c-needs); }
 wa-button.open-btn { margin-right:4px; vertical-align:middle; }
 wa-button.open-btn::part(base) { color:var(--muted); padding-inline:6px; }
 wa-button.open-btn:hover::part(base) { color:var(--fg); }

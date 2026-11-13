@@ -45,8 +45,8 @@ export function buildLanes(cards, done, me) {
         }
         for (const p of i.assignees) {
             if (lanes.has(p.username)) {
-                    lanes.get(p.username).closed++;
-                }
+                lanes.get(p.username).closed++;
+            }
         }
     }
     return [...[...lanes.values()].sort((a, b) => b.me - a.me || a.who.name.localeCompare(b.who.name)), free];
@@ -58,8 +58,8 @@ export function closedBy(done) {
     const n = new Map();
     for (const i of done) {
         for (const k of i.assignees.length ? i.assignees.map(p => p.name) : ['unassigned']) {
-                n.set(k, (n.get(k) ?? 0) + 1);
-            }
+            n.set(k, (n.get(k) ?? 0) + 1);
+        }
     }
     // @ts-expect-error boolean minus boolean is 0/1/-1 at runtime, the intended sort key
     return [...n].sort((a, b) => (a[0] === 'unassigned') - (b[0] === 'unassigned') || a[0].localeCompare(b[0]));
@@ -86,7 +86,7 @@ const initials = n => n.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpper
 let data;
 let openIid = null, closedOpen = false;
 const sentAt = new Map(); // iid -> last send, so a re-render keeps the button showing it
-const SENT_MS = 3000; // how long "Sent ✓" shows; further sends of that issue are ignored meanwhile
+const SENT_SHOWN_MS = 3000; // how long "Sent ✓" shows; further sends of that issue are ignored meanwhile
 
 // Tabs: Work (the item list) and Issues. 1 and 2 switch (keys.js); the choice survives reloads.
 /** @param {string | null} tab */
@@ -245,11 +245,10 @@ function card(c, ms) {
         ft.append(el('span', 'chip', 'no MR'));
     }
     a.append(top, el('div', 'tt', open ? c.title : shortTitle(c.title, ms.title)), ft);
-    if (!open) {
-        a.title = c.title;
-    }
     if (open) {
         a.append(more(c));
+    } else {
+        a.title = c.title;
     }
     a.onclick = () => {
         openIid = open ? null : c.iid;
@@ -264,17 +263,17 @@ function more(c) {
     if (c.desc) {
         box.append(el('div', 'desc', c.desc));
     }
-    const sent = Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_MS;
+    const sent = Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_SHOWN_MS;
     const send = waButton(sent ? 'Sent ✓' : 'Send to chat', null, { variant: 'brand', appearance: 'filled', ...(sent || !chatSession() ? { disabled: true } : {}) });
     send.onclick = e => {
         e.stopPropagation();
         const s = chatSession();
-        if (!s || Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_MS) {
+        if (!s || Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_SHOWN_MS) {
             return;
         }
         sentAt.set(c.iid, Date.now());
         renderIssues();
-        setTimeout(() => renderIssues(), SENT_MS);
+        setTimeout(() => renderIssues(), SENT_SHOWN_MS);
         sendText(s.id, msg);
     };
     const note = el('span', 'msg', 'sends ');

@@ -150,89 +150,95 @@ function starting(s, n) {
     return tr;
 }
 
+// One work item's row, plus its detail row while selected.
+/** @param {WorkItem} x @returns {HTMLElement[]} */
+function itemRows(x) {
+    const tr = el('tr', state.selected === x.key ? 'sel' : '');
+    tr.dataset.key = x.key;
+    const what = el('td', 'what');
+    const fresh = x.pr ? freshComments(x.comments, seenAt(x.pr)) : [];
+    const next = el('small', 'next', `Next: ${x.next}${fresh.length ? ` · ${fresh.length} new comment${fresh.length === 1 ? '' : 's'}` : ''}`);
+    // before Next, so the ellipsis doesn't cut it
+    if (unanswered.has(x.key) && x.action && !x.sent && !x.requested) {
+        next.prepend(el('span', 'no-reply', 'No response yet — check the chat · '));
+    }
+    if (x.comments?.count) {
+        next.prepend(commentBadge(x, fresh), ' ');
+    }
+    what.append(el('b', null, x.title), next);
+    if (x.milestone) {
+        what.firstElementChild.prepend(milestoneTag(x));
+    }
+    const prog = el('td', 'prog');
+    prog.append(stageBar(x));
+    if (x.tokens || x.time) {
+        const m = el('small', 'meta', [x.tokens, x.time].filter(Boolean).join(' · '));
+        prog.append(m);
+        if (x.tokensTitle) {
+            prog.append(tooltip(m, x.tokensTitle));
+        }
+    }
+    const pr = el('td', 'pr');
+    if (x.pr) {
+        pr.append(prChip(x), ...ciPill(x.prState?.pipeline), ...gateBadge(x.gate));
+    }
+    const br = el('td', 'br');
+    if (x.branch) {
+        br.append(el('span', 'chip mono', x.branch));
+    }
+    const act = el('td', 'act');
+    act.append(...openButton(x));
+    if (x.sent || x.requested) {
+        act.append(sentPill(x));
+    } else if (x.action && x.sessionId) {
+        act.append(...actionButton(x));
+    }
+    tr.append(what, prog, pr, br, act, el('td', 'when', ago(x.updated)));
+    tr.onclick = () => select(x);
+    if (state.selected !== x.key) {
+        return [tr];
+    }
+    const more = el('tr', 'detail'), td = el('td');
+    td.colSpan = 6;
+    td.append(detail(x));
+    more.append(td);
+    return [tr, more];
+}
+
+/** @param {WorkItem[]} list */
+function itemTable(list) {
+    const t = el('table', 'rows');
+    t.setAttribute('role', 'grid');
+    t.append(...list.flatMap(x => itemRows(x)));
+    return t;
+}
+
+// Folded groups: Merged stays open for this page load once opened; Recently finished remembers per project, after a toggle.
+/** @param {typeof COLUMNS[number]} c @param {WorkItem[]} list @param {boolean} isOpen @param {(open: boolean) => void} setOpen */
+function foldGroup(c, list, isOpen, setOpen) {
+    const f = el('wa-details', `group g-${c.key}`), sum = el('span', 'g-head');
+    f.setAttribute('appearance', 'plain');
+    f.toggleAttribute('open', isOpen);
+    sum.slot = 'summary';
+    sum.append(dot(c.key), `${c.label} (${list.length})`);
+    // tooltips inside also fire wa-show/wa-hide, and those bubble
+    f.addEventListener('wa-show', e => {
+        if (e.target === f) {
+            setOpen(true);
+        }
+    });
+    f.addEventListener('wa-hide', e => {
+        if (e.target === f) {
+            setOpen(false);
+        }
+    });
+    f.append(sum, itemTable(list));
+    return f;
+}
+
 // Work items (one per MR, plus running/stopped agents without one), grouped by what they wait on; recently finished and merged ones folded at the bottom.
 function renderItems() {
     const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).map(x => optimistic(x)).sort((a, b) => b.updated - a.updated);
-    /** @param {WorkItem[]} list */
-    const table = list => {
-        const t = el('table', 'rows');
-        t.setAttribute('role', 'grid');
-        t.append(...list.flatMap(x => {
-            const tr = el('tr', state.selected === x.key ? 'sel' : '');
-            tr.dataset.key = x.key;
-            const what = el('td', 'what');
-            const fresh = x.pr ? freshComments(x.comments, seenAt(x.pr)) : [];
-            const next = el('small', 'next', `Next: ${x.next}${fresh.length ? ` · ${fresh.length} new comment${fresh.length === 1 ? '' : 's'}` : ''}`);
-            // before Next, so the ellipsis doesn't cut it
-            if (unanswered.has(x.key) && x.action && !x.sent && !x.requested) {
-                next.prepend(el('span', 'no-reply', 'No response yet — check the chat · '));
-            }
-            if (x.comments?.count) {
-                next.prepend(commentBadge(x, fresh), ' ');
-            }
-            what.append(el('b', null, x.title), next);
-            if (x.milestone) {
-                what.firstElementChild.prepend(milestoneTag(x));
-            }
-            const prog = el('td', 'prog');
-            prog.append(stageBar(x));
-            if (x.tokens || x.time) {
-                const m = el('small', 'meta', [x.tokens, x.time].filter(Boolean).join(' · '));
-                prog.append(m);
-                if (x.tokensTitle) {
-                    prog.append(tooltip(m, x.tokensTitle));
-                }
-            }
-            const pr = el('td', 'pr');
-            if (x.pr) {
-                pr.append(prChip(x), ...ciPill(x.prState?.pipeline), ...gateBadge(x.gate));
-            }
-            const br = el('td', 'br');
-            if (x.branch) {
-                br.append(el('span', 'chip mono', x.branch));
-            }
-            const act = el('td', 'act');
-            act.append(...openButton(x));
-            if (x.sent || x.requested) {
-                act.append(sentPill(x));
-            } else if (x.action && x.sessionId) {
-                act.append(...actionButton(x));
-            }
-            tr.append(what, prog, pr, br, act, el('td', 'when', ago(x.updated)));
-            tr.onclick = () => select(x);
-            if (state.selected !== x.key) {
-                return [tr];
-            }
-            const more = el('tr', 'detail'), td = el('td');
-            td.colSpan = 6;
-            td.append(detail(x));
-            more.append(td);
-            return [tr, more];
-        }));
-        return t;
-    };
-    // Folded groups: Merged stays open for this page load once opened; Recently finished remembers per project, after a toggle.
-    /** @param {typeof COLUMNS[number]} c @param {WorkItem[]} list @param {boolean} isOpen @param {(open: boolean) => void} setOpen */
-    const fold = (c, list, isOpen, setOpen) => {
-        const f = el('wa-details', `group g-${c.key}`), sum = el('span', 'g-head');
-        f.setAttribute('appearance', 'plain');
-        f.toggleAttribute('open', isOpen);
-        sum.slot = 'summary';
-        sum.append(dot(c.key), `${c.label} (${list.length})`);
-        // tooltips inside also fire wa-show/wa-hide, and those bubble
-        f.addEventListener('wa-show', e => {
-            if (e.target === f) {
-                setOpen(true);
-            }
-        });
-        f.addEventListener('wa-hide', e => {
-            if (e.target === f) {
-                setOpen(false);
-            }
-        });
-        f.append(sum, table(list));
-        return f;
-    };
     const placeholders = visibleSessions().filter(isMaster).flatMap(s => startingIssues(s, visibleSessions().filter(o => o.project === s.project).flatMap(o => o.items || [])).map(n => starting(s, n)));
     const finishedKey = `fold:finished:${state.project}`;
     const groups = COLUMNS.map(c => {
@@ -241,14 +247,14 @@ function renderItems() {
             return null;
         }
         if (c.key === 'done') {
-            return fold(c, list, !!state.showMerged, v => { state.showMerged = v; });
+            return foldGroup(c, list, !!state.showMerged, v => { state.showMerged = v; });
         }
         if (c.key === 'finished') {
-            return fold(c, list, store.get(finishedKey) === 'open', v => store.set(finishedKey, v ? 'open' : 'closed'));
+            return foldGroup(c, list, store.get(finishedKey) === 'open', v => store.set(finishedKey, v ? 'open' : 'closed'));
         }
         const h = el('h2', 'g-head');
         h.append(dot(c.key), `${c.label} · ${list.length + extra.length}`);
-        const t = table(list);
+        const t = itemTable(list);
         t.prepend(...extra);
         const sec = el('section', `group g-${c.key}`);
         sec.append(h, t);
@@ -272,8 +278,8 @@ function commentBadge(x, fresh) {
 const markAllSeen = () => {
     for (const x of state.sessions.flatMap(s => s.items || [])) {
         if (x.pr) {
-                markSeen(x.pr);
-            }
+            markSeen(x.pr);
+        }
     }
     renderBoard();
     updateTitle();

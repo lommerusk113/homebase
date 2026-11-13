@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { spawn, execFileSync } from 'node:child_process';
 import { status, summarize, column } from './server.mjs';
 
 assert.equal(column('working', { state: 'merged' }, true), 'doing');
@@ -455,8 +459,6 @@ assert.equal(pendingQuestion([tu('AskUserQuestion', { id: 'q3', input: {} })]), 
 console.log('ok quick replies');
 
 import { addUsage, readUsage, formatDuration, formatTokens, limitsOf } from './server.mjs';
-import { mkdtempSync, writeFileSync, appendFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 const use = (id, input, output, ts) => JSON.stringify({ type: 'assistant', timestamp: ts, message: { id, usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: 100, cache_creation_input_tokens: 10 } } });
 const u = addUsage({ byId: new Map() }, [use('m1', 2, 30, T('00.000')), use('m1', 2, 30, T('01.000')), use('m2', 5, 7, T('09.000')), `{"type":"user","timestamp":"${T('10.000')}"}`].join('\n'));
 assert.deepEqual(u.totals, { input: 7, output: 37, cacheRead: 200, cacheWrite: 20 });
@@ -843,9 +845,8 @@ for (const p of [
 console.log('ok vendor');
 
 // Every request from the page goes through core.js's api(), which adds the token; a missing import fails silently in a try/catch.
-import { readdirSync, readFileSync as readSrc } from 'node:fs';
 for (const f of readdirSync(new URL('./public', import.meta.url)).filter(f => f.endsWith('.js') && f !== 'core.js')) {
-    const src = readSrc(new URL(`./public/${f}`, import.meta.url), 'utf8');
+    const src = readFileSync(new URL(`./public/${f}`, import.meta.url), 'utf8');
     assert.doesNotMatch(src, /\bfetch\(/, `${f} uses fetch() instead of api()`);
     if (/\bapi\(/.test(src)) assert.match(src, /import \{[^}]*\bapi\b[^}]*\} from '\.\/core\.js'/, `${f} calls api() without importing it`);
 }
@@ -920,12 +921,9 @@ import { refetch, refreshDue } from './server.mjs';
 }
 console.log('ok refresh');
 
-// Integration: real server on a random port, against a temp data dir and a tmux socket nobody uses. Only GETs and rejected POSTs.
-import { spawn } from 'node:child_process';
+// Integration: real server on a random port, over a temp HOME and data dir and a tmux socket nobody uses. Only GETs, rejected POSTs and a refresh with nothing to refresh.
 import { request } from 'node:http';
 import { createServer as netServer } from 'node:net';
-import { readFileSync as readSync, rmSync, statSync } from 'node:fs';
-import { join as pjoin } from 'node:path';
 {
     const freePort = () => new Promise(r => { const s = netServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
     const call = (port, { host, path = '/', method = 'GET', headers = {}, body, addr = '127.0.0.1' } = {}) => new Promise((ok, fail) => {
@@ -938,8 +936,8 @@ import { join as pjoin } from 'node:path';
         r.end(body);
     });
     async function start(env) {
-        const port = await freePort(), dir = mkdtempSync(pjoin(tmpdir(), 'homebase-test-'));
-        const child = spawn(process.execPath, ['server.mjs'], { cwd: new URL('.', import.meta.url).pathname, env: { ...process.env, PORT: String(port), HOMEBASE_DIR: dir, HOMEBASE_STATUSLINE_DIR: dir, HOMEBASE_TMUX_SOCKET: 'homebase-test-none', ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
+        const port = await freePort(), dir = mkdtempSync(join(tmpdir(), 'homebase-test-'));
+        const child = spawn(process.execPath, ['server.mjs'], { cwd: new URL('.', import.meta.url).pathname, env: { ...process.env, HOME: dir, PORT: String(port), HOMEBASE_DIR: dir, HOMEBASE_STATUSLINE_DIR: dir, HOMEBASE_TMUX_SOCKET: 'homebase-test-none', ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
         let out = '';
         await new Promise((ok, fail) => { child.stdout.on('data', c => { out += c; if (out.includes('Homebase on')) ok(); }); child.on('exit', fail); });
         return { port, dir, out, stop: () => { child.kill(); rmSync(dir, { recursive: true, force: true }); } };
@@ -1000,10 +998,10 @@ import { join as pjoin } from 'node:path';
     } else {
         const l = await start({ HOMEBASE_LAN: '1' });
         try {
-            const code = readSync(pjoin(l.dir, 'pairing-code'), 'utf8').trim();
+            const code = readFileSync(join(l.dir, 'pairing-code'), 'utf8').trim();
             assert.match(l.out, new RegExp(`pairing code ${code}`));
-            assert.equal(statSync(pjoin(l.dir, 'pairing-code')).mode & 0o777, 0o600);
-            assert.equal(statSync(pjoin(l.dir, 'session-secret')).mode & 0o777, 0o600);
+            assert.equal(statSync(join(l.dir, 'pairing-code')).mode & 0o777, 0o600);
+            assert.equal(statSync(join(l.dir, 'session-secret')).mode & 0o777, 0o600);
             const host = `${lanIp}:${l.port}`, lan = { addr: lanIp, host };
             assert.equal((await call(l.port, { ...lan, host: 'evil.com' })).status, 403);
             const pairing = await call(l.port, lan);
@@ -1186,7 +1184,7 @@ import { issueOf, mentionsMr, turnPrompts, worksOnMr, requestFor } from './serve
 // tracker e9c15e3f: a ~900 KB tool_result line filled the 512 KB tail, so the chat showed one bubble and the 403 vanished
 import { readTail } from './server.mjs';
 {
-    const f = pjoin(mkdtempSync(pjoin(tmpdir(), 'hb-')), 't.jsonl');
+    const f = join(mkdtempSync(join(tmpdir(), 'hb-')), 't.jsonl');
     const ts = '2026-11-13T10:15:47.041Z';
     const lines = [
         { type: 'user', message: { role: 'user', content: 'weight OC roles for new players' }, timestamp: '2026-11-13T10:10:00.000Z' },
@@ -1208,22 +1206,20 @@ import { readTail } from './server.mjs';
 }
 
 // A half-written agent .meta.json or a transcript deleted mid-poll skips that one entry, not the whole /api/sessions
-import { mkdirSync as mkdirS, symlinkSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import { fetchComments } from './server.mjs';
 {
-    const home = mkdtempSync(pjoin(tmpdir(), 'hb-home-'));
-    const dir = pjoin(home, '.claude', 'projects', 'p');
-    const subs = pjoin(dir, 'good', 'subagents');
-    mkdirS(subs, { recursive: true });
+    const home = mkdtempSync(join(tmpdir(), 'hb-home-'));
+    const dir = join(home, '.claude', 'projects', 'p');
+    const subs = join(dir, 'good', 'subagents');
+    mkdirSync(subs, { recursive: true });
     const at = new Date().toISOString();
-    writeFileSync(pjoin(dir, 'good.jsonl'), JSON.stringify({ type: 'user', sessionId: 'good', message: { content: 'hi' }, timestamp: at }) + '\n');
-    symlinkSync(pjoin(dir, 'nowhere.jsonl'), pjoin(dir, 'gone.jsonl')); // listed by readdir, gone on stat
+    writeFileSync(join(dir, 'good.jsonl'), JSON.stringify({ type: 'user', sessionId: 'good', message: { content: 'hi' }, timestamp: at }) + '\n');
+    symlinkSync(join(dir, 'nowhere.jsonl'), join(dir, 'gone.jsonl')); // listed by readdir, gone on stat
     const agentLine = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'done' }] }, timestamp: at }) + '\n';
-    writeFileSync(pjoin(subs, 'bad.jsonl'), agentLine);
-    writeFileSync(pjoin(subs, 'bad.meta.json'), '{"descrip');
-    writeFileSync(pjoin(subs, 'ok.jsonl'), agentLine);
-    writeFileSync(pjoin(subs, 'ok.meta.json'), JSON.stringify({ description: 'ok agent', finished: true }));
+    writeFileSync(join(subs, 'bad.jsonl'), agentLine);
+    writeFileSync(join(subs, 'bad.meta.json'), '{"descrip');
+    writeFileSync(join(subs, 'ok.jsonl'), agentLine);
+    writeFileSync(join(subs, 'ok.meta.json'), JSON.stringify({ description: 'ok agent', finished: true }));
     // ROOT comes from HOME at import, so sessions() runs in a child with HOME pointing at the fixture
     const code = "import { sessions } from './server/sessions.mjs'; console.log(JSON.stringify((await sessions()).map(s => [s.id, s.items.map(i => i.key)])));";
     const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home }, cwd: import.meta.dirname, encoding: 'utf8' });

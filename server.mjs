@@ -1117,6 +1117,8 @@ const MS_LIST_TTL_MS = 5 * 60_000;
 const MS_ISSUES_TTL_MS = 90_000;
 const MS_LINKS_TTL_MS = 5 * 60_000;
 const MS_PARALLEL = 8;
+const MS_CALL_TIMEOUT_MS = 60_000;
+const MS_FIRST_LOAD_MS = 15_000; // a project's first milestone list answers by then, as an error if it is not in yet
 const swr = new Map(); // key -> { at, value, pending, error }
 
 // Runs at most n of the given async functions at a time; the rest wait in call order.
@@ -1230,7 +1232,8 @@ const api = (repo, path) => {
 
     const cli = isGitLab(repo) ? 'glab' : 'gh';
 
-    return apiOnce(`${cli} ${path}`, () => apiSlot(() => run(cli, ['api', path]))).then(({ stdout }) => JSON.parse(stdout));
+    // the timeout kills a hung glab/gh, so it never holds a limiter slot for good
+    return apiOnce(`${cli} ${path}`, () => apiSlot(() => run(cli, ['api', path], { timeout: MS_CALL_TIMEOUT_MS }))).then(({ stdout }) => JSON.parse(stdout));
 };
 export const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
@@ -1427,14 +1430,23 @@ async function milestones(project, pick) {
     }
     const repo = repoPaths.get(project);
     if (!repo) {
-        throw Object.assign(new Error('unknown project'), { status: 404 });
+        throw Object.assign(new Error('unknown project'), { status: 404, body: noMilestones(project, null, 'unsupported', 'unknown project') });
     }
 
     // the signed-in user, for the Issues tab's "you" lane; a failed lookup only loses the mark
-    const [list, me] = await Promise.all([
-        cached(`ms:${project}`, MS_LIST_TTL_MS, () => fetchMilestones(repo)),
-        cached(`me:${repo.host}`, 24 * 3600_000, () => api(repo, 'user').then(person)).catch(() => null)
-    ]);
+    const late = new Promise((_, fail) => setTimeout(() => fail(new Error('timed out loading the milestones')), MS_FIRST_LOAD_MS).unref());
+    let list, me;
+    try {
+        [list, me] = await Promise.race([late, Promise.all([
+            cached(`ms:${project}`, MS_LIST_TTL_MS, () => fetchMilestones(repo)),
+            cached(`me:${repo.host}`, 24 * 3600_000, () => api(repo, 'user').then(person)).catch(() => null)
+        ])]);
+    } catch (e) {
+        return noMilestones(project, repo, 'error', e.stderr?.trim() || e.message);
+    }
+    if (!list.length) {
+        return { ...noMilestones(project, repo, 'none'), me };
+    }
     const mrs = [...prs].filter(([url, hit]) => hit.value && sameRepo(url, project)).map(([, hit]) => hit.value);
     const detected = activeMilestones(mrs, list);
     const ms = pick === 'none' ? null : list.find(m => String(m.id) === pick || m.title === pick) ?? list.find(m => m.id === detected[0]);
@@ -1444,7 +1456,18 @@ async function milestones(project, pick) {
     const selected = !ms ? null : issues.value ? { ...ms, ...issues.value } : { ...ms, loading: !!issues.pending, error: issues.error?.message ?? null };
     const updating = !!(issues?.pending || swr.get(`ms:${project}`).pending);
 
-    return { project, milestones: list, detected, me, selected, updating };
+    return { project, milestones: list, detected, me, selected, updating, loading: false, reason: null, url: milestonesPage(repo) };
+}
+
+const milestonesPage = repo => (isGitLab(repo) ? `https://${repo.host}/${repo.path}/-/milestones` : `https://github.com/${repo.path}/milestones`);
+
+// The terminal answer for a project without milestones to show. reason: none (it has no open ones), error (glab/gh
+// failed or timed out; error says why), unsupported (a project the session scan does not know).
+export function noMilestones(project, repo, reason, error = null) {
+    return {
+        project, milestones: [], detected: [], me: null, selected: null, updating: false, loading: false, reason, error,
+        url: reason !== 'unsupported' && repo ? milestonesPage(repo) : null
+    };
 }
 
 // Session scan at start, so /api/milestones knows the projects and the board's MRs before the page asks.
@@ -2053,6 +2076,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             res.end('not found');
         } catch (e) {
             res.statusCode = e.status ?? 500;
+            if (e.body) {
+                res.setHeader('content-type', 'application/json');
+                return res.end(JSON.stringify(e.body));
+            }
             res.end(String(e.message));
         }
     }).listen(PORT, BIND, () => console.log(`Homebase on http://localhost:${PORT}`));

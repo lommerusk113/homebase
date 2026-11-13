@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="homebase-token" content="__HOMEBASE_TOKEN__">
+<meta name="homebase-build" content="__HOMEBASE_BUILD__">
 <title>Homebase</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/vendor/fonts/fonts.css">
@@ -22,6 +23,7 @@
   <span class="sep">/</span>
   <wa-select id="project" size="s" aria-label="Project"></wa-select>
   <span id="milestone-slot"></span><!-- milestone pill goes here (milestoneSelector from milestone.js) -->
+  <span class="updated" id="updated" role="status" hidden>Homebase was updated — reload when convenient</span>
   <span class="offline" id="offline" hidden>Offline</span>
   <button class="quiet" id="bell" title="Desktop notifications" aria-label="Desktop notifications" aria-pressed="false">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

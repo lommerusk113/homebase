@@ -1791,6 +1791,10 @@ const STATIC = {
     '/keys.js': ['keys.js', JS],
     '/icon.svg': ['icon.svg', 'image/svg+xml']
 };
+// Hash of the app files as of this start, in index.html's homebase-build meta: a page whose build differs from a
+// freshly served index.html runs old code and says "reload when convenient". A restart without code changes keeps it.
+// ponytail: vendor files aren't hashed; they change only with a VENDOR.md update, which comes with app changes anyway
+const BUILD = createHash('sha1').update(Object.values(STATIC).map(([f]) => readFileSync(new URL(`./public/${f}`, import.meta.url))).join('\0')).digest('base64url').slice(0, 12);
 
 // No third-party origins: everything, Web Awesome included, comes from public/vendor. data: is for Web Awesome's
 // built-in icons, which it renders as data: SVG URLs and loads with fetch(). Its components set inline styles.
@@ -1925,7 +1929,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 // The token reaches only a page served to a request that passed the Host, Origin and pairing checks above.
                 res.setHeader('content-security-policy', CSP);
                 res.setHeader('cache-control', 'no-store');
-                return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN));
+                return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN).replace('__HOMEBASE_BUILD__', BUILD));
             }
             const vendored = vendorPath(url.pathname);
             if (vendored && await serveVendor(vendored, req, res)) {

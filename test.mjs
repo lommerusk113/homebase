@@ -394,6 +394,16 @@ assert.equal(rowAction(mr(4), wr, null, 'T'), null);
 assert.equal(rowAction(mr(4), { ...wr, reviewers: [] }, null, 'T'), null); // no Request review either
 assert.equal(rowAction(mr(4), { ...wr, ci: 'failing' }, null, 'T').label, 'Fix pipeline'); // only a failing pipeline beats it
 assert.equal(nextStep({ ...wr, ci: 'running' }, null), 'Replied to 2 threads — waiting for Børre to resolve');
+// mergeable wins over replied threads; unanswered comments and a failing pipeline still win over mergeable
+const wrReady = { ...wr, ready: true };
+assert.equal(itemColumn(wrReady, null, true), 'ready');
+assert.equal(nextStep(wrReady, null), 'Approved — merge it · 2 replied threads still open');
+assert.equal(rowAction(mr(4), wrReady, null, 'T').label, 'Merge + close issue');
+assert.equal(nextStep({ ...wrReady, replied: 1 }, null), 'Approved — merge it · 1 replied thread still open');
+assert.equal(rowAction(mr(4), { ...wrReady, ci: 'failing' }, null, 'T').label, 'Fix pipeline');
+const theirsReady = withThreads({ ...waiting, ready: true }, turn(th(B), th(ME, B)));
+assert.equal(nextStep(theirsReady, null), 'Approved — 2 unanswered comments from Børre');
+assert.equal(rowAction(mr(4), theirsReady, null, 'T').label, 'Fix & reply');
 const theirs = turn(th(B), th(ME, B));
 assert.deepEqual([theirs.unresolved, theirs.unresolvedBy, theirs.replied], [2, ['Børre'], 0]);
 assert.equal(itemColumn(withThreads(waiting, theirs), null, true), 'needs-you');

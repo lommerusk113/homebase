@@ -159,9 +159,11 @@ export async function prState(url) {
 }
 
 // Why the last MR/PR lookup failed, in a few words, or null when it worked: the old state keeps being served meanwhile.
-export function prError(url) {
+export const prError = url => errorText(prs.get(url)?.error);
 
-    const e = prs.get(url)?.error;
+// A glab/gh failure in a few words, or null for none.
+export function errorText(e) {
+
     if (!e) {
         return null;
     }

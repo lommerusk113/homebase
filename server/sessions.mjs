@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ROOT, WORKING_MS, cache, liveSessions, closedSession, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, pendingQuestion, askMarker, readUsage, usageCache, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
 import { loadStore, record, seeds, flush } from './store.mjs';
-import { PR_TTL_MS, openMrUrls, prState, prError, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
+import { PR_TTL_MS, openMrUrls, prState, prError, errorText, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { repoPaths } from './account.mjs';
 import { contextOf } from './limits.mjs';
 import { workItems, milestoneOf, sameRepo } from './items.mjs';
@@ -110,8 +110,9 @@ export function agentStage(uses, report, done) {
     return stage;
 }
 
-// Bash run_in_background, a Bash moved there by its timeout or a message, Monitor, background Workflow, async Agent
-const LAUNCHED = /(?:in background with ID: |moved to the background \(ID: |Monitor started \(task |launched in background\. Task ID: )(\w+)|Async agent launched successfully[\s\S]*?agentId: (\w+)/;
+// Bash run_in_background, a Bash moved there by its timeout or a message, Monitor, background Workflow, async Agent.
+// At a line start, so a file or transcript the agent read or grepped that quotes one doesn't count.
+const LAUNCHED = /^(?:Command[^\n]*?(?:in background with ID: |moved to the background \(ID: )|Monitor started \(task |Workflow launched in background\. Task ID: )(\w+)|^Async agent launched successfully[\s\S]*?agentId: (\w+)/m;
 const NOTIFIED = /<task-notification>\s*<task-id>(\w+)<\/task-id>/;
 
 // Background commands and subagents the agent launched that haven't sent their task notification yet.
@@ -472,7 +473,8 @@ async function itemsOf(out) {
         it.milestone = milestoneOf(it.prState, swr.get(`ms:${it.project}`)?.value ?? []);
         it.comments = comments.get(it.pr) ?? null;
         // a failed lookup: without any state the row says why; with an older one it is flagged stale
-        it.forgeError = it.pr ? prError(it.pr) : null;
+        const commentsError = it.pr && errorText(swr.get(`comments:${it.pr}`)?.error);
+        it.forgeError = it.pr ? prError(it.pr) ?? (commentsError && `comments: ${commentsError}`) : null;
         if (it.forgeError && !it.prState && it.next === 'Open the MR to check its state') {
             it.next = `Couldn't check the MR: ${it.forgeError}`;
         }

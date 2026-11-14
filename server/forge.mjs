@@ -53,7 +53,7 @@ async function fetchPr(url) {
 
     const gl = url.match(/^https:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)/);
     if (gl) {
-        const { stdout } = await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}`]);
+        const { stdout } = await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}`], { timeout: apiTimeout() });
         const mr = JSON.parse(stdout);
         const state = { opened: 'open', merged: 'merged' }[mr.state] ?? 'closed';
         const status = mr.detailed_merge_status;
@@ -79,7 +79,7 @@ async function fetchPr(url) {
     }
 
     const repo = repoOfUrl(url);
-    const view = fields => ghRun(repo, ['pr', 'view', url, '--json', fields]);
+    const view = fields => ghRun(repo, ['pr', 'view', url, '--json', fields], { timeout: apiTimeout() });
     const fields = 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid';
     // a token without read:org (the personal one) can't read reviewRequests; the reviewers then come from the reviews alone
     const { stdout } = await view(fields).catch(e => (/required scopes/.test(e.message) ? view(fields.replace('reviewRequests,', '')) : Promise.reject(e)));
@@ -139,7 +139,7 @@ export async function prState(url) {
         prs.set(url, hit);
     }
     if (Date.now() - hit.at > PR_TTL_MS) {
-        refetch(hit, () => fetchPr(url));
+        refetch(hit, () => apiSlot(() => fetchPr(url)));
     }
     if (!hit.at) {
         await hit.pending;
@@ -260,13 +260,14 @@ export async function cached(key, ttl, fn) {
 export const isGitLab = repo => repo.host.includes('gitlab');
 // Every glab/gh call goes through one limiter, and an identical call already in flight is shared.
 const API_PARALLEL = 8;
-const API_CALL_TIMEOUT_MS = 60_000;
+// ponytail: HOMEBASE_API_TIMEOUT_MS exists so the tests needn't wait a minute for a hung CLI
+const apiTimeout = () => Number(process.env.HOMEBASE_API_TIMEOUT_MS) || 60_000;
 const apiSlot = limiter(API_PARALLEL);
 const apiOnce = dedupe();
 export const api = (repo, path) => {
 
     const gitlab = isGitLab(repo);
-    const call = () => (gitlab ? run('glab', ['api', path], { timeout: API_CALL_TIMEOUT_MS }) : ghRun(repo, ['api', path], { timeout: API_CALL_TIMEOUT_MS }));
+    const call = () => (gitlab ? run('glab', ['api', path], { timeout: apiTimeout() }) : ghRun(repo, ['api', path], { timeout: apiTimeout() }));
 
     // the timeout kills a hung glab/gh, so it never holds a limiter slot for good; the account is part of the key
     return apiOnce(`${gitlab ? 'glab' : `gh:${accountOf(repo)}`} ${path}`, () => apiSlot(call)).then(({ stdout }) => JSON.parse(stdout));
@@ -407,7 +408,7 @@ export async function fetchComments(url) {
     const toThread = t => ({
         resolved: t.isResolved, notes: t.comments.nodes.map(c => ({ author: { name: c.author?.login, username: c.author?.login, type: c.author?.__typename } }))
     });
-    const threads = await apiOnce(`gh graphql threads ${url}`, () => apiSlot(() => ghRun(repo, args, { timeout: API_CALL_TIMEOUT_MS })))
+    const threads = await apiOnce(`gh graphql threads ${url}`, () => apiSlot(() => ghRun(repo, args, { timeout: apiTimeout() })))
         .then(({ stdout }) => JSON.parse(stdout).data.repository.pullRequest.reviewThreads.nodes.map(toThread))
         .catch(() => null);
 

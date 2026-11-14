@@ -1913,3 +1913,28 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
     assert.equal(st.dirty, true);
     console.log('ok accounts and repo filtering');
 }
+
+// fake glab first on PATH for the forge tests below; each test passes the script body it needs
+const fakeBin = mkdtempSync(join(tmpdir(), 'hb-forge-'));
+const withFakeGlab = async (body, fn) => {
+    writeFileSync(join(fakeBin, 'glab'), `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+    const path = process.env.PATH;
+    process.env.PATH = `${fakeBin}:${path}`;
+    try {
+        return await fn();
+    } finally {
+        process.env.PATH = path;
+    }
+};
+
+import { prState } from './server/forge.mjs';
+{
+    // a hung glab can't hold the first /api/sessions load: the MR lookup times out like every other forge call
+    process.env.HOMEBASE_API_TIMEOUT_MS = '300';
+    const t0 = Date.now();
+    const value = await withFakeGlab('sleep 5', () => prState('https://gitlab.example.com/g/hung/-/merge_requests/1'));
+    assert.equal(value, null);
+    assert.ok(Date.now() - t0 < 3000, `waited ${Date.now() - t0} ms`);
+    delete process.env.HOMEBASE_API_TIMEOUT_MS;
+    console.log('ok fetchPr timeout');
+}

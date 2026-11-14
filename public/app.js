@@ -236,8 +236,20 @@ api('/api/refresh').then(r => r.json()).then(/** @param {RefreshState} d */ d =>
     renderReload();
 }).catch(() => {});
 
-let lastSessions = '', lastRender = 0;
+let lastSessions = '', lastRender = 0, polling = false;
 async function poll() {
+    // a slow /api/sessions must not stack polls whose answers land out of order
+    if (polling) {
+        return;
+    }
+    polling = true;
+    try {
+        await pollOnce();
+    } finally {
+        polling = false;
+    }
+}
+async function pollOnce() {
     try {
         const r = await api('/api/sessions');
         if (!r.ok) {

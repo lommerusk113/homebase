@@ -101,6 +101,8 @@ interface WorkItem {
     stage: number;
     stageLabel: string;
     agentStatus: string | null;
+    /** when a running agent started its current step (`next` names it); null otherwise */
+    stepAt: number | null;
     updated: number;
     branch: string;
     worktreePath: string | null;

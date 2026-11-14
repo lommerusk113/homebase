@@ -168,6 +168,25 @@ export function agentStatus(meta, entries, ageMs) {
     return { status: ageMs < limit ? 'running' : 'stopped' };
 }
 
+// A tool call as what the agent is doing, in plain words: "running npm test", "editing login.js".
+const firstLine = (t, n = 60) => {
+    const l = String(t ?? '').trim().split('\n')[0];
+    return l.length > n ? `${l.slice(0, n - 1)}…` : l;
+};
+export function stepOf(use) {
+
+    const i = use.input ?? {}, file = basename(i.file_path ?? i.notebook_path ?? '');
+    const say = {
+        Bash: () => (i.description ? firstLine(i.description).replace(/^./, c => c.toLowerCase()) : `running ${firstLine(i.command, 40)}`),
+        Edit: () => `editing ${file}`, MultiEdit: () => `editing ${file}`, Write: () => `writing ${file}`, NotebookEdit: () => `editing ${file}`,
+        Read: () => `reading ${file}`, Grep: () => 'searching the code', Glob: () => 'searching the code',
+        Agent: () => `waiting on a helper agent${i.description ? `: ${firstLine(i.description, 40)}` : ''}`, Task: () => 'waiting on a helper agent',
+        WebFetch: () => 'reading a web page', WebSearch: () => 'searching the web', SubagentHandback: () => 'reporting back'
+    }[use.name];
+
+    return say ? say() : `using ${use.name}`;
+}
+
 export function summarizeAgent(meta, entries, ageMs, id) {
 
     const uses = entries.flatMap(e => (e.type === 'assistant' && Array.isArray(e.message?.content) ? e.message.content : []))
@@ -177,6 +196,7 @@ export function summarizeAgent(meta, entries, ageMs, id) {
     const { status, stopReason } = agentStatus(meta, entries, ageMs);
     const { tldr, text: body } = splitTldr(report);
     const stage = Math.max(agentStage(uses, report, status === 'done'), stagePeak.get(id) ?? 0);
+    const lastCall = entries.findLast(e => e.type === 'assistant' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_use'));
     if (id) {
         stagePeak.set(id, stage);
     }
@@ -187,6 +207,8 @@ export function summarizeAgent(meta, entries, ageMs, id) {
         stopReason,
         stage,
         stageLabel: STAGES[stage],
+        step: uses.length ? stepOf(uses.at(-1)) : null, // the newest tool call, as what it is doing now
+        stepAt: Date.parse(lastCall?.timestamp) || null,
         report,
         tldr,
         body,

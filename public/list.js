@@ -170,7 +170,9 @@ function itemRows(x) {
     tr.dataset.key = x.key;
     const what = el('td', 'what');
     const fresh = x.pr ? freshComments(x.comments, seenAt(x.pr)) : [];
-    const next = el('small', 'next', `Next: ${x.next}${fresh.length ? ` · ${fresh.length} new comment${fresh.length === 1 ? '' : 's'}` : ''}`);
+    // a running agent's line says what it does now, and how long it has been on that step once that's a minute or more
+    const live = x.agentStatus === 'running' && x.column === 'doing', stepFor = live && x.stepAt ? ago(x.stepAt) : 'now';
+    const next = el('small', 'next', `${live ? 'Now' : 'Next'}: ${x.next}${stepFor === 'now' ? '' : ` · for ${stepFor}`}${fresh.length ? ` · ${fresh.length} new comment${fresh.length === 1 ? '' : 's'}` : ''}`);
     // before Next, so the ellipsis doesn't cut it
     if (unanswered.has(x.key) && x.action && !x.sent && !x.requested) {
         next.prepend(el('span', 'no-reply', 'No response yet — check the chat · '));

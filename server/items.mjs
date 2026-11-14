@@ -90,7 +90,7 @@ export function nextStep(prState, agent) {
         return 'Closed without merging';
     }
     if (agent?.status === 'running') {
-        return `${agent.description} is ${VERB[agent.stage] ?? 'working'}…`;
+        return agent.step ? `${agent.description} — ${agent.step}` : `${agent.description} is ${VERB[agent.stage] ?? 'working'}…`;
     }
     if (agent?.status === 'stopped') {
         return agent.stopReason === 'api-error' ? 'Agent hit an API error — continue it' : 'Agent stopped — check the chat';
@@ -325,6 +325,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             agentStatus: agent?.status ?? null,
             updated: Math.max(agent?.updated ?? 0, it.linkedAt),
             branch: prState?.branch ?? agent?.branch ?? null, // transcript gitBranch is unreliable inside worktrees
+            stepAt: agent?.status === 'running' ? agent.stepAt ?? null : null,
             worktreePath: agent?.worktreePath ?? null,
             tldr: agent?.tldr ?? null,
             body: agent?.body ?? '',

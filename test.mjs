@@ -214,6 +214,14 @@ import { nextStep, workItems } from './server.mjs';
 const open = extra => ({ state: 'open', reviewers: [], ...extra });
 assert.equal(nextStep({ state: 'merged' }, { status: 'running', stage: 1 }), 'Merged');
 assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebase !7' }), 'Rebase !7 is verifying…');
+assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebase !7', step: 'running npm test' }), 'Rebase !7 — running npm test');
+{
+    const { stepOf } = await import('./server.mjs');
+    assert.equal(stepOf({ name: 'Bash', input: { command: 'npm test\nmore' } }), 'running npm test');
+    assert.equal(stepOf({ name: 'Bash', input: { command: 'npm test', description: 'Run the unit tests' } }), 'run the unit tests');
+    assert.equal(stepOf({ name: 'Edit', input: { file_path: '/x/src/login.js' } }), 'editing login.js');
+    assert.equal(stepOf({ name: 'mcp__x__y', input: {} }), 'using mcp__x__y');
+}
 assert.equal(nextStep(null, { status: 'stopped' }), 'Agent stopped — check the chat');
 assert.equal(nextStep(null, { status: 'stopped', stopReason: 'api-error' }), 'Agent hit an API error — continue it');
 assert.equal(nextStep(open({ changes: true, reviewers: ['Ann'] }), null), 'Address review comments from Ann');

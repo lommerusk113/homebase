@@ -32,9 +32,10 @@ export default {
         await open();
         await ready(page);
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#feed .b-topic-name')].map(t => t.textContent)`), ['Fix login', 'Release'], 'a header only where the topic changes');
-        assert.ok(await page.ev(`${bubble('cookie scope')}.matches('.bubble.assistant.needs.topical') && ${bubble('cookie scope')}.querySelector('.need-pill').textContent === 'needs you'`));
+        assert.ok(await page.ev(`${bubble('tag the release')}.matches('.bubble.assistant.needs.topical') && ${bubble('tag the release')}.querySelector('.need-pill').textContent === 'needs you'`));
+        assert.ok(await page.ev(`${bubble('cookie scope')}.matches('.fyi') && !${bubble('cookie scope')}.querySelector('.need-pill')`), 'a question the user has replied to no longer needs them');
         assert.ok(await page.ev(`${bubble('push the branch')}.matches('.fyi')`), 'a plain reply is FYI');
-        assert.ok(await page.ev(`getComputedStyle(${bubble('cookie scope')}).borderLeftWidth === '3px'`));
+        assert.ok(await page.ev(`getComputedStyle(${bubble('tag the release')}).borderLeftWidth === '3px'`));
     },
 
     'TLDR folds the rest of the message': async ({ page, open }) => {

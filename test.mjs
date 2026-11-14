@@ -75,6 +75,18 @@ assert.equal(st([call('a'), bg, onHold('Waiting on Cucumber.')], 31 * MIN, { fin
 assert.equal(st([call('a'), bg, onHold('Waiting on Cucumber.')], 3 * MIN).status, 'running'); // not stopped after 2 min idle
 assert.equal(st([call('a'), bg, call('v'), child, told('b172vb7y2'), onHold('Waiting on the validator.')], 3 * MIN, { finished: true }).status, 'running');
 assert.equal(st([call('a'), bg, call('v'), child, told('b172vb7y2'), told('a2da1ee3a8630e53c'), ended], 3 * MIN, { finished: true }).status, 'done');
+// the other launch forms: a Bash moved to the background by its timeout or by a message, a Monitor, a background Workflow
+for (const launch of [
+    'Command did not complete within its 600s timeout and was moved to the background (ID: bt9p1x). Output is being written to: /tmp/x',
+    'Command was moved to the background (ID: bt9p1x) after running for 180s. Output is being written to: /tmp/x',
+    'Command was moved to the background (ID: bt9p1x) so that a message that arrived while it was running can reach you.',
+    'Monitor started (task bt9p1x, expires in 20m unless the source ends first; you get one notice at expiry — re-arm if you still need the watch).',
+    'Workflow launched in background. Task ID: bt9p1x\nSummary: one review round'
+]) {
+    const r = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: launch }] } };
+    assert.equal(st([call('a'), r, onHold('Waiting for the notification.')], 3 * MIN).status, 'running', launch);
+    assert.equal(st([call('a'), r, told('bt9p1x'), ended], 3 * MIN).status, 'stopped', launch);
+}
 console.log('ok agents');
 
 import { splitTldr, splitTopic, toolSummary, chatItems, pendingQuestion, sendSteps } from './server.mjs';

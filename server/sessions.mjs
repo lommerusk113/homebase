@@ -110,7 +110,8 @@ export function agentStage(uses, report, done) {
     return stage;
 }
 
-const LAUNCHED = /Command running in background with ID: (\w+)|Async agent launched successfully[\s\S]*?agentId: (\w+)/;
+// Bash run_in_background, a Bash moved there by its timeout or a message, Monitor, background Workflow, async Agent
+const LAUNCHED = /(?:in background with ID: |moved to the background \(ID: |Monitor started \(task |launched in background\. Task ID: )(\w+)|Async agent launched successfully[\s\S]*?agentId: (\w+)/;
 const NOTIFIED = /<task-notification>\s*<task-id>(\w+)<\/task-id>/;
 
 // Background commands and subagents the agent launched that haven't sent their task notification yet.

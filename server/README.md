@@ -13,6 +13,7 @@
 | `limits.mjs` | Rate limits from the status-line dumps |
 | `tmux.mjs` | tmux plumbing: socket override, session names, `/clear` aliases, keystroke steps |
 | `control.mjs` | POST actions: send, interrupt, `/clear`, open in editor |
+| `startup.mjs` | Blocking Claude Code startup dialogs in a `cc-*` tmux pane: parse the capture, answer an option, trust the new project's own folder |
 | `account.mjs` | which GitHub account a repo's gh calls run as (keychain token for personal repos), the shared token reader, config merge |
 | `newproject.mjs` | POST `/api/projects/new`: name check, the create/clone/start-chat steps with the keychain token kept out of every output |
 | `security.mjs` | Host/Origin/token checks, LAN pairing cookie and code, rate limiter |
@@ -25,6 +26,7 @@ Imports only go one way, with no cycles:
 `milestones` → forge, items, sessions.
 `log` → transcripts, forge, sessions.
 `control` → sessions, tmux.
-`newproject` → transcripts, tmux.
+`newproject` → transcripts, tmux, startup.
+`startup` → tmux.
 
 Module state (caches, maps) lives in exactly one module and is imported, never copied.

@@ -8,6 +8,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { ROOT } from './transcripts.mjs';
 import { tmux, sleep } from './tmux.mjs';
+import { trustNewProject } from './startup.mjs';
 import { DEFAULTS, mergeConfig, loadConfig, readToken, scrub as scrubToken } from './account.mjs';
 
 export { DEFAULTS, mergeConfig, loadConfig };
@@ -103,6 +104,8 @@ export async function createProject(body, deps = {}) {
             throw fail(2, e, `${made} and cloned to ${dir}, but starting Claude failed:`);
         }
         steps[2].state = 'done';
+
+        await trustNewProject(tmuxName, dir, { tm, nap, waitMs }); // never throws; other startup prompts show in the chat
 
         let sessionId = null;
         for (let t = 0; t < waitMs && !sessionId; t += 500) {

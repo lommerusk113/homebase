@@ -123,7 +123,7 @@ $('manage').onclick = () => {
 };
 
 // A project made by "New project…": tracked, selected, and its chat bound as soon as its session is known.
-initNewProject(({ name, dir, sessionId }) => {
+initNewProject(({ name, dir, sessionId, tmux }) => {
     if (!state.tracked.includes(name)) {
         state.tracked = [...state.tracked, name];
         saveTracked();
@@ -135,6 +135,7 @@ initNewProject(({ name, dir, sessionId }) => {
     if (sessionId) {
         bindChat(sessionId);
     } else {
+        state.startingTmux = tmux;
         state.starting = dir; // poll() binds the chat once a session in that folder shows up
         refreshChat();
     }

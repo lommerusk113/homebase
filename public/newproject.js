@@ -54,7 +54,7 @@ export async function openNewProject() {
     } catch {}
 }
 
-/** @param {(p: { name: string, dir: string, sessionId: string | null }) => void} onCreated */
+/** @param {(p: { name: string, dir: string, sessionId: string | null, tmux?: string }) => void} onCreated */
 export function initNewProject(onCreated) {
 
     $('np-name').addEventListener('input', validate);

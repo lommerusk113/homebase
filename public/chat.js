@@ -292,6 +292,42 @@ function showAsk(s, data) {
     $('ask-cmd').textContent = `tmux attach -t ${s.tmux ?? `cc-${s.id.slice(0, 8)}`}`;
 }
 
+// A blocking Claude Code startup dialog (workspace trust, first run) read off the tmux pane: its question, an option per button.
+// Clicking one has the server move the ❯ selection there and confirm; while it is up, normal sends are blocked.
+/** @param {string | null | undefined} tmux */
+async function showBoot(tmux) {
+
+    let dialog = null;
+    try {
+        const r = tmux && await api(`/api/startup?tmux=${encodeURIComponent(tmux)}`);
+        dialog = r && r.ok ? (await r.json()).dialog : null;
+    } catch {}
+    if (JSON.stringify(dialog) === JSON.stringify(state.boot ?? null)) {
+        return;
+    }
+    state.boot = dialog;
+    $('boot').hidden = !dialog;
+    $('boot-q').textContent = dialog?.question ?? '';
+    $('boot-cmd').textContent = `tmux attach -t ${tmux}`;
+    $('boot-opts').replaceChildren(...(dialog?.options ?? []).map((o, i) => {
+        const b = waButton(o, null, { variant: i === dialog.selected ? 'brand' : 'neutral', appearance: 'outlined' });
+        b.onclick = async () => {
+            $('c-err').textContent = '';
+            try {
+                const r = await api(`/api/startup?tmux=${encodeURIComponent(tmux)}&option=${i}&label=${encodeURIComponent(o)}`, { method: 'POST' });
+                if (!r.ok) {
+                    throw new Error(await r.text());
+                }
+            } catch (err) {
+                $('c-err').textContent = err.message;
+            }
+            showBoot(tmux);
+        };
+
+        return b;
+    }));
+}
+
 const LANDED_SLACK_MS = 10_000; // a transcript item may predate the send it matches by this much
 const OUTBOX_TTL_MS = 30_000; // after a successful send, the bubble goes even if nothing matched it
 
@@ -380,6 +416,7 @@ export async function refreshChat() {
         renderBoard();
     }
     showNewer(s);
+    await showBoot(s ? s.tmux ?? `cc-${s.id.slice(0, 8)}` : state.startingTmux);
     if (s && !restored) {
         restored = true;
         restoreDraft(draftStorage(), s.id, $('msg')).then(ok => ok && syncSend());
@@ -563,7 +600,14 @@ export function initChat() {
     $('send').onsubmit = async e => {
         e.preventDefault();
         const s = chatSession(), ta = $('msg'), text = ta.value.trim();
-        if (!s || !text) {
+        if (!text) {
+            return;
+        }
+        if (state.boot) {
+            $('c-err').textContent = 'Claude is waiting on a startup question above';
+            return;
+        }
+        if (!s) {
             return;
         }
         // clear at once; the "sending…" bubble shows progress

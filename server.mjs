@@ -14,6 +14,7 @@ import { limits } from './server/limits.mjs';
 import { log } from './server/log.mjs';
 import { MAX_SEND } from './server/tmux.mjs';
 import { createProject, publicConfig } from './server/newproject.mjs';
+import { startupDialog, answerStartup } from './server/startup.mjs';
 import { send, interrupt, clearChat, compactChat, editors, openInEditor } from './server/control.mjs';
 import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, COOKIE, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode, pairPage } from './server/security.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
@@ -31,6 +32,7 @@ export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones } f
 export { limitsOf, peakLimits, contextOf } from './server/limits.mjs';
 export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
 export { tmuxArgs, tmuxFor, findClearedSuccessor, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
+export { parseDialog, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
 export { editorsFrom, openInEditor, refuseIfBusy } from './server/control.mjs';
 export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode } from './server/security.mjs';
 export { validName, mergeConfig, loadConfig, createProject, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
@@ -171,6 +173,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
             if (isPost('/api/send')) {
                 await send(url.searchParams.get('id'), await readBody(req, MAX_SEND));
+                return res.end('ok');
+            }
+            if (url.pathname === '/api/startup' && req.method === 'GET') {
+                return json({ dialog: await startupDialog(url.searchParams.get('tmux')) });
+            }
+            if (isPost('/api/startup')) {
+                await answerStartup(url.searchParams.get('tmux'), Number(url.searchParams.get('option')), url.searchParams.get('label'));
                 return res.end('ok');
             }
             if (isPost('/api/clear')) {

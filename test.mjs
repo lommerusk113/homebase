@@ -1829,7 +1829,7 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
     // the step runner, with every command stubbed: no keychain, gh, git or tmux is ever touched
     const TOKEN = 'ghp_SECRET_TOKEN_123';
     const config = mergeConfig({ newProject: { baseDir: '/base' } });
-    const fake = ({ failOn, leak } = {}) => {
+    const fake = ({ pane = '', failOn, leak } = {}) => {
         const calls = [];
         const exec = async (file, args, opts = {}) => {
             calls.push({ file, args, env: opts.env, timeout: opts.timeout });
@@ -1842,6 +1842,9 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
             return { stdout: '' };
         };
         const tm = async args => {
+            if (args[0] === 'capture-pane') {
+                return { stdout: pane };
+            }
             calls.push({ file: 'tmux', args });
             if (failOn === 'tmux') {
                 throw new Error('no server');
@@ -2144,4 +2147,69 @@ import { transcript } from './server/transcripts.mjs';
         assert.equal((await transcript(dir, id).catch(e => e)).status, 400, `${dir} ${id}`);
     }
     console.log('ok transcript bad path');
+}
+
+import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup } from './server.mjs';
+{
+    const trust = sel => `
+ Accessing workspace:
+
+ /base/league
+
+ Quick safety check: Is this a project you created or one you trust? (Like your
+ own code, a well-known open source project, or work from your team). If not,
+ take a moment to review what's in this folder first.
+
+ Claude Code'll be able to read, edit, and execute files here.
+
+ Security guide
+
+ ${sel ? '  No, exit' : '❯ No, exit'}
+ ${sel ? '❯ Yes, I trust this folder' : '  Yes, I trust this folder'}
+
+ Enter to confirm · Esc to cancel
+`;
+    for (const sel of [0, 1]) {
+        const d = parseDialog(trust(sel));
+        assert.deepEqual(d.options, ['No, exit', 'Yes, I trust this folder']);
+        assert.equal(d.selected, sel);
+        assert.match(d.question, /^Quick safety check: Is this a project you created or one you trust\?/);
+    }
+    assert.equal(parseDialog('some output\n❯ ls\nEnter to confirm'), null, 'a shell prompt is not a dialog');
+    assert.equal(parseDialog(trust(0).replace('Enter to confirm', '')), null, 'needs the confirm hint');
+
+    assert.deepEqual(selectSteps('cc-new-x', 0, 1), [['send-keys', '-t', '=cc-new-x:', 'Down'], ['send-keys', '-t', '=cc-new-x:', 'Enter']]);
+    assert.deepEqual(selectSteps('cc-new-x', 2, 0), [['send-keys', '-t', '=cc-new-x:', 'Up', 'Up'], ['send-keys', '-t', '=cc-new-x:', 'Enter']]);
+    assert.deepEqual(selectSteps('cc-new-x', 1, 1), [['send-keys', '-t', '=cc-new-x:', 'Enter']]);
+
+    // answering: arrows then Enter, only for the exact label, only cc-* sessions; still showing -> error
+    const run = async (panes, index, label, name = 'cc-new-league') => {
+        const sent = [];
+        const tm = async a => (a[0] === 'capture-pane' ? { stdout: panes.length > 1 ? panes.shift() : panes[0] } : void sent.push(a));
+        const err = await answerStartup(name, index, label, { tm, nap: async () => {} }).then(() => null, e => e);
+
+        return { sent, err };
+    };
+    let r = await run([trust(0), 'claude is starting'], 1, 'Yes, I trust this folder');
+    assert.equal(r.err, null);
+    assert.deepEqual(r.sent.map(a => a.slice(3)), [['Down'], ['Enter']]);
+    r = await run([trust(0)], 1, 'Yes, I trust this folder');
+    assert.equal(r.err.status, 502, 'dialog still up');
+    r = await run([trust(0)], 1, 'No, exit');
+    assert.equal(r.err.status, 409, 'label mismatch');
+    assert.deepEqual(r.sent, []);
+    assert.equal((await run([trust(0)], 0, 'No, exit', 'zsh')).err.status, 400, 'not a cc-* session');
+
+    // New project auto-trust: only the exact cloned folder
+    assert.equal(trustFolder(trust(0)), '/base/league');
+    for (const [dir, answered] of [['/base/league', true], ['/base', false], ['/base/league2', false], ['/base/leagu', false]]) {
+        const sent = [];
+        const tm = async a => (a[0] === 'capture-pane' ? { stdout: sent.length ? 'ok' : trust(0) } : void sent.push(a));
+        assert.equal(await trustNewProject('cc-new-league', dir, { tm, nap: async () => {}, waitMs: 1000 }), answered, dir);
+        assert.equal(sent.length > 0, answered, `${dir} keys`);
+    }
+    const none = [];
+    assert.equal(await trustNewProject('cc-new-league', '/base/league', { tm: async a => (none.push(a), { stdout: 'loading' }), nap: async () => {}, waitMs: 1000 }), false);
+    assert.ok(none.every(a => a[0] === 'capture-pane'), 'no dialog: nothing is sent');
+    console.log('ok startup dialog');
 }

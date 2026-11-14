@@ -36,6 +36,8 @@ The hook never blocks or changes anything in Claude Code and prints nothing. Wit
 The ☰ dialog's "New project…" button asks for a name, creates a GitHub repo for your personal account, clones it, starts a Claude chat in tmux (`cc-new-<name>`) and adds the project to your board.
 It needs a fine-grained token in the macOS keychain (`security add-generic-password -s gh-personal -a "$USER" -w`) that may create repositories.
 The token is read when you press Create, kept in memory, handed only to `gh` as `GH_TOKEN` (with `GITHUB_TOKEN` removed), and scrubbed from any error shown.
+Claude Code's workspace trust dialog for the new folder is answered "Yes" for you, but only when the dialog names exactly the folder Homebase just cloned; nothing else is ever auto-answered.
+Any other blocking startup dialog in a `cc-*` tmux session shows in the chat with its options as buttons (and the `tmux attach` hint); clicking one selects it in the terminal, and the message box refuses to send while it is up.
 If creating the repo fails nothing else happens; if cloning or starting the chat fails, the error says what already exists.
 
 The defaults can be overridden in `~/.claude/homebase/config.json` (`HOMEBASE_DIR` moves it). The file is optional and Homebase never writes it:

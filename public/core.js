@@ -38,7 +38,7 @@ const parse = v => {
 /**
  * @type {{ sessions: Session[], tracked: string[], project: string, selected: string | null, chat: string | null, unfold: Set<string>,
  *   outbox: OutboxItem[], nudged: Set<string>, offline?: boolean, asking?: string | null, items?: WorkItem[], editors?: Editor[],
- *   opened?: { key: string, since: number }, showMerged?: boolean, starting?: string | null }}
+ *   opened?: { key: string, since: number }, showMerged?: boolean, starting?: string | null, startingTmux?: string | null, boot?: { question: string, options: string[], selected: number } | null }}
  */
 export const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [], nudged: new Set() };
 export const saveTracked = () => { store.set('tracked', JSON.stringify(state.tracked)); };

@@ -353,7 +353,12 @@ import { rowAction } from './server.mjs';
 const act = (prState, agent, url = mr(4)) => rowAction(url, prState, agent, 'T');
 assert.deepEqual(act(open({ ready: true, reviewers: ['Ann'] }), null), { label: 'Merge + close issue', message: `Run review-gate on !4 (${mr(4)}). If the verdict is ready, merge it and close its issue. If it's fix first, show me the findings and don't merge.` });
 assert.equal(act(open({ ready: true }), null, 'https://github.com/o/r/pull/9').message.slice(0, 63), 'Run review-gate on #9 (https://github.com/o/r/pull/9). If the v');
-assert.deepEqual(act(open({ changes: true, reviewers: ['Ann'] }), { status: 'stopped' }), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
+assert.deepEqual(act(open({ changes: true, reviewers: ['Ann'] }), null), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
+// one precedence with nextStep: a stopped agent wins over the MR's own ask, but not over a merged MR; a running pipeline asks nothing
+assert.deepEqual([open({ changes: true }), open({ ready: true })].map(p => act(p, { status: 'stopped' }).label), ['Continue', 'Continue']);
+assert.equal(nextStep(open({ ready: true }), { status: 'stopped' }), 'Agent stopped — check the chat');
+assert.equal(act({ state: 'merged' }, { status: 'stopped' }), null);
+assert.equal(act(open({ ci: 'running' }), null), null);
 assert.deepEqual(act(open({ ci: 'failing', reviewers: ['Ann'] }), null), { label: 'Fix pipeline', message: `The pipeline on !4 (${mr(4)}) is failing — find out why and fix it.` });
 assert.deepEqual(act(open(), { status: 'done' }), { label: 'Request review', message: `Assign a reviewer to !4 (${mr(4)}) — suggest who.` });
 assert.equal(act(open(), null, 'https://github.com/o/r/pull/9').message, 'Assign a reviewer to #9 (https://github.com/o/r/pull/9) — suggest who.');
@@ -1937,4 +1942,17 @@ import { prState } from './server/forge.mjs';
     assert.ok(Date.now() - t0 < 3000, `waited ${Date.now() - t0} ms`);
     delete process.env.HOMEBASE_API_TIMEOUT_MS;
     console.log('ok fetchPr timeout');
+}
+
+// a GitLab MR as glab answers it; fields not given are the plain open, unblocked defaults
+const glabMr = (fields, n) => withFakeGlab(`echo '${JSON.stringify({ state: 'opened', title: 't', source_branch: 'b', detailed_merge_status: 'mergeable', ...fields })}'`,
+    () => prState(`https://gitlab.example.com/g/p/-/merge_requests/${n}`));
+{
+    // ready means merge now: a failing or running pipeline GitLab doesn't require still blocks it
+    const failed = await glabMr({ head_pipeline: { status: 'failed' } }, 101);
+    assert.deepEqual([failed.ready, failed.ci], [false, 'failing']);
+    assert.equal(column('idle', failed, true), 'review');
+    assert.equal((await glabMr({ head_pipeline: { status: 'running' } }, 102)).ready, false);
+    assert.equal((await glabMr({ head_pipeline: { status: 'success' } }, 103)).ready, true);
+    console.log('ok ready vs ci');
 }

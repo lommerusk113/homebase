@@ -144,15 +144,14 @@ export function nextStep(prState, agent) {
 // The one-click command for a work item's row, as { label, message } typed into its session, or null when nothing is on you.
 export function rowAction(pr, prState, agent, title) {
 
-    if (agent?.status === 'running') {
+    // same order as nextStep: a merged/closed MR, then a running or stopped agent, then what the MR asks for
+    if (agent?.status === 'running' || prState?.state === 'merged' || prState?.state === 'closed') {
         return null;
     }
-    if (!pr) {
-        return agent?.status === 'stopped'
-            ? { label: 'Continue', message: `The subagent '${title}' stopped — check why and continue it.` }
-            : null;
+    if (agent?.status === 'stopped') {
+        return { label: 'Continue', message: `The subagent '${title}' stopped — check why and continue it.` };
     }
-    if (prState?.state !== 'open') {
+    if (!pr || prState?.state !== 'open') {
         return null;
     }
 
@@ -165,6 +164,9 @@ export function rowAction(pr, prState, agent, title) {
     }
     if (prState.replied && !prState.ready) {
         return null; // every open thread was last answered by me: the reviewer resolves them, unless GitLab already allows the merge
+    }
+    if (prState.ci === 'running') {
+        return null;
     }
     if (prState.ready) {
         return { label: 'Merge + close issue', message: `Run review-gate on ${ref}. If the verdict is ready, merge it and close its issue. If it's fix first, show me the findings and don't merge.` };

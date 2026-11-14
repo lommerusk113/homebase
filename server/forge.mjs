@@ -58,18 +58,20 @@ async function fetchPr(url) {
         const state = { opened: 'open', merged: 'merged' }[mr.state] ?? 'closed';
         const status = mr.detailed_merge_status;
         const pipeline = pipelineOf(mr.head_pipeline ?? mr.pipeline);
+        const ci = { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? ciOf(pipeline);
 
         return {
             state,
             title: mr.title,
             branch: mr.source_branch,
             reviewers: (mr.reviewers ?? []).map(r => r.name),
-            ready: status === 'mergeable',
+            // ready means merge now, so a failing or running pipeline (GitLab allows it when CI isn't required) is not ready
+            ready: status === 'mergeable' && !ci,
             // ponytail: the MR payload doesn't say which reviewer blocked; the /reviewers endpoint would
             changes: status === 'requested_changes' || status === 'discussions_not_resolved' || mr.blocking_discussions_resolved === false,
             changesBy: [],
             draft: !!mr.draft,
-            ci: { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? ciOf(pipeline),
+            ci,
             pipeline,
             milestone: mr.milestone ? { id: mr.milestone.id, title: mr.milestone.title, due_date: mr.milestone.due_date } : null,
             target: mr.target_branch,
@@ -93,7 +95,7 @@ async function fetchPr(url) {
         branch: pr.headRefName,
         reviewers: [...new Set([...(pr.reviewRequests ?? []).map(r => r.login ?? r.name), ...reviews.map(r => r.author?.login)].filter(Boolean))],
         // an empty reviewDecision means the repo requires no review (hobby repos without branch protection)
-        ready: (pr.reviewDecision === 'APPROVED' || !pr.reviewDecision) && !pr.isDraft,
+        ready: (pr.reviewDecision === 'APPROVED' || !pr.reviewDecision) && !pr.isDraft && !ciOf(pipeline),
         changes: pr.reviewDecision === 'CHANGES_REQUESTED',
         changesBy: reviews.filter(r => r.state === 'CHANGES_REQUESTED').map(r => r.author?.login).filter(Boolean),
         draft: pr.isDraft,

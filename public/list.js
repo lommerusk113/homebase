@@ -216,6 +216,13 @@ function itemRows(x) {
     const pr = el('td', 'pr');
     if (x.pr) {
         pr.append(prChip(x), ...ciPill(x.prState?.pipeline), ...gateBadge(x.gate));
+        // the lookup failed but an older answer is shown: say it may be out of date (with no answer, Next already says so)
+        if (x.forgeError && x.prState) {
+            const w = el('span', 'ci-pill stale', '⚠');
+            w.tabIndex = 0;
+            w.setAttribute('aria-label', 'May be out of date');
+            pr.append(w, tooltip(w, `Couldn't check this MR just now (${x.forgeError}), so this is what it was last time`));
+        }
     }
     const br = el('td', 'br');
     if (x.branch) {

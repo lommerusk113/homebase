@@ -100,6 +100,7 @@ interface WorkItem {
     sessionId: string;
     title: string;
     pr: string | null;
+    forgeError?: string | null; // why the last MR/PR lookup failed; prState is then the last good one, or null
     prState: PrState | null;
     column: Column;
     /** index into LIFECYCLE */

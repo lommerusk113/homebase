@@ -158,6 +158,17 @@ export async function prState(url) {
     return hit.value;
 }
 
+// Why the last MR/PR lookup failed, in a few words, or null when it worked: the old state keeps being served meanwhile.
+export function prError(url) {
+
+    const e = prs.get(url)?.error;
+    if (!e) {
+        return null;
+    }
+
+    return (e.killed ? 'timed out' : String(e.stderr || e.message).trim().split('\n')[0]).slice(0, 120);
+}
+
 export const swr = new Map(); // key -> { at, value, pending, error }
 
 // Runs at most n of the given async functions at a time; the rest wait in call order.

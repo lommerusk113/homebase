@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, pendingQuestion, askMarker, readUsage, usageCache, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
 import { loadStore, record, seeds, flush } from './store.mjs';
-import { PR_TTL_MS, openMrUrls, prState, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
+import { PR_TTL_MS, openMrUrls, prState, prError, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { repoPaths } from './account.mjs';
 import { contextOf } from './limits.mjs';
 import { workItems, milestoneOf, sameRepo } from './items.mjs';
@@ -468,6 +468,11 @@ async function itemsOf(out) {
         // only an already fetched milestone list; /api/milestones fills it for the projects on the board
         it.milestone = milestoneOf(it.prState, swr.get(`ms:${it.project}`)?.value ?? []);
         it.comments = comments.get(it.pr) ?? null;
+        // a failed lookup: without any state the row says why; with an older one it is flagged stale
+        it.forgeError = it.pr ? prError(it.pr) : null;
+        if (it.forgeError && !it.prState && it.next === 'Open the MR to check its state') {
+            it.next = `Couldn't check the MR: ${it.forgeError}`;
+        }
     }
     record(store, items);
     flush(store);

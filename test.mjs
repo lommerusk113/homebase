@@ -2034,3 +2034,18 @@ const glabMr = (fields, n) => withFakeGlab(`echo '${JSON.stringify({ state: 'ope
     rmSync(home, { recursive: true, force: true });
     console.log('ok caches age out');
 }
+
+{
+    // a failing MR lookup says why on the row instead of "Open the MR to check its state"
+    const home = mkdtempSync(join(tmpdir(), 'hb-home-'));
+    const dir = join(home, '.claude', 'projects', 'p');
+    mkdirSync(dir, { recursive: true });
+    const at = new Date().toISOString(), url = 'https://gitlab.example.com/g/p/-/merge_requests/9';
+    writeFileSync(join(dir, 's1.jsonl'), [{ type: 'user', sessionId: 's1', cwd: join(home, 'p'), message: { content: 'hi' }, timestamp: at }, { type: 'pr-link', prUrl: url, timestamp: at }].map(l => JSON.stringify(l)).join('\n') + '\n');
+    writeFileSync(join(fakeBin, 'glab'), '#!/bin/sh\necho "glab: 404 Not Found" >&2\nexit 1\n', { mode: 0o755 });
+    const code = "import { sessions } from './server/sessions.mjs'; console.log(JSON.stringify((await sessions()).flatMap(s => s.items.map(i => [i.next, i.forgeError]))));";
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home, PATH: `${fakeBin}:${process.env.PATH}` }, cwd: import.meta.dirname, encoding: 'utf8' });
+    assert.deepEqual(JSON.parse(out.trim().split('\n').at(-1)), [["Couldn't check the MR: glab: 404 Not Found", 'glab: 404 Not Found']]);
+    rmSync(home, { recursive: true, force: true });
+    console.log('ok forge error shown');
+}

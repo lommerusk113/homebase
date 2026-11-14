@@ -64,6 +64,10 @@ assert.equal(st([call('a'), result('a')], 11 * MIN).status, 'stopped');
 assert.equal(st([call('a'), result('a'), ended], 1 * MIN).status, 'running');
 assert.equal(st([call('a'), result('a'), ended], 3 * MIN).status, 'stopped'); // ended its turn without handing back
 assert.equal(st([call('old'), result('x'), ended], 3 * MIN).status, 'stopped'); // an unanswered call from an earlier turn is not pending
+// a thinking-only entry is mid-reply (a stalled stream is retried after minutes), not a turn that ended
+const thinking = { type: 'assistant', message: { content: [{ type: 'thinking', thinking: '' }], stop_reason: null } };
+assert.equal(st([call('a'), result('a'), thinking], 8 * MIN).status, 'running');
+assert.equal(st([call('a'), result('a'), thinking], 11 * MIN).status, 'stopped');
 assert.deepEqual(st([call('a'), result('a'), { type: 'assistant', isApiErrorMessage: true, message: { content: [{ type: 'text', text: 'API Error' }] } }], 1_000), { status: 'stopped', stopReason: 'api-error' });
 // pracsys !1791: meta.finished flipped while the gate agent waited on its own background Cucumber run
 const bg = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: 'Command running in background with ID: b172vb7y2. Output is being written to: /tmp/tasks/b172vb7y2.output.' }] } };

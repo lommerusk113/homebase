@@ -1298,7 +1298,7 @@ import { createServer as netServer } from 'node:net';
         // only known sessions and plain transcript folders; HOME is empty, so nothing reaches tmux
         const authed = { 'x-homebase-token': token };
         for (const dir of ['..', 'a%2Fb']) {
-            assert.deepEqual((({ status, body }) => [status, body])(await call(s.port, { path: `/api/transcript?dir=${dir}&id=x`, headers: authed })), [500, 'bad path'], dir);
+            assert.deepEqual((({ status, body }) => [status, body])(await call(s.port, { path: `/api/transcript?dir=${dir}&id=x`, headers: authed })), [400, 'bad path'], dir);
         }
         const sent = await call(s.port, { path: '/api/send?id=..%2Fx', method: 'POST', headers: { ...authed, 'x-codetool': '1' }, body: 'hi' });
         assert.deepEqual([sent.status, sent.body], [500, 'bad id']);
@@ -2080,4 +2080,13 @@ import { liveSessions, closedSession } from './server/transcripts.mjs';
     assert.equal(turnState(turn, 5_000, null, new Set()).state, 'working', 'a fresh write still counts');
     assert.equal(closedSession(turn.map(e => ({ ...e, entrypoint: 'sdk-cli' })), 60_000, new Set()), false, 'only interactive CLI sessions register');
     console.log('ok closed session');
+}
+
+import { transcript } from './server/transcripts.mjs';
+{
+    // /api/transcript without dir or id, or with a path out of the projects folder, is a 400, not a 500
+    for (const [dir, id] of [[null, 'x'], ['p', null], ['..', 'x'], ['a/b', 'x']]) {
+        assert.equal((await transcript(dir, id).catch(e => e)).status, 400, `${dir} ${id}`);
+    }
+    console.log('ok transcript bad path');
 }

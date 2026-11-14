@@ -773,9 +773,12 @@ export function formatTokens(n) {
 
 export async function transcript(dir, id) {
 
+    if (!dir || !id || dir.includes('/') || id.includes('/')) {
+        throw Object.assign(new Error('bad path'), { status: 400 });
+    }
     const path = join(ROOT, dir, `${id}.jsonl`);
-    if (!path.startsWith(ROOT + '/') || dir.includes('/') || id.includes('/')) {
-        throw new Error('bad path');
+    if (!path.startsWith(ROOT + '/')) {
+        throw Object.assign(new Error('bad path'), { status: 400 });
     }
 
     const st = await stat(path);

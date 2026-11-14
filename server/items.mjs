@@ -12,7 +12,8 @@ export function column(status, prState, hasPr) {
     if (prState?.state === 'merged' || prState?.state === 'closed') {
         return 'done';
     }
-    if (prState?.changes) {
+    // review comments, a failing pipeline or a needed rebase wait on you (they get a Fix/Rebase button), not on a reviewer
+    if (prState?.changes || prState?.ci === 'failing' || prState?.blocked === 'conflict' || prState?.blocked === 'rebase') {
         return 'needs-you';
     }
     if (prState?.ready) {

@@ -9,6 +9,8 @@ assert.equal(column('working', { state: 'merged' }, true), 'doing');
 assert.equal(column('idle', { state: 'merged' }, true), 'done');
 assert.equal(column('idle', { state: 'open', ready: true }, true), 'ready');
 assert.equal(column('idle', { state: 'open', changes: true }, true), 'needs-you');
+assert.equal(column('idle', { state: 'open', blocked: 'conflict' }, true), 'needs-you');
+assert.equal(column('idle', { state: 'open', blocked: 'checks' }, true), 'review'); // nothing to type for an external check
 assert.equal(column('waiting', null, true), 'review');
 assert.equal(column('waiting', null, false), 'needs-you');
 assert.equal(column('idle', null, false), 'idle');
@@ -1995,7 +1997,7 @@ const glabMr = (fields, n) => withFakeGlab(`echo '${JSON.stringify({ state: 'ope
     // ready means merge now: a failing or running pipeline GitLab doesn't require still blocks it
     const failed = await glabMr({ head_pipeline: { status: 'failed' } }, 101);
     assert.deepEqual([failed.ready, failed.ci], [false, 'failing']);
-    assert.equal(column('idle', failed, true), 'review');
+    assert.equal(column('idle', failed, true), 'needs-you'); // Fix pipeline is on you
     assert.equal((await glabMr({ head_pipeline: { status: 'running' } }, 102)).ready, false);
     assert.equal((await glabMr({ head_pipeline: { status: 'success' } }, 103)).ready, true);
     console.log('ok ready vs ci');

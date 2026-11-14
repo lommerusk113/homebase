@@ -287,6 +287,15 @@ export function chatItems(entries, max = 60) {
     const items = dedupePrompts([...mergeChunks(rawItems(entries)), ...pendingPrompts(entries)]);
     const out = pairAnswers(items.map(i => (i.role === 'assistant' ? topicAndTldr(i) : i))).slice(-max);
 
+    // a question the user has answered or replied after no longer needs them
+    let replied = false;
+    for (const i of out.toReversed()) {
+        replied ||= i.role === 'user';
+        if (i.needsYou && (replied || i.answer)) {
+            i.needsYou = false;
+        }
+    }
+
     const last = out.at(-1);
     if (last?.role === 'assistant' && !last.answer) {
         last.replies = quickReplies(last.tldr, last.text); // only the newest item, so any later user message hides them
@@ -348,7 +357,8 @@ function rawItems(entries) {
     let uses = [];
     const flush = () => {
         if (uses.length) {
-            items.push({ role: 'tools', text: toolSummary(uses) });
+            // quiet: only commands, reads, searches and the like; the page hides those lines as noise
+            items.push({ role: 'tools', text: toolSummary(uses), quiet: !uses.some(u => ['edit', 'agent'].includes(TOOL_KIND[u.name])) });
             uses = [];
         }
     };

@@ -207,8 +207,9 @@ function head(ms, hint) {
 
 /** @param {Lane} lane @param {number} n @param {SelectedMilestone} ms */
 function lane({ who, me, list, closed }, n, ms) {
-    const sec = el('section', 'lane' + (who ? '' : ' free')), side = el('div', 'who'), name = el('div', 'name');
-    const av = el('span', 'av', who ? initials(who.name) : '?');
+    // Unassigned is amber only while something is up for grabs
+    const sec = el('section', 'lane' + (who || !list.length ? '' : ' free')), side = el('div', 'who'), name = el('div', 'name');
+    const av = el('span', who ? 'av' : 'av none', who ? initials(who.name) : '?');
     if (who) {
         av.style.background = COLOURS[n % COLOURS.length];
     }
@@ -221,10 +222,10 @@ function lane({ who, me, list, closed }, n, ms) {
     }
     const count = st => list.filter(c => c.st === st).length;
     const parts = who ? [['doing', 'in progress'], ['closable', 'can close'], ['todo', 'not started'], ['free', 'unassigned']].map(([st, l]) => count(st) && `${count(st)} ${l}`).filter(Boolean)
-        : [`${list.length} up for grabs`];
+        : list.length ? [`${list.length} up for grabs`] : [];
     side.append(name, el('small', null, parts.join(' · ') || 'nothing open'), el('small', null, `${closed} closed`));
     const strip = el('div', 'strip');
-    strip.append(...(list.length ? list.map(c => card(c, ms)) : [el('span', 'empty', 'Nothing up for grabs.')]));
+    strip.append(...(list.length ? list.map(c => card(c, ms)) : [el('span', 'empty', 'Every open issue has an owner.')]));
     sec.append(side, strip);
     return sec;
 }

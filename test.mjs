@@ -138,6 +138,9 @@ const needy = text => chatItems([{ type: 'user', message: { content: 'go' } }, s
 assert.deepEqual([needy('**▸ Ports · needs you**\n\nX.\n\n**TLDR:** pick one').topic, needy('**▸ Ports · needs you**\n\nX.\n\n**TLDR:** pick one').needsYou], ['Ports', true]);
 assert.equal(needy('**▸ Ports**\n\nX.\n\n**TLDR:** **Use 4478?**').needsYou, true);
 assert.equal(needy('Is it? Yes.\n\nTLDR: done').needsYou, false);
+// ...until the user replies: then it's history, not a question
+assert.deepEqual(chatItems([say('**▸ Ports · needs you**\n\nTLDR: pick one'), { type: 'user', message: { content: 'use 4478' } }]).map(i => i.needsYou), [false, undefined]);
+assert.equal(chatItems([say('TLDR: Ship it?'), { type: 'user', message: { content: 'yes' } }])[0].needsYou, false); // answered by a chip
 // Two replies with only an agent message / task notification between them stay separate bubbles, each with its own TLDR.
 const twoTurns = chatItems([
     { type: 'user', message: { content: 'security issues?' } },

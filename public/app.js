@@ -12,6 +12,7 @@ import { refreshLog } from './log.js';
 // The old pill stops (timers, in-flight fetch) the moment the project changes; data for another project is dropped.
 let pillFor = null, milestone = null, pillStop = new AbortController();
 hooks.inMilestone = x => inMilestone(x, milestone);
+hooks.milestoneId = () => milestone?.id ?? null;
 function renderMilestone() {
     if (pillFor === state.project) {
         return;
@@ -90,7 +91,7 @@ function renderDialog() {
     const c = counts(), body = $('dlg-body');
     const row = (name, kind) => {
         const r = el('div', 'p-row'), b = waButton(kind === 'add' ? '+ Add' : 'Remove', kind);
-        r.append(el('span', null, name), el('small', null, `${c[name] || 0} sessions`), b);
+        r.append(el('span', null, name), el('small', null, `${c[name] || 0} session${c[name] === 1 ? '' : 's'}`), b);
         b.onclick = () => {
             state.tracked = kind === 'add' ? [...state.tracked, name] : state.tracked.filter(p => p !== name);
             saveTracked();

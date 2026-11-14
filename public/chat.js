@@ -137,7 +137,7 @@ function markRead(sid, key, b) {
 /** @param {ChatItem} i @param {string} sid @param {string | null} prevTopic @param {{ latest?: boolean, unread?: boolean }} [look] */
 function bubble(i, sid, prevTopic, look = {}) {
     if (i.role === 'tools') {
-        return el('div', 'tools', i.text);
+        return el('div', `tools${i.quiet ? ' quiet' : ''}`, i.text);
     }
     if (i.role === 'error') {
         return el('div', 'tools api-error', i.text);

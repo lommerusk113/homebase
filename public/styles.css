@@ -162,6 +162,7 @@ a.chip:hover { text-decoration:underline; }
 .lead code { font-family:var(--wa-font-family-code); font-size:12px; background:var(--chip); padding:1px 5px; border-radius:4px; }
 .tools { align-self:flex-start; flex-shrink:0; font-size:12px; color:var(--muted); padding:0 4px; }
 .tools::before { content:'⚙ '; }
+.tools.quiet { display:none; }
 .tools.api-error { color:var(--c-danger); }
 .tools.api-error::before { content:'⚠ '; }
 .c-feed.needs-only .tools.api-error { display:block; }
@@ -172,7 +173,8 @@ a.chip:hover { text-decoration:underline; }
 .c-ask ol { margin:4px 0 6px; padding-left:20px; }
 .c-ask ol li { font-weight:500; }
 .c-ask p { margin:2px 0 0; }
-.replies { display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0; margin-top:-4px; }
+/* min-height: the chips' height before they render, so scrolling to the bottom shows them whole */
+.replies { display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0; margin-top:-4px; min-height:26px; }
 .replies wa-button { font-size:12.5px; }
 /* Input dock: a fixed height (26px status line + 56px one-row input) that never changes, so the feed's height never does.
    Its column is bottom-aligned, so anything taller (a growing textarea, the error, the ask note) overflows upward over the feed. */
@@ -217,6 +219,7 @@ a.chip:hover { text-decoration:underline; }
 .body { font-size:13.5px; line-height:1.6; overflow-wrap:anywhere; }
 .body strong { font-weight:700; color:var(--strong); }
 .body .chip { vertical-align:baseline; }
+.ref { color:var(--accent); white-space:nowrap; }
 .body p, .body ul, .body ol, .body pre, .body table, .body blockquote { margin:10px 0; }
 .body ul, .body ol { padding-left:22px; }
 .body h1, .body h2, .body h3, .body h4 { font-size:14px; margin:14px 0 6px; }
@@ -281,7 +284,7 @@ wa-details.group::part(icon) { color:var(--muted); font-size:12px; }
 ul.comments { margin:0; padding:0; list-style:none; font-size:13px; }
 ul.comments li { margin:3px 0; }
 ul.comments a { color:var(--fg); }
-.rows .pr { width:230px; } .rows .br { width:16%; } .rows .act { width:186px; white-space:nowrap; text-align:right; padding-right:0; }
+.rows .pr { width:170px; } .rows .br { width:16%; } .rows .act { width:186px; white-space:nowrap; text-align:right; padding-right:0; }
 .ci-pill { --c:var(--c-idle); display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; margin-left:4px; border-radius:99px; font-size:11px; font-weight:700; line-height:1; text-decoration:none; vertical-align:middle; color:var(--c); background:color-mix(in srgb, var(--c) 15%, transparent); }
 .ci-success { --c:var(--c-ready); } .ci-failed { --c:var(--c-danger); }
 .ci-running, .ci-pending, .ci-created, .ci-preparing, .ci-waiting_for_resource, .ci-scheduled { --c:var(--c-warn); }
@@ -367,6 +370,7 @@ ul.comments a { color:var(--fg); }
 .who small { font-size:11.5px; color:var(--muted); line-height:1.35; }
 .who .you { font-size:10.5px; font-weight:500; color:var(--muted); background:var(--chip); border-radius:99px; padding:0 6px; }
 .lane.free .who .name { color:var(--c-needs); }
+.av.none { border:1.5px dashed var(--line); color:var(--muted); }
 .lane.free .av { border:1.5px dashed var(--c-needs); color:var(--c-needs); }
 /* cards wrap onto more rows instead of scrolling sideways; an open card takes a full row */
 .strip { display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:8px; padding:10px; align-items:start; min-width:0; }
@@ -382,7 +386,8 @@ ul.comments a { color:var(--fg); }
 .card .top .st { color:var(--c); font-weight:600; }
 .card .top .age { margin-left:auto; }
 .card .tt { font-size:12.5px; line-height:1.35; font-weight:500; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
-.card .ft { display:flex; gap:4px; align-items:center; min-height:18px; }
+.card .ft { display:flex; flex-wrap:wrap; gap:4px; align-items:center; min-height:18px; }
+.card .ft > * { flex-shrink:0; }
 .card .ft .ci-pill { margin-left:0; }
 .card.open { grid-column:1 / -1; cursor:default; box-shadow:var(--shadow); border-color:color-mix(in srgb, var(--c) 50%, var(--line)); border-left-color:var(--c); }
 .card.open:hover { background:var(--bg); }
@@ -451,7 +456,6 @@ ul.comments a { color:var(--fg); }
 .lg-tname { flex-shrink:0; font-weight:600; color:var(--tc); }
 .lg-tname::before { content:'▸ '; }
 .lg-c { display:flex; gap:8px; align-items:center; min-width:0; }
-.lg-hash { color:var(--muted); flex-shrink:0; }
 .lg-subj { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
 .lg-nested { margin-top:4px; padding-left:10px; border-left:2px solid var(--line-soft); display:flex; flex-direction:column; gap:2px; font-size:12.5px; }
 .lg-unpushed { flex-shrink:0; height:18px; padding:0 6px; border-radius:99px; font-size:11px; font-weight:600; line-height:18px; white-space:nowrap; color:var(--c-warn); background:color-mix(in srgb, var(--c-warn) 15%, transparent); }

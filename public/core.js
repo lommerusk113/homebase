@@ -212,14 +212,16 @@ export const prLabel = url => {
 };
 /** @param {{ pr: string, prState?: PrState | null }} s */
 export const prChip = s => {
-    const a = el('a', 'chip mono', `${prLabel(s.pr)}${s.prState ? ' · ' + s.prState.state : ''}`);
+    // "open" is the usual case, so only merged/closed are spelled out
+    const a = el('a', 'chip mono', `${prLabel(s.pr)}${s.prState && s.prState.state !== 'open' ? ' · ' + s.prState.state : ''}`);
     a.href = s.pr;
     a.target = '_blank';
     a.onclick = e => e.stopPropagation();
     return a;
 };
 
-// Scan aids on rendered markdown: PR/MR links become chips, !123/#123 become chips, file paths become inline code.
+// Scan aids on rendered markdown: PR/MR links become chips, file paths become inline code, and !123/#123 (bare or in
+// backticks) become light accent text: chips for every ref made bold sentences hard to read.
 const PR_HREF = /^https:\/\/\S+?\/(?:-\/merge_requests|pull)\/\d+\/?$/;
 const CHIP_OR_PATH = /(^|[\s(\[])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+\/?|[\w.@+-]+(?:\/[\w.@+-]+)+\.[a-z]\w{0,5}|[!#]\d+\b)/gi;
 function enrich(root) {
@@ -232,7 +234,12 @@ function enrich(root) {
             a.title = a.href;
         }
     }
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement.closest('a, code, pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    for (const c of root.querySelectorAll(':not(pre) > code')) {
+        if (/^[!#]\d+$/.test(c.textContent)) {
+            c.replaceWith(el('span', 'ref', c.textContent));
+        }
+    }
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement.closest('a, code, pre, .ref') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
     /** @type {Text[]} */
     const nodes = [];
     while (walker.nextNode()) {
@@ -247,7 +254,7 @@ function enrich(root) {
         let last = 0;
         for (const m of t.matchAll(CHIP_OR_PATH)) {
             const start = m.index + m[1].length, tok = m[2].replace(/[.,:;]+$/, '');
-            frag.append(t.slice(last, start), /^[!#]/.test(tok) ? el('span', 'chip mono', tok) : el('code', null, tok));
+            frag.append(t.slice(last, start), /^[!#]/.test(tok) ? el('span', 'ref', tok) : el('code', null, tok));
             last = start + tok.length;
         }
         frag.append(t.slice(last));
@@ -309,10 +316,10 @@ export function foldable(tldr, rest, key) {
     return [top, body, btn];
 }
 
-// Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected) and hooks.refresh for keys.js's r;
+// Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected), hooks.milestoneId to the picked one and hooks.refresh for keys.js's r;
 // keys.js sets hooks.rendered, which list.js and issues.js call after each render.
-/** @type {{ inMilestone: (x: WorkItem) => boolean, refresh: () => void, rendered?: (refocus: boolean) => void }} */
-export const hooks = { inMilestone: () => true, refresh: () => {} };
+/** @type {{ inMilestone: (x: WorkItem) => boolean, milestoneId: () => number | null, refresh: () => void, rendered?: (refocus: boolean) => void }} */
+export const hooks = { inMilestone: () => true, milestoneId: () => null, refresh: () => {} };
 
 // In a tracked project and in the selected one (or "All").
 /** @param {{ project: string }} x */

@@ -10,11 +10,12 @@ let lastText = '';
 
 const time = at => new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
-/** @param {LogCommit} c @param {string | null} main */
-function commit(c, main) {
+// The hash is only in the tooltip; under an agent the branch is the agent's own, so it isn't repeated per commit.
+/** @param {LogCommit} c @param {string | null} main @param {boolean} [nested] */
+function commit(c, main, nested = false) {
     const r = el('div', 'lg-c');
-    r.append(el('span', 'mono lg-hash', c.short), el('span', 'lg-subj', c.subject));
-    if (c.branch && c.branch !== main) {
+    r.append(el('span', 'lg-subj', c.subject));
+    if (c.branch && c.branch !== main && !nested) {
         r.append(el('span', 'chip mono', c.branch));
     }
     if (c.unpushed) {
@@ -40,7 +41,7 @@ function entry(e, d) {
         main.append(head, ...foldable(e.tldr, e.body, `log:${e.id}`));
         if (e.commits.length) {
             const box = el('div', 'lg-nested');
-            box.append(...e.commits.map(c => commit(c, d.defaultBranch)));
+            box.append(...e.commits.map(c => commit(c, d.defaultBranch, true)));
             main.append(box);
         }
         li.dataset.key = `log:${e.id}`;

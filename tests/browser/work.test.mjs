@@ -25,7 +25,8 @@ export default {
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.next').textContent`), "💬 1 Next: Reply to Ann Reviewer's comment");
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.act-btn').textContent`), 'Fix & reply');
         assert.equal(await page.ev(`${row(MR(102))}.querySelector('.act-btn').textContent`), 'Merge + close issue');
-        assert.ok(await page.ev(`${row(MR(101))}.querySelector('.ms-tag').textContent === '⚑ Sprint 12'`), 'milestone tag');
+        await page.waitFor(`!${row(MR(101))}.querySelector('.ms-tag')`, { what: 'no milestone tag while the pill has Sprint 12 picked' });
+        assert.equal(await page.ev(`${row(MR(101))}.querySelector('a.chip').textContent`), '!101', 'an open MR shows no "open"');
     },
 
     'an open MR only the forge lists (never in a transcript) is a row bound to the project\'s newest session': async ({ page, open }) => {

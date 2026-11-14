@@ -200,7 +200,8 @@ function itemRows(x) {
         next.prepend(commentBadge(x, fresh), ' ');
     }
     what.append(el('b', null, x.title), next);
-    if (x.milestone) {
+    // with a milestone picked every row is in it, so the tag would only repeat the header pill
+    if (x.milestone && !hooks.milestoneId()) {
         what.firstElementChild.prepend(milestoneTag(x));
     }
     const prog = el('td', 'prog');

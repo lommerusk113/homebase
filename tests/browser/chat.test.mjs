@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { chatItems } from '../../server.mjs';
 
 const bubble = text => `[...document.querySelectorAll('#feed .bubble')].find(b => b.textContent.includes(${JSON.stringify(text)}))`;
 const ready = page => page.waitFor(`${bubble('tag the release')}`, { what: 'the newest master bubble' });
@@ -58,6 +59,22 @@ export default {
         await page.waitFor(`${bubble('tag the release')}.querySelector('.answer')?.textContent === '✕ You: No · sending…'`, { what: 'the answer tag' });
         assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [[`/api/send?id=${IDS.master}`, 'No']]);
         assert.equal(await page.ev(`document.querySelector('#feed .replies')`), null, 'chips gone once answered');
+    },
+
+    'a chip on an older question names it and answers that question': async ({ page, open, IDS, answerPosts }) => {
+        const say = (text, at) => ({ type: 'assistant', timestamp: at, message: { content: [{ type: 'text', text }] } });
+        const tool = { type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: {} }] } };
+        const items = chatItems([say('Done.\n\nTLDR: Should I tag the release?', '2026-11-14T10:00:00.000Z'), tool, say('The notes are on the wiki.\n\nTLDR: Should I link them from the README?', '2026-11-14T10:01:00.000Z')]);
+        await open();
+        await ready(page);
+        page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: true, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        await page.waitFor(`${bubble('link them from the README')}`, { what: 'the newest bubble' });
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#feed .replies')].map(r => r.previousElementSibling.textContent.includes('README'))`), [false], 'chips only under the older question while Claude works');
+        await page.clickOn(`${bubble('tag the release')}.nextElementSibling.querySelector('wa-button:last-child')`);
+        await page.waitFor(`${bubble('tag the release')}.querySelector('.answer')?.textContent === '✕ You: No · sending…'`, { what: 'the answer tag on the older question' });
+        assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]),
+            [[`/api/send?id=${IDS.master}`, 'No\n\n(Answering your earlier question from 2026-11-14T10:00:00.000Z: "Should I tag the release?")']]);
+        assert.equal(await page.ev(`[...document.querySelectorAll('#feed .bubble.user')].length`), 0, 'no bubble with the note');
     },
 
     'a short reply becomes the answer tag of the question before it': async ({ page, open }) => {

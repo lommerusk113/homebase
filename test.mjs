@@ -1500,6 +1500,10 @@ import { issueOf, mentionsMr, turnPrompts, spawnPrompts, worksOnMr, requestFor }
     const ag = extra => ({ id: 'a', status: 'running', stage: 1, updated: 5, prs: [], description: 'Implement thing', prompt: '', branches: ['worktree-agent-a'], ...extra });
     assert.equal(worksOnMr(ag({ branches: ['worktree-agent-a', '2219-auto-booked-creator'] }), url, pr), true);
     assert.equal(worksOnMr(ag({ description: 'Implement #2219 auto booked' }), url, pr), true);
+    // a finished agent links a GitHub PR by #N in its description, as a GitLab one by !N
+    const ghPr = 'https://github.com/o/r/pull/12';
+    assert.deepEqual(['Address comments on #12', 'Address comments on #123', 'Address comments on !12'].map(d => worksOnMr(ag({ status: 'done', description: d }), ghPr, null)), [true, false, false]);
+    assert.equal(worksOnMr(ag({ status: 'done', description: 'Rebase !1785' }), url, pr), true);
     assert.equal(worksOnMr(ag({ prompt: 'Implement GitLab issue #2219 in pracsys' }), url, pr), true);
     assert.equal(worksOnMr(ag({ prompt: `Fix the comments on ${url}` }), url, pr), true);
     assert.equal(worksOnMr(ag({ prompt: 'Fix the comments on !1785' }), url, pr), true);

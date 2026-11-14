@@ -1,6 +1,6 @@
 // Work-item rules (pure): one item per MR or loose agent, its column, lifecycle stage, next step, row action, gate badge and milestone.
 import { PR_URL, USAGE_KEYS, formatDuration, formatTokens } from './transcripts.mjs';
-import { mentionsMr, mrNumber, mrRef } from './forge.mjs';
+import { mentionsMr, mrRef } from './forge.mjs';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
@@ -200,13 +200,12 @@ const gateHeads = new Map(); // gate run -> MR head sha first seen with it
 // A prompt's first MR URL, first `!N` and first `#N`: what it is about, not the other issues it lists for context.
 const leadRefs = text => [PR_URL, /(?<![\w&!#])!\d+/, /(?<![\w&!#])#\d+/].map(re => text.match(re)?.[0]).filter(Boolean).join(' ');
 
-// An agent works on an MR when its description names `!N`, or, while not done, it is on the MR's branch, its
+// An agent works on an MR when its description names `!N` (`#N` on GitHub), or, while not done, it is on the MR's branch, its
 // description names the MR or its issue, its prompt's first MR or issue ref is it, or the master's prompt behind the
 // call that started it (`spawnedFor`) names it anywhere, as "merge !1784 and !1785" does both.
 export function worksOnMr(agent, url, prState) {
 
-    const n = mrNumber(url);
-    if (new RegExp(`!${n}(?!\\d)`).test(agent.description ?? '')) {
+    if (new RegExp(`(?<![\\w&!#])${mrRef(url)}(?!\\d)`).test(agent.description ?? '')) {
         return true;
     }
     if (agent.status === 'done') {

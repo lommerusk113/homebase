@@ -1,5 +1,5 @@
 // Transcript parsing: tail reading and its cache, chat bubbles, TLDR/topic, turn state, review-gate runs, token usage, GET /api/transcript.
-import { open, stat, readFile } from 'node:fs/promises';
+import { open, stat, readFile, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -12,6 +12,43 @@ export const WORKING_MS = 10_000;
 const TURN_STALE_MS = 30 * 60_000; // an open turn with no transcript write this long is treated as dead
 
 export const cache = new Map(); // path -> { mtimeMs, entries }
+
+// Session ids held by a running Claude Code, from the registry it keeps in ~/.claude/sessions/<pid>.json (it follows
+// /clear and --resume), as a Set; null when there is no registry (older Claude Code), so nothing is inferred.
+// ponytail: liveness is kill(pid, 0); a reused pid keeps a dead session "live", which is the old behaviour
+export async function liveSessions(dir = join(homedir(), '.claude', 'sessions')) {
+
+    let names;
+    try {
+        names = (await readdir(dir)).filter(f => /^\d+\.json$/.test(f));
+    } catch {
+        return null;
+    }
+
+    const live = new Set();
+    for (const name of names) {
+        try {
+            const { pid, sessionId } = JSON.parse(await readFile(join(dir, name), 'utf8'));
+            if (alive(pid)) {
+                live.add(sessionId);
+            }
+        } catch {
+            continue; // half-written or removed as the process exits
+        }
+    }
+
+    return live;
+}
+
+function alive(pid) {
+
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (e) {
+        return e.code === 'EPERM'; // exists, owned by someone else
+    }
+}
 
 // A few huge lines (tool results, api-request blobs of ~1 MB) can fill the byte tail on their own, and one long turn
 // can outrun it, so it grows until it holds TAIL_MIN_LINES lines and a turn start, the whole file or `cap` bytes.
@@ -536,9 +573,23 @@ export function markerAsk(marker, entries, now = Date.now()) {
 // attachments only land mid-turn) and ends at `turn_duration`, an API error, or an Esc interrupt. An interrupt
 // parented on the newest start is the marker of a prompt that interrupted the previous turn, so that turn goes on.
 // Assistant output after an end (a turn retried after /login) reopens it.
-// Returns { state: 'working' | 'asking' | 'idle', since: turn start ms | null }.
-export function turnState(entries, ageMs, marker = null) {
+// Whether the Claude Code process of a CLI session is gone (closed or killed), by the session ids live processes hold
+// (liveSessions). Never for a transcript written in the last WORKING_MS, or without a registry to ask.
+// ponytail: only entrypoint "cli" sessions are judged; whether `claude -p`/SDK sessions register is unknown
+export function closedSession(entries, ageMs, live) {
 
+    const e = live && ageMs > WORKING_MS ? entries.findLast(e => e.sessionId && e.entrypoint) : null;
+
+    return e?.entrypoint === 'cli' && !live.has(e.sessionId);
+}
+
+// live: see closedSession; a closed session's open turn is over.
+// Returns { state: 'working' | 'asking' | 'idle', since: turn start ms | null }.
+export function turnState(entries, ageMs, marker = null, live = null) {
+
+    if (closedSession(entries, ageMs, live)) {
+        return { state: 'idle', since: null };
+    }
     if (pendingAsk(entries, marker)) {
         return { state: 'asking', since: null };
     }
@@ -580,9 +631,9 @@ export function turnState(entries, ageMs, marker = null) {
 }
 
 // The human prompts of the open turn (the one that started it, typed or queued, and any queued into it), as [{ at, text }].
-export function turnPrompts(entries, ageMs, marker = null) {
+export function turnPrompts(entries, ageMs, marker = null, live = null) {
 
-    if (turnState(entries, ageMs, marker).state !== 'working') {
+    if (turnState(entries, ageMs, marker, live).state !== 'working') {
         return [];
     }
 
@@ -731,7 +782,7 @@ export async function transcript(dir, id) {
     const entries = await tailOf(path, st);
 
     const marker = await askMarker(id);
-    const turn = turnState(entries, Date.now() - st.mtimeMs, marker);
+    const turn = turnState(entries, Date.now() - st.mtimeMs, marker, await liveSessions());
 
     return { items: chatItems(entries), asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', since: turn.since };
 }

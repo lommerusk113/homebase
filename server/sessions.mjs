@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, pendingQuestion, askMarker, readUsage, usageCache, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
+import { ROOT, WORKING_MS, cache, liveSessions, closedSession, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, pendingQuestion, askMarker, readUsage, usageCache, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
 import { loadStore, record, seeds, flush } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { repoPaths } from './account.mjs';
@@ -364,14 +364,14 @@ export function lastActivity(entries) {
     return Number.isNaN(at) ? null : at;
 }
 
-export function summarize(entries, ageMs, marker = null) {
+export function summarize(entries, ageMs, marker = null, live = null) {
 
     const last = type => entries.findLast(e => e.type === type);
     const turns = entries.filter(e => (e.type === 'user' || e.type === 'assistant') && !e.isSidechain);
     const meta = entries.findLast(e => e.cwd) ?? {};
     const lastTurn = turns.at(-1);
-    const turn = turnState(entries, ageMs, marker);
-    const openPrompts = turnPrompts(entries, ageMs, marker);
+    const turn = turnState(entries, ageMs, marker, live);
+    const openPrompts = turnPrompts(entries, ageMs, marker, live);
     const lastItem = chatItems(entries, 1)[0]; // the chat's newest bubble, so the Work tab and the chat agree on "needs you"
 
     return {
@@ -429,7 +429,7 @@ async function* recentTranscripts(now) {
 }
 
 // One session from its cached tail, with its subagents; null when the transcript vanished before it was read.
-async function sessionOf({ dir, file, path, st }, now) {
+async function sessionOf({ dir, file, path, st }, now, live) {
 
     let entries;
     try {
@@ -438,11 +438,14 @@ async function sessionOf({ dir, file, path, st }, now) {
         return null; // deleted between stat and read
     }
 
-    const s = summarize(entries, now - st.mtimeMs, await askMarker(file.replace('.jsonl', '')));
+    const s = summarize(entries, now - st.mtimeMs, await askMarker(file.replace('.jsonl', '')), live);
     const id = s.id ?? file.replace('.jsonl', '');
 
+    // subagents run inside their session's process, so they end with it
+    const closed = closedSession(entries, now - st.mtimeMs, live);
     const spawns = spawnPrompts(entries);
-    const subagents = (await agents(join(ROOT, dir, id, 'subagents'), now)).map(a => ({ ...a, spawnedFor: spawns.get(a.toolUseId) ?? null }));
+    const subagents = (await agents(join(ROOT, dir, id, 'subagents'), now))
+        .map(a => ({ ...a, spawnedFor: spawns.get(a.toolUseId) ?? null, ...(closed && a.status === 'running' && { status: 'stopped', stopReason: 'closed' }) }));
 
     const ctx = await contextOf(id);
 
@@ -535,9 +538,10 @@ export async function sessions() {
 
     const now = Date.now();
     forgetAged(now);
+    const live = await liveSessions();
     const out = [];
     for await (const transcript of recentTranscripts(now)) {
-        const s = await sessionOf(transcript, now);
+        const s = await sessionOf(transcript, now, live);
         if (s) {
             out.push(s);
         }

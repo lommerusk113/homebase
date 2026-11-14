@@ -2053,3 +2053,31 @@ const glabMr = (fields, n) => withFakeGlab(`echo '${JSON.stringify({ state: 'ope
     rmSync(home, { recursive: true, force: true });
     console.log('ok forge error shown');
 }
+
+import { liveSessions, closedSession } from './server/transcripts.mjs';
+{
+    // the process registry: live pids' session ids; a dead pid's or a half-written entry doesn't count; no registry is null
+    const dir = mkdtempSync(join(tmpdir(), 'hb-reg-'));
+    const dead = spawn(process.execPath, ['-e', '']);
+    await new Promise(r => dead.on('exit', r));
+    writeFileSync(join(dir, `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: 'up' }));
+    writeFileSync(join(dir, `${dead.pid}.json`), JSON.stringify({ pid: dead.pid, sessionId: 'down' }));
+    writeFileSync(join(dir, '1.json'), '{"pid": 1, "sessi');
+    writeFileSync(join(dir, `${process.pid}.abc.key`), 'x');
+    assert.deepEqual([...await liveSessions(dir)], ['up']);
+    assert.equal(await liveSessions(join(dir, 'nope')), null);
+    rmSync(dir, { recursive: true });
+
+    // a CLI session no live process holds was closed mid-turn: idle at once instead of working for 30 minutes
+    const at = s => `2026-11-13T09:${s}.000Z`;
+    const turn = [
+        { type: 'user', sessionId: 's', entrypoint: 'cli', uuid: 'p', timestamp: at('55:20'), origin: { kind: 'human' }, promptSource: 'typed', turnPosition: { promptIndex: 1, turnIndex: 1 }, message: { role: 'user', content: 'fix it' } },
+        { type: 'assistant', sessionId: 's', entrypoint: 'cli', uuid: 'a', timestamp: at('55:30'), message: { content: [{ type: 'tool_use', id: 't', name: 'Bash', input: {} }], stop_reason: 'tool_use' } }
+    ];
+    assert.equal(turnState(turn, 60_000).state, 'working');
+    assert.equal(turnState(turn, 60_000, null, new Set(['s'])).state, 'working');
+    assert.equal(turnState(turn, 60_000, null, new Set(['other'])).state, 'idle');
+    assert.equal(turnState(turn, 5_000, null, new Set()).state, 'working', 'a fresh write still counts');
+    assert.equal(closedSession(turn.map(e => ({ ...e, entrypoint: 'sdk-cli' })), 60_000, new Set()), false, 'only interactive CLI sessions register');
+    console.log('ok closed session');
+}

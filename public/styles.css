@@ -292,7 +292,7 @@ ul.comments a { color:var(--fg); }
 .activity li { padding:3px 0; color:var(--muted); }
 .activity b { font-weight:500; color:var(--fg); }
 /* zero width, not display:none, so the detail row's colspan still matches the columns */
-@container (max-width: 1000px) { .rows .br { width:0; padding:0; } }
+@container (max-width: 1200px) { .rows .br { width:0; padding:0; } }
 @container (max-width: 700px) { .rows .pr { width:0; padding:0; } }
 @media (max-width: 900px) {
   .main { flex-direction:column; overflow:auto; }

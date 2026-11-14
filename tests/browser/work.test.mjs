@@ -10,7 +10,7 @@ export default {
         await page.waitFor(`${row(MR(102))} && ${row(MR(106))}`, { what: 'the !102 row and the forge-seeded !106' });
         assert.deepEqual(await page.ev(groups), {
             'needs-you': ['agent-stopped', MR(104)],
-            doing: [`starting:${IDS.worker}:7`, MR(101), MR(105)],
+            doing: [MR(101), MR(105), `starting:${IDS.worker}:7`], // placeholders after the item rows
             review: [MR(103), MR(107), MR(106)],
             ready: [MR(102)],
             finished: ['agent-notes'],

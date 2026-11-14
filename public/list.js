@@ -270,7 +270,7 @@ function renderItems() {
         const h = el('h2', 'g-head');
         h.append(dot(c.key), `${c.label} · ${list.length + extra.length}`);
         const t = itemTable(list);
-        t.prepend(...extra);
+        t.append(...extra); // after the item rows: a fixed-layout table takes its column widths from the first row, and this one spans them all
         const sec = el('section', `group g-${c.key}`);
         sec.append(h, t);
         return sec;

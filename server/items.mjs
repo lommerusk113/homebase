@@ -324,7 +324,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             stageLabel: prState?.state === 'closed' ? 'Closed' : LIFECYCLE[stage],
             agentStatus: agent?.status ?? null,
             updated: Math.max(agent?.updated ?? 0, it.linkedAt),
-            branch: prState?.branch ?? agent?.branch ?? null, // transcript gitBranch is unreliable inside worktrees
+            branch: [prState?.branch, agent?.branch].find(b => b && b !== 'HEAD') ?? null, // transcript gitBranch is unreliable inside worktrees; HEAD is a detached checkout
             stepAt: agent?.status === 'running' ? agent.stepAt ?? null : null,
             worktreePath: agent?.worktreePath ?? null,
             tldr: agent?.tldr ?? null,

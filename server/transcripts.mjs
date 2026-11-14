@@ -647,7 +647,7 @@ export function spawnPrompts(entries) {
     return out;
 }
 
-const usageCache = new Map(); // subagent transcript path -> { offset, byId, first, last, totals }
+export const usageCache = new Map(); // subagent transcript path -> { offset, byId, first, last, totals }
 export const USAGE_KEYS = { input: 'input_tokens', output: 'output_tokens', cacheRead: 'cache_read_input_tokens', cacheWrite: 'cache_creation_input_tokens' };
 
 // Folds complete JSONL lines into u. Streamed chunks repeat a message id with the same usage, so the last one per id wins.

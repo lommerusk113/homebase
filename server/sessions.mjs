@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, pendingQuestion, askMarker, readUsage, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
+import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, pendingQuestion, askMarker, readUsage, usageCache, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
 import { loadStore, record, seeds, flush } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { repoPaths } from './account.mjs';
@@ -513,9 +513,23 @@ function attachTmux(out, now) {
 // By real activity, so an idle process's bookkeeping writes don't float it to the top.
 const byActivity = (a, b) => (b.lastActivity ?? b.created) - (a.lastActivity ?? a.created);
 
+// Transcripts that aged out of the listing leave every per-transcript cache, so a long-running server doesn't grow.
+function forgetAged(now) {
+
+    for (const [path, hit] of cache) {
+        if (now - hit.mtimeMs > MAX_AGE_MS) {
+            cache.delete(path);
+            prompts.delete(path);
+            usageCache.delete(path);
+            stagePeak.delete(basename(path, '.jsonl'));
+        }
+    }
+}
+
 export async function sessions() {
 
     const now = Date.now();
+    forgetAged(now);
     const out = [];
     for await (const transcript of recentTranscripts(now)) {
         const s = await sessionOf(transcript, now);

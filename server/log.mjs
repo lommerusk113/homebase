@@ -280,6 +280,11 @@ export async function log(project, now = Date.now()) {
     }
 
     const since = now - LOG_MS;
+    for (const [path, hit] of agentCache) {
+        if (hit.mtimeMs < since) {
+            agentCache.delete(path); // aged out of every log
+        }
+    }
     const masters = [];
     for (const dir of await readdir(ROOT)) {
         let files;
@@ -292,7 +297,12 @@ export async function log(project, now = Date.now()) {
             const path = join(ROOT, dir, f);
             try {
                 const st = await stat(path);
-                const cwd = st.mtimeMs >= since && await cwdOf(path);
+                if (st.mtimeMs < since) {
+                    cwds.delete(path); // aged out of every log
+                    chats.delete(path);
+                    continue;
+                }
+                const cwd = await cwdOf(path);
                 if (cwd && await projectOf(cwd) === project) {
                     masters.push({ path, size: st.size, cwd, agentsDir: join(ROOT, dir, f.replace('.jsonl', ''), 'subagents') });
                 }

@@ -2009,3 +2009,28 @@ const glabMr = (fields, n) => withFakeGlab(`echo '${JSON.stringify({ state: 'ope
     assert.equal(prs.get(url).value.ready, true, `checking kept ready (first answer ${checking.ready})`);
     console.log('ok gitlab merge statuses');
 }
+
+{
+    // a merged MR is not asked again every minute
+    const url = 'https://gitlab.example.com/g/p/-/merge_requests/121', calls = join(fakeBin, 'calls');
+    prs.set(url, { at: 1, value: { state: 'merged' } });
+    await withFakeGlab(`echo x >> "${calls}"; exit 1`, () => prState(url));
+    assert.equal(statSync(calls, { throwIfNoEntry: false }), undefined);
+
+    // transcripts that aged out of the listing leave the tail and usage caches
+    const home = mkdtempSync(join(tmpdir(), 'hb-home-'));
+    const dir = join(home, '.claude', 'projects', 'p'), subs = join(dir, 's1', 'subagents');
+    mkdirSync(subs, { recursive: true });
+    const line = JSON.stringify({ type: 'user', sessionId: 's1', message: { content: 'hi' }, timestamp: new Date().toISOString() }) + '\n';
+    writeFileSync(join(dir, 's1.jsonl'), line);
+    writeFileSync(join(subs, 'a1.jsonl'), line);
+    writeFileSync(join(subs, 'a1.meta.json'), JSON.stringify({ description: 'a', finished: true }));
+    const code = `import { sessions } from './server/sessions.mjs'; import { cache, usageCache } from './server/transcripts.mjs';
+        await sessions(); const before = [cache.size, usageCache.size];
+        const real = Date.now; Date.now = () => real() + 5 * 864e5; // five days later
+        await sessions(); console.log(JSON.stringify([before, [cache.size, usageCache.size]]));`;
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home }, cwd: import.meta.dirname, encoding: 'utf8' });
+    assert.deepEqual(JSON.parse(out.trim().split('\n').at(-1)), [[2, 1], [0, 0]]);
+    rmSync(home, { recursive: true, force: true });
+    console.log('ok caches age out');
+}

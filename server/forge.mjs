@@ -147,7 +147,8 @@ export async function prState(url) {
         hit = { at: 0, value: null };
         prs.set(url, hit);
     }
-    if (Date.now() - hit.at > PR_TTL_MS) {
+    // a merged or closed MR doesn't change on its own; the refresh button still rechecks a closed one
+    if (Date.now() - hit.at > PR_TTL_MS && !['merged', 'closed'].includes(hit.value?.state)) {
         refetch(hit, () => apiSlot(() => fetchPr(url)));
     }
     if (!hit.at) {
@@ -227,7 +228,7 @@ export function refetch(hit, fn) {
 // Manual refresh may start when none is running and the last one started at least gap ms ago.
 export const refreshDue = (running, startedAt, now = Date.now(), gap = 5000) => !running && now - startedAt >= gap;
 
-// The refresh button: every PR/MR state and every glab/gh cache entry (milestones, issues, linked MRs, me) refetches now
+// The refresh button: every PR/MR state (but a merged one's) and every glab/gh cache entry (milestones, issues, linked MRs, me) refetches now
 // through the limiter, never cleared. Issue groups go second so they are built from the fresh linked MRs.
 // Concurrent calls share the running refresh; a call within 5 s of the last start returns at once.
 let refreshRun = null, refreshStartedAt = 0, lastRefreshedAt = 0;
@@ -241,7 +242,7 @@ export function refreshAll() {
     const isIssues = ([k]) => k.startsWith('issues:');
     const refetchAll = list => Promise.all(list.filter(([, hit]) => hit.fn).map(([, hit]) => refetch(hit, hit.fn)));
     refreshRun = Promise.all([
-        ...[...prs].map(([url, hit]) => refetch(hit, () => apiSlot(() => fetchPr(url)))),
+        ...[...prs].filter(([, hit]) => hit.value?.state !== 'merged').map(([url, hit]) => refetch(hit, () => apiSlot(() => fetchPr(url)))),
         refetchAll(entries.filter(e => !isIssues(e))).then(() => refetchAll(entries.filter(isIssues)))
     ]).finally(() => {
         refreshRun = null;

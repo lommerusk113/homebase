@@ -106,3 +106,6 @@ To log out every paired device, delete `~/.claude/homebase/session-secret` and r
 
 LAN mode is plain HTTP: anyone on your network who can watch your traffic can see the pages and steal the cookie.
 Use it only on a network you trust.
+
+Until Claude writes its first transcript (on the first prompt) the chat sends to `cc-new-<name>` by tmux name (`/api/send?tmux=`, only that name pattern and only while the session runs), and `/api/starting` lets a reloaded page find it again.
+Once the transcript exists, Homebase maps it to that tmux session on every poll (same start folder, no tmux of its own), so no second Claude is started.

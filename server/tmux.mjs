@@ -61,3 +61,41 @@ export function refuseIfLiveElsewhere(ageMs) {
         throw Object.assign(new Error('This session is open in another terminal. Close it there first.'), { status: 409 });
     }
 }
+
+// A new project's Claude runs in cc-new-<name> before it has a transcript, so that name is also a send target.
+export const NEW_TMUX = /^cc-new-[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+let liveCache = { at: 0, list: [] };
+
+// Every tmux session as { name, path } (path = its start dir); [] without a tmux server. Cached for a moment, as every poll asks.
+export async function liveTmux(now = Date.now(), list = () => tmux(['list-sessions', '-F', '#{session_name}\t#{session_path}'])) {
+
+    if (now - liveCache.at > 2000) {
+        const out = await list().then(r => r.stdout, () => '');
+        liveCache = { at: now, list: out.split('\n').filter(Boolean).map(l => { const [name, path] = l.split('\t'); return { name, path }; }) };
+    }
+
+    return liveCache.list;
+}
+
+// A session in the start dir of a running cc-new-* tmux session, with no tmux of its own, is that project's chat: remember it
+// (the earliest one, per tmux). Derived on every poll, so it also holds after a server restart.
+export function mapNewProjects(sessions, live, map = aliases) {
+
+    const taken = new Set([...map.values()].map(a => a.tmux));
+    const names = new Set(live.map(l => l.name));
+    for (const { name, path } of live) {
+        if (!NEW_TMUX.test(name) || taken.has(name)) {
+            continue;
+        }
+        const own = sessions.filter(s => s.cwd === path && !names.has(tmuxName(s.id)) && !map.has(s.id)).sort((a, b) => a.created - b.created)[0];
+        if (own) {
+            map.set(own.id, { tmux: name });
+        }
+    }
+}
+
+// cc-new-* tmux sessions whose folder has no transcript yet: the chats still starting.
+export const startingProjects = (sessions, live) => live
+    .filter(l => NEW_TMUX.test(l.name) && !sessions.some(s => s.cwd === l.path))
+    .map(l => ({ tmux: l.name, name: l.name.slice('cc-new-'.length), dir: l.path }));

@@ -6,7 +6,7 @@ import { join, basename } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { sessions } from './sessions.mjs';
-import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, sleep } from './tmux.mjs';
+import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, sleep, NEW_TMUX } from './tmux.mjs';
 
 const run = promisify(execFile);
 
@@ -99,14 +99,35 @@ export async function send(id, text, session = null) {
         await sleep(5000); // ponytail: fixed wait for claude to boot; poll capture-pane for its prompt if this proves flaky
     }
 
+    await typeSteps(steps);
+
+    return name;
+}
+
+async function typeSteps(steps) {
     for (const args of steps) {
         if (args.at(-1) === 'Enter') {
             await sleep(300); // a separate, later Enter so Claude doesn't treat it as part of the typed/pasted text
         }
         await tmux(args);
     }
+}
 
-    return name;
+// A new project's chat before its transcript exists: typed into its cc-new-<name> tmux session, if that is running.
+export async function sendToNew(name, text) {
+
+    if (!NEW_TMUX.test(name ?? '')) {
+        throw Object.assign(new Error('bad tmux name'), { status: 400 });
+    }
+
+    const steps = sendSteps(name, text);
+    try {
+        await tmux(['has-session', '-t', `=${name}`]);
+    } catch {
+        throw Object.assign(new Error(`${name} isn't running`), { status: 409 });
+    }
+
+    await typeSteps(steps);
 }
 
 // Escape interrupts Claude's turn, so queued messages are handled right away. Only in our own tmux session.

@@ -1025,6 +1025,28 @@ import { findClearedSuccessor, tmuxFor, lastActivity } from './server.mjs';
 }
 console.log('ok clear');
 
+import { NEW_TMUX, mapNewProjects, startingProjects } from './server.mjs';
+{
+    for (const ok of ['cc-new-league', 'cc-new-My_repo.v2', 'cc-new-a']) {
+        assert.ok(NEW_TMUX.test(ok), ok);
+    }
+    for (const bad of ['cc-new-', 'cc-abcdef01', 'cc-new-.x', 'cc-new--x', 'cc-new-a b', 'cc-new-a;b', 'x-cc-new-a', 'cc-new-a\nb', '']) {
+        assert.ok(!NEW_TMUX.test(bad), JSON.stringify(bad));
+    }
+    const live = [{ name: 'cc-new-league', path: '/p/league' }, { name: 'cc-new-other', path: '/p/other' }, { name: 'cc-aaaaaaaa', path: '/p/league' }];
+    const ss = [{ id: 'bbbbbbbb-1', cwd: '/p/league', created: 5 }, { id: 'cccccccc-2', cwd: '/p/league', created: 9 }, { id: 'dddddddd-3', cwd: '/elsewhere', created: 1 }];
+    const map = new Map();
+    mapNewProjects(ss, live, map);
+    assert.deepEqual([...map], [['bbbbbbbb-1', { tmux: 'cc-new-league' }]], 'the earliest session in the start dir; a different cwd or no match maps nothing');
+    mapNewProjects(ss, live, map);
+    assert.equal(map.size, 1, 'a tmux that is mapped already is left alone');
+    const own = new Map();
+    mapNewProjects(ss, [...live, { name: 'cc-bbbbbbbb', path: '/p/league' }], own);
+    assert.deepEqual([...own], [['cccccccc-2', { tmux: 'cc-new-league' }]], 'a session with its own tmux is skipped');
+    assert.deepEqual(startingProjects(ss, live), [{ tmux: 'cc-new-other', name: 'other', dir: '/p/other' }], 'only a cc-new tmux with no transcript in its folder is starting');
+}
+console.log('ok new project tmux');
+
 import { pipelineOf, ciOf } from './server.mjs';
 {
     const gl = { status: 'success', web_url: 'https://gl/p/1', finished_at: '2026-11-12T10:00:00Z', updated_at: '2026-11-12T10:01:00Z' };
@@ -1345,6 +1367,10 @@ import { createServer as netServer } from 'node:net';
         }
         const sent = await call(s.port, { path: '/api/send?id=..%2Fx', method: 'POST', headers: { ...authed, 'x-codetool': '1' }, body: 'hi' });
         assert.deepEqual([sent.status, sent.body], [500, 'bad id']);
+        for (const [tmux, want] of [['cc-abcdef01', [400, 'bad tmux name']], ['cc-new-x;y', [400, 'bad tmux name']], ['cc-new-nosuch', [409, "cc-new-nosuch isn't running"]]]) {
+            const r = await call(s.port, { path: `/api/send?tmux=${encodeURIComponent(tmux)}`, method: 'POST', headers: { ...authed, 'x-codetool': '1' }, body: 'hi' });
+            assert.deepEqual([r.status, r.body], want, tmux);
+        }
         const refreshed = await call(s.port, { path: '/api/refresh', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token } });
         assert.equal(refreshed.status, 200);
         assert.equal(JSON.parse(refreshed.body).refreshing, false);

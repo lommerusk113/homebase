@@ -11,7 +11,7 @@ import { PR_TTL_MS, openMrUrls, prState, prError, errorText, swrEntry, fetchComm
 import { repoPaths } from './account.mjs';
 import { contextOf } from './limits.mjs';
 import { workItems, milestoneOf, sameRepo } from './items.mjs';
-import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor } from './tmux.mjs';
+import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor, liveTmux, mapNewProjects, startingProjects } from './tmux.mjs';
 
 const run = promisify(execFile);
 
@@ -512,7 +512,7 @@ function attachItems(out, items, now) {
 }
 
 // Each session's tmux target. A /clear sent from Homebase starts a new transcript that keeps typing into the old tmux session.
-function attachTmux(out, now) {
+async function attachTmux(out, now) {
 
     for (const c of clears.splice(0)) {
         const next = findClearedSuccessor(out, c);
@@ -522,6 +522,8 @@ function attachTmux(out, now) {
             clears.push(c);
         }
     }
+
+    mapNewProjects(out, await liveTmux());
 
     for (const s of out) {
         const a = aliases.get(s.id);
@@ -548,6 +550,12 @@ function forgetAged(now) {
     }
 }
 
+// Chats of new projects that have a tmux session but no transcript yet.
+export async function startingChats() {
+
+    return startingProjects(await sessions(), await liveTmux());
+}
+
 export async function sessions() {
 
     const now = Date.now();
@@ -566,7 +574,7 @@ export async function sessions() {
     }));
 
     attachItems(out, await itemsOf(out), now);
-    attachTmux(out, now);
+    await attachTmux(out, now);
 
     return out.sort(byActivity);
 }

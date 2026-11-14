@@ -1,7 +1,7 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
 import { api, $, el, state, store, saveTracked, inView, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks, setOffline, seenAt, authorSummary } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
-import { refreshChat, initChat, bindChat, isMaster } from './chat.js';
+import { refreshChat, initChat, bindChat, isMaster, chatSession } from './chat.js';
 import { openNewProject, initNewProject } from './newproject.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
 import { initKeys } from './keys.js';
@@ -251,6 +251,20 @@ async function poll() {
         polling = false;
     }
 }
+// After a page reload: a project whose chat is still starting (tmux running, no transcript) is found again by name.
+async function findStarting() {
+    if (state.startingTmux || state.project === 'all' || chatSession()) {
+        return;
+    }
+    try {
+        const r = await api('/api/starting');
+        const hit = r.ok && (await r.json()).find(x => x.name === state.project);
+        if (hit) {
+            state.startingTmux = hit.tmux;
+            state.starting = hit.dir;
+        }
+    } catch {}
+}
 async function pollOnce() {
     try {
         const r = await api('/api/sessions');
@@ -270,6 +284,7 @@ async function pollOnce() {
             const started = state.starting && state.sessions.find(s => s.cwd === state.starting && isMaster(s));
             if (started) {
                 state.starting = null;
+                state.startingTmux = null;
                 bindChat(started.id);
             }
             renderProjects();
@@ -289,6 +304,7 @@ async function pollOnce() {
     } catch {
         setOffline(true);
     }
+    await findStarting();
     refreshChat();
     refreshLimits();
     renderReload();

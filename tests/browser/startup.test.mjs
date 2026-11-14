@@ -50,5 +50,27 @@ export default {
         const post = page.posts.find(p => p.url.includes('/api/startup'));
         const u = new URL(post.url);
         assert.deepEqual([u.searchParams.get('tmux'), u.searchParams.get('option'), u.searchParams.get('label')], ['cc-new-newrepo', '1', 'Yes, I trust this folder']);
+    },
+
+    'a starting project takes a message by its tmux name and shows the bubble': async ({ page, open, answerPosts }) => {
+        await open();
+        page.route = q => (q.url.includes('/api/startup') && q.method !== 'POST' ? { body: '{"dialog":null}', headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        await page.ev(`(async () => {
+            const { state } = await import('/core.js');
+            const { refreshChat } = await import('/chat.js');
+            localStorage.removeItem('chat:alpha');
+            state.chat = null;
+            state.sessions = [];
+            state.starting = '/x/alpha';
+            state.startingTmux = 'cc-new-alpha';
+            refreshChat();
+        })()`);
+        await page.waitFor(`document.querySelector('#feed .welcome')?.textContent === 'Chat starting…'`, { what: 'the starting note' });
+        await page.click('#msg');
+        await page.type('first prompt');
+        await page.key('Enter');
+        await page.waitFor(`document.querySelector('#feed .bubble.user')?.textContent.includes('first prompt')`, { what: 'the optimistic bubble' });
+        const posts = page.posts.filter(p => p.url.includes('/api/send'));
+        assert.deepEqual(posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [['/api/send?tmux=cc-new-alpha', 'first prompt']]);
     }
 };

@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { transcript } from './server/transcripts.mjs';
-import { sessions } from './server/sessions.mjs';
+import { sessions, startingChats } from './server/sessions.mjs';
 import { refreshAll, refreshInfo } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
 import { limits } from './server/limits.mjs';
@@ -15,7 +15,7 @@ import { log } from './server/log.mjs';
 import { MAX_SEND } from './server/tmux.mjs';
 import { createProject, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup } from './server/startup.mjs';
-import { send, interrupt, clearChat, compactChat, editors, openInEditor } from './server/control.mjs';
+import { send, sendToNew, interrupt, clearChat, compactChat, editors, openInEditor } from './server/control.mjs';
 import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, COOKIE, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode, pairPage } from './server/security.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
 
@@ -31,7 +31,7 @@ export {
 export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones } from './server/milestones.mjs';
 export { limitsOf, peakLimits, contextOf } from './server/limits.mjs';
 export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
-export { tmuxArgs, tmuxFor, findClearedSuccessor, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
+export { tmuxArgs, tmuxFor, findClearedSuccessor, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
 export { parseDialog, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
 export { editorsFrom, openInEditor, refuseIfBusy } from './server/control.mjs';
 export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode } from './server/security.mjs';
@@ -172,8 +172,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return json(await sessions());
             }
             if (isPost('/api/send')) {
-                await send(url.searchParams.get('id'), await readBody(req, MAX_SEND));
+                const body = await readBody(req, MAX_SEND);
+                if (url.searchParams.has('tmux')) {
+                    await sendToNew(url.searchParams.get('tmux'), body); // a new project's chat that has no transcript yet
+                } else {
+                    await send(url.searchParams.get('id'), body);
+                }
                 return res.end('ok');
+            }
+            if (url.pathname === '/api/starting') {
+                return json(await startingChats());
             }
             if (url.pathname === '/api/startup' && req.method === 'GET') {
                 return json({ dialog: await startupDialog(url.searchParams.get('tmux')) });

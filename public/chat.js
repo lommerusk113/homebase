@@ -39,6 +39,8 @@ const bindKey = () => `chat:${state.project}`;
 // only sessions in the selected project(s)
 /** @returns {Session | null} */
 export const chatSession = () => pickChat(visibleSessions(), store.get(bindKey()), state.chat);
+// The tmux session of the selected project's chat while it is still starting (no transcript yet), else null.
+const startingTarget = () => (state.startingTmux === `cc-new-${state.project}` ? state.startingTmux : null);
 let chatKey = null;
 let stick = false; // set by a send: the next render scrolls to the bottom even if the user had scrolled up
 
@@ -428,7 +430,9 @@ export async function refreshChat() {
         state.asking = null;
         updateTitle();
         setStatus(state.offline ? { error: true } : null);
-        return feed.replaceChildren(el('div', 'welcome', state.starting ? 'Chat starting…' : 'No session to chat with yet.'));
+        // a message sent to a starting project (by tmux name) shows until its session binds
+        const sent = state.outbox.filter(o => o.sid === startingTarget());
+        return feed.replaceChildren(...(sent.length ? sent.map(o => bubble(o, o.sid, null)) : [el('div', 'welcome', state.starting ? 'Chat starting…' : 'No session to chat with yet.')]));
     }
 
     /** @type {Transcript} */
@@ -563,7 +567,7 @@ export async function sendText(sid, text, answerTo, note) {
     stick = true;
     refreshChat();
     try {
-        const r = await api(`/api/send?id=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: note ? `${text}\n\n${note}` : text });
+        const r = await api(`/api/send?${sid.startsWith('cc-new-') ? 'tmux' : 'id'}=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: note ? `${text}\n\n${note}` : text });
         if (!r.ok) {
             throw new Error(await r.text());
         }
@@ -607,18 +611,19 @@ export function initChat() {
             $('c-err').textContent = 'Claude is waiting on a startup question above';
             return;
         }
-        if (!s) {
+        const target = s?.id ?? startingTarget(); // a project that is still starting has no session id, only its tmux name
+        if (!target) {
             return;
         }
         // clear at once; the "sending…" bubble shows progress
         ta.value = '';
         syncSend();
-        if (!await sendText(s.id, text) && !ta.value) {
+        if (!await sendText(target, text) && !ta.value) {
             // give the text back so it isn't lost
             ta.value = text;
             syncSend();
         } else {
-            saveDraft(draftStorage(), s.id, ta); // sent: drops the draft, or keeps whatever was typed meanwhile
+            saveDraft(draftStorage(), target, ta); // sent: drops the draft, or keeps whatever was typed meanwhile
         }
     };
     $('msg').onkeydown = e => {

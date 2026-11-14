@@ -141,6 +141,12 @@ const chat = chatItems([
 assert.deepEqual(chat.map(i => [i.role, i.text, i.tldr]), [
     ['user', 'do it', undefined], ['assistant', 'On it.', null], ['tools', 'Ran 1 command · read 1 file', undefined], ['assistant', 'Done.', 'shipped']
 ]);
+// a subagent's task notification is one line per prompt, however often it re-notifies; background commands stay out
+const taskNote = (status, summary) => ({ type: 'user', message: { content: `<task-notification>\n<task-id>x</task-id>\n<status>${status}</status>\n<summary>${summary}</summary>\n</task-notification>` } });
+assert.deepEqual(chatItems([
+    { type: 'user', message: { content: 'go' } }, taskNote('completed', 'Agent "Fix login" finished'), say('Fixed.'), taskNote('completed', 'Agent "Fix login" finished'),
+    taskNote('failed', 'Agent "Docs" failed'), taskNote('completed', 'Background command "npm test" completed (exit code 0)')
+]).map(i => [i.role, i.text]), [['user', 'go'], ['tools', 'Agent finished: Fix login'], ['assistant', 'Fixed.'], ['tools', 'Agent failed: Docs']]);
 const topical = chatItems([{ type: 'user', message: { content: 'go' } }, say('**▸ Topic headers**\n\nDone.\n\n**TLDR:** shipped')]).at(-1);
 assert.deepEqual([topical.topic, topical.text, topical.tldr, topical.needsYou], ['Topic headers', 'Done.', 'shipped', false]);
 // needs-you: the topic marker, or (no marker) a TLDR ending in "?"

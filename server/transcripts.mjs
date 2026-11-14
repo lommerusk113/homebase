@@ -317,6 +317,15 @@ export function chatItems(entries, max = 60) {
 // - turn: any other non-tool-result user entry (agent message, task notification, reminder), which starts a new turn;
 // - error: an API error line;
 // - assistant: Claude's text and tool calls.
+// A subagent's task notification as a chat line ("Agent finished: Fix login"), else null; background commands and the like stay out.
+const AGENT_DONE = /^\s*<task-notification>[\s\S]*?<status>(\w+)<\/status>\s*<summary>(?:Background )?[Aa]gent "([^"]+)"/;
+function agentDone(text) {
+
+    const m = text.match(AGENT_DONE);
+
+    return m ? `Agent ${m[1] === 'completed' ? 'finished' : m[1] === 'failed' ? 'failed' : 'stopped'}: ${m[2]}` : null;
+}
+
 function entryKind(e) {
 
     if (e.isSidechain) {
@@ -343,7 +352,7 @@ function entryKind(e) {
         return { kind: 'prompt', text: unwrapPasted(textOf({ message: { content: a.prompt } })), src: 'queued' };
     }
     if (e.type === 'user' && !(Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result'))) {
-        return { kind: 'turn' };
+        return { kind: 'turn', agent: agentDone(textOf(e)) };
     }
     if (e.type !== 'assistant') {
         return null;
@@ -386,6 +395,11 @@ function rawItems(entries) {
             items.push({ role: 'compact', text: 'Conversation compacted', at: e.timestamp });
             newTurn = true;
         } else if (entry?.kind === 'turn') {
+            // an agent notifies again each time it stops: once per prompt of yours is the news
+            if (entry.agent && !items.slice(items.findLastIndex(i => i.role === 'user') + 1).some(i => i.text === entry.agent)) {
+                flush();
+                items.push({ role: 'tools', text: entry.agent, at: e.timestamp });
+            }
             newTurn = true;
         } else if (entry?.kind === 'error') {
             flush();

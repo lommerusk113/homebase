@@ -173,7 +173,8 @@ a.chip:hover { text-decoration:underline; }
 .c-ask ol { margin:4px 0 6px; padding-left:20px; }
 .c-ask ol li { font-weight:500; }
 .c-ask p { margin:2px 0 0; }
-.replies { display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0; margin-top:-4px; }
+/* min-height: the chips' height before they render, so scrolling to the bottom shows them whole */
+.replies { display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0; margin-top:-4px; min-height:26px; }
 .replies wa-button { font-size:12.5px; }
 /* Input dock: a fixed height (26px status line + 56px one-row input) that never changes, so the feed's height never does.
    Its column is bottom-aligned, so anything taller (a growing textarea, the error, the ask note) overflows upward over the feed. */

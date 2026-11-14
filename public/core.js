@@ -220,7 +220,8 @@ export const prChip = s => {
     return a;
 };
 
-// Scan aids on rendered markdown: PR/MR links become chips, !123/#123 become chips, file paths become inline code.
+// Scan aids on rendered markdown: PR/MR links become chips, file paths become inline code, and !123/#123 (bare or in
+// backticks) become light accent text: chips for every ref made bold sentences hard to read.
 const PR_HREF = /^https:\/\/\S+?\/(?:-\/merge_requests|pull)\/\d+\/?$/;
 const CHIP_OR_PATH = /(^|[\s(\[])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+\/?|[\w.@+-]+(?:\/[\w.@+-]+)+\.[a-z]\w{0,5}|[!#]\d+\b)/gi;
 function enrich(root) {
@@ -233,7 +234,12 @@ function enrich(root) {
             a.title = a.href;
         }
     }
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement.closest('a, code, pre') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    for (const c of root.querySelectorAll(':not(pre) > code')) {
+        if (/^[!#]\d+$/.test(c.textContent)) {
+            c.replaceWith(el('span', 'ref', c.textContent));
+        }
+    }
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement.closest('a, code, pre, .ref') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
     /** @type {Text[]} */
     const nodes = [];
     while (walker.nextNode()) {
@@ -248,7 +254,7 @@ function enrich(root) {
         let last = 0;
         for (const m of t.matchAll(CHIP_OR_PATH)) {
             const start = m.index + m[1].length, tok = m[2].replace(/[.,:;]+$/, '');
-            frag.append(t.slice(last, start), /^[!#]/.test(tok) ? el('span', 'chip mono', tok) : el('code', null, tok));
+            frag.append(t.slice(last, start), /^[!#]/.test(tok) ? el('span', 'ref', tok) : el('code', null, tok));
             last = start + tok.length;
         }
         frag.append(t.slice(last));

@@ -218,6 +218,7 @@ a.chip:hover { text-decoration:underline; }
 .body { font-size:13.5px; line-height:1.6; overflow-wrap:anywhere; }
 .body strong { font-weight:700; color:var(--strong); }
 .body .chip { vertical-align:baseline; }
+.ref { color:var(--accent); white-space:nowrap; }
 .body p, .body ul, .body ol, .body pre, .body table, .body blockquote { margin:10px 0; }
 .body ul, .body ol { padding-left:22px; }
 .body h1, .body h2, .body h3, .body h4 { font-size:14px; margin:14px 0 6px; }

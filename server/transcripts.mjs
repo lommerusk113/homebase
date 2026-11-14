@@ -68,8 +68,13 @@ export function textOf(entry) {
     return Array.isArray(c) ? c.filter(b => b.type === 'text').map(b => b.text).join('\n') : '';
 }
 
+// Text Claude Code writes as a user line: a hyphenated tag first (<task-notification>, <command-name>, <bash-input>,
+// <local-command-stdout>, <agent-message>, <system-reminder>…). A prompt that merely starts with "<" is still the user's.
+const SYSTEM_TEXT = /^<[a-z]+-[\w-]*[\s/>]/;
+export const isSystemText = t => SYSTEM_TEXT.test(t.trimStart());
+
 export function isHumanPrompt(e) {
-    return e.type === 'user' && !e.isMeta && !e.isCompactSummary && !e.isSidechain && textOf(e) && !textOf(e).startsWith('<');
+    return e.type === 'user' && !e.isMeta && !e.isCompactSummary && !e.isSidechain && !!textOf(e) && !isSystemText(textOf(e));
 }
 
 export const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
@@ -148,7 +153,7 @@ export function queuedPrompts(entries) {
         }
     }
 
-    return queue.map(q => ({ at: q.at, text: unwrapPasted(q.raw) })).filter(q => q.text && !q.text.startsWith('<'));
+    return queue.map(q => ({ at: q.at, text: unwrapPasted(q.raw) })).filter(q => q.text && !isSystemText(q.text));
 }
 
 // Pulls the last "TLDR: ..." line out of a message so the page can show it as a callout.
@@ -275,7 +280,7 @@ function entryKind(e) {
     if (INTERRUPTED.test(human)) {
         return { kind: 'interrupt' };
     }
-    if (human && !human.startsWith('<')) {
+    if (human && !isSystemText(human)) {
         return { kind: 'prompt', text: human, src: 'typed' };
     }
 

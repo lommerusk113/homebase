@@ -236,6 +236,15 @@ const twice = chatItems([
     { type: 'attachment', timestamp: T('31.000'), attachment: { type: 'queued_command', prompt: 'yes', origin: { kind: 'human' } } }
 ]);
 assert.deepEqual(twice.map(i => i.text), ['continue', 'ok', 'continue', 'yes', 'yes']);
+// a prompt starting with "<" is the user's; Claude Code's own tagged lines are not
+{
+    const { isHumanPrompt } = await import('./server/transcripts.mjs');
+    const typed = text => ({ type: 'user', message: { content: text }, timestamp: T('40.000') });
+    const lines = ['<div> overflows on mobile', `${paste('p', 'pasted')}`, '<task-notification>\n<task-id>x</task-id>', '<command-name>/clear</command-name>', '<bash-input>ls</bash-input>', '<local-command-stdout>ok</local-command-stdout>', '<artifact-content-authored-by-others/> x'];
+    assert.deepEqual(lines.map(t => isHumanPrompt(typed(t))), [true, true, false, false, false, false, false]);
+    assert.deepEqual(chatItems(lines.map(typed)).map(i => i.text), ['<div> overflows on mobile', 'pasted']);
+    assert.deepEqual(queuedPrompts([{ type: 'queue-operation', operation: 'enqueue', content: '<b>bold</b> please', timestamp: T('41.000') }]).map(q => q.text), ['<b>bold</b> please']);
+}
 console.log('ok pasted + dedupe');
 import { nextStep, workItems } from './server.mjs';
 const open = extra => ({ state: 'open', reviewers: [], ...extra });

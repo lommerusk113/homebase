@@ -368,6 +368,7 @@ ul.comments a { color:var(--fg); }
 .who small { font-size:11.5px; color:var(--muted); line-height:1.35; }
 .who .you { font-size:10.5px; font-weight:500; color:var(--muted); background:var(--chip); border-radius:99px; padding:0 6px; }
 .lane.free .who .name { color:var(--c-needs); }
+.av.none { border:1.5px dashed var(--line); color:var(--muted); }
 .lane.free .av { border:1.5px dashed var(--c-needs); color:var(--c-needs); }
 /* cards wrap onto more rows instead of scrolling sideways; an open card takes a full row */
 .strip { display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:8px; padding:10px; align-items:start; min-width:0; }
@@ -383,7 +384,8 @@ ul.comments a { color:var(--fg); }
 .card .top .st { color:var(--c); font-weight:600; }
 .card .top .age { margin-left:auto; }
 .card .tt { font-size:12.5px; line-height:1.35; font-weight:500; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
-.card .ft { display:flex; gap:4px; align-items:center; min-height:18px; }
+.card .ft { display:flex; flex-wrap:wrap; gap:4px; align-items:center; min-height:18px; }
+.card .ft > * { flex-shrink:0; }
 .card .ft .ci-pill { margin-left:0; }
 .card.open { grid-column:1 / -1; cursor:default; box-shadow:var(--shadow); border-color:color-mix(in srgb, var(--c) 50%, var(--line)); border-left-color:var(--c); }
 .card.open:hover { background:var(--bg); }

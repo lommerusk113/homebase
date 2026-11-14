@@ -135,18 +135,19 @@ export function backgroundTasks(entries) {
 }
 
 // Status from the transcript tail: pending tool calls and thinking may be silent for long; an API error stops it at once.
-// meta.finished flips when the agent ends its turn, even while it waits on its own background work to resume it.
+// meta.finished flips when the agent ends its turn, even while it waits on its own background work to resume it, and
+// when it dies on an API error.
 export function agentStatus(meta, entries, ageMs) {
-
-    const waiting = backgroundTasks(entries).size > 0;
-    if (meta.finished) {
-        return { status: waiting && ageMs < AGENT_TOOL_MS ? 'running' : 'done' };
-    }
 
     const turns = entries.filter(e => e.type === 'assistant' || e.type === 'user');
     const last = turns.at(-1);
     if (last?.isApiErrorMessage) {
         return { status: 'stopped', stopReason: 'api-error' };
+    }
+
+    const waiting = backgroundTasks(entries).size > 0;
+    if (meta.finished) {
+        return { status: waiting && ageMs < AGENT_TOOL_MS ? 'running' : 'done' };
     }
 
     const pending = new Set();

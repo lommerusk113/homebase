@@ -69,6 +69,8 @@ const thinking = { type: 'assistant', message: { content: [{ type: 'thinking', t
 assert.equal(st([call('a'), result('a'), thinking], 8 * MIN).status, 'running');
 assert.equal(st([call('a'), result('a'), thinking], 11 * MIN).status, 'stopped');
 assert.deepEqual(st([call('a'), result('a'), { type: 'assistant', isApiErrorMessage: true, message: { content: [{ type: 'text', text: 'API Error' }] } }], 1_000), { status: 'stopped', stopReason: 'api-error' });
+// pracsys 5010a555: an agent that dies on "Please run /login · API Error: 403" gets meta.finished too, and the master a "failed" notification
+assert.deepEqual(st([call('a'), result('a'), { type: 'assistant', isApiErrorMessage: true, message: { content: [{ type: 'text', text: 'Please run /login · API Error: 403' }] } }], 99 * MIN, { finished: true }), { status: 'stopped', stopReason: 'api-error' });
 // pracsys !1791: meta.finished flipped while the gate agent waited on its own background Cucumber run
 const bg = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: 'Command running in background with ID: b172vb7y2. Output is being written to: /tmp/tasks/b172vb7y2.output.' }] } };
 const child = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'v', content: [{ type: 'text', text: 'Async agent launched successfully. (internal metadata)\nagentId: a2da1ee3a8630e53c (internal ID)' }] }] } };

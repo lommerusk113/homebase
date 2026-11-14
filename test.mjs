@@ -2063,6 +2063,18 @@ const glabMr = (fields, n) => withFakeGlab(`echo '${JSON.stringify({ state: 'ope
     assert.deepEqual(JSON.parse(out.trim().split('\n').at(-1)), [["Couldn't check the MR: glab: 404 Not Found", 'glab: 404 Not Found']]);
     rmSync(home, { recursive: true, force: true });
     console.log('ok forge error shown');
+
+    // a failing comment fetch is flagged too, so a row without its review threads doesn't look clean
+    const home2 = mkdtempSync(join(tmpdir(), 'hb-home-'));
+    const dir2 = join(home2, '.claude', 'projects', 'p');
+    mkdirSync(dir2, { recursive: true });
+    writeFileSync(join(dir2, 's1.jsonl'), [{ type: 'user', sessionId: 's1', cwd: join(home2, 'p'), message: { content: 'hi' }, timestamp: at }, { type: 'pr-link', prUrl: url, timestamp: at }].map(l => JSON.stringify(l)).join('\n') + '\n');
+    writeFileSync(join(fakeBin, 'glab'), `#!/bin/sh\ncase "$2" in\n*discussions*) echo "glab: 403 Forbidden" >&2; exit 1;;\n*user) echo '{"username":"me"}';;\n*) echo '${JSON.stringify({ state: 'opened', title: 't', source_branch: 'b', detailed_merge_status: 'not_approved' })}';;\nesac\n`, { mode: 0o755 });
+    const code2 = "import { sessions } from './server/sessions.mjs'; await sessions(); await new Promise(r => setTimeout(r, 1500)); console.log(JSON.stringify((await sessions()).flatMap(s => s.items.map(i => i.forgeError))));";
+    const out2 = execFileSync(process.execPath, ['--input-type=module', '-e', code2], { env: { ...process.env, HOME: home2, PATH: `${fakeBin}:${process.env.PATH}` }, cwd: import.meta.dirname, encoding: 'utf8' });
+    assert.deepEqual(JSON.parse(out2.trim().split('\n').at(-1)), ['comments: glab: 403 Forbidden']);
+    rmSync(home2, { recursive: true, force: true });
+    console.log('ok comment error shown');
 }
 
 import { liveSessions, closedSession } from './server/transcripts.mjs';

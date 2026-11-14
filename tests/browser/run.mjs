@@ -103,7 +103,7 @@ const answerPosts = q => {
 
 const DEFAULTS = { tracked: '["alpha","beta","gamma"]', project: 'alpha', tab: 'work', chat: IDS.master };
 const ctx = {
-    page, base, IDS, answerPosts,
+    page, base, IDS, answerPosts, homebase: env.HOMEBASE_DIR,
     // Fresh page: storage reset to DEFAULTS plus overrides (null removes a key), then loaded and the board drawn.
     async open(storage = {}) {
         page.route = answerPosts;

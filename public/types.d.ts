@@ -19,8 +19,10 @@ interface Session {
     lastReply: string;
     /** topic of Claude's newest reply that has one (▸ header) */
     topic: string | null;
-    /** a question (AskUserQuestion) waits on the user */
+    /** a question (AskUserQuestion) or a permission prompt waits on the user */
     asking: boolean;
+    /** the text of that question or prompt; null when not asking */
+    question: string | null;
     /** start of the running turn; null when idle or unknown */
     since: number | null;
     /** the human prompt the running turn works on; null when idle */

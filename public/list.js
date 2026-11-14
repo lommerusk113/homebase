@@ -163,6 +163,20 @@ function starting(s, n) {
     return tr;
 }
 
+// "<chat> is asking" atop Needs you, for a session waiting on an AskUserQuestion or a permission prompt. Click chats with it.
+/** @param {Session} s */
+function askingRow(s) {
+    const tr = el('tr', 'asking'), what = el('td', 'what'), b = el('b');
+    tr.dataset.key = `asking:${s.id}`;
+    tr.setAttribute('role', 'button');
+    b.append(el('span', 'pulse'), ` ${state.project === 'all' ? `${s.project} · ` : ''}${s.title || sessionTopic(s)} is asking`);
+    what.append(b, el('small', 'next', `${s.question || 'Claude asked a question.'} · click to answer in the chat`));
+    what.colSpan = 6;
+    tr.append(what);
+    tr.onclick = () => bindChat(s.id);
+    return tr;
+}
+
 // One work item's row, plus its detail row while selected.
 /** @param {WorkItem} x @returns {HTMLElement[]} */
 function itemRows(x) {
@@ -253,9 +267,10 @@ function foldGroup(c, list, isOpen, setOpen) {
 function renderItems() {
     const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).map(x => optimistic(x)).sort((a, b) => b.updated - a.updated);
     const placeholders = visibleSessions().filter(isMaster).flatMap(s => startingIssues(s, visibleSessions().filter(o => o.project === s.project).flatMap(o => o.items || [])).map(n => starting(s, n)));
+    const asking = visibleSessions().filter(s => s.asking && !s.sidechain).map(askingRow);
     const finishedKey = `fold:finished:${state.project}`;
     const groups = COLUMNS.map(c => {
-        const list = items.filter(x => x.column === c.key), extra = c.key === 'doing' ? placeholders : [];
+        const list = items.filter(x => x.column === c.key), extra = c.key === 'doing' ? placeholders : c.key === 'needs-you' ? asking : [];
         if (!list.length && !extra.length) {
             return null;
         }

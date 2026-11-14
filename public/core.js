@@ -341,6 +341,8 @@ export const authorSummary = items => {
 /** @param {WorkItem} x */
 const newCount = x => (x.pr ? freshComments(x.comments, seenAt(x.pr)).length : 0);
 export function updateTitle() {
-    const n = visibleSessions().flatMap(s => s.items || []).filter(x => x.column === 'needs-you' || x.column === 'ready' || newCount(x)).length + (state.asking ? 1 : 0);
+    // the chat's own poll can see its question before the session list does; max, so it isn't counted twice
+    const asking = Math.max(visibleSessions().filter(s => s.asking && !s.sidechain).length, state.asking ? 1 : 0);
+    const n = visibleSessions().flatMap(s => s.items || []).filter(x => x.column === 'needs-you' || x.column === 'ready' || newCount(x)).length + asking;
     document.title = n ? `(${n}) Homebase` : 'Homebase';
 }

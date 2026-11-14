@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { MR, IDS } from './fixture.mjs';
 
 const row = key => `document.querySelector('#masters tr[data-key="${key}"]')`;
@@ -55,6 +57,28 @@ export default {
         assert.equal(await ci(MR(103)), 'ci-pill ci-running ●');
         assert.equal(await page.ev(`${row(MR(102))}.querySelector('.gate-badge').className + ' ' + ${row(MR(102))}.querySelector('.gate-badge').textContent`), 'gate-badge gate-ready ✓ gate');
         assert.equal(await page.ev(`${row(MR(101))}.querySelector('.gate-badge')`), null, 'no gate where none ran');
+    },
+
+    'a chat only the hook marker says is asking gets a Needs you row that opens it': async ({ page, open, homebase }) => {
+        // worker's transcript shows an open turn and no question (the late-write case); only hooks/asking.mjs's marker knows
+        const dir = join(homebase, 'asking'), file = join(dir, `${IDS.worker}.json`);
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(file, JSON.stringify({ questions: [{ question: 'Merge !101 now?', options: ['Yes', 'No'] }], toolUseId: 'q1', at: new Date().toISOString() }));
+        try {
+            await open();
+            const ask = row(`asking:${IDS.worker}`);
+            await page.waitFor(`document.querySelector('#masters .g-needs-you tr[data-key="asking:${IDS.worker}"]')`, { what: 'the asking row in Needs you' });
+            assert.equal(await page.ev(`${ask}.querySelector('b').textContent.trim()`), 'Refactor the session store is asking');
+            assert.equal(await page.ev(`${ask}.querySelector('.next').textContent`), 'Merge !101 now? · click to answer in the chat');
+            assert.equal(await page.ev(`document.querySelector('#masters .g-needs-you .g-head').textContent`), 'Needs you · 3');
+            await page.click(`#masters tr[data-key="asking:${IDS.worker}"]`);
+            await page.waitFor(`document.getElementById('status-text').textContent.startsWith('Claude is asking')`, { what: 'the chat status to say asking' });
+            assert.equal(await page.ev(`localStorage.getItem('chat')`), IDS.worker);
+            assert.match(await page.ev(`document.getElementById('ask-q').textContent`), /Merge !101 now\?/);
+            assert.match(await page.ev('document.title'), /^\(\d+\) Homebase$/);
+        } finally {
+            rmSync(file, { force: true });
+        }
     },
 
     'Recently finished is folded until opened': async ({ page, open }) => {

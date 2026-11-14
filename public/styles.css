@@ -258,8 +258,10 @@ wa-details.group::part(icon) { color:var(--muted); font-size:12px; }
 .s-more { appearance:none; flex-shrink:0; border:0; background:none; color:var(--muted); font:inherit; padding:3px 6px; border-radius:6px; cursor:pointer; }
 .s-more:hover { color:var(--accent); }
 .s-more:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
-.rows tr.starting b { display:flex; align-items:center; gap:6px; color:var(--muted); }
-.rows tr.starting .pulse { flex-shrink:0; }
+.rows tr.starting b, .rows tr.asking b { display:flex; align-items:center; gap:6px; color:var(--muted); }
+.rows tr.asking b { color:inherit; }
+.rows tr.starting .pulse, .rows tr.asking .pulse { flex-shrink:0; }
+.rows tr.asking .pulse { background:var(--c-needs); }
 .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--c); flex-shrink:0; }
 .dot.live { animation:pulse 1.2s ease-in-out infinite; }
 .rows { width:100%; border-collapse:collapse; table-layout:fixed; border-top:1px solid var(--line); }

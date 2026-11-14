@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 const pill = `document.querySelector('#milestone-slot .ms-pick')`;
 
 export default {
-    'project dropdown lists tracked projects and switches the board': async ({ page, open }) => {
+    'project dropdown lists tracked projects and switches the board': async ({ page, open, IDS }) => {
         await open({ project: 'all' });
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#project wa-option')].map(o => o.textContent)`), ['All my projects', 'alpha', 'beta', 'gamma']);
         assert.equal(await page.ev(`document.getElementById('milestone-slot').children.length`), 0, 'no pill for All');
@@ -11,7 +11,7 @@ export default {
         await page.waitFor(`document.getElementById('project').open`, { what: 'the project list to open' });
         await page.click('#project wa-option[value="beta"]');
         await page.waitFor(`localStorage.getItem('project') === 'beta'`, { what: 'beta to be picked' });
-        await page.waitFor(`[...document.querySelectorAll('#masters tr[data-key]')].map(r => r.dataset.key).join() === 'https://github.com/acme/beta/pull/7'`, { what: 'only the beta PR on the board' });
+        await page.waitFor(`[...document.querySelectorAll('#masters tr[data-key]')].map(r => r.dataset.key).join() === 'asking:${IDS.asker},https://github.com/acme/beta/pull/7'`, { what: 'only the beta asking chat and PR on the board' });
         await page.waitFor(`${pill}?.textContent.includes('No milestones')`, { what: 'the beta pill' });
     },
 

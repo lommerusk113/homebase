@@ -254,7 +254,7 @@ function addShowMore(feed) {
 // Fixed-height line above the input (in the fixed-height dock): changing it never resizes the feed, so the scroll position stays put.
 /** @param {Parameters<typeof chatStatus>[0]} data */
 function setStatus(data) {
-    const { kind, text } = chatStatus(data);
+    const { kind, text } = chatStatus(data, Date.now(), chatSession());
     $('status').className = `c-status ${kind}`;
     $('status-text').textContent = text;
 }

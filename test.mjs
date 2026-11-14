@@ -744,6 +744,9 @@ console.log('ok issues');
 
 import { chatStatus } from './public/core.js';
 assert.equal(chatStatus(null).kind, 'idle');
+assert.equal(chatStatus({}).text, 'Claude is done — your turn');
+assert.equal(chatStatus({}, 0, { needsYou: true, subagents: { running: 2, finished: 0 } }).text, 'Claude needs your answer · 2 agents still working');
+assert.equal(chatStatus({}, 0, { needsYou: false, subagents: { running: 1, finished: 0 } }).text, 'Claude is done · 1 agent still working');
 assert.equal(chatStatus({ error: true, working: true, asking: 'Pick one?' }).kind, 'error'); // a failed poll never reads as idle or stale working
 assert.match(chatStatus({ error: true }).text, /reconnecting/);
 assert.equal(chatStatus({ working: true, asking: 'Pick one?', items: [] }).kind, 'asking'); // asking wins

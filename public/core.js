@@ -163,9 +163,10 @@ export const limitLeft = (w, now = Date.now()) => {
     return { left: Math.max(0, Math.min(100, Math.round(100 - w.used))), until };
 };
 // Chat status bar: a failed poll wins (never claim "Idle" on data we couldn't fetch), then asking over working
-// (Claude waits on you); working counts from the turn start (`since`), else from your last message.
-/** @param {(Partial<Transcript> & { error?: boolean }) | null} d */
-export const chatStatus = (d, now = Date.now()) => {
+// (Claude waits on you); working counts from the turn start (`since`), else from your last message. Idle says whether
+// Claude's last reply wants you and whether its agents still work, from the session `s`.
+/** @param {(Partial<Transcript> & { error?: boolean }) | null} d @param {Pick<Session, 'needsYou' | 'subagents'> | null} [s] */
+export const chatStatus = (d, now = Date.now(), s = null) => {
     if (d?.error) {
         return { kind: 'error', text: 'Can’t reach Homebase — reconnecting…' };
     }
@@ -173,7 +174,8 @@ export const chatStatus = (d, now = Date.now()) => {
         return { kind: 'asking', text: 'Claude is asking — answer below' };
     }
     if (!d?.working) {
-        return { kind: 'idle', text: 'Idle — waiting for you' };
+        const n = s?.subagents?.running ?? 0, agents = n ? ` · ${n} agent${n === 1 ? '' : 's'} still working` : '';
+        return { kind: 'idle', text: `${s?.needsYou ? 'Claude needs your answer' : agents ? 'Claude is done' : 'Claude is done — your turn'}${agents}` };
     }
     const at = d.since ?? Date.parse(d.items?.findLast(i => i.role === 'user' && !i.pending)?.at);
     const m = (now - at) / 60000 | 0;

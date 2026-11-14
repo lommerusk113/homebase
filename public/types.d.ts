@@ -143,6 +143,8 @@ interface ChatItem {
     needsYou?: boolean;
     tldr?: string | null;
     interrupted?: boolean;
+    /** a tools line with no edits or agents, hidden as noise */
+    quiet?: boolean;
     /** queued in the server's send queue */
     pending?: boolean;
     replies?: string[];

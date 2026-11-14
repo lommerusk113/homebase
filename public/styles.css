@@ -162,6 +162,7 @@ a.chip:hover { text-decoration:underline; }
 .lead code { font-family:var(--wa-font-family-code); font-size:12px; background:var(--chip); padding:1px 5px; border-radius:4px; }
 .tools { align-self:flex-start; flex-shrink:0; font-size:12px; color:var(--muted); padding:0 4px; }
 .tools::before { content:'⚙ '; }
+.tools.quiet { display:none; }
 .tools.api-error { color:var(--c-danger); }
 .tools.api-error::before { content:'⚠ '; }
 .c-feed.needs-only .tools.api-error { display:block; }

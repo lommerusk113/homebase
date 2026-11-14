@@ -314,7 +314,8 @@ function rawItems(entries) {
     let uses = [];
     const flush = () => {
         if (uses.length) {
-            items.push({ role: 'tools', text: toolSummary(uses) });
+            // quiet: only commands, reads, searches and the like; the page hides those lines as noise
+            items.push({ role: 'tools', text: toolSummary(uses), quiet: !uses.some(u => ['edit', 'agent'].includes(TOOL_KIND[u.name])) });
             uses = [];
         }
     };

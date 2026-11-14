@@ -837,6 +837,7 @@ assert.equal(chatStatus({ working: true, asking: 'Pick one?', items: [] }).kind,
 const askedAt = new Date(now - 125 * 60_000).toISOString();
 assert.equal(chatStatus({ working: true, items: [{ role: 'user', at: askedAt }, { role: 'user', at: new Date(now).toISOString(), pending: true }] }, now).text, 'Claude is working… · 2h5m');
 assert.equal(chatStatus({ working: true, items: [] }, now).text, 'Claude is working…');
+assert.equal(chatStatus({ working: true, items: [] }, now, { needsYou: false, subagents: { running: 0, finished: 0 }, step: 'running npm test' }).text, 'Claude is working… · running npm test');
 assert.equal(chatStatus({ working: true, since: now - 2 * 60_000, items: [{ role: 'user', at: askedAt }] }, now).text, 'Claude is working… · 2m'); // turn start wins
 console.log('ok chat status');
 

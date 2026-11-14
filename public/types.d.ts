@@ -29,6 +29,8 @@ interface Session {
     since: number | null;
     /** the human prompt the running turn works on; null when idle */
     now: string | null;
+    /** the running turn's newest tool call in words ("running npm test"); null when idle */
+    step?: string | null;
     /** human prompts waiting in Claude Code's queue */
     queued: string[];
     /** running subagents, and those finished in the last 2h */

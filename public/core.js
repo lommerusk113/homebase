@@ -165,7 +165,7 @@ export const limitLeft = (w, now = Date.now()) => {
 // Chat status bar: a failed poll wins (never claim "Idle" on data we couldn't fetch), then asking over working
 // (Claude waits on you); working counts from the turn start (`since`), else from your last message. Idle says whether
 // Claude's last reply wants you and whether its agents still work, from the session `s`.
-/** @param {(Partial<Transcript> & { error?: boolean }) | null} d @param {Pick<Session, 'needsYou' | 'subagents'> | null} [s] */
+/** @param {(Partial<Transcript> & { error?: boolean }) | null} d @param {Pick<Session, 'needsYou' | 'subagents' | 'step'> | null} [s] */
 export const chatStatus = (d, now = Date.now(), s = null) => {
     if (d?.error) {
         return { kind: 'error', text: 'Can’t reach Homebase — reconnecting…' };
@@ -180,7 +180,7 @@ export const chatStatus = (d, now = Date.now(), s = null) => {
     const at = d.since ?? Date.parse(d.items?.findLast(i => i.role === 'user' && !i.pending)?.at);
     const m = (now - at) / 60000 | 0;
 
-    return { kind: 'working', text: `Claude is working…${m > 0 ? ` · ${hoursMinutes(m)}` : ''}` };
+    return { kind: 'working', text: `Claude is working…${m > 0 ? ` · ${hoursMinutes(m)}` : ''}${s?.step ? ` · ${s.step}` : ''}` };
 };
 // Context window use, as a level for the gauge colour: amber from 60%, red from 85%.
 /** @param {number} p @returns {'' | 'warn' | 'hot'} */

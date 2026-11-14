@@ -365,6 +365,17 @@ export function lastActivity(entries) {
     return Number.isNaN(at) ? null : at;
 }
 
+// What the running turn does now: its newest tool call in words ("running npm test"), or null before its first one.
+function turnStep(turns, since) {
+
+    const e = turns.findLast(e => e.type === 'assistant' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_use'));
+    if (!e || (since && Date.parse(e.timestamp) < since)) {
+        return null;
+    }
+
+    return stepOf(e.message.content.findLast(b => b.type === 'tool_use'));
+}
+
 export function summarize(entries, ageMs, marker = null, live = null) {
 
     const last = type => entries.findLast(e => e.type === type);
@@ -391,6 +402,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         topic: latestTopic(entries),
         openPrompts,
         now: openPrompts.at(-1)?.text ?? null, // the human prompt the running turn works on (newest absorbed one wins)
+        step: turn.state === 'working' ? turnStep(turns, turn.since) : null,
         queued: queuedPrompts(entries).map(q => q.text),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),

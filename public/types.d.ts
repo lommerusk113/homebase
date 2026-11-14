@@ -60,6 +60,7 @@ interface PrState {
     branch: string;
     reviewers: string[];
     ready: boolean;
+    blocked?: 'conflict' | 'rebase' | 'blocked' | 'checks' | null;
     changes: boolean;
     changesBy: string[];
     draft: boolean;

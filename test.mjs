@@ -1932,7 +1932,7 @@ const withFakeGlab = async (body, fn) => {
     }
 };
 
-import { prState } from './server/forge.mjs';
+import { prState, prs } from './server/forge.mjs';
 {
     // a hung glab can't hold the first /api/sessions load: the MR lookup times out like every other forge call
     process.env.HOMEBASE_API_TIMEOUT_MS = '300';
@@ -1955,4 +1955,20 @@ const glabMr = (fields, n) => withFakeGlab(`echo '${JSON.stringify({ state: 'ope
     assert.equal((await glabMr({ head_pipeline: { status: 'running' } }, 102)).ready, false);
     assert.equal((await glabMr({ head_pipeline: { status: 'success' } }, 103)).ready, true);
     console.log('ok ready vs ci');
+
+    // merge statuses besides review and CI say what blocks the MR instead of "Waiting for review"
+    const conflict = await glabMr({ detailed_merge_status: 'conflict', reviewers: [{ name: 'Ann' }] }, 111);
+    assert.deepEqual([conflict.ready, conflict.blocked, nextStep(conflict, null), rowAction(mr(4), conflict, null, 'T').label], [false, 'conflict', 'Merge conflicts — rebase it', 'Rebase']);
+    assert.equal(nextStep(await glabMr({ detailed_merge_status: 'blocked_status' }, 112), null), 'Blocked by another MR');
+    // a must-pass project without a pipeline isn't "Pipeline failing"
+    assert.equal((await glabMr({ detailed_merge_status: 'ci_must_pass' }, 113)).ci, null);
+    // unchecked/checking keep the last answer, so a ready MR doesn't flap and notify again
+    const url = 'https://gitlab.example.com/g/p/-/merge_requests/114';
+    prs.delete(url);
+    assert.equal((await glabMr({}, 114)).ready, true);
+    prs.get(url).at = 0;
+    const checking = await glabMr({ detailed_merge_status: 'checking' }, 114);
+    await prs.get(url).pending;
+    assert.equal(prs.get(url).value.ready, true, `checking kept ready (first answer ${checking.ready})`);
+    console.log('ok gitlab merge statuses');
 }

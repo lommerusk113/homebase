@@ -80,6 +80,8 @@ export function itemColumn(prState, agent, hasPr) {
     return !hasPr && agent?.status === 'done' ? 'finished' : column('idle', prState, hasPr);
 }
 
+const BLOCKED_STEP = { conflict: 'Merge conflicts — rebase it', rebase: 'Needs a rebase onto its target', blocked: 'Blocked by another MR', checks: 'Waiting for external status checks' };
+
 // What has to happen next for a work item, as one deterministic line.
 export function nextStep(prState, agent) {
 
@@ -123,6 +125,9 @@ export function nextStep(prState, agent) {
     if (prState.ci === 'failing') {
         return 'Pipeline failing';
     }
+    if (prState.blocked) {
+        return BLOCKED_STEP[prState.blocked];
+    }
     if (prState.replied && !prState.ready) {
         const n = prState.replied;
         return `Replied to ${n} thread${n === 1 ? '' : 's'} — waiting for ${prState.repliedTo?.join(', ') || 'the reviewer'} to resolve`;
@@ -161,6 +166,12 @@ export function rowAction(pr, prState, agent, title) {
     }
     if (prState.ci === 'failing') {
         return { label: 'Fix pipeline', message: `The pipeline on ${ref} is failing — find out why and fix it.` };
+    }
+    if (prState.blocked === 'conflict' || prState.blocked === 'rebase') {
+        return { label: 'Rebase', message: `Rebase ${ref} onto its target branch, resolve any conflicts and push.` };
+    }
+    if (prState.blocked) {
+        return null; // another MR or an external check, nothing to type
     }
     if (prState.replied && !prState.ready) {
         return null; // every open thread was last answered by me: the reviewer resolves them, unless GitLab already allows the merge

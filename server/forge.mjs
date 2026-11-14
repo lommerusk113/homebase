@@ -48,7 +48,10 @@ export function repoOfUrl(url) {
     return known?.path === repo.path ? known : repo;
 }
 
-// Read-only PR/MR lookup via gh/glab. Returns { state: open|merged|closed, title, branch, reviewers, ready, changes, changesBy, draft, ci, pipeline } or null.
+// GitLab merge statuses that stop a merge for a reason other than review or CI.
+const BLOCKED = { conflict: 'conflict', need_rebase: 'rebase', blocked_status: 'blocked', external_status_checks: 'checks' };
+
+// Read-only PR/MR lookup via gh/glab. Returns { state: open|merged|closed, title, branch, reviewers, ready, blocked, changes, changesBy, draft, ci, pipeline } or null.
 async function fetchPr(url) {
 
     const gl = url.match(/^https:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)/);
@@ -58,7 +61,10 @@ async function fetchPr(url) {
         const state = { opened: 'open', merged: 'merged' }[mr.state] ?? 'closed';
         const status = mr.detailed_merge_status;
         const pipeline = pipelineOf(mr.head_pipeline ?? mr.pipeline);
-        const ci = { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? ciOf(pipeline);
+        // ci_must_pass without a pipeline is a missing one, not a failing one
+        const ci = status === 'ci_must_pass' && !pipeline ? null : { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? ciOf(pipeline);
+        // GitLab is still computing the status: keep what it said last, so ready doesn't flap
+        const prev = ['unchecked', 'checking', 'approvals_syncing', 'preparing'].includes(status) ? prs.get(url)?.value : null;
 
         return {
             state,
@@ -66,7 +72,8 @@ async function fetchPr(url) {
             branch: mr.source_branch,
             reviewers: (mr.reviewers ?? []).map(r => r.name),
             // ready means merge now, so a failing or running pipeline (GitLab allows it when CI isn't required) is not ready
-            ready: status === 'mergeable' && !ci,
+            ready: (status === 'mergeable' || !!prev?.ready) && !ci,
+            blocked: BLOCKED[status] ?? prev?.blocked ?? null,
             // ponytail: the MR payload doesn't say which reviewer blocked; the /reviewers endpoint would
             changes: status === 'requested_changes' || status === 'discussions_not_resolved' || mr.blocking_discussions_resolved === false,
             changesBy: [],

@@ -1432,6 +1432,21 @@ import { readTail } from './server.mjs';
         ['user', 'try again'], ['tools', 'Ran 1 command'], ['assistant', 'It still shows no']
     ]);
     console.log('ok big-line tail, api error line');
+
+    // pracsys 5010a555: one turn of 236+ lines and over 512 KB; the tail must reach back to its prompt, or the chat
+    // shows idle (no turn markers, so the 10 s mtime fallback) while Claude works
+    const g = join(mkdtempSync(join(tmpdir(), 'hb-')), 't.jsonl');
+    const t = s => `2026-11-13T10:${s}.000Z`;
+    const long = [
+        { type: 'system', subtype: 'turn_duration', timestamp: t('00:00') },
+        { type: 'user', turnPosition: { promptIndex: 1, turnIndex: 1 }, message: { role: 'user', content: 'run the accountant agents' }, timestamp: t('01:00') },
+        ...Array.from({ length: 300 }, (_, i) => i % 2
+            ? { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `t${i - 1}`, content: 'y'.repeat(2_000) }] }, timestamp: t('02:00') }
+            : { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `t${i}`, name: 'Bash', input: { command: 'z'.repeat(2_000) } }] }, timestamp: t('02:00') })
+    ];
+    writeFileSync(g, long.map(l => JSON.stringify(l)).join('\n') + '\n');
+    assert.deepEqual(turnState(await readTail(g, statSync(g).size), 60_000), { state: 'working', since: Date.parse(t('01:00')) });
+    console.log('ok long turn tail');
 }
 
 // A half-written agent .meta.json or a transcript deleted mid-poll skips that one entry, not the whole /api/sessions

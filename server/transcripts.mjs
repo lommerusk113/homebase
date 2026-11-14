@@ -13,8 +13,9 @@ const TURN_STALE_MS = 30 * 60_000; // an open turn with no transcript write this
 
 export const cache = new Map(); // path -> { mtimeMs, entries }
 
-// A few huge lines (tool results, api-request blobs of ~1 MB) can fill the byte tail on their own, so it grows
-// until it holds TAIL_MIN_LINES lines, the whole file or `cap` bytes.
+// A few huge lines (tool results, api-request blobs of ~1 MB) can fill the byte tail on their own, and one long turn
+// can outrun it, so it grows until it holds TAIL_MIN_LINES lines and a turn start, the whole file or `cap` bytes.
+// ponytail: a transcript with no turn markers (older Claude Code) is read up to `cap` on every change
 export async function readTail(path, size, max = TAIL_BYTES, cap = TAIL_MAX_BYTES) {
 
     const fh = await open(path, 'r');
@@ -23,11 +24,12 @@ export async function readTail(path, size, max = TAIL_BYTES, cap = TAIL_MAX_BYTE
         for (;;) {
             const buf = Buffer.alloc(len);
             await fh.read(buf, 0, len, size - len);
-            lines = buf.toString('utf8').split('\n');
+            const text = buf.toString('utf8');
+            lines = text.split('\n');
             if (len < size) {
                 lines.shift(); // partial first line
             }
-            if (lines.length >= TAIL_MIN_LINES || len >= size || len >= cap) {
+            if ((lines.length >= TAIL_MIN_LINES && text.includes('"turnPosition":{')) || len >= size || len >= cap) {
                 break;
             }
             len = Math.min(size, len * 2);

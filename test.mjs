@@ -1484,6 +1484,13 @@ import { latestTopic, queuedPrompts } from './server.mjs';
     assert.deepEqual(queuedPrompts(waiting).map(q => q.text), ['Implement #2225'], 'typed mid-turn, still queued');
     assert.deepEqual(queuedPrompts([...waiting, notify]).map(q => q.text), ['Implement #2225'], 'task notifications are not human prompts');
     assert.deepEqual(queuedPrompts([enqueue, notify, dequeue]).map(q => q.text), [], 'dequeue takes the head');
+    // pracsys 5010a555: a task notification that was never dequeued nor removed sits ahead; a prompt typed later is
+    // dequeued first (notifications wait behind prompts and agent messages), so it isn't left pending once delivered
+    const delivered = { ...typed, message: { role: 'user', content: 'Implement #2225' } };
+    assert.deepEqual(queuedPrompts([notify, enqueue, dequeue, delivered]), [], 'a prompt outranks an older notification');
+    assert.deepEqual(chatItems([notify, enqueue, dequeue, delivered]).map(i => [i.text, !!i.pending]), [['Implement #2225', false]]);
+    // a queued multi-line paste counts as queued too
+    assert.deepEqual(queuedPrompts([{ ...enqueue, content: '<pasted_content id="a">\nline 1\nline 2\n</pasted_content id="a">' }]).map(q => q.text), ['line 1\nline 2']);
     let s = summarize(waiting, 1_000);
     assert.deepEqual([s.status, s.now, s.queued], ['working', 'Implement #2244', ['Implement #2225']]);
 

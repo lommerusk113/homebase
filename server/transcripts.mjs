@@ -122,30 +122,31 @@ export function latestTopic(entries) {
     return null;
 }
 
-// Human prompts still waiting in Claude Code's queue, replayed from queue-operation entries: enqueue appends, dequeue
-// takes the head, remove (absorbed mid-turn, or cancelled) drops the matching text. Task notifications and agent
-// messages queue too ("<..." text) and are left out.
-// ponytail: a queue older than the tail replays partly; a dequeue then takes the wrong head until the queue drains.
+// Human prompts still waiting in Claude Code's queue, as [{ at, text }], replayed from queue-operation entries: enqueue
+// appends, dequeue takes the oldest item that isn't a task notification (those wait behind prompts and agent messages,
+// and some are never dequeued at all), remove (absorbed mid-turn, or cancelled) drops the matching text. Task
+// notifications and agent messages queue too ("<..." text) and are left out.
+// ponytail: a queue older than the tail replays partly; a dequeue then takes the wrong item until the queue drains.
 export function queuedPrompts(entries) {
 
     const queue = [];
     for (const e of entries) {
-        if (e.type !== 'queue-operation') {
+        if (e.isSidechain || e.type !== 'queue-operation') {
             continue;
         }
         if (e.operation === 'enqueue') {
-            queue.push({ at: e.timestamp, text: typeof e.content === 'string' ? e.content : '' });
+            queue.push({ at: e.timestamp, raw: typeof e.content === 'string' ? e.content : '' });
         } else if (e.operation === 'dequeue') {
-            queue.shift();
+            queue.splice(Math.max(0, queue.findIndex(q => !q.raw.trimStart().startsWith('<task-notification>'))), 1);
         } else if (e.operation === 'remove') {
-            const i = queue.findIndex(q => q.text === e.content);
+            const i = queue.findIndex(q => q.raw === e.content);
             if (i >= 0) {
                 queue.splice(i, 1);
             }
         }
     }
 
-    return queue.filter(q => q.text.trim() && !q.text.trimStart().startsWith('<'));
+    return queue.map(q => ({ at: q.at, text: unwrapPasted(q.raw) })).filter(q => q.text && !q.text.startsWith('<'));
 }
 
 // Pulls the last "TLDR: ..." line out of a message so the page can show it as a callout.
@@ -363,29 +364,8 @@ function mergeChunks(items) {
 
 // Messages typed while Claude works are queued first, then absorbed into the running turn as an attachment; the ones
 // still queued are pending bubbles.
-// ponytail: replays the queue in the tail; a dequeue whose enqueue fell out of the tail shifts the wrong item
 function pendingPrompts(entries) {
-
-    const queue = [];
-    for (const e of entries) {
-        if (e.isSidechain || e.type !== 'queue-operation') {
-            continue;
-        }
-        if (e.operation === 'enqueue') {
-            queue.push({ raw: e.content, text: unwrapPasted(e.content), at: e.timestamp });
-        } else if (e.operation === 'dequeue') {
-            queue.shift();
-        } else if (e.operation === 'remove') {
-            const i = queue.findIndex(q => q.raw === e.content);
-            if (i >= 0) {
-                queue.splice(i, 1);
-            }
-        }
-    }
-
-    return queue
-        .filter(q => q.text && !q.text.startsWith('<'))
-        .map(q => ({ role: 'user', text: q.text, at: q.at, pending: true }));
+    return queuedPrompts(entries).map(q => ({ role: 'user', text: q.text, at: q.at, pending: true }));
 }
 
 // One message can surface as a prompt, a queued_command attachment and a pending enqueue; keep the first.

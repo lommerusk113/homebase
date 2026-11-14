@@ -172,8 +172,9 @@ export function splitTldr(text) {
     return { tldr, text: (text.slice(0, m.index) + text.slice(m.index + m[0].length)).trim() };
 }
 
-// review-gate's verdict line ("**Verdict: fix first** — ...") or its bold TLDR ("**ready**").
-const VERDICT = /(?:verdict:?[*_\s]*|\*\*)(ready|fix[- ]first)\b/i;
+// review-gate's verdict line ("**Verdict: fix first** — ...", "the verdict is **ready**") or "review-gate is **ready**".
+// A bold ready alone ("MR is **ready** for review") said while the gate runs is no verdict.
+const VERDICT = /verdict\b[^\n.]{0,30}?\b(ready|fix[- ]first)\b|review[- ]gate\b[^\n.]{0,15}?\*\*(ready|fix[- ]first)\*\*/i;
 const GATE = /review[- ]gate/i;
 const COMMIT = /\b(?:commit|head|sha)\b[\s:`@]*([0-9a-f]{7,40})\b/i;
 
@@ -196,7 +197,7 @@ export function gateRuns(entries, brief = null) {
             const v = armed !== null && said?.match(VERDICT);
             if (v) {
                 const text = `${armed}\n${said}`;
-                runs.push({ verdict: v[1].toLowerCase().replace('-', ' '), at: Date.parse(e.timestamp) || 0, tldr: splitTldr(said).tldr, commit: text.match(COMMIT)?.[1] ?? null, text });
+                runs.push({ verdict: (v[1] ?? v[2]).toLowerCase().replace('-', ' '), at: Date.parse(e.timestamp) || 0, tldr: splitTldr(said).tldr, commit: text.match(COMMIT)?.[1] ?? null, text });
                 armed = null;
             }
         }

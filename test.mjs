@@ -413,6 +413,7 @@ const gateTail = [
     said('2026-11-13T10:01:00Z', skill('review-gate', `!4 ${mr(4)}`)),
     { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_01', content: 'Launching skill: review-gate' }] } },
     said('2026-11-13T10:02:00Z', txt('Running code-review and threat-review as subagents.')),
+    said('2026-11-13T10:03:00Z', txt('The diff is **ready** for the reviewers.')), // a bold ready while the gate runs is no verdict
     said('2026-11-13T10:09:00Z', txt('**Verdict: fix first** — adds the gate badge\n\n| # | Sev |\n\n**TLDR:** **Fix first**: one HIGH on !4, fix the null check.')),
     said('2026-11-13T11:00:00Z', skill('review-gate', 'branch kjn-gate at commit abc1234')),
     said('2026-11-13T11:05:00Z', txt('Verdict: **ready** — clean.\nTLDR: **ready**, open it.'))
@@ -423,6 +424,9 @@ assert.deepEqual(runs.map(r => [r.verdict, r.at, r.tldr, r.commit]), [
     ['ready', Date.parse('2026-11-13T11:05:00Z'), '**ready**, open it.', 'abc1234']
 ]);
 assert.deepEqual(gateRuns([said('t', skill('code-review', '!4')), said('t', txt('**Verdict: ready**'))]), []); // other skills don't arm
+// real phrasings of the verdict
+assert.deepEqual(['the verdict is **fix first**, so', 'Verdict was **ready**, with', 'review-gate is **ready**. Merge', '**Review gate verdict: ready.**']
+    .map(t => gateRuns([said('t', skill('review-gate', '!4')), said('t', txt(t))])[0]?.verdict), ['fix first', 'ready', 'ready', 'ready']);
 // a subagent briefed with review-gate reports through its handback
 const handback = said('2026-11-13T12:00:00Z', { type: 'tool_use', name: 'SubagentHandback', input: { message: '**Verdict: ready** — fine\n\n**TLDR:** **ready** for review, open !7.' } });
 assert.equal(gateRuns([handback], 'Run review-gate on the branch').at(0).verdict, 'ready');

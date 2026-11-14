@@ -276,12 +276,12 @@ function entryKind(e) {
         return { kind: 'interrupt' };
     }
     if (human && !human.startsWith('<')) {
-        return { kind: 'prompt', text: human };
+        return { kind: 'prompt', text: human, src: 'typed' };
     }
 
     const a = e.type === 'attachment' ? e.attachment : null;
     if (a?.type === 'queued_command' && a.origin?.kind === 'human') {
-        return { kind: 'prompt', text: unwrapPasted(textOf({ message: { content: a.prompt } })) };
+        return { kind: 'prompt', text: unwrapPasted(textOf({ message: { content: a.prompt } })), src: 'queued' };
     }
     if (e.type === 'user' && !(Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result'))) {
         return { kind: 'turn' };
@@ -320,7 +320,7 @@ function rawItems(entries) {
             }
         } else if (entry?.kind === 'prompt') {
             flush();
-            items.push({ role: 'user', text: entry.text, at: e.timestamp });
+            items.push({ role: 'user', text: entry.text, at: e.timestamp, src: entry.src });
         } else if (entry?.kind === 'compact') {
             flush();
             items.push({ role: 'compact', text: 'Conversation compacted', at: e.timestamp });
@@ -367,10 +367,11 @@ function mergeChunks(items) {
 // Messages typed while Claude works are queued first, then absorbed into the running turn as an attachment; the ones
 // still queued are pending bubbles.
 function pendingPrompts(entries) {
-    return queuedPrompts(entries).map(q => ({ role: 'user', text: q.text, at: q.at, pending: true }));
+    return queuedPrompts(entries).map(q => ({ role: 'user', text: q.text, at: q.at, pending: true, src: 'pending' }));
 }
 
-// One message can surface as a prompt, a queued_command attachment and a pending enqueue; keep the first.
+// One message can surface as a prompt, a queued_command attachment and a pending enqueue; keep the first. Each shown
+// prompt absorbs at most one copy of each other source, so the same text sent twice shows twice.
 function dedupePrompts(items) {
 
     const seen = [];
@@ -380,13 +381,15 @@ function dedupePrompts(items) {
             return true;
         }
         const norm = i.text.replace(/\s+/g, ' '), t = Date.parse(i.at);
-        if (seen.some(u => u.norm === norm && Math.abs(u.t - t) < DUP_MS)) {
+        const twin = seen.find(u => u.norm === norm && Math.abs(u.t - t) < DUP_MS && !u.srcs.has(i.src));
+        if (twin) {
+            twin.srcs.add(i.src);
             return false;
         }
-        seen.push({ norm, t });
+        seen.push({ norm, t, srcs: new Set([i.src]) });
 
         return true;
-    });
+    }).map(({ src, ...i }) => i);
 }
 
 function topicAndTldr(i) {

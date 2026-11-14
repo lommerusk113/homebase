@@ -227,6 +227,15 @@ const dup = chatItems([
     { type: 'user', message: { content: 'ship it' }, timestamp: '2026-11-12T23:00:00.000Z' }
 ]);
 assert.deepEqual(dup.map(i => [i.text, i.at]), [['ship it', T('00.000')], ['ship it', '2026-11-12T23:00:00.000Z']]);
+// the same text typed twice within a minute is two messages; so is the same text queued twice
+const twice = chatItems([
+    { type: 'user', message: { content: 'continue' }, timestamp: T('00.000') },
+    { type: 'assistant', message: { content: [{ type: 'text', text: 'ok' }] }, timestamp: T('01.000') },
+    { type: 'user', message: { content: 'continue' }, timestamp: T('20.000') },
+    { type: 'attachment', timestamp: T('30.000'), attachment: { type: 'queued_command', prompt: 'yes', origin: { kind: 'human' } } },
+    { type: 'attachment', timestamp: T('31.000'), attachment: { type: 'queued_command', prompt: 'yes', origin: { kind: 'human' } } }
+]);
+assert.deepEqual(twice.map(i => i.text), ['continue', 'ok', 'continue', 'yes', 'yes']);
 console.log('ok pasted + dedupe');
 import { nextStep, workItems } from './server.mjs';
 const open = extra => ({ state: 'open', reviewers: [], ...extra });

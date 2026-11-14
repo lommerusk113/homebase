@@ -212,7 +212,8 @@ export const prLabel = url => {
 };
 /** @param {{ pr: string, prState?: PrState | null }} s */
 export const prChip = s => {
-    const a = el('a', 'chip mono', `${prLabel(s.pr)}${s.prState ? ' · ' + s.prState.state : ''}`);
+    // "open" is the usual case, so only merged/closed are spelled out
+    const a = el('a', 'chip mono', `${prLabel(s.pr)}${s.prState && s.prState.state !== 'open' ? ' · ' + s.prState.state : ''}`);
     a.href = s.pr;
     a.target = '_blank';
     a.onclick = e => e.stopPropagation();
@@ -309,10 +310,10 @@ export function foldable(tldr, rest, key) {
     return [top, body, btn];
 }
 
-// Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected) and hooks.refresh for keys.js's r;
+// Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected), hooks.milestoneId to the picked one and hooks.refresh for keys.js's r;
 // keys.js sets hooks.rendered, which list.js and issues.js call after each render.
-/** @type {{ inMilestone: (x: WorkItem) => boolean, refresh: () => void, rendered?: (refocus: boolean) => void }} */
-export const hooks = { inMilestone: () => true, refresh: () => {} };
+/** @type {{ inMilestone: (x: WorkItem) => boolean, milestoneId: () => number | null, refresh: () => void, rendered?: (refocus: boolean) => void }} */
+export const hooks = { inMilestone: () => true, milestoneId: () => null, refresh: () => {} };
 
 // In a tracked project and in the selected one (or "All").
 /** @param {{ project: string }} x */

@@ -12,6 +12,7 @@ import { refreshLog } from './log.js';
 // The old pill stops (timers, in-flight fetch) the moment the project changes; data for another project is dropped.
 let pillFor = null, milestone = null, pillStop = new AbortController();
 hooks.inMilestone = x => inMilestone(x, milestone);
+hooks.milestoneId = () => milestone?.id ?? null;
 function renderMilestone() {
     if (pillFor === state.project) {
         return;

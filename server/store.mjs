@@ -44,6 +44,7 @@ export function loadStore(file = STORE_FILE) {
     return store;
 }
 
+const stale = (e, now) => now - e.lastSeen > PRUNE_MS;
 const sameEntry = (a, b) => JSON.stringify({ ...a, lastSeen: 0 }) === JSON.stringify({ ...b, lastSeen: 0 });
 
 // Notes every work item that has an MR: its title, issue, branch, session, state and finished agents. lastSeen alone never triggers a write.
@@ -63,7 +64,7 @@ export function record(store, items, now = Date.now()) {
             branch: it.branch ?? old?.branch ?? null,
             sessionId: it.sessionId ?? old?.sessionId ?? null,
             firstSeen: old?.firstSeen ?? now,
-            lastSeen: now,
+            lastSeen: it.prState ? now : old?.lastSeen ?? now, // confirmed by the forge, so an MR it can't read any more ages out
             state,
             mergedAt: state === 'merged' ? old?.mergedAt ?? now : old?.mergedAt ?? null,
             agents: [...agents.values()]
@@ -72,10 +73,10 @@ export function record(store, items, now = Date.now()) {
         store.dirty ||= !old || !sameEntry(old, next);
     }
 
-    // merged/closed entries nobody has seen for 30 days
+    // entries the forge hasn't confirmed for 30 days: merged/closed ones, and open ones it can't read any more
     for (const [project, urls] of Object.entries(store.data)) {
         for (const [url, e] of Object.entries(urls)) {
-            if (e.state !== 'open' && now - e.lastSeen > PRUNE_MS) {
+            if (stale(e, now)) {
                 delete urls[url];
                 store.dirty = true;
             }
@@ -94,7 +95,9 @@ export function seeds(store, now, windowMs) {
         .map(([url, e]) => ({ url, project, sessionId: e.sessionId, agents: e.agents ?? [] })));
 }
 
-// Writes when something changed and the last write was 10 s ago: temp file + rename, mode 0600.
+// Writes when something changed and the last write was 10 s ago: temp file + rename, mode 0600. Entries another
+// Homebase wrote since are kept, unless ours are newer or they are stale.
+// ponytail: read-merge-write without a lock; two flushes racing can still drop the other's newest change until it writes again
 export function flush(store, now = Date.now()) {
 
     if (!store.dirty || now - store.writtenAt < WRITE_GAP_MS) {
@@ -103,7 +106,15 @@ export function flush(store, now = Date.now()) {
     store.writtenAt = now;
     try {
         mkdirSync(dirname(store.file), { recursive: true, mode: 0o700 });
-        const tmp = `${store.file}.tmp`;
+        for (const [project, urls] of Object.entries(loadStore(store.file).data)) {
+            for (const [url, e] of Object.entries(urls ?? {})) {
+                const mine = store.data[project]?.[url];
+                if (!stale(e, now) && (!mine || e.lastSeen > mine.lastSeen)) {
+                    (store.data[project] ??= {})[url] = e;
+                }
+            }
+        }
+        const tmp = `${store.file}.${process.pid}.tmp`;
         writeFileSync(tmp, JSON.stringify(store.data, null, 1), { mode: 0o600 });
         renameSync(tmp, store.file);
         store.dirty = false;

@@ -319,11 +319,26 @@ import { loadStore, record, seeds, flush } from './server/store.mjs';
     assert.deepEqual(seeds(loadStore(file), 4000, 3 * DAY).map(s => [s.url, s.sessionId, s.agents.length]).sort(), [[mr(1), 's1', 1], [mr(2), 's1', 1]]);
     assert.deepEqual(seeds(loadStore(file), 4000 + 4 * DAY, 3 * DAY), []);
 
-    // pruning: merged/closed entries unseen for 30 days go, open ones stay
+    // pruning: entries the forge hasn't confirmed for 30 days go, open ones too (an MR it can't read any more stays
+    // seeded forever otherwise); an open one it still answers for stays
     const old = loadStore(file);
-    record(old, [item(mr(3), { state: 'open' })], 1000);
-    record(old, [], 1000 + 31 * DAY);
+    record(old, [item(mr(3), { state: 'open' }), item(mr(5), { state: 'open' })], 1000);
+    record(old, [item(mr(5), null), item(mr(3), { state: 'open' })], 1000 + 31 * DAY);
     assert.deepEqual(Object.keys(old.data.p), [mr(3)]);
+
+    // two Homebase instances on one file keep each other's entries; a pruned one doesn't come back from disk
+    rmSync(file);
+    const a = loadStore(file), b = loadStore(file);
+    record(a, [item(mr(6), { state: 'open' })], 50_000);
+    flush(a, 50_000);
+    record(b, [item(mr(7), { state: 'open' })], 60_000);
+    flush(b, 60_000);
+    assert.deepEqual(Object.keys(loadStore(file).data.p).sort(), [mr(6), mr(7)]);
+    assert.deepEqual(readdirSync(dir).sort(), ['items.json']);
+    record(b, [], 60_000 + 31 * DAY);
+    b.writtenAt = 0;
+    flush(b, 60_000 + 31 * DAY);
+    assert.equal(loadStore(file).data.p, undefined);
 
     // corrupt file: starts empty and keeps a .bak
     writeFileSync(file, '{"p": ');

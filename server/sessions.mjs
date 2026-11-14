@@ -21,7 +21,7 @@ const FINISHED_MS = 2 * 3600_000; // a finished subagent counts on the Sessions 
 const AGENT_TAIL_BYTES = 128 * 1024;
 // Silence an unfinished subagent may keep before it counts as stopped, by what its transcript ends on.
 const AGENT_TOOL_MS = 30 * 60_000; // a tool call is still pending (long Bash, own background subagent)
-const AGENT_THINK_MS = 10 * 60_000; // last entry is a tool result or user message, so the model is thinking
+const AGENT_THINK_MS = 10 * 60_000; // last entry is a tool result, user message or thinking-only chunk, so the model is thinking
 const AGENT_IDLE_MS = 2 * 60_000; // ended its turn with text but never handed back
 
 const store = loadStore();
@@ -110,7 +110,8 @@ export function agentStage(uses, report, done) {
     return stage;
 }
 
-const LAUNCHED = /Command running in background with ID: (\w+)|Async agent launched successfully[\s\S]*?agentId: (\w+)/;
+// Bash run_in_background, a Bash moved there by its timeout or a message, Monitor, background Workflow, async Agent
+const LAUNCHED = /(?:in background with ID: |moved to the background \(ID: |Monitor started \(task |launched in background\. Task ID: )(\w+)|Async agent launched successfully[\s\S]*?agentId: (\w+)/;
 const NOTIFIED = /<task-notification>\s*<task-id>(\w+)<\/task-id>/;
 
 // Background commands and subagents the agent launched that haven't sent their task notification yet.
@@ -134,18 +135,19 @@ export function backgroundTasks(entries) {
 }
 
 // Status from the transcript tail: pending tool calls and thinking may be silent for long; an API error stops it at once.
-// meta.finished flips when the agent ends its turn, even while it waits on its own background work to resume it.
+// meta.finished flips when the agent ends its turn, even while it waits on its own background work to resume it, and
+// when it dies on an API error.
 export function agentStatus(meta, entries, ageMs) {
-
-    const waiting = backgroundTasks(entries).size > 0;
-    if (meta.finished) {
-        return { status: waiting && ageMs < AGENT_TOOL_MS ? 'running' : 'done' };
-    }
 
     const turns = entries.filter(e => e.type === 'assistant' || e.type === 'user');
     const last = turns.at(-1);
     if (last?.isApiErrorMessage) {
         return { status: 'stopped', stopReason: 'api-error' };
+    }
+
+    const waiting = backgroundTasks(entries).size > 0;
+    if (meta.finished) {
+        return { status: waiting && ageMs < AGENT_TOOL_MS ? 'running' : 'done' };
     }
 
     const pending = new Set();
@@ -163,7 +165,7 @@ export function agentStatus(meta, entries, ageMs) {
         prev = e.type;
     }
 
-    const limit = pending.size || waiting ? AGENT_TOOL_MS : last?.type === 'assistant' ? AGENT_IDLE_MS : AGENT_THINK_MS;
+    const limit = pending.size || waiting ? AGENT_TOOL_MS : last?.type === 'assistant' && textOf(last) ? AGENT_IDLE_MS : AGENT_THINK_MS;
 
     return { status: ageMs < limit ? 'running' : 'stopped' };
 }

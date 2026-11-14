@@ -64,7 +64,13 @@ assert.equal(st([call('a'), result('a')], 11 * MIN).status, 'stopped');
 assert.equal(st([call('a'), result('a'), ended], 1 * MIN).status, 'running');
 assert.equal(st([call('a'), result('a'), ended], 3 * MIN).status, 'stopped'); // ended its turn without handing back
 assert.equal(st([call('old'), result('x'), ended], 3 * MIN).status, 'stopped'); // an unanswered call from an earlier turn is not pending
+// a thinking-only entry is mid-reply (a stalled stream is retried after minutes), not a turn that ended
+const thinking = { type: 'assistant', message: { content: [{ type: 'thinking', thinking: '' }], stop_reason: null } };
+assert.equal(st([call('a'), result('a'), thinking], 8 * MIN).status, 'running');
+assert.equal(st([call('a'), result('a'), thinking], 11 * MIN).status, 'stopped');
 assert.deepEqual(st([call('a'), result('a'), { type: 'assistant', isApiErrorMessage: true, message: { content: [{ type: 'text', text: 'API Error' }] } }], 1_000), { status: 'stopped', stopReason: 'api-error' });
+// pracsys 5010a555: an agent that dies on "Please run /login · API Error: 403" gets meta.finished too, and the master a "failed" notification
+assert.deepEqual(st([call('a'), result('a'), { type: 'assistant', isApiErrorMessage: true, message: { content: [{ type: 'text', text: 'Please run /login · API Error: 403' }] } }], 99 * MIN, { finished: true }), { status: 'stopped', stopReason: 'api-error' });
 // pracsys !1791: meta.finished flipped while the gate agent waited on its own background Cucumber run
 const bg = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: 'Command running in background with ID: b172vb7y2. Output is being written to: /tmp/tasks/b172vb7y2.output.' }] } };
 const child = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'v', content: [{ type: 'text', text: 'Async agent launched successfully. (internal metadata)\nagentId: a2da1ee3a8630e53c (internal ID)' }] }] } };
@@ -75,6 +81,18 @@ assert.equal(st([call('a'), bg, onHold('Waiting on Cucumber.')], 31 * MIN, { fin
 assert.equal(st([call('a'), bg, onHold('Waiting on Cucumber.')], 3 * MIN).status, 'running'); // not stopped after 2 min idle
 assert.equal(st([call('a'), bg, call('v'), child, told('b172vb7y2'), onHold('Waiting on the validator.')], 3 * MIN, { finished: true }).status, 'running');
 assert.equal(st([call('a'), bg, call('v'), child, told('b172vb7y2'), told('a2da1ee3a8630e53c'), ended], 3 * MIN, { finished: true }).status, 'done');
+// the other launch forms: a Bash moved to the background by its timeout or by a message, a Monitor, a background Workflow
+for (const launch of [
+    'Command did not complete within its 600s timeout and was moved to the background (ID: bt9p1x). Output is being written to: /tmp/x',
+    'Command was moved to the background (ID: bt9p1x) after running for 180s. Output is being written to: /tmp/x',
+    'Command was moved to the background (ID: bt9p1x) so that a message that arrived while it was running can reach you.',
+    'Monitor started (task bt9p1x, expires in 20m unless the source ends first; you get one notice at expiry — re-arm if you still need the watch).',
+    'Workflow launched in background. Task ID: bt9p1x\nSummary: one review round'
+]) {
+    const r = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: launch }] } };
+    assert.equal(st([call('a'), r, onHold('Waiting for the notification.')], 3 * MIN).status, 'running', launch);
+    assert.equal(st([call('a'), r, told('bt9p1x'), ended], 3 * MIN).status, 'stopped', launch);
+}
 console.log('ok agents');
 
 import { splitTldr, splitTopic, toolSummary, chatItems, pendingQuestion, sendSteps } from './server.mjs';
@@ -791,6 +809,14 @@ import { turnState } from './server.mjs';
     // queued messages mid-turn don't end it, and the elapsed time stays on the turn's prompt
     const q = turnState([...turn, queued('55:40'), queued('55:41', 'task-notification'), tool('c', '55:42')], 1_000);
     assert.deepEqual(q, { state: 'working', since: Date.parse(at('55:20')) });
+    // idle compaction writes a boundary and a summary entry with turnPosition, but no turn_duration: still idle
+    const boundary = { type: 'system', subtype: 'compact_boundary', timestamp: at('58:00') };
+    const summary = { ...prompt('s', '58:00'), isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { role: 'user', content: 'This session is being continued…' } };
+    const idleCompacted = [...turn, td('55:43'), boundary, summary, { type: 'system', subtype: 'informational', content: 'Compacted while idle', timestamp: at('58:00') }];
+    assert.equal(state(idleCompacted), 'idle');
+    // auto-compact mid-turn: the turn goes on
+    assert.equal(state([...turn, boundary, summary]), 'working');
+    assert.equal(state([...idleCompacted, prompt('n', '59:00')]), 'working');
     // asking: a pending AskUserQuestion
     assert.equal(state([...turn, tool('k', '55:42', 'AskUserQuestion')]), 'asking');
     // no turn markers (older Claude Code): the 10 s mtime heuristic
@@ -1412,6 +1438,10 @@ import { issueOf, mentionsMr, turnPrompts, spawnPrompts, worksOnMr, requestFor }
     assert.deepEqual(turnPrompts([td('11:00'), prompt('12:00', 'unrelated'), queued('12:10', 'and #2219?'), queued('12:11', 'note', 'task-notification')], 1_000).map(p => p.text), ['unrelated', 'and #2219?']);
     // a turn a task notification started has no human prompt
     assert.deepEqual(turnPrompts([td('11:00'), prompt('12:00', '<task-notification>…</task-notification>', { origin: { kind: 'task-notification' } })], 1_000), []);
+    // auto-compact mid-turn: the summary entry (turnPosition, isCompactSummary) keeps the turn's prompt
+    const compacted = [td('11:00'), ask, tool('12:05'), { type: 'system', subtype: 'compact_boundary', timestamp: at('12:06') }, prompt('12:06', 'This session is being continued…', { isCompactSummary: true }), tool('12:07')];
+    assert.deepEqual(turnPrompts(compacted, 1_000).map(p => p.at), [at('12:00')]);
+    assert.deepEqual([...spawnPrompts([...compacted, { type: 'assistant', isSidechain: false, timestamp: at('12:08'), message: { content: [{ type: 'tool_use', id: 'toolu_c', name: 'Agent', input: {} }] } }]).values()], [ask.message.content]);
 
     // requested: shown as doing without a button while the turn is open and no agent runs for it
     const pr = { state: 'open', changes: true, reviewers: ['Ann'], branch: '2219-auto-booked-creator', issue: '2219', title: '#2219 - Auto booked creator' };
@@ -1492,6 +1522,21 @@ import { readTail } from './server.mjs';
         ['user', 'try again'], ['tools', 'Ran 1 command'], ['assistant', 'It still shows no']
     ]);
     console.log('ok big-line tail, api error line');
+
+    // pracsys 5010a555: one turn of 236+ lines and over 512 KB; the tail must reach back to its prompt, or the chat
+    // shows idle (no turn markers, so the 10 s mtime fallback) while Claude works
+    const g = join(mkdtempSync(join(tmpdir(), 'hb-')), 't.jsonl');
+    const t = s => `2026-11-13T10:${s}.000Z`;
+    const long = [
+        { type: 'system', subtype: 'turn_duration', timestamp: t('00:00') },
+        { type: 'user', turnPosition: { promptIndex: 1, turnIndex: 1 }, message: { role: 'user', content: 'run the accountant agents' }, timestamp: t('01:00') },
+        ...Array.from({ length: 300 }, (_, i) => i % 2
+            ? { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `t${i - 1}`, content: 'y'.repeat(2_000) }] }, timestamp: t('02:00') }
+            : { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `t${i}`, name: 'Bash', input: { command: 'z'.repeat(2_000) } }] }, timestamp: t('02:00') })
+    ];
+    writeFileSync(g, long.map(l => JSON.stringify(l)).join('\n') + '\n');
+    assert.deepEqual(turnState(await readTail(g, statSync(g).size), 60_000), { state: 'working', since: Date.parse(t('01:00')) });
+    console.log('ok long turn tail');
 }
 
 // A half-written agent .meta.json or a transcript deleted mid-poll skips that one entry, not the whole /api/sessions
@@ -1544,6 +1589,13 @@ import { latestTopic, queuedPrompts } from './server.mjs';
     assert.deepEqual(queuedPrompts(waiting).map(q => q.text), ['Implement #2225'], 'typed mid-turn, still queued');
     assert.deepEqual(queuedPrompts([...waiting, notify]).map(q => q.text), ['Implement #2225'], 'task notifications are not human prompts');
     assert.deepEqual(queuedPrompts([enqueue, notify, dequeue]).map(q => q.text), [], 'dequeue takes the head');
+    // pracsys 5010a555: a task notification that was never dequeued nor removed sits ahead; a prompt typed later is
+    // dequeued first (notifications wait behind prompts and agent messages), so it isn't left pending once delivered
+    const delivered = { ...typed, message: { role: 'user', content: 'Implement #2225' } };
+    assert.deepEqual(queuedPrompts([notify, enqueue, dequeue, delivered]), [], 'a prompt outranks an older notification');
+    assert.deepEqual(chatItems([notify, enqueue, dequeue, delivered]).map(i => [i.text, !!i.pending]), [['Implement #2225', false]]);
+    // a queued multi-line paste counts as queued too
+    assert.deepEqual(queuedPrompts([{ ...enqueue, content: '<pasted_content id="a">\nline 1\nline 2\n</pasted_content id="a">' }]).map(q => q.text), ['line 1\nline 2']);
     let s = summarize(waiting, 1_000);
     assert.deepEqual([s.status, s.now, s.queued], ['working', 'Implement #2244', ['Implement #2225']]);
 

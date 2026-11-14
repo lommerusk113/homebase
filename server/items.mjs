@@ -264,9 +264,12 @@ function itemGroups(sessions, prOf, now, seeds) {
         stored.set(it, [...stored.get(it) ?? [], ...agents]);
     }
 
+    // a stopped agent the master retried (a later agent with the same description) is history, not work to continue
+    const retried = (a, list) => a.status === 'stopped' && list.some(b => b !== a && b.description === a.description && b.updated > a.updated);
+
     const loose = [];
     for (const s of sessions) {
-        for (const a of s.agents ?? []) {
+        for (const a of (s.agents ?? []).filter((a, _, list) => !retried(a, list))) {
             const own = { ...a, sessionId: s.id };
             const refs = new Set((a.prs ?? []).filter(u => sameRepo(u, s.project)).map(u => byUrl.get(u)).filter(Boolean));
             for (const it of byUrl.values()) {

@@ -323,6 +323,18 @@ const forged = workItems([
     { id: 'q', project: 'q', updated: 99, prs: [], agents: [] }
 ], () => open(), 0, new Map(), [{ url: mr(1), project: 'p' }, { url: mr(7), project: 'p' }, { url: mr(7), project: 'p' }]);
 assert.deepEqual(forged.map(i => [i.key, i.sessionId, i.column]), [[mr(1), 'old', 'review'], [mr(7), 'new', 'review']]);
+// a stopped agent retried by a later one with the same description no longer offers Continue on the MR
+{
+    const review = () => ({ state: 'open', reviewers: ['Ann'], issue: '7', branch: 'b7' });
+    const desc = 'Implement #7 confirm';
+    const [row] = workItems([{ id: 's', project: 'p', prs: [{ url: mr(70), at: 1 }], agents: [
+        agent('dead', 10, { status: 'stopped', stopReason: 'api-error', description: desc }),
+        agent('retry', 20, { description: desc })
+    ] }], () => review(), 30, new Map());
+    assert.equal(row.agentStatus, null);
+    assert.equal(row.next, 'Waiting for review by Ann');
+}
+
 console.log('ok items');
 
 import { loadStore, record, seeds, flush } from './server/store.mjs';

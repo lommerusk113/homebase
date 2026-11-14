@@ -157,12 +157,10 @@ function migrateTracked() {
 }
 
 const notifyOn = () => store.get('notify') === '1' && window.Notification?.permission === 'granted';
-/** @param {AttentionEvent} e */
-function notify({ kind, item: x, comments }) {
-    if (!notifyOn() || (document.visibilityState === 'visible' && document.hasFocus())) {
-        return;
-    }
+/** @param {AttentionEvent} e @returns {[string, string | undefined]} */
+function eventText({ kind, item: x, comments }) {
     const ref = x.pr ? prLabel(x.pr) : x.title;
+    /** @type {Record<AttentionEvent['kind'], [string, string | undefined]>} */
     const texts = {
         'needs-you': [`Needs you: ${x.title} — ${x.next}`, undefined],
         ready: [`Ready to merge: ${ref}`, x.title],
@@ -170,7 +168,14 @@ function notify({ kind, item: x, comments }) {
         failing: [`Pipeline failing: ${ref}`, x.title],
         comment: [`💬 ${authorSummary(comments ?? [])} commented on ${ref}`, comments?.[0]?.excerpt]
     };
-    const [title, body] = texts[kind];
+    return texts[kind];
+}
+/** @param {AttentionEvent} e */
+function notify(e) {
+    if (!notifyOn() || (document.visibilityState === 'visible' && document.hasFocus())) {
+        return;
+    }
+    const { kind, item: x } = e, [title, body] = eventText(e);
     const tag = kind === 'comment' ? `${x.key}:comment` : x.key;
 
     const n = new Notification(title, { body, tag, icon: '/icon.svg' });
@@ -257,7 +262,12 @@ async function poll() {
             renderBoard();
             // diffed over all items, then filtered, so changing the project filter doesn't read as transitions
             const items = state.sessions.flatMap(s => s.items || []);
-            attentionEvents(state.items, items, x => seenAt(x.pr)).filter(e => inView(e.item)).forEach(notify);
+            const events = attentionEvents(state.items, items, x => seenAt(x.pr)).filter(e => inView(e.item));
+            events.forEach(notify);
+            // screen readers hear the same transitions, notifications on or not
+            if (events.length) {
+                $('announce').textContent = events.map(e => eventText(e)[0]).join('. ');
+            }
             state.items = items;
         }
         setOffline(false);

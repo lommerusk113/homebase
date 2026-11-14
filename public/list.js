@@ -44,8 +44,8 @@ function gateBadge(g) {
     return [b, tooltip(b, tip)];
 }
 
-// Sessions strip: master sessions per project, most recently active first. Folded, a project shows only the chat's
-// session (else its newest) and hides the rest; open shows them all.
+// Sessions strip: master sessions per project, most recently active first. Folded, a project shows the chat's session
+// (else its newest) and any that work, ask or need you, and hides the rest; open shows them all.
 /** @param {Session[]} visible @param {Set<string>} [open] @param {string | null} [bound] @returns {{ project: string, shown: Session[], hidden: number }[]} */
 export function sessionRows(visible, open = new Set(), bound = null) {
     /** @type {Map<string, Session[]>} */
@@ -57,7 +57,8 @@ export function sessionRows(visible, open = new Set(), bound = null) {
         by.get(s.project).push(s);
     }
     return [...by].map(([project, list]) => {
-        const shown = open.has(project) ? list : [list.find(s => s.id === bound) ?? list[0]];
+        const first = list.find(s => s.id === bound) ?? list[0];
+        const shown = open.has(project) ? list : list.filter(s => s === first || s.status === 'working' || s.asking || s.needsYou);
         return { project, shown, hidden: list.length - shown.length };
     });
 }
@@ -81,11 +82,14 @@ export function startingIssues(s, items) {
     const covered = n => items.some(x => String(x.prState?.issue ?? '') === n || new RegExp(`#${n}(?!\\d)`).test(x.title ?? '') || x.branch?.startsWith(`${n}-`));
     return [...new Set(asked)].filter(n => !covered(n));
 }
-// working (with the time since the turn start), asking, or idle.
-/** @param {Session} s @returns {{ kind: 'working' | 'asking' | 'idle', text: string }} */
+// working (with the time since the turn start), asking, needs you (its newest reply asks for a decision), or idle.
+/** @param {Session} s @returns {{ kind: 'working' | 'asking' | 'needs' | 'idle', text: string }} */
 export function sessionState(s) {
     if (s.asking) {
         return { kind: 'asking', text: 'asking' };
+    }
+    if (s.needsYou && s.status !== 'working') {
+        return { kind: 'needs', text: 'needs you' };
     }
     const t = ago(s.status === 'working' ? s.since ?? s.lastActivity ?? s.updated : s.lastActivity ?? s.updated);
     return s.status === 'working' ? { kind: 'working', text: `working${t === 'now' ? '' : ` ${t}`}` } : { kind: 'idle', text: 'idle' };
@@ -109,7 +113,7 @@ function renderSessions() {
             r.setAttribute('role', 'button');
             const n = s.subagents, q = s.queued ?? [];
             const now = st.kind === 'working' && s.now ? excerpt(s.now, 120) : '';
-            const suffix = [n?.running && `${n.running} running`, q.length && `${q.length} queued`].filter(Boolean).join(' · ');
+            const suffix = [n?.running && `${n.running} agent${n.running === 1 ? '' : 's'} working`, q.length && `${q.length} queued`].filter(Boolean).join(' · ');
             if (all) {
                 r.append(el('span', 's-proj', g.project));
             }
@@ -118,7 +122,7 @@ function renderSessions() {
                 r.append(el('span', 's-counts', suffix));
             }
             if (s.context != null) {
-                r.append(el('span', `s-ctx${ctxLevel(s.context) && ` ${ctxLevel(s.context)}`}`, `ctx ${Math.round(s.context)}%`));
+                r.append(el('span', `s-ctx${ctxLevel(s.context) && ` ${ctxLevel(s.context)}`}`, `context ${Math.round(s.context)}%`));
             }
             if (s.id === bound) {
                 r.append(el('span', 's-chat', 'chat'));
@@ -128,7 +132,8 @@ function renderSessions() {
             const tip = [
                 now && s.topic ? s.topic : null,
                 st.kind === 'idle' && `idle ${since === 'now' ? 'just now' : `for ${since}`}`,
-                s.context != null && `Context ${Math.round(s.context)}% used`,
+                st.kind === 'needs' && 'Claude’s last reply wants your decision',
+                s.context != null && `Context ${Math.round(s.context)}% full${ctxLevel(s.context) ? ' — compact it soon' : ''}`,
                 agents && `Subagents: ${agents}`,
                 q.length && `Queued: ${q.map(t => excerpt(t, 80)).join(' · ')}`,
                 s.id === bound ? 'The chat is on this session' : 'Click to chat with this session'
@@ -184,7 +189,9 @@ function itemRows(x) {
     tr.dataset.key = x.key;
     const what = el('td', 'what');
     const fresh = x.pr ? freshComments(x.comments, seenAt(x.pr)) : [];
-    const next = el('small', 'next', `Next: ${x.next}${fresh.length ? ` · ${fresh.length} new comment${fresh.length === 1 ? '' : 's'}` : ''}`);
+    // a running agent's line says what it does now, and how long it has been on that step once that's a minute or more
+    const live = x.agentStatus === 'running' && x.column === 'doing', stepFor = live && x.stepAt ? ago(x.stepAt) : 'now';
+    const next = el('small', 'next', `${live ? 'Now' : 'Next'}: ${x.next}${stepFor === 'now' ? '' : ` · for ${stepFor}`}${fresh.length ? ` · ${fresh.length} new comment${fresh.length === 1 ? '' : 's'}` : ''}`);
     // before Next, so the ellipsis doesn't cut it
     if (unanswered.has(x.key) && x.action && !x.sent && !x.requested) {
         next.prepend(el('span', 'no-reply', 'No response yet — check the chat · '));
@@ -283,7 +290,7 @@ function renderItems() {
         const h = el('h2', 'g-head');
         h.append(dot(c.key), `${c.label} · ${list.length + extra.length}`);
         const t = itemTable(list);
-        t.prepend(...extra);
+        t.append(...extra); // after the item rows: a fixed-layout table takes its column widths from the first row, and this one spans them all
         const sec = el('section', `group g-${c.key}`);
         sec.append(h, t);
         return sec;

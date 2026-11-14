@@ -23,6 +23,8 @@ interface Session {
     asking: boolean;
     /** the text of that question or prompt; null when not asking */
     question: string | null;
+    /** idle, and Claude's newest reply asks for the user's decision, answer or action (as the chat's needs-you bubble) */
+    needsYou: boolean;
     /** start of the running turn; null when idle or unknown */
     since: number | null;
     /** the human prompt the running turn works on; null when idle */
@@ -103,6 +105,8 @@ interface WorkItem {
     stage: number;
     stageLabel: string;
     agentStatus: string | null;
+    /** when a running agent started its current step (`next` names it); null otherwise */
+    stepAt: number | null;
     updated: number;
     branch: string;
     worktreePath: string | null;

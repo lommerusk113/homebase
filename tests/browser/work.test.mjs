@@ -12,7 +12,7 @@ export default {
         await page.waitFor(`${row(MR(102))} && ${row(MR(106))}`, { what: 'the !102 row and the forge-seeded !106' });
         assert.deepEqual(await page.ev(groups), {
             'needs-you': ['agent-stopped', MR(104)],
-            doing: [`starting:${IDS.worker}:7`, MR(101), MR(105)],
+            doing: [MR(101), MR(105), `starting:${IDS.worker}:7`], // placeholders after the item rows
             review: [MR(103), MR(107), MR(106)],
             ready: [MR(102)],
             finished: ['agent-notes'],
@@ -43,7 +43,7 @@ export default {
     'a gate subagent links through the turn that spawned it, so its approved MR has no Merge button': async ({ page, open }) => {
         await open();
         await page.waitFor(`document.querySelector('#masters .g-doing tr[data-key="${MR(105)}"]')`, { what: 'the !105 row in Doing' });
-        assert.equal(await page.ev(`${row(MR(105))}.querySelector('.next').textContent`), 'Next: Gate: code review is exploring…');
+        assert.match(await page.ev(`${row(MR(105))}.querySelector('.next').textContent`), /^Now: Gate: code review — running git diff main\.\.\.( · for \dm)?$/, 'what the agent does now');
         assert.equal(await page.ev(`${row(MR(105))}.querySelector('.act-btn')`), null, 'no Merge button');
     },
 

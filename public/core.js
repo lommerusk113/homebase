@@ -171,7 +171,7 @@ export const chatStatus = (d, now = Date.now(), s = null) => {
         return { kind: 'error', text: 'Can’t reach Homebase — reconnecting…' };
     }
     if (d?.asking) {
-        return { kind: 'asking', text: 'Claude is asking — answer below' };
+        return { kind: 'asking', text: 'Claude is asking — see the question above' };
     }
     if (!d?.working) {
         const n = s?.subagents?.running ?? 0, agents = n ? ` · ${n} agent${n === 1 ? '' : 's'} still working` : '';

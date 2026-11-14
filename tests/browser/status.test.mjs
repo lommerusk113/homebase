@@ -18,7 +18,7 @@ export default {
 
     'status bar: asking, with the question and its options': async ({ page, open, IDS }) => {
         await open({ project: 'beta', chat: IDS.asker });
-        await page.waitFor(`${status} === 'c-status asking | Claude is asking — answer below'`, { what: 'asking' });
+        await page.waitFor(`${status} === 'c-status asking | Claude is asking — see the question above'`, { what: 'asking' });
         assert.equal(await page.ev(`document.getElementById('ask').hidden`), false);
         assert.equal(await page.ev(`document.querySelector('#ask-q p').textContent`), 'Which database should be the default?');
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#ask-q li')].map(l => l.textContent)`), ['Postgres', 'SQLite']);

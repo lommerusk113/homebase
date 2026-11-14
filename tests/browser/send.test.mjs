@@ -45,7 +45,7 @@ export default {
         await page.ev(`(() => { const f = document.getElementById('feed'); for (let i = 0; i < 40; i++) { const b = document.createElement('div'); b.className = 'bubble assistant'; b.textContent = 'filler ' + i; f.prepend(b); } f.scrollTop = (f.scrollHeight - f.clientHeight) / 2; })()`);
         const before = await page.ev(geometry);
         assert.ok(before.scrollTop > 100, 'feed scrolled mid-way');
-        const statuses = [['working', 'Claude is working… · 3m'], ['asking', 'Claude is asking — answer below'], ['error', 'Can’t reach Homebase — reconnecting…'],
+        const statuses = [['working', 'Claude is working… · 3m'], ['asking', 'Claude is asking — see the question above'], ['error', 'Can’t reach Homebase — reconnecting…'],
             ['working', `Claude is working… ${'and a very long status line that must ellipsize, not wrap '.repeat(3)}`], ['idle', 'Claude is done — your turn']];
         for (const [kind, text] of statuses) {
             await page.ev(`document.getElementById('status').className = 'c-status ${kind}'; document.getElementById('status-text').textContent = ${JSON.stringify(text)}`);

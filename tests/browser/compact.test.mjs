@@ -14,10 +14,10 @@ const waitForPost = async page => {
 const loaded = (page, expr = nudge) => page.waitFor(`${expr} && !${expr}.hidden`, { what: 'the chat to load' });
 
 export default {
-    'the one-liner shows ctx %, amber from 60% and red from 85%': async ({ page, open, IDS }) => {
+    'the one-liner shows context %, amber from 60% and red from 85%': async ({ page, open, IDS }) => {
         await open({ 'sessions-open:alpha': '1' });
         await page.waitFor(ctx(IDS.worker), { what: 'the ctx gauges' });
-        assert.equal(await page.ev(`${ctx(IDS.master)}.textContent`), 'ctx 72%');
+        assert.equal(await page.ev(`${ctx(IDS.master)}.textContent`), 'context 72%');
         assert.equal(await page.ev(`${ctx(IDS.master)}.className`), 's-ctx warn');
         assert.equal(await page.ev(`${ctx(IDS.worker)}.className`), 's-ctx', 'muted under 60%');
         assert.equal(await page.ev(`${ctx(IDS.other)}`), null, 'no dump, no gauge');

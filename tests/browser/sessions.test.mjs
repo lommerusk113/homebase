@@ -4,17 +4,19 @@ import { IDS } from './fixture.mjs';
 const srow = id => `document.querySelector('#masters .s-row[data-key="session:${id}"]')`;
 
 export default {
-    'the strip shows the chat session and folds the rest behind +N sessions': async ({ page, open }) => {
+    'the strip shows the chat session and the working one, and folds the rest behind +N sessions': async ({ page, open }) => {
         await open();
         await page.waitFor(`${srow(IDS.master)}`, { what: 'the chat session row' });
         assert.equal(await page.ev(`document.querySelector('#masters > *').className`), 'g-sessions', 'the strip leads the Work tab');
         assert.equal(await page.ev(`document.querySelector('#masters .g-sessions .g-head')`), null, 'no heading');
-        assert.equal(await page.ev(`document.querySelectorAll('#masters .s-row').length`), 1, 'only the bound session');
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters .s-row')].map(r => r.dataset.key)`), [`session:${IDS.worker}`, `session:${IDS.master}`], 'the bound session and the working one, not the idle one');
+        assert.equal(await page.ev(`${srow(IDS.master)}.className`), 's-row s-needs bound', 'its last reply asks something');
+        assert.equal(await page.ev(`${srow(IDS.master)}.querySelector('.s-state').textContent`), 'needs you');
         assert.equal(await page.ev(`${srow(IDS.master)}.querySelector('.s-topic').textContent`), 'Release');
-        assert.equal(await page.ev(`${srow(IDS.master)}.querySelector('.s-counts').textContent`), '2 running', 'finished subagents only in the tooltip');
+        assert.equal(await page.ev(`${srow(IDS.master)}.querySelector('.s-counts').textContent`), '2 agents working', 'finished subagents only in the tooltip');
         assert.match(await page.ev(`document.querySelector('wa-tooltip[for="' + ${srow(IDS.master)}.id + '"]').textContent`), /Subagents: 2 running, 2 finished/);
         assert.equal(await page.ev(`${srow(IDS.master)}.querySelector('.s-chat')?.textContent`), 'chat', 'the bound session is marked');
-        assert.equal(await page.ev(`document.querySelector('#masters .s-more').textContent`), '+2 sessions');
+        assert.equal(await page.ev(`document.querySelector('#masters .s-more').textContent`), '+1 session');
         await page.click('#masters .s-more');
         await page.waitFor(`document.querySelectorAll('#masters .s-row').length === 3`, { what: 'all three rows' });
         assert.equal(await page.ev(`localStorage.getItem('sessions-open:alpha')`), '1', 'the open state is remembered');
@@ -25,8 +27,8 @@ export default {
         assert.equal(await page.ev(`${srow(IDS.worker)}.querySelector('.s-counts').textContent`), '1 queued');
         assert.match(await page.ev(`document.querySelector('wa-tooltip[for="' + ${srow(IDS.worker)}.id + '"]').textContent`), /Queued: /);
         await page.click('#masters .s-more');
-        await page.waitFor(`document.querySelectorAll('#masters .s-row').length === 1`, { what: 'the strip to fold' });
-        assert.equal(await page.ev(`document.querySelector('#masters .s-more').textContent`), '+2 sessions');
+        await page.waitFor(`document.querySelectorAll('#masters .s-row').length === 2`, { what: 'the strip to fold' });
+        assert.equal(await page.ev(`document.querySelector('#masters .s-more').textContent`), '+1 session');
     },
 
     'an opened strip stays open after a reload': async ({ page, open }) => {

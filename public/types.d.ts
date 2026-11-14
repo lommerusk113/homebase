@@ -21,6 +21,8 @@ interface Session {
     topic: string | null;
     /** a question (AskUserQuestion) waits on the user */
     asking: boolean;
+    /** idle, and Claude's newest reply asks for the user's decision, answer or action (as the chat's needs-you bubble) */
+    needsYou: boolean;
     /** start of the running turn; null when idle or unknown */
     since: number | null;
     /** the human prompt the running turn works on; null when idle */

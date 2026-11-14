@@ -245,10 +245,10 @@ wa-details.group::part(icon) { color:var(--muted); font-size:12px; }
 .s-row:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 .s-row .pulse { flex-shrink:0; width:6px; height:6px; background:var(--c-idle); animation:none; }
 .s-row.s-working .pulse { background:var(--c-doing); animation:pulse 1.2s ease-in-out infinite; }
-.s-row.s-asking .pulse { background:var(--c-needs); }
+.s-row.s-asking .pulse, .s-row.s-needs .pulse { background:var(--c-needs); }
 .s-proj { flex-shrink:0; font-weight:500; }
 .s-state { flex-shrink:0; }
-.s-asking .s-state { color:var(--c-needs); }
+.s-asking .s-state, .s-needs .s-state { color:var(--c-needs); }
 .s-topic { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 .s-counts, .s-chat { flex-shrink:0; margin-left:-4px; opacity:.75; }
 .s-counts::before, .s-chat::before { content:'· '; }

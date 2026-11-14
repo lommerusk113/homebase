@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, readUsage, latestTopic, queuedPrompts, spawnPrompts } from './transcripts.mjs';
+import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, readUsage, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
 import { loadStore, record, seeds, flush } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { repoPaths } from './account.mjs';
@@ -370,6 +370,7 @@ export function summarize(entries, ageMs) {
     const lastTurn = turns.at(-1);
     const turn = turnState(entries, ageMs);
     const openPrompts = turnPrompts(entries, ageMs);
+    const lastItem = chatItems(entries, 1)[0]; // the chat's newest bubble, so the Work tab and the chat agree on "needs you"
 
     return {
         id: meta.sessionId,
@@ -381,6 +382,7 @@ export function summarize(entries, ageMs) {
         model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? null,
         status: status(lastTurn, ageMs, turn),
         asking: turn.state === 'asking',
+        needsYou: turn.state === 'idle' && lastItem?.role === 'assistant' && !!lastItem.needsYou && !lastItem.answer && !lastItem.error,
         since: turn.since,
         topic: latestTopic(entries),
         openPrompts,

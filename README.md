@@ -10,6 +10,27 @@ The rate limits in the header come from `scripts/statusline.sh`: set it as Claud
 
 Homebase remembers the MRs/PRs it has seen in `~/.claude/homebase/items.json` (`HOMEBASE_DIR` moves it), so the Work tab doesn't lose one when its link scrolls out of a transcript; deleting the file is safe.
 
+## Asking hook
+
+A chat waiting on you (an AskUserQuestion or a tool permission prompt) shows as "<chat> is asking" at the top of Needs you in the Work tab; click it to answer in the chat.
+Claude Code writes an AskUserQuestion to the transcript only once it is answered when the same message also started background agents, so Homebase also reads a marker that `hooks/asking.mjs` keeps in `~/.claude/homebase/asking/<session>.json` (`HOMEBASE_DIR` moves it).
+Install it in `~/.claude/settings.json` (merge into any `hooks` you already have):
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "node /Users/bruinen/IdeaProjects/Privat/codetool/hooks/asking.mjs" }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node /Users/bruinen/IdeaProjects/Privat/codetool/hooks/asking.mjs", "async": true }] }],
+    "Notification": [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "node /Users/bruinen/IdeaProjects/Privat/codetool/hooks/asking.mjs" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node /Users/bruinen/IdeaProjects/Privat/codetool/hooks/asking.mjs" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node /Users/bruinen/IdeaProjects/Privat/codetool/hooks/asking.mjs" }] }]
+  }
+}
+```
+
+The answer, the next tool (for a permission prompt), a new prompt or the end of the turn removes the marker; Homebase also ignores one the transcript has moved past, or one older than a day.
+The hook never blocks or changes anything in Claude Code and prints nothing. Without it, only questions already in the transcript show.
+
 ## New project
 
 The ☰ dialog's "New project…" button asks for a name, creates a GitHub repo for your personal account, clones it, starts a Claude chat in tmux (`cc-new-<name>`) and adds the project to your board.

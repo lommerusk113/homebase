@@ -296,9 +296,16 @@ export function chatItems(entries, max = 60) {
         }
     }
 
+    // chips stay on every question still waiting, also after Claude said more; a later user message clears needsYou
+    for (const i of out) {
+        if (i.role === 'assistant' && i.needsYou && !i.answer) {
+            i.replies = quickReplies(i.tldr, i.text);
+        }
+    }
+
     const last = out.at(-1);
     if (last?.role === 'assistant' && !last.answer) {
-        last.replies = quickReplies(last.tldr, last.text); // only the newest item, so any later user message hides them
+        last.replies = quickReplies(last.tldr, last.text);
     }
 
     return out;
@@ -457,10 +464,23 @@ const SHORT_ANSWER = /^(?:yes|yeah|yep|sure|ok|okay|no|nope|do it|go ahead|do bo
 
 // A short reply right after a Claude message that asked something becomes its answer tag instead of a bubble:
 // a chip label offered on it, or a tiny approval like "ok" / "go ahead". Only the item directly before counts.
+// A chip on an older question arrives as: Yes\n\n(Answering your earlier question from <at>: "<excerpt>")
+// <at> is the question item's timestamp, the key it is paired on.
+const EARLIER = /^([\s\S]*?)\s*\(Answering your earlier question from (\S+): "[^"]*"\)$/;
+
 function pairAnswers(items) {
 
     const out = [];
-    for (const i of items) {
+    for (let i of items) {
+        const earlier = i.role === 'user' ? i.text.trim().match(EARLIER) : null;
+        if (earlier) {
+            const q = out.findLastIndex(o => o.role === 'assistant' && o.at === earlier[2] && !o.answer);
+            if (q >= 0) {
+                out[q] = { ...out[q], answer: { text: earlier[1], at: i.at, ...(i.pending && { queued: true }) } };
+                continue;
+            }
+            i = { ...i, text: earlier[1] }; // question gone (cut off): keep just the label
+        }
         const prev = out.at(-1);
         const text = i.role === 'user' ? i.text.trim() : '';
         const asked = prev?.role === 'assistant' && !prev.answer && quickReplies(prev.tldr, prev.text);

@@ -607,7 +607,6 @@ assert.deepEqual(quickReplies(null, 'Open points:\n- Rename it?\n- Drop the flag
 assert.deepEqual(quickReplies(null, ''), []);
 assert.deepEqual(chatItems([say('Done.\n\nShip it?')]).at(-1).replies, YN);
 assert.equal(chatItems([say('Ship it?'), { type: 'user', message: { content: 'yes' } }])[0].replies, undefined);
-assert.equal(chatItems([say('Ship it?'), tu('Bash')])[0].replies, undefined);
 const you = (text, at) => ({ type: 'user', message: { content: text }, timestamp: at });
 const tagged = chatItems([say('Fix A or B?'), you('Do both', 't1')]); // chip answer
 assert.deepEqual(tagged.map(i => [i.role, i.answer, i.replies]), [['assistant', { text: 'Do both', at: 't1' }, undefined]]);
@@ -621,6 +620,18 @@ assert.deepEqual(chatItems([say('Ship it?'), tu('Bash'), say('Also cleaned up.')
     [['assistant', undefined], ['tools', undefined], ['assistant', undefined], ['user', undefined]]);
 assert.deepEqual(chatItems([say('Ship it?'), you('yes'), you('no')]).map(i => i.role), ['assistant', 'user']); // one answer per question
 assert.deepEqual(chatItems([say('Ship it?'), { type: 'queue-operation', operation: 'enqueue', content: 'Yes', timestamp: 't2' }])[0].answer, { text: 'Yes', at: 't2', queued: true });
+// chips stay on an older unanswered question after Claude says more
+const sayAt = (text, at) => ({ type: 'assistant', timestamp: at, message: { content: [{ type: 'text', text }] } });
+const noTools = e => chatItems(e).filter(i => i.role !== 'tools');
+assert.deepEqual(chatItems([sayAt('Done.\n\nTLDR: Ship it?', 't1'), tu('Bash'), sayAt('Also cleaned up.', 't2')]).map(i => i.replies), [YN, undefined, []]);
+// its chip answer carries the question's timestamp: paired to that question and stripped
+const earlier = '\n\n(Answering your earlier question from t1: "Ship it?")';
+const paired = noTools([sayAt('Done.\n\nTLDR: Ship it?', 't1'), tu('Bash'), sayAt('Also cleaned up.', 't2'), you('Yes' + earlier, 't3')]);
+assert.deepEqual(paired.map(i => [i.role, i.answer, i.needsYou, i.replies]), [['assistant', { text: 'Yes', at: 't3' }, false, undefined], ['assistant', undefined, false, []]]);
+const two = noTools([sayAt('Done.\n\nTLDR: Ship it?', 't1'), tu('Bash'), sayAt('Done.\n\nTLDR: Merge it?', 't2'), you('No' + earlier, 't3')]);
+assert.deepEqual(two.map(i => [i.answer?.text, i.replies]), [['No', undefined], [undefined, YN]]); // the right question
+// a plain later message still clears the older question
+assert.deepEqual(noTools([sayAt('Done.\n\nTLDR: Ship it?', 't1'), tu('Bash'), sayAt('Also cleaned up.', 't2'), you('ok whatever, later', 't3')]).map(i => [i.role, i.needsYou, i.replies]), [['assistant', false, undefined], ['assistant', false, undefined], ['user', undefined, undefined]]);
 const ask2 = tu('AskUserQuestion', { id: 'q2', input: { questions: [{ question: 'Which DB?', options: [{ label: 'Postgres', description: 'x' }, { label: 'SQLite' }] }] } });
 assert.deepEqual(pendingAsk([ask2]), [{ question: 'Which DB?', options: ['Postgres', 'SQLite'] }]);
 assert.equal(pendingAsk([ask2, { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'q2' }] } }]), null);

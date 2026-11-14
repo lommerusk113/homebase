@@ -334,18 +334,34 @@ function feedItems(s, data) {
     return { items, hidden, cut };
 }
 
-// Quick replies under Claude's newest message when it ends with a question; an outbox bubble after it hides them.
-/** @param {Session} s @param {Transcript} data @param {ChatItem | undefined} last */
-function quickReplyRow(s, data, last) {
+const EXCERPT_CHARS = 150;
 
-    if (!(last?.replies?.length && (!last.answer || last.answer.error) && !data.asking && !data.working)) {
+// What an older question asked, for the note that tells Claude which one a chip answers: its TLDR, else its last paragraph.
+/** @param {ChatItem} i */
+function questionExcerpt(i) {
+
+    const ask = i.tldr?.trim().endsWith('?') ? i.tldr : (i.text ?? '').trim().split(/\n\s*\n/).at(-1);
+    const flat = (ask ?? '').replace(/[*_`"]/g, '').replace(/\s+/g, ' ').trim();
+
+    return flat.length > EXCERPT_CHARS ? `${flat.slice(0, EXCERPT_CHARS - 1)}…` : flat;
+}
+
+// Quick replies under a Claude message that ends with a question and has no answer yet. The newest one waits for Claude
+// to finish; an older one stays (the send just queues) and its chips carry a note naming the question; a message
+// the user sent after it hides them.
+/** @param {Session} s @param {Transcript} data @param {ChatItem[]} items @param {number} n */
+function quickReplyRow(s, data, items, n) {
+
+    const q = items[n], newest = n === items.length - 1;
+    if (!(q.replies?.length && (!q.answer || q.answer.error) && !data.asking && (newest || !items.slice(n + 1).some(x => x.role === 'user')) && !(newest && data.working))) {
         return null;
     }
 
+    const note = newest ? undefined : `(Answering your earlier question from ${q.at}: "${questionExcerpt(q)}")`;
     const row = el('div', 'replies');
-    row.append(...last.replies.map(t => {
+    row.append(...q.replies.map(t => {
         const b = waButton(t, null, { variant: 'brand', appearance: 'filled-outlined', pill: true });
-        b.onclick = () => sendText(s.id, t, last.at);
+        b.onclick = () => sendText(s.id, t, q.at, note);
 
         return b;
     }));
@@ -422,13 +438,15 @@ export async function refreshChat() {
         && !items.slice(n + 1).some(x => x.role === 'user');
     const latest = items.findLastIndex(i => i.role === 'assistant');
     let topic = null;
-    feed.replaceChildren(...items.map((i, n) => {
+    feed.replaceChildren(...items.flatMap((i, n) => {
         const prev = topic;
         if (i.role === 'assistant') {
             topic = i.topic;
         }
 
-        return bubble(i, s.id, prev, { latest: n === latest, unread: unread(i, n) });
+        const row = quickReplyRow(s, data, items, n);
+
+        return [bubble(i, s.id, prev, { latest: n === latest, unread: unread(i, n) }), ...(row ? [row] : [])];
     }));
 
     if (hidden && !cut.fresh) {
@@ -441,10 +459,6 @@ export async function refreshChat() {
         feed.prepend(line);
     } else if (!items.length) {
         feed.append(el('div', 'welcome', fresh ? 'New conversation — say something to Claude' : 'No messages yet.'));
-    }
-    const replies = quickReplyRow(s, data, items.at(-1));
-    if (replies) {
-        feed.append(replies);
     }
 
     addShowMore(feed);
@@ -502,8 +516,9 @@ async function compact(sid) {
 const syncSend = () => { $('send-btn').disabled = !$('msg').value?.trim(); };
 
 // Types text into a session as an outbox bubble ("sending…", then gone once the transcript has it); false if it failed.
-/** @param {string} sid @param {string} text @param {string} [answerTo] @returns {Promise<boolean>} */
-export async function sendText(sid, text, answerTo) {
+// note: appended to what is sent but not shown, so the chat shows just the label.
+/** @param {string} sid @param {string} text @param {string} [answerTo] @param {string} [note] @returns {Promise<boolean>} */
+export async function sendText(sid, text, answerTo, note) {
     $('c-err').textContent = '';
     /** @type {OutboxItem} */
     const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo };
@@ -511,7 +526,7 @@ export async function sendText(sid, text, answerTo) {
     stick = true;
     refreshChat();
     try {
-        const r = await api(`/api/send?id=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: text });
+        const r = await api(`/api/send?id=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: note ? `${text}\n\n${note}` : text });
         if (!r.ok) {
             throw new Error(await r.text());
         }

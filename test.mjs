@@ -792,6 +792,14 @@ import { turnState } from './server.mjs';
     // queued messages mid-turn don't end it, and the elapsed time stays on the turn's prompt
     const q = turnState([...turn, queued('55:40'), queued('55:41', 'task-notification'), tool('c', '55:42')], 1_000);
     assert.deepEqual(q, { state: 'working', since: Date.parse(at('55:20')) });
+    // idle compaction writes a boundary and a summary entry with turnPosition, but no turn_duration: still idle
+    const boundary = { type: 'system', subtype: 'compact_boundary', timestamp: at('58:00') };
+    const summary = { ...prompt('s', '58:00'), isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { role: 'user', content: 'This session is being continued…' } };
+    const idleCompacted = [...turn, td('55:43'), boundary, summary, { type: 'system', subtype: 'informational', content: 'Compacted while idle', timestamp: at('58:00') }];
+    assert.equal(state(idleCompacted), 'idle');
+    // auto-compact mid-turn: the turn goes on
+    assert.equal(state([...turn, boundary, summary]), 'working');
+    assert.equal(state([...idleCompacted, prompt('n', '59:00')]), 'working');
     // asking: a pending AskUserQuestion
     assert.equal(state([...turn, tool('k', '55:42', 'AskUserQuestion')]), 'asking');
     // no turn markers (older Claude Code): the 10 s mtime heuristic
@@ -1336,6 +1344,10 @@ import { issueOf, mentionsMr, turnPrompts, spawnPrompts, worksOnMr, requestFor }
     assert.deepEqual(turnPrompts([td('11:00'), prompt('12:00', 'unrelated'), queued('12:10', 'and #2219?'), queued('12:11', 'note', 'task-notification')], 1_000).map(p => p.text), ['unrelated', 'and #2219?']);
     // a turn a task notification started has no human prompt
     assert.deepEqual(turnPrompts([td('11:00'), prompt('12:00', '<task-notification>…</task-notification>', { origin: { kind: 'task-notification' } })], 1_000), []);
+    // auto-compact mid-turn: the summary entry (turnPosition, isCompactSummary) keeps the turn's prompt
+    const compacted = [td('11:00'), ask, tool('12:05'), { type: 'system', subtype: 'compact_boundary', timestamp: at('12:06') }, prompt('12:06', 'This session is being continued…', { isCompactSummary: true }), tool('12:07')];
+    assert.deepEqual(turnPrompts(compacted, 1_000).map(p => p.at), [at('12:00')]);
+    assert.deepEqual([...spawnPrompts([...compacted, { type: 'assistant', isSidechain: false, timestamp: at('12:08'), message: { content: [{ type: 'tool_use', id: 'toolu_c', name: 'Agent', input: {} }] } }]).values()], [ask.message.content]);
 
     // requested: shown as doing without a button while the turn is open and no agent runs for it
     const pr = { state: 'open', changes: true, reviewers: ['Ann'], branch: '2219-auto-booked-creator', issue: '2219', title: '#2219 - Auto booked creator' };

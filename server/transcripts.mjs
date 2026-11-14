@@ -497,7 +497,8 @@ export function turnState(entries, ageMs) {
     let open = false;
     let known = false; // this Claude Code writes turn markers
     for (const e of entries) {
-        if (e.isSidechain) {
+        // the summary after a compact_boundary carries turnPosition but starts no turn: idle compaction never ends it
+        if (e.isSidechain || e.isCompactSummary) {
             continue;
         }
         if (e.type === 'system' && e.subtype === 'turn_duration') {
@@ -537,7 +538,7 @@ export function turnPrompts(entries, ageMs) {
 
     let prompts = [];
     for (const e of entries) {
-        if (e.isSidechain) {
+        if (e.isSidechain || e.isCompactSummary) {
             continue;
         }
         const a = e.type === 'attachment' ? e.attachment : null;
@@ -568,7 +569,7 @@ export function spawnPrompts(entries) {
     const byUse = new Map(), useOf = new Map(); // tool_use id -> prompts; agent id -> its tool_use id
     let prompts = [];
     for (const e of entries) {
-        if (e.isSidechain) {
+        if (e.isSidechain || e.isCompactSummary) {
             continue;
         }
         const a = e.type === 'attachment' ? e.attachment : null;

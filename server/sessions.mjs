@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, readUsage, latestTopic, queuedPrompts, spawnPrompts } from './transcripts.mjs';
+import { ROOT, WORKING_MS, cache, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, pendingQuestion, askMarker, readUsage, latestTopic, queuedPrompts, spawnPrompts } from './transcripts.mjs';
 import { loadStore, record, seeds, flush } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { repoPaths } from './account.mjs';
@@ -340,14 +340,14 @@ export function lastActivity(entries) {
     return Number.isNaN(at) ? null : at;
 }
 
-export function summarize(entries, ageMs) {
+export function summarize(entries, ageMs, marker = null) {
 
     const last = type => entries.findLast(e => e.type === type);
     const turns = entries.filter(e => (e.type === 'user' || e.type === 'assistant') && !e.isSidechain);
     const meta = entries.findLast(e => e.cwd) ?? {};
     const lastTurn = turns.at(-1);
-    const turn = turnState(entries, ageMs);
-    const openPrompts = turnPrompts(entries, ageMs);
+    const turn = turnState(entries, ageMs, marker);
+    const openPrompts = turnPrompts(entries, ageMs, marker);
 
     return {
         id: meta.sessionId,
@@ -359,6 +359,7 @@ export function summarize(entries, ageMs) {
         model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? null,
         status: status(lastTurn, ageMs, turn),
         asking: turn.state === 'asking',
+        question: turn.state === 'asking' ? pendingQuestion(entries, marker) : null,
         since: turn.since,
         topic: latestTopic(entries),
         openPrompts,
@@ -411,7 +412,7 @@ async function sessionOf({ dir, file, path, st }, now) {
         return null; // deleted between stat and read
     }
 
-    const s = summarize(entries, now - st.mtimeMs);
+    const s = summarize(entries, now - st.mtimeMs, await askMarker(file.replace('.jsonl', '')));
     const id = s.id ?? file.replace('.jsonl', '');
 
     const spawns = spawnPrompts(entries);

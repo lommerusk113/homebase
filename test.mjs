@@ -793,6 +793,83 @@ import { turnState } from './server.mjs';
     console.log('ok turn state');
 }
 
+import { askMarker, markerAsk } from './server.mjs';
+{
+    // the late write: an AskUserQuestion sent with background agents lands in the transcript only once answered, so the
+    // hook's marker is all that says the session is asking
+    const at = s => `2026-11-14T12:${s}.000Z`, now = Date.parse(at('40:00'));
+    const ask = { questions: [{ question: 'Merge now?', options: ['Yes', 'No'] }], toolUseId: 'q1', at: at('26:05') };
+    const turn = [
+        { type: 'user', timestamp: at('25:00'), turnPosition: { promptIndex: 1 }, message: { content: 'go' } },
+        { type: 'assistant', timestamp: at('26:00'), message: { content: [{ type: 'tool_use', id: 'a1', name: 'Agent', input: {} }] } },
+        { type: 'queue-operation', operation: 'enqueue', content: '<task-notification>', timestamp: at('30:00') },
+        { type: 'attachment', timestamp: at('31:00'), attachment: { type: 'queued_command', prompt: '<task-notification>' } }
+    ];
+    assert.equal(turnState(turn, 60_000).state, 'working');
+    assert.deepEqual(markerAsk(ask, turn, now), [{ question: 'Merge now?', options: ['Yes', 'No'] }]);
+    assert.equal(turnState(turn, 60_000, { ...ask, at: new Date(Date.now() - 60_000).toISOString() }).state, 'asking');
+    assert.equal(summarize(turn, 60_000, { ...ask, at: new Date(Date.now() - 60_000).toISOString() }).question, 'Merge now?');
+    // over: its answer, a turn end or a new human prompt after the marker; an older one doesn't count
+    const result = (id, s) => ({ type: 'user', timestamp: at(s), message: { content: [{ type: 'tool_result', tool_use_id: id }] } });
+    assert.equal(markerAsk(ask, [...turn, result('q1', '41:00')], now), null);
+    assert.notEqual(markerAsk(ask, [...turn, result('a1', '41:00')], now), null, 'another tool result doesn\'t answer the question');
+    assert.equal(markerAsk(ask, [...turn, { type: 'system', subtype: 'turn_duration', timestamp: at('41:00') }], now), null);
+    assert.equal(markerAsk(ask, [...turn, { type: 'user', timestamp: at('41:00'), message: { content: 'never mind' } }], now), null);
+    assert.notEqual(markerAsk(ask, [{ type: 'system', subtype: 'turn_duration', timestamp: at('20:00') }, ...turn], now), null);
+    // stale after 24 h; nothing to ask, nothing shown
+    assert.equal(markerAsk(ask, turn, now + 25 * 3_600_000), null);
+    assert.equal(markerAsk({ questions: [], at: ask.at }, turn, now), null);
+    assert.equal(markerAsk(null, turn, now), null);
+    // a permission prompt: its message is the question, and any later tool result ends it
+    const perm = { permission: 'Claude needs your permission to use Bash', at: at('26:05') };
+    assert.deepEqual(markerAsk(perm, turn, now), [{ question: perm.permission, options: [] }]);
+    assert.equal(markerAsk(perm, [...turn, result('b1', '41:00')], now), null);
+    // a pending AskUserQuestion in the transcript wins over the marker
+    const inTranscript = { type: 'assistant', timestamp: at('26:00'), message: { content: [{ type: 'tool_use', id: 'q9', name: 'AskUserQuestion', input: { questions: [{ question: 'Real?', options: [] }] } }] } };
+    assert.equal(pendingQuestion([...turn, inTranscript], ask), 'Real?');
+
+    // the hook writes and clears the marker that askMarker reads
+    const dir = mkdtempSync(join(tmpdir(), 'hb-ask-')), old = process.env.HOMEBASE_DIR;
+    process.env.HOMEBASE_DIR = dir;
+    const id = '5010a555-e1b1-4472-afa4-c92b1b2f1882';
+    const hook = input => execFileSync(process.execPath, ['hooks/asking.mjs'], { input: JSON.stringify({ session_id: id, ...input }), env: { ...process.env, HOMEBASE_DIR: dir } }).toString();
+    const file = join(dir, 'asking', `${id}.json`);
+    assert.equal(hook({ hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion', tool_use_id: 'q1', tool_input: { questions: [{ question: 'Merge now?', header: 'M', options: [{ label: 'Yes', description: 'd' }, { label: 'No' }] }] } }), '');
+    const m = await askMarker(id);
+    assert.deepEqual([m.questions, m.toolUseId], [[{ question: 'Merge now?', options: ['Yes', 'No'] }], 'q1']);
+    assert.ok(Date.now() - Date.parse(m.at) < 60_000);
+    hook({ hook_event_name: 'PostToolUse', tool_name: 'Agent' }); // a background agent launched in the same message
+    assert.ok(readdirSync(join(dir, 'asking')).includes(`${id}.json`), 'another tool finishing keeps the question');
+    hook({ hook_event_name: 'PostToolUse', tool_name: 'AskUserQuestion', agent_id: 'x' });
+    assert.ok(readdirSync(join(dir, 'asking')).includes(`${id}.json`), 'a subagent\'s tool never clears');
+    hook({ hook_event_name: 'PostToolUse', tool_name: 'AskUserQuestion' });
+    assert.equal(await askMarker(id), null);
+    hook({ hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' });
+    assert.equal((await askMarker(id)).permission, 'Claude needs your permission to use Bash');
+    hook({ hook_event_name: 'PostToolUse', tool_name: 'Bash' });
+    assert.equal(await askMarker(id), null, 'the next tool ends a permission prompt');
+    for (const ev of ['Stop', 'UserPromptSubmit']) {
+        hook({ hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'p' });
+        hook({ hook_event_name: ev });
+        assert.equal(await askMarker(id), null, `${ev} clears`);
+    }
+    hook({ hook_event_name: 'Notification', notification_type: 'idle_prompt', message: 'idle' });
+    assert.equal(await askMarker(id), null);
+    // a bad session id or bad input never writes outside the folder and never fails the hook
+    assert.equal(hook({ session_id: '../../x', hook_event_name: 'PreToolUse', tool_name: 'AskUserQuestion' }), '');
+    assert.equal(execFileSync(process.execPath, ['hooks/asking.mjs'], { input: 'not json' }).toString(), '');
+    assert.deepEqual(readdirSync(dir), ['asking']);
+    assert.equal(await askMarker('../../x'), null);
+    writeFileSync(file, '{"half');
+    assert.equal(await askMarker(id), null, 'a half-written marker is none');
+    process.env.HOMEBASE_DIR = old ?? '';
+    if (old === undefined) {
+        delete process.env.HOMEBASE_DIR;
+    }
+    rmSync(dir, { recursive: true });
+    console.log('ok asking marker');
+}
+
 import { findClearedSuccessor, tmuxFor, lastActivity } from './server.mjs';
 {
     const ts = s => `2026-11-13T10:${s}:00.000Z`;

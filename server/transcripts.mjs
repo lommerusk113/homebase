@@ -1,5 +1,5 @@
 // Transcript parsing: tail reading and its cache, chat bubbles, TLDR/topic, turn state, review-gate runs, token usage, GET /api/transcript.
-import { open, stat } from 'node:fs/promises';
+import { open, stat, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -456,29 +456,88 @@ export function quickReplies(tldr, text) {
     return twoOptions ? ['Yes', 'Do both', 'No'] : ['Yes', 'No'];
 }
 
-// The questions of an AskUserQuestion that has no tool_result yet, as [{ question, options: [label] }], else null.
-export function pendingAsk(entries) {
+// The questions of an AskUserQuestion that has no tool_result yet, as [{ question, options: [label] }], else those of
+// the hook's marker (see askMarker), else null.
+export function pendingAsk(entries, marker = null) {
 
     const ask = entries
         .filter(e => e.type === 'assistant' && !e.isSidechain && Array.isArray(e.message?.content))
         .flatMap(e => e.message.content)
         .findLast(b => b.type === 'tool_use' && b.name === 'AskUserQuestion');
-    if (!ask) {
+    const answered = ask && entries.some(e => e.type === 'user' && Array.isArray(e.message?.content)
+        && e.message.content.some(b => b.type === 'tool_result' && b.tool_use_id === ask.id));
+
+    if (ask && !answered) {
+        return (ask.input?.questions ?? []).map(q => ({ question: q.question ?? '', options: (q.options ?? []).map(o => o.label).filter(Boolean) }));
+    }
+
+    return markerAsk(marker, entries);
+}
+
+// The question text of a pending AskUserQuestion (or permission prompt), else null.
+export function pendingQuestion(entries, marker = null) {
+
+    const questions = pendingAsk(entries, marker);
+
+    return questions && (questions[0]?.question || 'Claude asked a question.');
+}
+
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const MARKER_MAX_MS = 24 * 3600_000;
+const markers = new Map(); // session id -> { mtimeMs, marker }
+
+// The marker hooks/asking.mjs keeps while a session waits on an AskUserQuestion ({ questions, toolUseId, at }) or a
+// permission prompt ({ permission, at }), else null. Claude Code can write the AskUserQuestion entry only once it is
+// answered (when the same message started background agents), so the transcript alone misses that wait.
+export async function askMarker(id) {
+
+    if (!SESSION_ID.test(id ?? '')) {
         return null;
     }
 
-    const answered = entries.some(e => e.type === 'user' && Array.isArray(e.message?.content)
-        && e.message.content.some(b => b.type === 'tool_result' && b.tool_use_id === ask.id));
+    const path = join(process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase'), 'asking', `${id}.json`);
+    let st;
+    try {
+        st = await stat(path);
+    } catch {
+        markers.delete(id);
+        return null;
+    }
 
-    return answered ? null : (ask.input?.questions ?? []).map(q => ({ question: q.question ?? '', options: (q.options ?? []).map(o => o.label).filter(Boolean) }));
+    let hit = markers.get(id);
+    if (hit?.mtimeMs !== st.mtimeMs) {
+        let marker = null;
+        try {
+            marker = JSON.parse(await readFile(path, 'utf8'));
+        } catch {} // gone or unreadable: none this poll
+        hit = { mtimeMs: st.mtimeMs, marker };
+        markers.set(id, hit);
+    }
+
+    return hit.marker;
 }
 
-// The question text of a pending AskUserQuestion, else null.
-export function pendingQuestion(entries) {
+// A marker's questions, unless it is older than MARKER_MAX_MS or a later transcript entry shows the wait is over: the
+// answer to its AskUserQuestion (any tool result, for a permission prompt), a turn end or a new human prompt.
+export function markerAsk(marker, entries, now = Date.now()) {
 
-    const questions = pendingAsk(entries);
+    const at = Date.parse(marker?.at);
+    if (!at || now - at > MARKER_MAX_MS || !(marker.questions?.length || marker.permission)) {
+        return null;
+    }
 
-    return questions && (questions[0]?.question || 'Claude asked a question.');
+    const over = entries.some(e => !e.isSidechain && Date.parse(e.timestamp) > at && (
+        (e.type === 'system' && e.subtype === 'turn_duration')
+        || isHumanPrompt(e)
+        || (e.type === 'user' && Array.isArray(e.message?.content)
+            && e.message.content.some(b => b.type === 'tool_result' && (marker.permission || b.tool_use_id === marker.toolUseId)))));
+    if (over) {
+        return null;
+    }
+
+    return marker.questions?.length
+        ? marker.questions.map(q => ({ question: String(q.question ?? ''), options: (q.options ?? []).map(String) }))
+        : [{ question: String(marker.permission), options: [] }];
 }
 
 // Turn state from the entries, not the mtime: thinking, long replies and long tool calls write nothing for minutes.
@@ -487,9 +546,9 @@ export function pendingQuestion(entries) {
 // parented on the newest start is the marker of a prompt that interrupted the previous turn, so that turn goes on.
 // Assistant output after an end (a turn retried after /login) reopens it.
 // Returns { state: 'working' | 'asking' | 'idle', since: turn start ms | null }.
-export function turnState(entries, ageMs) {
+export function turnState(entries, ageMs, marker = null) {
 
-    if (pendingAsk(entries)) {
+    if (pendingAsk(entries, marker)) {
         return { state: 'asking', since: null };
     }
 
@@ -529,9 +588,9 @@ export function turnState(entries, ageMs) {
 }
 
 // The human prompts of the open turn (the one that started it, typed or queued, and any queued into it), as [{ at, text }].
-export function turnPrompts(entries, ageMs) {
+export function turnPrompts(entries, ageMs, marker = null) {
 
-    if (turnState(entries, ageMs).state !== 'working') {
+    if (turnState(entries, ageMs, marker).state !== 'working') {
         return [];
     }
 
@@ -679,7 +738,8 @@ export async function transcript(dir, id) {
     const st = await stat(path);
     const entries = await tailOf(path, st);
 
-    const turn = turnState(entries, Date.now() - st.mtimeMs);
+    const marker = await askMarker(id);
+    const turn = turnState(entries, Date.now() - st.mtimeMs, marker);
 
-    return { items: chatItems(entries), asking: pendingQuestion(entries), questions: pendingAsk(entries), working: turn.state === 'working', since: turn.since };
+    return { items: chatItems(entries), asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', since: turn.since };
 }

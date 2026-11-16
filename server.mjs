@@ -18,6 +18,7 @@ import { startupDialog, answerStartup } from './server/startup.mjs';
 import { send, sendToNew, interrupt, clearChat, compactChat, editors, openInEditor } from './server/control.mjs';
 import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, COOKIE, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode, pairPage } from './server/security.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
+import { saveUpload, readUpload } from './server/uploads.mjs';
 
 export {
     readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, quickReplies,
@@ -38,6 +39,7 @@ export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk,
 export { validName, mergeConfig, loadConfig, createProject, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
 export { vendorPath } from './server/static.mjs';
 export { accountOf, readToken, ghRun, scrub } from './server/account.mjs';
+export { saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME } from './server/uploads.mjs';
 
 const PORT = Number(process.env.PORT ?? 4321);
 
@@ -58,6 +60,7 @@ async function readBody(req, max) {
 const LAN = process.env.HOMEBASE_LAN === '1';
 const BIND = LAN ? '0.0.0.0' : '127.0.0.1';
 const DATA_DIR = process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase');
+const UPLOAD_DIR = join(DATA_DIR, 'uploads');
 const TOKEN = randomBytes(32).toString('hex');
 const SECURITY_HEADERS = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY' };
 const pairLimit = rateLimiter();
@@ -179,6 +182,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     await send(url.searchParams.get('id'), body);
                 }
                 return res.end('ok');
+            }
+            if (isPost('/api/upload')) {
+                res.setHeader('connection', 'close'); // a refused body is not read to the end
+                return json({ path: await saveUpload(req, req.headers['content-type'], req.headers['content-length'], UPLOAD_DIR) });
+            }
+            if (url.pathname.startsWith('/api/upload/') && req.method === 'GET') {
+                const img = await readUpload(url.pathname.slice('/api/upload/'.length), UPLOAD_DIR);
+                if (!img) {
+                    return deny(404, 'not found');
+                }
+                res.setHeader('content-type', img.type);
+                res.setHeader('cache-control', 'private, max-age=31536000, immutable'); // a name is never reused
+                return res.end(img.body);
             }
             if (url.pathname === '/api/starting') {
                 return json(await startingChats());

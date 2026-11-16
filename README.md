@@ -10,6 +10,8 @@ The rate limits in the header come from `scripts/statusline.sh`: set it as Claud
 
 Homebase remembers the MRs/PRs it has seen in `~/.claude/homebase/items.json` (`HOMEBASE_DIR` moves it), so the Work tab doesn't lose one when its link scrolls out of a transcript; deleting the file is safe.
 
+Images attached in the chat (paste, drop or the paperclip) are stored in `~/.claude/homebase/uploads/` (`HOMEBASE_DIR` moves it) and sent as `[Image: <path>]` lines, which Claude opens with its Read tool; the folder is never cleaned up, so delete old files when you like.
+
 ## Asking hook
 
 A chat waiting on you (an AskUserQuestion or a tool permission prompt) shows as "<chat> is asking" at the top of Needs you in the Work tab; click it to answer in the chat.

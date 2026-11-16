@@ -206,6 +206,17 @@ a.chip:hover { text-decoration:underline; }
 .c-send:hover:not(:disabled) { filter:brightness(1.1); }
 .c-send:disabled { opacity:.35; cursor:default; }
 .c-send:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.c-attach { align-self:flex-end; width:28px; height:38px; margin-right:4px; border:0; padding:0; display:grid; place-items:center; background:none; color:var(--muted); cursor:pointer; }
+.c-attach:hover { color:var(--accent); }
+.c-attach:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.c-attached { display:flex; flex-wrap:wrap; gap:6px; padding:4px 12px 0; background:var(--bg); }
+.c-attached[hidden] { display:none; }
+.c-thumb { position:relative; }
+.c-thumb img, .b-images img { display:block; width:56px; height:56px; object-fit:cover; border-radius:6px; border:1px solid var(--line); }
+.c-thumb button { position:absolute; top:-6px; right:-6px; width:18px; height:18px; border-radius:50%; border:0; padding:0; line-height:18px; font-size:12px; background:var(--fg); color:var(--bg); cursor:pointer; }
+.c-row.drop #msg::part(base) { outline:2px dashed var(--accent); }
+.b-images { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+.b-images img { width:96px; height:96px; }
 .send-now { margin-left:6px; --wa-form-control-height:20px; --wa-form-control-padding-inline:8px; font-size:11px; }
 .send-now::part(base) { color:var(--accent); }
 #c-err:empty { display:none; }

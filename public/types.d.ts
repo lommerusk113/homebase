@@ -309,6 +309,9 @@ interface PageIds {
     'c-menu': WaDropdown;
     send: HTMLFormElement;
     'send-btn': HTMLButtonElement;
+    attached: HTMLDivElement;
+    'attach-btn': HTMLButtonElement;
+    'attach-input': HTMLInputElement;
 }
 
 // The DOM stringifies these (aria-pressed, aria-selected, aria-expanded take true/false).

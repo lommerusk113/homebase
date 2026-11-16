@@ -2239,3 +2239,35 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     assert.ok(none.every(a => a[0] === 'capture-pane'), 'no dialog: nothing is sent');
     console.log('ok startup dialog');
 }
+
+import { saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME } from './server.mjs';
+{
+    // Chat image uploads: allowed types only, 10 MB cap (also mid-stream), a generated name, and a serve-name check
+    const dir = mkdtempSync(join(tmpdir(), 'homebase-uploads-'));
+    const png = Buffer.from('89504e470d0a1a0a', 'hex');
+    const status = p => p.then(() => null, e => e.status);
+    for (const type of ['text/html', 'image/svg+xml', 'application/octet-stream', undefined, '']) {
+        assert.equal(await status(saveUpload([png], type, png.length, dir)), 415, String(type));
+    }
+    assert.equal(await status(saveUpload([png], 'image/png', UPLOAD_MAX + 1, dir)), 413, 'declared length');
+    let read = 0;
+    const big = (function* () { for (let i = 0; i < 20; i++) { read++; yield Buffer.alloc(1024 * 1024); } })();
+    assert.equal(await status(saveUpload(big, 'image/png', undefined, dir)), 413, 'streamed length');
+    assert.equal(read, 11, 'stops reading past the cap');
+    assert.equal(await status(saveUpload([], 'image/png', 0, dir)), 400);
+    assert.deepEqual(readdirSync(dir), [], 'nothing stored for a refused upload');
+
+    const path = await saveUpload([png], 'image/png; charset=binary', png.length, dir);
+    const name = path.slice(dir.length + 1);
+    assert.equal(path, join(dir, name));
+    assert.match(name, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$/);
+    assert.match(await saveUpload([png], 'IMAGE/JPEG', 8, dir), /\.jpg$/);
+    assert.deepEqual(await readUpload(name, dir), { type: 'image/png', body: png });
+    assert.equal(await readUpload(name.replace('.png', '.gif'), dir), null, 'missing file');
+    for (const bad of ['../items.json', `..%2F${name}`, `../uploads/${name}`, `${name}/..`, name.replace('.png', '.svg'), `a${name}`, '%2e%2e%2fitems.json', '']) {
+        assert.ok(!UPLOAD_NAME.test(bad), bad);
+        assert.equal(await readUpload(bad, dir), null, bad);
+    }
+    rmSync(dir, { recursive: true, force: true });
+    console.log('ok uploads');
+}

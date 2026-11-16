@@ -184,6 +184,12 @@ function bubble(i, sid, prevTopic, look = {}) {
             body.classList.add('fold');
         }
         b.append(body);
+        const names = imageNames(i.text);
+        if (names.length) {
+            const row = el('div', 'b-images');
+            row.append(...names.map(n => thumb(imageUrl(n), n)));
+            b.append(row);
+        }
     }
     if (i.answer) {
         b.append(answerTag(i.answer));
@@ -554,7 +560,79 @@ async function compact(sid) {
     }
 }
 
-const syncSend = () => { $('send-btn').disabled = !$('msg').value?.trim(); };
+const syncSend = () => { $('send-btn').disabled = !$('msg').value?.trim() && !attached.length; };
+
+// Images attached to the next message. Sent as "[Image: <path>]" lines after uploading; Claude reads them by path.
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+/** @type {File[]} */
+let attached = [];
+let uploading = false;
+// Upload names in a message's "[Image: …]" lines (only the names /api/upload makes).
+/** @param {string} text @returns {string[]} */
+const imageNames = text => [...(text || '').matchAll(/^\[Image: \/[^\]\n]*\/([0-9a-f-]{36}\.(?:png|jpe?g|gif|webp))\]$/gm)].map(m => m[1]);
+
+// data: URLs, as the CSP allows no blob: images. /api/upload/<name> needs the token header, so no plain <img src>.
+/** @param {Blob} blob @returns {Promise<string>} */
+const dataUrl = blob => new Promise((ok, fail) => {
+    const r = new FileReader();
+    r.onload = () => ok(String(r.result));
+    r.onerror = () => fail(r.error);
+    r.readAsDataURL(blob);
+});
+// ponytail: every image the chat showed stays in memory until reload; fine for a session's worth of screenshots
+/** @type {Map<string, Promise<string>>} */
+const images = new Map();
+/** @param {string} name */
+function imageUrl(name) {
+    if (!images.has(name)) {
+        images.set(name, api(`/api/upload/${name}`).then(r => (r.ok ? r.blob().then(dataUrl) : '')).catch(() => ''));
+    }
+    return /** @type {Promise<string>} */ (images.get(name));
+}
+/** @param {Promise<string>} url @param {string} alt */
+function thumb(url, alt) {
+    const img = el('img');
+    img.alt = alt;
+    url.then(u => { if (u) { img.src = u; } else { img.remove(); } });
+    return img;
+}
+
+/** @param {Iterable<File>} files */
+function attach(files) {
+    const list = [...files];
+    const ok = list.filter(f => IMAGE_TYPES.includes(f.type));
+    if (ok.length < list.length) {
+        $('c-err').textContent = 'Only PNG, JPEG, GIF or WebP images can be attached';
+    }
+    attached = [...attached, ...ok];
+    showAttached();
+}
+function showAttached() {
+    $('attached').replaceChildren(...attached.map(f => {
+        const t = el('span', 'c-thumb'), x = el('button', '', '×');
+        x.type = 'button';
+        x.ariaLabel = `Remove ${f.name}`;
+        x.onclick = () => {
+            attached = attached.filter(a => a !== f);
+            showAttached();
+        };
+        t.append(thumb(dataUrl(f), f.name), x);
+        return t;
+    }));
+    $('attached').hidden = !attached.length;
+    syncSend();
+}
+// Uploads the attached images; their "[Image: <path>]" lines, one per image.
+/** @param {File[]} files @returns {Promise<string[]>} */
+async function upload(files) {
+    return Promise.all(files.map(async f => {
+        const r = await api('/api/upload', { method: 'POST', headers: { 'content-type': f.type }, body: f });
+        if (!r.ok) {
+            throw new Error(`${f.name}: ${await r.text()}`);
+        }
+        return `[Image: ${(await r.json()).path}]`;
+    }));
+}
 
 // Types text into a session as an outbox bubble ("sending…", then gone once the transcript has it); false if it failed.
 // note: appended to what is sent but not shown, so the chat shows just the label.
@@ -603,8 +681,9 @@ export function initChat() {
     });
     $('send').onsubmit = async e => {
         e.preventDefault();
-        const s = chatSession(), ta = $('msg'), text = ta.value.trim();
-        if (!text) {
+        const s = chatSession(), ta = $('msg'), files = attached;
+        let text = ta.value.trim();
+        if (!text && !files.length) {
             return;
         }
         if (state.boot) {
@@ -614,6 +693,23 @@ export function initChat() {
         const target = s?.id ?? startingTarget(); // a project that is still starting has no session id, only its tmux name
         if (!target) {
             return;
+        }
+        if (files.length) {
+            if (uploading) {
+                return; // a second Enter while the first upload runs
+            }
+            $('c-err').textContent = '';
+            uploading = true;
+            try {
+                text = [text, ...await upload(files)].filter(Boolean).join('\n');
+            } catch (err) {
+                $('c-err').textContent = err.message; // text and images stay for another try
+                return;
+            } finally {
+                uploading = false;
+            }
+            attached = attached.filter(f => !files.includes(f)); // keeps any attached while uploading
+            showAttached();
         }
         // clear at once; the "sending…" bubble shows progress
         ta.value = '';
@@ -626,6 +722,34 @@ export function initChat() {
             saveDraft(draftStorage(), target, ta); // sent: drops the draft, or keeps whatever was typed meanwhile
         }
     };
+    $('attach-btn').onclick = () => $('attach-input').click();
+    $('attach-input').onchange = () => {
+        attach($('attach-input').files ?? []);
+        $('attach-input').value = '';
+    };
+    $('send').addEventListener('paste', e => {
+        const files = [...e.clipboardData?.files ?? []].filter(f => f.type.startsWith('image/'));
+        if (files.length) {
+            e.preventDefault(); // not also the file's name as text
+            attach(files);
+        }
+    });
+    const row = $('send').querySelector('.c-row');
+    const hasFiles = /** @param {DragEvent} e */ e => !!e.dataTransfer?.types.includes('Files');
+    $('send').addEventListener('dragover', e => {
+        if (hasFiles(e)) {
+            e.preventDefault();
+            row?.classList.add('drop');
+        }
+    });
+    $('send').addEventListener('dragleave', () => row?.classList.remove('drop'));
+    $('send').addEventListener('drop', e => {
+        row?.classList.remove('drop');
+        if (hasFiles(e)) {
+            e.preventDefault();
+            attach(e.dataTransfer?.files ?? []);
+        }
+    });
     $('msg').onkeydown = e => {
         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
             e.preventDefault();

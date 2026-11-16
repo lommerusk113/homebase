@@ -38,6 +38,27 @@ export default {
         assert.equal(await page.ev(`document.getElementById('c-err').textContent`), '');
     },
 
+    'an attached image is uploaded and sent as an [Image: path] line, with a thumbnail': async ({ page, open, answerPosts, homebase }) => {
+        await open();
+        await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
+        page.route = q => (q.url.includes('/api/upload') ? null : answerPosts(q)); // the upload reaches the server
+        // a 1x1 PNG, attached as the file picker would
+        await page.ev(`(() => { const b = atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='); const dt = new DataTransfer();
+            dt.items.add(new File([Uint8Array.from(b, c => c.charCodeAt(0))], 'dot.png', { type: 'image/png' }));
+            const i = document.getElementById('attach-input'); i.files = dt.files; i.dispatchEvent(new Event('change')); })()`);
+        await page.waitFor(`document.querySelector('#attached .c-thumb img')?.src.startsWith('data:image/png')`, { what: 'the pending thumbnail' });
+        assert.equal(await page.ev(`document.getElementById('send-btn').disabled`), false, 'images alone can be sent');
+        await page.click('#msg');
+        await page.type('what is this?');
+        await page.key('Enter');
+        await page.waitFor(`document.querySelector('#feed .bubble.user:last-of-type .b-images img')?.src.startsWith('data:image/png')`, { what: 'the thumbnail in the sent bubble' });
+        const send = page.posts.find(p => p.url.includes('/api/send'));
+        const m = /^what is this\?\n\[Image: (\/.+\/uploads\/[0-9a-f-]{36}\.png)\]$/.exec(send.body);
+        assert.ok(m, send.body);
+        assert.ok(m[1].startsWith(`${homebase}/uploads/`), m[1]);
+        assert.equal(await page.ev(`document.getElementById('attached').hidden`), true, 'attachments cleared');
+    },
+
     'the feed does not jump when the status changes or while typing': async ({ page, open }) => {
         await open();
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });

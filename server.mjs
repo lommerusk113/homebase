@@ -1,8 +1,7 @@
-// Dashboard over Claude Code transcripts in ~/.claude/projects. Only types into its own tmux sessions; writes files only in LAN mode (pairing code, session secret).
+// Dashboard over Claude Code transcripts in ~/.claude/projects. Only types into its own tmux sessions.
 // Entry point: config, startup and the router. Everything else lives in server/ (see server/README.md); what test.mjs uses is re-exported here.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -16,7 +15,7 @@ import { MAX_SEND } from './server/tmux.mjs';
 import { createProject, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup } from './server/startup.mjs';
 import { send, sendToNew, interrupt, clearChat, compactChat, editors, openInEditor } from './server/control.mjs';
-import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, COOKIE, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode, pairPage } from './server/security.mjs';
+import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, bindOk } from './server/security.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
 import { saveUpload, readUpload } from './server/uploads.mjs';
 
@@ -35,7 +34,7 @@ export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
 export { tmuxArgs, tmuxFor, findClearedSuccessor, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
 export { parseDialog, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
 export { editorsFrom, openInEditor, refuseIfBusy } from './server/control.mjs';
-export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, cookieOk, isLoopback, bindOk, rateLimiter, pairingCode } from './server/security.mjs';
+export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, bindOk } from './server/security.mjs';
 export { validName, mergeConfig, loadConfig, createProject, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
 export { vendorPath } from './server/static.mjs';
 export { accountOf, readToken, ghRun, scrub } from './server/account.mjs';
@@ -63,41 +62,12 @@ const DATA_DIR = process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebas
 const UPLOAD_DIR = join(DATA_DIR, 'uploads');
 const TOKEN = randomBytes(32).toString('hex');
 const SECURITY_HEADERS = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY' };
-const pairLimit = rateLimiter();
-const PAIR_BODY_MAX = 200; // "code=XXXXXXXX" with room to spare
-const PAIR_COOKIE_MAX_AGE_S = 365 * 24 * 3600;
-
-function writeSecret(name, value) {
-
-    const path = join(DATA_DIR, name);
-    mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
-    writeFileSync(path, value + '\n', { mode: 0o600 });
-    chmodSync(path, 0o600); // mode only applies when the file is created
-
-    return value;
-}
-// LAN mode only: a fresh pairing code per start, and a session secret that survives restarts until its file is deleted.
-function lanSecrets() {
-
-    if (!LAN) {
-        return {};
-    }
-
-    let session;
-    try {
-        session = readFileSync(join(DATA_DIR, 'session-secret'), 'utf8').trim();
-    } catch {}
-
-    return { code: writeSecret('pairing-code', pairingCode()), session: session || writeSecret('session-secret', randomBytes(32).toString('hex')) };
-}
-
 if (import.meta.url === `file://${process.argv[1]}`) {
     if (!bindOk(BIND, LAN)) {
         throw new Error(`refusing to listen on ${BIND}: Homebase binds to 127.0.0.1 unless HOMEBASE_LAN=1`);
     }
-    const { code: PAIR_CODE, session: SESSION_SECRET } = lanSecrets();
     if (LAN) {
-        console.log(`LAN mode: pairing code ${PAIR_CODE} (also in ${join(DATA_DIR, 'pairing-code')})`);
+        console.log(`LAN mode: open http://${lanHosts(PORT).at(-1)} from any device on this network`);
     }
     editors();
     warmMilestones();
@@ -124,33 +94,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         if (req.method === 'POST' && site !== undefined && site !== 'same-origin') {
             return deny(403, 'forbidden');
         }
-        // Other machines (LAN mode only) pair once with the code; until then they get the pairing page and nothing else.
-        if (!isLoopback(req.socket.remoteAddress) && !cookieOk(req.headers.cookie, SESSION_SECRET)) {
-            res.setHeader('cache-control', 'no-store');
-            res.setHeader('content-security-policy', CSP); // the pairing page: a plain form POST, no scripts
-            if (url.pathname === '/pair' && req.method === 'POST') {
-                if (!pairLimit(req.socket.remoteAddress)) {
-                    return deny(429, 'too many tries, wait 15 minutes');
-                }
-                let code = '';
-                try {
-                    code = new URLSearchParams(await readBody(req, PAIR_BODY_MAX)).get('code')?.trim().toUpperCase() ?? '';
-                } catch {}
-                if (!tokenOk(code, PAIR_CODE)) {
-                    res.setHeader('content-type', 'text/html; charset=utf-8');
-                    return deny(403, pairPage('Wrong code.'));
-                }
-                res.setHeader('set-cookie', `${COOKIE}=${SESSION_SECRET}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${PAIR_COOKIE_MAX_AGE_S}`);
-                res.setHeader('location', '/');
-                res.statusCode = 303;
-                return res.end();
-            }
-            if (url.pathname === '/' || url.pathname === '/index.html') {
-                res.setHeader('content-type', 'text/html; charset=utf-8');
-                return res.end(pairPage(''));
-            }
-            return deny(401, 'unauthorized');
-        }
         if (url.pathname.startsWith('/api/') && !tokenOk(req.headers['x-homebase-token'], TOKEN)) {
             return deny(401, 'unauthorized');
         }
@@ -162,7 +105,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 if (file[0] !== 'index.html') {
                     return sendRevalidated(req, res, body);
                 }
-                // The token reaches only a page served to a request that passed the Host, Origin and pairing checks above.
+                // The token reaches only a page served to a request that passed the Host and Origin checks above.
                 res.setHeader('content-security-policy', CSP);
                 res.setHeader('cache-control', 'no-store');
                 return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN).replace('__HOMEBASE_BUILD__', BUILD));

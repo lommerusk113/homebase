@@ -85,13 +85,8 @@ Any process on the Mac, run by any OS user, can fetch the page, read the token a
 That's fine on a single-user Mac, where such a process can already read `~/.claude` and type into tmux.
 Don't run Homebase on a Mac shared with other users.
 
-LAN mode is plain HTTP, so anyone who can watch the network traffic can steal the pairing cookie.
-Fine on a trusted home network; don't use it on shared or public Wi-Fi.
-
-Known hardening gaps (not vulnerabilities):
-
-- The pairing rate limiter's per-address map is never pruned.
-- All paired devices share one session secret, so revoking one device means rotating it and re-pairing all of them.
+LAN mode has no login: every device on the network can open Homebase and type into your sessions.
+Use it only on a home network where you trust every device.
 
 ## Access from another computer
 
@@ -99,15 +94,8 @@ Known hardening gaps (not vulnerabilities):
 HOMEBASE_LAN=1 node server.mjs
 ```
 
-Open `http://<mac>.local:4321` (or the Mac's LAN IP) on the other computer and enter the pairing code printed in the terminal.
-If the server runs under nohup, read the code with `cat ~/.claude/homebase/pairing-code`.
-A new code is made at every start; 5 wrong tries in a minute lock that address out for 15 minutes.
-
-Pairing sets a long-lived cookie, so the device stays paired across restarts.
-To log out every paired device, delete `~/.claude/homebase/session-secret` and restart.
-
-LAN mode is plain HTTP: anyone on your network who can watch your traffic can see the pages and steal the cookie.
-Use it only on a network you trust.
+Open `http://<mac>.local:4321` (or the Mac's LAN IP) on the other device; there is no login.
+LAN mode is plain HTTP and has no authentication, so use it only on a network where you trust every device.
 
 Until Claude writes its first transcript (on the first prompt) the chat sends to `cc-new-<name>` by tmux name (`/api/send?tmux=`, only that name pattern and only while the session runs), and `/api/starting` lets a reloaded page find it again.
 Once the transcript exists, Homebase maps it to that tmux session on every poll (same start folder, no tmux of its own), so no second Claude is started.

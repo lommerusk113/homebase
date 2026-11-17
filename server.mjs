@@ -67,7 +67,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         throw new Error(`refusing to listen on ${BIND}: Homebase binds to 127.0.0.1 unless HOMEBASE_LAN=1`);
     }
     if (LAN) {
-        console.log(`LAN mode: open http://${lanHosts(PORT).at(-1)} from any device on this network`);
+        console.log(`LAN mode: open ${lanHosts(PORT).filter(h => !localHosts(PORT).includes(h)).map(h => `http://${h}`).join(' or ')} from any device on this network`);
     }
     editors();
     warmMilestones();

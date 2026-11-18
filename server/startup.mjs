@@ -7,12 +7,14 @@ const MAX_OPTIONS = 10;
 const CACHE_MS = 3000;
 const cache = new Map(); // tmux name -> { at, dialog }
 
-// "❯ option … Enter to confirm": the contiguous lines around the ❯ line are the options. -> { question, options, selected } or null
+// "❯ option … Enter to confirm": the contiguous lines around the last ❯ line above the hint are the options (a ❯ further
+// up is the user's own echoed prompt). -> { question, options, selected } or null
 export function parseDialog(pane) {
 
     const lines = String(pane ?? '').split('\n').map(l => l.replace(/\s+$/, ''));
-    const at = lines.findIndex(l => /^\s*❯\s+\S/.test(l));
-    if (at < 0 || !lines.slice(at).some(l => /enter to (confirm|select)/i.test(l))) {
+    const hint = lines.findLastIndex(l => /enter to (confirm|select)/i.test(l));
+    const at = lines.slice(0, Math.max(hint, 0)).findLastIndex(l => /^\s*❯\s+\S/.test(l));
+    if (at < 0) {
         return null;
     }
 
@@ -68,17 +70,17 @@ export async function startupDialog(name, { tm = tmux, now = Date.now() } = {}) 
 }
 
 // Selects option `index` (whose text must be `label`, so a dialog that changed meanwhile isn't answered blind) and confirms;
-// then re-reads the pane and fails if the same dialog is still up.
-export async function answerStartup(name, index, label, { tm = tmux, nap = sleep } = {}) {
+// then re-reads the pane and fails if the same dialog is still up. `parse` reads the dialog: parseDialog or parseQuestion.
+export async function answerStartup(name, index, label, { tm = tmux, nap = sleep, parse = parseDialog } = {}) {
 
     check(name);
     cache.delete(name);
-    const dialog = parseDialog(await capture(name, tm));
+    const dialog = parse(await capture(name, tm));
     if (!dialog) {
-        throw Object.assign(new Error('No startup question is showing any more'), { status: 409 });
+        throw Object.assign(new Error('No question is showing any more'), { status: 409 });
     }
     if (!Number.isInteger(index) || dialog.options[index] === undefined || dialog.options[index] !== label) {
-        throw Object.assign(new Error('The startup question changed, check it and try again'), { status: 409 });
+        throw Object.assign(new Error('The question changed, check it and try again'), { status: 409 });
     }
 
     // Enter only once the ❯ is seen on the chosen option: a just-drawn dialog can drop the arrow keys, and Enter then
@@ -92,20 +94,82 @@ export async function answerStartup(name, index, label, { tm = tmux, nap = sleep
             await tm(args);
         }
         await nap(300);
-        const now = parseDialog(await capture(name, tm));
-        if (!now || now.options.join('|') !== dialog.options.join('|')) {
-            throw Object.assign(new Error('The startup question changed, check it and try again'), { status: 409 });
+        const now = parse(await capture(name, tm));
+        if (!now || now.question !== dialog.question || now.options.join('|') !== dialog.options.join('|')) {
+            throw Object.assign(new Error('The question changed, check it and try again'), { status: 409 });
         }
         on = now.selected;
     }
     await tm(selectSteps(name, index, index)[0]);
 
     await nap(700);
-    const after = parseDialog(await capture(name, tm));
+    const after = parse(await capture(name, tm));
     cache.delete(name);
     if (after && after.question === dialog.question && after.options.join('|') === dialog.options.join('|')) {
-        throw Object.assign(new Error('The startup question is still showing, answer it in the terminal'), { status: 502 });
+        throw Object.assign(new Error('The question is still showing, answer it in the terminal'), { status: 502 });
     }
+}
+
+// Claude's own entries under an AskUserQuestion, never offered as buttons: one opens a text box, the other a chat
+const FREE_FORM = /^(type something\.?|chat about this)$/i;
+const OPTION = /^(?: {0,2}|\s*❯\s+)(\d+)\.\s+(.+)$/;
+
+// An AskUserQuestion on screen: the question above "1." and the numbered options down to "Enter to select", each
+// option's indented lines its description. One question at a time (a ☐ tab bar above is ignored); a multi-select
+// ([ ] boxes) isn't parsed. The last step of several questions, "Review your answers", has no hint: its options run to
+// the bottom and its question is the answers summary. -> { question, options, descriptions, selected } or null
+export function parseQuestion(pane) {
+
+    const lines = String(pane ?? '').split('\n').map(l => l.replace(/\s+$/, ''));
+    const hint = lines.findLastIndex(l => /enter to select/i.test(l));
+    const review = lines.findLastIndex(l => /^\s*Review your answers$/.test(l));
+    const end = hint >= 0 ? hint : review >= 0 ? lines.length : 0;
+    const first = lines.slice(0, end).findLastIndex(l => OPTION.exec(l)?.[1] === '1');
+    if (first < 0) {
+        return null;
+    }
+
+    const options = [], descriptions = [];
+    let selected = -1;
+    for (const l of lines.slice(first, end)) {
+        const m = OPTION.exec(l);
+        if (m && Number(m[1]) === options.length + 1) {
+            selected = l.includes('❯') ? options.length : selected;
+            options.push(m[2].trim());
+            descriptions.push('');
+        } else if (l.trim() && !/^[\s─]+$/.test(l)) {
+            descriptions[options.length - 1] = `${descriptions.at(-1)} ${l.trim()}`.trim();
+        }
+    }
+    if (selected < 0 || options.some(o => /^\[.?\]/.test(o))) {
+        return null;
+    }
+
+    let from = first;
+    while (from > 0 && !lines[from - 1].trim()) {
+        from--;
+    }
+    let top = hint < 0 && review < from ? review : from;
+    while (top > 0 && lines[top - 1].trim()) {
+        top--;
+    }
+    const question = lines.slice(top, from).map(l => l.trim()).filter(Boolean).join(' ').replace(/\s*●\s*/g, ' · ');
+
+    return question && !/^[☐☒✔←]/.test(question) ? { question, options, descriptions, selected } : null;
+}
+
+export async function paneQuestion(name, { tm = tmux } = {}) {
+    check(name);
+
+    return parseQuestion(await capture(name, tm));
+}
+
+// Picks option `index` (labelled `label`) of the AskUserQuestion on screen, never the free-form entries.
+export async function answerQuestion(name, index, label, { tm = tmux, nap = sleep } = {}) {
+    if (FREE_FORM.test(label ?? '')) {
+        throw Object.assign(new Error('Answer that one in the terminal'), { status: 400 });
+    }
+    await answerStartup(name, index, label, { tm, nap, parse: parseQuestion });
 }
 
 // The folder a workspace trust dialog names: the lines after "Accessing workspace:" up to a blank line, joined (a narrow pane wraps the path)

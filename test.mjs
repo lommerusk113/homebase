@@ -661,7 +661,7 @@ assert.deepEqual(two.map(i => [i.answer?.text, i.replies]), [['No', undefined], 
 // a plain later message still clears the older question
 assert.deepEqual(noTools([sayAt('Done.\n\nTLDR: Ship it?', 't1'), tu('Bash'), sayAt('Also cleaned up.', 't2'), you('ok whatever, later', 't3')]).map(i => [i.role, i.needsYou, i.replies]), [['assistant', false, undefined], ['assistant', false, undefined], ['user', undefined, undefined]]);
 const ask2 = tu('AskUserQuestion', { id: 'q2', input: { questions: [{ question: 'Which DB?', options: [{ label: 'Postgres', description: 'x' }, { label: 'SQLite' }] }] } });
-assert.deepEqual(pendingAsk([ask2]), [{ question: 'Which DB?', options: ['Postgres', 'SQLite'] }]);
+assert.deepEqual(pendingAsk([ask2]), [{ question: 'Which DB?', options: ['Postgres', 'SQLite'], descriptions: ['x', ''] }]);
 assert.equal(pendingAsk([ask2, { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'q2' }] } }]), null);
 assert.equal(pendingQuestion([tu('AskUserQuestion', { id: 'q3', input: {} })]), 'Claude asked a question.');
 console.log('ok quick replies');
@@ -2169,6 +2169,8 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
         assert.equal(d.selected, sel);
         assert.match(d.question, /^Quick safety check: Is this a project you created or one you trust\?/);
     }
+    // a running chat: the user's echoed prompt starts with ❯ too; the dialog is the last ❯ above the hint
+    assert.deepEqual(parseDialog(`❯ Please look at the\n  league table\n────\n${trust(1)}`).options, ['No, exit', 'Yes, I trust this folder']);
     assert.equal(parseDialog('some output\n❯ ls\nEnter to confirm'), null, 'a shell prompt is not a dialog');
     assert.equal(parseDialog(trust(0).replace('Enter to confirm', '')), null, 'needs the confirm hint');
 
@@ -2216,6 +2218,69 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     assert.equal((await refuseIfTrustDialog('cc-new-league', { tm: async () => ({ stdout: trust(0) }) }).catch(e => e)).status, 409, 'send refused while trust dialog is up');
     assert.equal(await refuseIfTrustDialog('cc-new-league', { tm: async () => ({ stdout: '❯ pick\nEnter to select' }) }), undefined, 'other dialogs (questions) still take sends');
     console.log('ok startup dialog');
+}
+
+import { parseQuestion, answerQuestion } from './server.mjs';
+{
+    const ask = sel => `❯ Ask me which color
+────────────────
+ ☐ Color
+
+Which color
+do you want?
+
+${sel === 0 ? '❯' : ' '} 1. Green (Recommended)
+     calm and
+     quiet
+${sel === 1 ? '❯' : ' '} 2. Red
+     warm
+${sel === 2 ? '❯' : ' '} 3. Blue
+  4. Type something.
+────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+`;
+    assert.deepEqual(parseQuestion(ask(0)), {
+        question: 'Which color do you want?',
+        options: ['Green (Recommended)', 'Red', 'Blue', 'Type something.', 'Chat about this'],
+        descriptions: ['calm and quiet', 'warm', '', '', ''],
+        selected: 0
+    });
+    assert.equal(parseQuestion(ask(2)).selected, 2);
+    assert.equal(parseQuestion(ask(0).replace('Enter to select', '')), null, 'needs the hint');
+    assert.equal(parseQuestion(ask(0).replace('1. Green', '1. [ ] Green')), null, 'multi-select is left to the terminal');
+    const submit = '←  ☒ Size  ☒ Shape  ✔ Submit  →\n\nReview your answers\n\n ● Which size?\n   → Large\n ● Which shape?\n   → Square\n\n❯ 1. Submit answers\n  2. Cancel\n\n';
+    assert.deepEqual(parseQuestion(submit), { question: 'Review your answers · Which size? → Large · Which shape? → Square', options: ['Submit answers', 'Cancel'], descriptions: ['', ''], selected: 0 }, 'the submit step has no hint');
+    assert.equal(parseQuestion('❯ 1. my typed list\n'), null, 'no hint, no review: not a question');
+    assert.equal(parseQuestion(' Accessing workspace:\n\n ❯ No, exit\n   Yes, I trust this folder\n\n Enter to confirm'), null, 'not a question');
+
+    const run = async (panes, index, label, name = 'cc-new-probe') => {
+        const sent = [];
+        const tm = async a => (a[0] === 'capture-pane' ? { stdout: panes.length > 1 ? panes.shift() : panes[0] } : void sent.push(a));
+        const err = await answerQuestion(name, index, label, { tm, nap: async () => {} }).then(() => null, e => e);
+
+        return { sent, err };
+    };
+    let r = await run([ask(0), ask(1), 'Red'], 1, 'Red');
+    assert.equal(r.err, null);
+    assert.deepEqual(r.sent.map(a => a.slice(3)), [['Down'], ['Enter']]);
+    r = await run([ask(0), ask(0), ask(0), ask(2), 'Blue'], 2, 'Blue');
+    assert.deepEqual(r.sent.map(a => a.slice(3)), [['Down', 'Down'], ['Down', 'Down'], ['Down', 'Down'], ['Enter']], 'dropped arrows are resent');
+    r = await run([ask(0)], 1, 'Red');
+    assert.equal(r.err.status, 502, 'arrows never land');
+    assert.ok(!r.sent.some(a => a.includes('Enter')), 'never confirms another option');
+    r = await run([ask(0), ask(1).replace('Which color', 'Which shade')], 1, 'Red');
+    assert.equal(r.err.status, 409, 'the question changed under the arrows');
+    assert.ok(!r.sent.some(a => a.includes('Enter')));
+    r = await run([ask(0)], 1, 'Blue');
+    assert.equal(r.err.status, 409, 'label mismatch');
+    assert.deepEqual(r.sent, []);
+    assert.equal((await run([ask(0)], 3, 'Type something.')).err.status, 400, 'free-form entries are not answered');
+    assert.equal((await run([ask(0)], 1, 'Red', 'zsh')).err.status, 400, 'not a cc-* session');
+    r = await run([ask(0), ask(1), ask(1).replace('Which color\ndo you want?', 'Which size?')], 1, 'Red');
+    assert.equal(r.err, null, 'the next question of a multi-question dialog counts as answered');
+    console.log('ok ask question');
 }
 
 import { saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME } from './server.mjs';

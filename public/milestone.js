@@ -31,6 +31,9 @@ export function milestoneTag(item) {
 export function pillLabel(ms) {
 
     const g = ms.groups, open = ms.total - ms.closed;
+    if (ms.mine) {
+        return g ? { text: `${open} open`, tip: `Assigned to you: ${open} open issues across all milestones` } : { text: 'loading…', tip: 'Loading your issues…' };
+    }
     if (!g) {
         return { text: ms.total == null ? 'loading…' : `${open} open`, tip: `${ms.title}: loading issues… · ${due(ms.due)}` };
     }
@@ -125,6 +128,15 @@ export function milestoneSelector(project, { signal, onChange, onData, onBusy } 
         }
     });
 
+    // the first menu entry: the open issues assigned to you in every milestone
+    const mineButton = on => {
+        const b = el('button', on ? 'on' : null);
+        b.dataset.id = 'mine';
+        b.append(el('span', null, 'Assigned to me'), el('small', null, 'all milestones'));
+        b.onclick = () => choose('mine');
+        return b;
+    };
+
     /** @param {Milestones} data */
     function render(data) {
         const ms = data.selected, empty = emptyPill(data);
@@ -138,9 +150,12 @@ export function milestoneSelector(project, { signal, onChange, onData, onBusy } 
             if (data.url) {
                 info.append(link(null, 'Milestones page ↗', data.url));
             }
+            if (data.reason === 'none') {
+                menu.append(el('hr'), mineButton(false));
+            }
             return;
         }
-        summary.replaceChildren(el('span', null, '⚑'), el('span', 't', ms ? ms.title : 'No milestone'));
+        summary.replaceChildren(el('span', null, ms?.mine ? '@' : '⚑'), el('span', 't', ms ? ms.title : 'No milestone'));
         if (ms) {
             const { text, tip } = pillLabel(ms);
             summary.append(el('span', 'n', `· ${text}`));
@@ -168,7 +183,7 @@ export function milestoneSelector(project, { signal, onChange, onData, onBusy } 
         }
         if (ms?.groups) {
             const g = ms.groups, info = el('div', 'info');
-            info.append(link(null, due(ms.due), ms.url));
+            info.append(link(null, ms.mine ? 'Issues ↗' : due(ms.due), ms.url));
             for (const [k, label] of [['doing', 'in progress'], ['assigned', 'assigned'], ['unassigned', 'unassigned']]) {
                 if (g[k].length) {
                     info.append(el('span', null, `${g[k].length} ${label}`));
@@ -186,6 +201,7 @@ export function milestoneSelector(project, { signal, onChange, onData, onBusy } 
             }
             parts.push(el('hr'));
         }
+        parts.push(mineButton(!!ms?.mine), el('hr'));
         parts.push(...data.milestones.map(m => {
             const b = el('button', ms?.id === m.id ? 'on' : null);
             b.dataset.id = String(m.id);
@@ -245,7 +261,7 @@ export function milestoneSelector(project, { signal, onChange, onData, onBusy } 
                 loading = isLoading(data);
                 render(data);
                 onData?.(data);
-                const sel = data.selected ? { id: data.selected.id, title: data.selected.title } : null;
+                const sel = data.selected && typeof data.selected.id === 'number' ? { id: data.selected.id, title: data.selected.title } : null; // "Assigned to me" is no milestone for the board
                 if (sel?.id !== selectedId) {
                     selectedId = sel?.id;
                     onChange?.(sel);

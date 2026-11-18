@@ -15,6 +15,17 @@ export default {
         assert.equal(await page.ev(`document.querySelector('#issues .is-big').textContent`), '4 open of 5');
     },
 
+    'Assigned to me lists only my open issues across milestones': async ({ page, open }) => {
+        await open({ tab: 'issues' });
+        await page.waitFor(`document.querySelector('#issues .card')`, { what: 'the milestone cards' });
+        await page.click('#milestone-slot .ms-pick summary');
+        await page.click('#milestone-slot .ms-menu button[data-id="mine"]');
+        await page.waitFor(`document.querySelector('#milestone-slot .ms-pick summary .t')?.textContent === 'Assigned to me' && document.querySelector('#issues .card[data-key="issue:20"]')`, { what: 'my issues' });
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#issues .card')].map(c => c.dataset.key)`), ['issue:5', 'issue:8', 'issue:20']);
+        assert.equal(await page.ev(`document.querySelector('#issues .card[data-key="issue:20"] .is-ms').textContent`), '⚑ Backlog');
+        assert.equal(await page.ev(`document.querySelector('#issues .is-big').textContent`), '3 open of 3');
+    },
+
     'a card expands and collapses': async ({ page, open }) => {
         await open({ tab: 'issues' });
         await page.waitFor(`document.querySelector('#issues .card[data-key="issue:6"]')`, { what: 'card #6' });

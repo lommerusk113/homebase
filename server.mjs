@@ -28,7 +28,7 @@ export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refres
 export {
     column, gateFor, toGate, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf
 } from './server/items.mjs';
-export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones } from './server/milestones.mjs';
+export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones, mineView } from './server/milestones.mjs';
 export { limitsOf, peakLimits, contextOf } from './server/limits.mjs';
 export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
 export { tmuxArgs, tmuxFor, findClearedSuccessor, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';

@@ -399,6 +399,7 @@ ul.comments a { color:var(--fg); }
 .card .top .st { color:var(--c); font-weight:600; }
 .card .top .age { margin-left:auto; }
 .card .tt { font-size:12.5px; line-height:1.35; font-weight:500; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+.card .is-ms { color:var(--muted); font-size:10.5px; }
 .card .ft { display:flex; flex-wrap:wrap; gap:4px; align-items:center; min-height:18px; }
 .card .ft > * { flex-shrink:0; }
 .card .ft .ci-pill { margin-left:0; }

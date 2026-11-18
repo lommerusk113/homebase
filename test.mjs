@@ -744,7 +744,7 @@ assert.equal(limitView(false, { used: 81, resetsAt: thu + 97 * 60_000 }, thu).te
 assert.equal(limitView(false, { used: 80, resetsAt: thu + 97 * 60_000 }, thu).text, '20%');
 console.log('ok limit peaks');
 
-import { repoPath, groupIssues, milestoneOf, activeMilestones, keepMilestone, worksOn, noMilestones } from './server.mjs';
+import { repoPath, groupIssues, milestoneOf, activeMilestones, keepMilestone, worksOn, noMilestones, mineView } from './server.mjs';
 import { inMilestone, toData, isLoading, emptyPill } from './public/milestone.js';
 assert.deepEqual(repoPath('git@gitlab.com:tritt/accounting/pracsys.git\n'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
 assert.deepEqual(repoPath('https://gitlab.com/tritt/accounting/pracsys.git'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
@@ -807,6 +807,12 @@ assert.equal(inMilestone(row('u', null), null), true); // no milestone selected
     assert.equal(emptyText(none), 'No open milestones in p.');
     assert.match(emptyText(err), /^Milestones unavailable for r: gh: Not Found \(HTTP 404\)\. Press r/);
     assert.equal(emptyText(noMilestones('x', null, 'unsupported', 'unknown project')), "Milestones aren't available for x: unknown project.");
+}
+// "mine" without a known user is an error in the view, not an empty list; it still lists the milestones for the menu
+{
+    const v = mineView('p', { host: 'gitlab.com', path: 'g/p' }, [], null);
+    assert.deepEqual([v.reason, v.selected.id, v.selected.mine, v.selected.groups, v.selected.error], [null, 'mine', true, undefined, 'could not tell who you are on this forge']);
+    assert.equal(v.selected.url, 'https://gitlab.com/g/p/-/issues');
 }
 console.log('ok milestones');
 

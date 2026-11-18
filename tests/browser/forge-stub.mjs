@@ -68,6 +68,13 @@ function glab(path) {
     if (p === 'projects/acme%2Falpha/milestones/11/issues') {
         return out(ISSUES);
     }
+    if (p === 'projects/acme%2Falpha/issues') {
+        const q = new URLSearchParams(path.split('?')[1]);
+
+        return q.get('assignee_username') === 'tester' && q.get('state') === 'opened'
+            ? out([ISSUES[1], ISSUES[4], issue(20, 'Backlog item for me', { assignees: [me], milestone: { id: 12, title: 'Backlog' } })])
+            : fail(`stub: unexpected issue list ${path}`);
+    }
     let m = p.match(/^projects\/acme%2Falpha\/issues\/(\d+)\/related_merge_requests$/);
     if (m) {
         return out(RELATED[m[1]] ?? []);

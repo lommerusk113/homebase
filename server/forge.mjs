@@ -65,6 +65,12 @@ async function fetchPr(url) {
         const ci = status === 'ci_must_pass' && !pipeline ? null : { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? ciOf(pipeline);
         // GitLab is still computing the status: keep what it said last, so ready doesn't flap
         const prev = ['unchecked', 'checking', 'approvals_syncing', 'preparing'].includes(status) ? prs.get(url)?.value : null;
+        // no milestone of its own: its issue's, which beats guessing from the target branch (v1 and v2 share one branch)
+        const issue = issueOf(mr.title, mr.description);
+        const issueMs = !mr.milestone && issue
+            ? await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/issues/${issue}`], { timeout: apiTimeout() }).then(r => JSON.parse(r.stdout).milestone, () => null)
+            : null;
+        const ms = mr.milestone ?? issueMs;
 
         return {
             state,
@@ -80,9 +86,9 @@ async function fetchPr(url) {
             draft: !!mr.draft,
             ci,
             pipeline,
-            milestone: mr.milestone ? { id: mr.milestone.id, title: mr.milestone.title, due_date: mr.milestone.due_date } : null,
+            milestone: ms ? { id: ms.id, title: ms.title, due_date: ms.due_date } : null,
             target: mr.target_branch,
-            issue: issueOf(mr.title, mr.description),
+            issue,
             sha: mr.sha ?? mr.diff_refs?.head_sha ?? null
         };
     }

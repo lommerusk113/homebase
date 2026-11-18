@@ -35,7 +35,7 @@ const bad = (msg, status = 400) => Object.assign(new Error(msg), { status });
 // every string that leaves here has the token scrubbed.
 export async function createProject(body, deps = {}) {
 
-    const { config = loadConfig(), exec = run, tmux: tm = tmux, exists = existsSync, transcripts = listTranscripts, nap = sleep, waitMs = 20_000 } = deps;
+    const { config = loadConfig(), exec = run, tmux: tm = tmux, exists = existsSync, transcripts = listTranscripts, nap = sleep, waitMs = 20_000, trustMs = 60_000 } = deps;
     const { name } = body ?? {};
     const description = String(body?.description ?? '').replace(/[\x00-\x1f\x7f]/g, ' ').trim();
     if (!validName(name)) {
@@ -99,13 +99,13 @@ export async function createProject(body, deps = {}) {
         // d. the session id is only known once Claude has written its transcript
         const tmuxName = `cc-new-${name}`;
         try {
-            await tm(['new-session', '-d', '-s', tmuxName, '-c', dir, 'zsh', '-lic', 'claude']);
+            await tm(['new-session', '-d', '-s', tmuxName, '-x', '200', '-y', '50', '-c', dir, 'zsh', '-lic', 'claude']);
         } catch (e) {
             throw fail(2, e, `${made} and cloned to ${dir}, but starting Claude failed:`);
         }
         steps[2].state = 'done';
 
-        await trustNewProject(tmuxName, dir, { tm, nap, waitMs }); // never throws; other startup prompts show in the chat
+        await trustNewProject(tmuxName, dir, { tm, nap, waitMs: trustMs }); // never throws; other startup prompts show in the chat
 
         let sessionId = null;
         for (let t = 0; t < waitMs && !sessionId; t += 500) {

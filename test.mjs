@@ -1853,7 +1853,7 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
         assert.deepEqual(calls[2].args, ['clone', 'git@github-personal:lommerusk113/my-repo.git', '/base/my-repo']);
         assert.ok(!JSON.stringify(calls[2]).includes(TOKEN) && !JSON.stringify(calls[3]).includes(TOKEN), 'only gh gets the token');
         assert.ok(calls.every(c => c.file === 'tmux' || c.timeout > 0), 'every step has a timeout');
-        assert.deepEqual(calls[3].args, ['new-session', '-d', '-s', 'cc-new-my-repo', '-c', '/base/my-repo', 'zsh', '-lic', 'claude']);
+        assert.deepEqual(calls[3].args, ['new-session', '-d', '-s', 'cc-new-my-repo', '-x', '200', '-y', '50', '-c', '/base/my-repo', 'zsh', '-lic', 'claude']);
         assert.deepEqual([r.ok, r.sessionId, r.dir, r.steps.map(s => s.state)], [true, '11111111-2222-3333-4444-555555555555', '/base/my-repo', ['done', 'done', 'done']]);
         noToken(r);
     }
@@ -2190,6 +2190,8 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
 
     // New project auto-trust: only the exact cloned folder
     assert.equal(trustFolder(trust(0)), '/base/league');
+    assert.equal(trustFolder(' Accessing workspace:\n\n /base/a-very-long-\n folder/league\n\n Quick safety check'), '/base/a-very-long-folder/league', 'wrapped path');
+    assert.equal(trustFolder(' Accessing workspace:\n /base/league\n Quick safety check: Is this'), '/base/league', 'no blank lines');
     for (const [dir, answered] of [['/base/league', true], ['/base', false], ['/base/league2', false], ['/base/leagu', false]]) {
         const sent = [];
         const tm = async a => (a[0] === 'capture-pane' ? { stdout: sent.length ? 'ok' : trust(0) } : void sent.push(a));
@@ -2199,6 +2201,9 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     const none = [];
     assert.equal(await trustNewProject('cc-new-league', '/base/league', { tm: async a => (none.push(a), { stdout: 'loading' }), nap: async () => {}, waitMs: 1000 }), false);
     assert.ok(none.every(a => a[0] === 'capture-pane'), 'no dialog: nothing is sent');
+    const { refuseIfTrustDialog } = await import('./server/startup.mjs');
+    assert.equal((await refuseIfTrustDialog('cc-new-league', { tm: async () => ({ stdout: trust(0) }) }).catch(e => e)).status, 409, 'send refused while trust dialog is up');
+    assert.equal(await refuseIfTrustDialog('cc-new-league', { tm: async () => ({ stdout: '❯ pick\nEnter to select' }) }), undefined, 'other dialogs (questions) still take sends');
     console.log('ok startup dialog');
 }
 

@@ -6,6 +6,7 @@ import { join, basename } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { sessions } from './sessions.mjs';
+import { refuseIfTrustDialog } from './startup.mjs';
 import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, sleep, NEW_TMUX } from './tmux.mjs';
 
 const run = promisify(execFile);
@@ -99,6 +100,7 @@ export async function send(id, text, session = null) {
         await sleep(5000); // ponytail: fixed wait for claude to boot; poll capture-pane for its prompt if this proves flaky
     }
 
+    await refuseIfTrustDialog(name);
     await typeSteps(steps);
 
     return name;
@@ -127,6 +129,7 @@ export async function sendToNew(name, text) {
         throw Object.assign(new Error(`${name} isn't running`), { status: 409 });
     }
 
+    await refuseIfTrustDialog(name);
     await typeSteps(steps);
 }
 

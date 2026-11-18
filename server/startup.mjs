@@ -96,12 +96,24 @@ export async function answerStartup(name, index, label, { tm = tmux, nap = sleep
     }
 }
 
-// The folder a workspace trust dialog names: the line after "Accessing workspace:"
-export const trustFolder = pane => String(pane ?? '').match(/Accessing workspace:\s*\n\s*\n?\s*(\S[^\n]*?)\s*\n/)?.[1] ?? null;
+// The folder a workspace trust dialog names: the lines after "Accessing workspace:" up to a blank line, joined (a narrow pane wraps the path)
+export const trustFolder = pane => {
+    const m = String(pane ?? '').match(/Accessing workspace:[ \t]*\n(?:[ \t]*\n)?((?:[ \t]*\S[^\n]*\n)+?)(?:[ \t]*\n|[ \t]*Quick safety)/);
+
+    return m ? m[1].split('\n').map(l => l.trim()).join('') || null : null;
+};
+
+// Typing into the trust dialog would press Enter on its default "No, exit" and quit Claude: refuse sends until it's answered.
+export async function refuseIfTrustDialog(name, { tm = tmux } = {}) {
+    const pane = await capture(name, tm);
+    if (parseDialog(pane) && /Accessing workspace:/.test(pane)) {
+        throw Object.assign(new Error('Claude is waiting for you to trust this folder: answer the startup question first'), { status: 409 });
+    }
+}
 
 // New project only: the user creating `dir` is consent to trust exactly that folder. Waits for the trust dialog, and answers
 // "Yes" only when it names `dir` itself (not a parent or another folder). Anything else is left to the chat panel. -> true if answered
-export async function trustNewProject(name, dir, { tm = tmux, nap = sleep, waitMs = 20_000 } = {}) {
+export async function trustNewProject(name, dir, { tm = tmux, nap = sleep, waitMs = 60_000 } = {}) {
 
     for (let t = 0; t < waitMs; t += 500) {
         const pane = await capture(name, tm);

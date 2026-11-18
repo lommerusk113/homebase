@@ -75,7 +75,7 @@ export default {
             await page.click(`#masters tr[data-key="asking:${IDS.worker}"]`);
             await page.waitFor(`document.getElementById('status-text').textContent.startsWith('Claude is asking')`, { what: 'the chat status to say asking' });
             assert.equal(await page.ev(`localStorage.getItem('chat')`), IDS.worker);
-            assert.match(await page.ev(`document.getElementById('ask-q').textContent`), /Merge !101 now\?/);
+            await page.waitFor(`/Merge !101 now\\?/.test(document.getElementById('ask-q').textContent)`, { what: 'the question in the card' });
             assert.match(await page.ev('document.title'), /^\(\d+\) Homebase$/);
         } finally {
             rmSync(file, { force: true });

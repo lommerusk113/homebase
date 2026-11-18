@@ -14,7 +14,7 @@ Images attached in the chat (paste, drop or the paperclip) are stored in `~/.cla
 
 ## Asking hook
 
-A chat waiting on you (an AskUserQuestion or a tool permission prompt) shows as "<chat> is asking" at the top of Needs you in the Work tab; click it to answer in the chat.
+A chat waiting on you (an AskUserQuestion or a tool permission prompt) shows as "<chat> is asking" at the top of Needs you in the Work tab; click it to answer in the chat, where each option of the question on its tmux pane is a button.
 Claude Code writes an AskUserQuestion to the transcript only once it is answered when the same message also started background agents, so Homebase also reads a marker that `hooks/asking.mjs` keeps in `~/.claude/homebase/asking/<session>.json` (`HOMEBASE_DIR` moves it).
 Install it in `~/.claude/settings.json` (merge into any `hooks` you already have):
 

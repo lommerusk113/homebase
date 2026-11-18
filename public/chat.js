@@ -281,23 +281,89 @@ function showNewer(s) {
     }
 }
 
-// The "Claude is asking" panel: its questions and options, and the tmux command to answer in the terminal.
-/** @param {Session} s @param {Transcript} data */
-function showAsk(s, data) {
+// The ask and startup cards: the question, an option per button (its description under it) that `answer` picks, else
+// read-only rows; and the tmux command to answer in the terminal.
+/** @param {string} id @param {string} tmux @param {string} question @param {{ label: string, desc?: string, primary?: boolean }[]} options @param {((i: number) => Promise<void>) | null} answer */
+function fillCard(id, tmux, question, options, answer) {
 
-    $('ask').hidden = !data.asking;
+    $(`${id}-q`).textContent = question;
+    $(`${id}-cmd`).textContent = `tmux attach -t ${tmux}`;
+    $(`${id}-opts`).replaceChildren(...options.map((o, i) => {
+        const b = answer ? waButton(o.label, 'c-opt', { variant: o.primary ? 'brand' : 'neutral', appearance: o.primary ? 'accent' : 'outlined' }) : el('div', 'c-opt ro', o.label);
+        if (o.desc) {
+            b.append(el('small', null, o.desc));
+        }
+        if (answer) {
+            b.onclick = async () => {
+                $('c-err').textContent = '';
+                for (const x of $(`${id}-opts`).children) {
+                    x.setAttribute('disabled', '');
+                }
+                b.setAttribute('loading', '');
+                await answer(i).catch(err => { $('c-err').textContent = err.message; });
+            };
+        }
+
+        return b;
+    }));
+}
+
+// POSTs an answer; a refusal's text is the error.
+/** @param {string} url */
+const postAnswer = async url => {
+    const r = await api(url, { method: 'POST' });
+    if (!r.ok) {
+        throw new Error(await r.text());
+    }
+};
+
+const FREE_FORM = /^(type something\.?|chat about this)$/i; // Claude's own entries under a question: left to the terminal
+let askKey = null;
+
+// The "Claude is asking" card. The question on the tmux pane gets buttons (the server moves the ❯ there and confirms,
+// one question at a time); descriptions come from the transcript, else the pane. Not in tmux: the transcript's questions, read-only.
+/** @param {Session} s @param {Transcript} data */
+async function showAsk(s, data) {
+
     state.asking = data.asking;
     updateTitle();
+    if (!data.asking) {
+        $('ask').hidden = true;
+        askKey = null;
+        return;
+    }
 
-    // ponytail: options are read-only; the docs don't pin down a keypress that picks option N, so answering stays in the terminal
-    const questions = data.questions?.length ? data.questions : [{ question: data.asking || '', options: [] }];
-    $('ask-q').replaceChildren(...questions.flatMap(q => {
-        const ol = el('ol');
-        ol.append(...q.options.map(o => el('li', null, o)));
+    const tmux = s.tmux ?? `cc-${s.id.slice(0, 8)}`;
+    /** @type {{ question: string, options: string[], descriptions: string[], selected: number } | null} */
+    let pane = null;
+    try {
+        const r = await api(`/api/question?tmux=${encodeURIComponent(tmux)}`);
+        pane = r.ok ? (await r.json()).question : null;
+    } catch {}
+    const key = JSON.stringify([tmux, data.questions, data.asking, pane && [pane.question, pane.options, pane.descriptions]]); // not the moving ❯
+    if (key === askKey) {
+        return;
+    }
+    askKey = key;
+    $('ask').hidden = false; // shown once filled, never empty
 
-        return [el('p', null, q.question), ...(q.options.length ? [ol] : [])];
-    }));
-    $('ask-cmd').textContent = `tmux attach -t ${s.tmux ?? `cc-${s.id.slice(0, 8)}`}`;
+    const questions = data.questions?.length ? data.questions : [{ question: data.asking, options: [] }];
+    if (!pane) {
+        fillCard('ask', tmux, questions.map(q => q.question).join(' · '), questions.flatMap(q => q.options.map((label, i) => ({ label, desc: q.descriptions?.[i] }))), null);
+        return;
+    }
+    const flat = t => t.replace(/\s+/g, ' ').trim();
+    const known = questions.find(q => flat(q.question) === pane.question);
+    const options = pane.options.map((label, i) => ({ i, label, desc: known?.descriptions?.[known.options.indexOf(label)] || pane.descriptions[i], primary: /\(recommended\)/i.test(label) }))
+        .filter(o => !FREE_FORM.test(o.label));
+    fillCard('ask', tmux, known?.question ?? pane.question, options, async n => {
+        try {
+            await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&option=${options[n].i}&label=${encodeURIComponent(options[n].label)}`);
+        } finally {
+            askKey = null;
+            showAsk(s, data); // the pane shows the next question, or none
+        }
+    });
 }
 
 // A blocking Claude Code startup dialog (workspace trust, first run) read off the tmux pane: its question, an option per button.
@@ -310,30 +376,21 @@ async function showBoot(tmux) {
         const r = tmux && await api(`/api/startup?tmux=${encodeURIComponent(tmux)}`);
         dialog = r && r.ok ? (await r.json()).dialog : null;
     } catch {}
-    if (JSON.stringify(dialog) === JSON.stringify(state.boot ?? null)) {
+    if (state.boot !== undefined && JSON.stringify(dialog) === JSON.stringify(state.boot)) { // undefined: re-render
         return;
     }
     state.boot = dialog;
     $('boot').hidden = !dialog;
-    $('boot-q').textContent = dialog?.question ?? '';
-    $('boot-cmd').textContent = `tmux attach -t ${tmux}`;
-    $('boot-opts').replaceChildren(...(dialog?.options ?? []).map((o, i) => {
-        const b = waButton(o, null, { variant: i === dialog.selected ? 'brand' : 'neutral', appearance: 'outlined' });
-        b.onclick = async () => {
-            $('c-err').textContent = '';
+    if (dialog) {
+        fillCard('boot', tmux, dialog.question, dialog.options.map(label => ({ label })), async i => {
             try {
-                const r = await api(`/api/startup?tmux=${encodeURIComponent(tmux)}&option=${i}&label=${encodeURIComponent(o)}`, { method: 'POST' });
-                if (!r.ok) {
-                    throw new Error(await r.text());
-                }
-            } catch (err) {
-                $('c-err').textContent = err.message;
+                await postAnswer(`/api/startup?tmux=${encodeURIComponent(tmux)}&option=${i}&label=${encodeURIComponent(dialog.options[i])}`);
+            } finally {
+                state.boot = undefined;
+                showBoot(tmux);
             }
-            showBoot(tmux);
-        };
-
-        return b;
-    }));
+        });
+    }
 }
 
 const LANDED_SLACK_MS = 10_000; // a transcript item may predate the send it matches by this much
@@ -458,7 +515,7 @@ export async function refreshChat() {
     }
 
     setStatus(data);
-    showAsk(s, data);
+    await showAsk(s, data);
     compactUi(s, data);
 
     const { items, hidden, cut } = feedItems(s, data);
@@ -803,8 +860,10 @@ export function initChat() {
             $('c-err').textContent = err.message;
         }
     };
-    $('ask-copy').onclick = () => navigator.clipboard.writeText($('ask-cmd').textContent).then(() => {
-        $('ask-copy').textContent = 'Copied';
-        setTimeout(() => { $('ask-copy').textContent = 'Copy'; }, 1500);
-    });
+    for (const b of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.c-copy'))) {
+        b.addEventListener('click', () => navigator.clipboard.writeText($(b.dataset.copy).textContent).then(() => {
+            b.textContent = 'Copied';
+            setTimeout(() => { b.textContent = 'Copy'; }, 1500);
+        }));
+    }
 }

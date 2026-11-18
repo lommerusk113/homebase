@@ -170,7 +170,7 @@ interface OutboxItem extends ChatItem {
 interface Transcript {
     items: ChatItem[];
     asking: string | null;
-    questions: { question: string; options: string[] }[] | null;
+    questions: { question: string; options: string[]; descriptions?: string[] }[] | null;
     working: boolean;
     since?: number;
 }

@@ -167,13 +167,19 @@ a.chip:hover { text-decoration:underline; }
 .tools.api-error::before { content:'⚠ '; }
 .c-feed.needs-only .tools.api-error { display:block; }
 .c-note { margin:0 12px 8px; padding:8px 10px; border-radius:8px; font-size:12.5px; display:flex; gap:8px; align-items:center; }
-.c-ask { align-items:flex-start; background:color-mix(in srgb, var(--c-needs) 14%, var(--bg)); border:1px solid color-mix(in srgb, var(--c-needs) 40%, transparent); }
-.c-ask > div { flex:1; min-width:0; }
-.c-ask code { background:var(--chip); padding:1px 5px; border-radius:4px; white-space:nowrap; }
-.c-ask ol { margin:4px 0 6px; padding-left:20px; }
-.c-ask ol li { font-weight:500; }
-.c-opts { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
-.c-ask p { margin:2px 0 0; }
+/* Claude is asking / startup question: a label, the question as the heading, an option per button, the terminal as a quiet fallback */
+.c-ask { flex-direction:column; align-items:stretch; gap:6px; padding:10px 12px; background:color-mix(in srgb, var(--c-needs) 8%, var(--bg)); border:1px solid color-mix(in srgb, var(--c-needs) 40%, transparent); }
+.c-ask-label { font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+.c-ask-q { font-size:14px; font-weight:600; color:var(--fg); overflow-wrap:anywhere; }
+.c-opts { display:flex; flex-direction:column; gap:6px; }
+.c-opts:empty { display:none; }
+wa-button.c-opt::part(base) { height:auto; min-height:var(--wa-form-control-height); padding-block:6px; justify-content:flex-start; text-align:left; white-space:normal; }
+wa-button.c-opt::part(label) { display:flex; flex-direction:column; align-items:flex-start; gap:1px; }
+.c-opt small { font-size:11.5px; font-weight:400; opacity:.75; }
+.c-opt.ro { display:flex; flex-direction:column; padding:6px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); font-weight:500; }
+.c-term { display:flex; align-items:center; gap:6px; flex-wrap:wrap; color:var(--muted); font-size:11.5px; }
+.c-term code { background:var(--chip); padding:1px 5px; border-radius:4px; white-space:nowrap; color:var(--fg); }
+.c-copy::part(base) { color:var(--muted); padding-inline:6px; }
 /* min-height: the chips' height before they render, so scrolling to the bottom shows them whole */
 .replies { display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0; margin-top:-4px; min-height:26px; }
 .replies wa-button { font-size:12.5px; }

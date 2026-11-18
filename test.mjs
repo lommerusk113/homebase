@@ -2178,10 +2178,15 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
 
         return { sent, err };
     };
-    let r = await run([trust(0), 'claude is starting'], 1, 'Yes, I trust this folder');
+    let r = await run([trust(0), trust(1), 'claude is starting'], 1, 'Yes, I trust this folder');
     assert.equal(r.err, null);
     assert.deepEqual(r.sent.map(a => a.slice(3)), [['Down'], ['Enter']]);
+    r = await run([trust(0), trust(0), trust(1), 'claude is starting'], 1, 'Yes, I trust this folder');
+    assert.deepEqual(r.sent.map(a => a.slice(3)), [['Down'], ['Down'], ['Enter']], 'a dropped arrow is resent');
     r = await run([trust(0)], 1, 'Yes, I trust this folder');
+    assert.equal(r.err.status, 502, 'arrows never land');
+    assert.ok(!r.sent.some(a => a.includes('Enter')), 'never confirms the default');
+    r = await run([trust(0), trust(1)], 1, 'Yes, I trust this folder');
     assert.equal(r.err.status, 502, 'dialog still up');
     r = await run([trust(0)], 1, 'No, exit');
     assert.equal(r.err.status, 409, 'label mismatch');
@@ -2194,7 +2199,7 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     assert.equal(trustFolder(' Accessing workspace:\n /base/league\n Quick safety check: Is this'), '/base/league', 'no blank lines');
     for (const [dir, answered] of [['/base/league', true], ['/base', false], ['/base/league2', false], ['/base/leagu', false]]) {
         const sent = [];
-        const tm = async a => (a[0] === 'capture-pane' ? { stdout: sent.length ? 'ok' : trust(0) } : void sent.push(a));
+        const tm = async a => (a[0] === 'capture-pane' ? { stdout: sent.some(k => k.includes('Enter')) ? 'ok' : sent.length ? trust(1) : trust(0) } : void sent.push(a));
         assert.equal(await trustNewProject('cc-new-league', dir, { tm, nap: async () => {}, waitMs: 1000 }), answered, dir);
         assert.equal(sent.length > 0, answered, `${dir} keys`);
     }

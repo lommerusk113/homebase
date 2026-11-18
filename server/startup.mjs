@@ -81,12 +81,24 @@ export async function answerStartup(name, index, label, { tm = tmux, nap = sleep
         throw Object.assign(new Error('The startup question changed, check it and try again'), { status: 409 });
     }
 
-    for (const args of selectSteps(name, dialog.selected, index)) {
-        if (args.at(-1) === 'Enter') {
-            await nap(200);
+    // Enter only once the ❯ is seen on the chosen option: a just-drawn dialog can drop the arrow keys, and Enter then
+    // confirms the default ("No, exit" quits Claude)
+    let on = dialog.selected;
+    for (let tries = 0; on !== index; tries++) {
+        if (tries === 5) {
+            throw Object.assign(new Error("Couldn't select that option, answer it in the terminal"), { status: 502 });
         }
-        await tm(args);
+        for (const args of selectSteps(name, on, index).slice(0, -1)) {
+            await tm(args);
+        }
+        await nap(300);
+        const now = parseDialog(await capture(name, tm));
+        if (!now || now.options.join('|') !== dialog.options.join('|')) {
+            throw Object.assign(new Error('The startup question changed, check it and try again'), { status: 409 });
+        }
+        on = now.selected;
     }
+    await tm(selectSteps(name, index, index)[0]);
 
     await nap(700);
     const after = parseDialog(await capture(name, tm));

@@ -1802,7 +1802,7 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
 }
 
 {
-    const { validName, mergeConfig, createProject, NEW_PROJECT_DEFAULTS } = await import('./server.mjs');
+    const { validName, mergeConfig, createProject, cloneProject, githubProjects, NEW_PROJECT_DEFAULTS } = await import('./server.mjs');
     const { homedir } = await import('node:os');
 
     // name validation
@@ -1899,6 +1899,53 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
         const both = fake();
         const [a, b] = await Promise.allSettled([createProject({ name: 'dup' }, both.deps), createProject({ name: 'dup' }, both.deps)]);
         assert.deepEqual([a.status, b.reason?.status], ['fulfilled', 409], 'the same name twice at once');
+    }
+
+    // cloning one of the owner's repos: gh lists, the name must be in the list, then the shared clone + chat steps
+    const LIST = [
+        { name: 'old', description: null, isPrivate: false, updatedAt: '2026-01-01T00:00:00Z', isArchived: false },
+        { name: 'dead', description: 'x', isPrivate: true, updatedAt: '2026-12-01T00:00:00Z', isArchived: true },
+        { name: 'new', description: 'Fresh', isPrivate: true, updatedAt: '2026-11-01T00:00:00Z', isArchived: false }
+    ];
+    const withList = (o = {}) => {
+        const f = fake(o);
+        const exec = f.deps.exec;
+        f.deps.exec = async (file, args, opts) => file === 'gh' ? (f.calls.push({ file, args, env: opts.env }), { stdout: JSON.stringify(LIST) }) : exec(file, args, opts);
+        f.deps.ttl = 0;
+        return f;
+    };
+    {
+        const { calls, deps } = withList();
+        const l = await githubProjects({ ...deps, exists: p => p === '/base/old' });
+        assert.deepEqual(l.map(r => [r.name, r.local]), [['new', false], ['old', true]], 'newest first, archived out, local marked');
+        assert.deepEqual(calls[1].args, ['repo', 'list', 'lommerusk113', '--limit', '200', '--json', 'name,description,isPrivate,updatedAt,isArchived']);
+        assert.equal(calls[1].env.GH_TOKEN, TOKEN);
+        assert.equal('GITHUB_TOKEN' in calls[1].env, false);
+        const e = await githubProjects({ ...fake({ failOn: 'gh', leak: true }).deps, ttl: 0 }).catch(e => e);
+        assert.deepEqual([e.status, e.message], [502, 'Could not list repos: HTTP 403 for token [token]']);
+    }
+    {
+        const { calls, deps } = withList();
+        const r = await cloneProject({ name: 'new' }, deps);
+        assert.deepEqual(calls.map(c => c.file), ['security', 'gh', 'git', 'tmux']);
+        assert.deepEqual(calls[2].args, ['clone', 'git@github-personal:lommerusk113/new.git', '/base/new']);
+        assert.deepEqual(calls[3].args.slice(0, 4), ['new-session', '-d', '-s', 'cc-new-new']);
+        assert.deepEqual([r.ok, r.repo, r.dir, r.sessionId, r.steps.map(s => [s.id, s.state])], [true, 'lommerusk113/new', '/base/new', '11111111-2222-3333-4444-555555555555', [['clone', 'done'], ['chat', 'done']]]);
+        noToken(r);
+    }
+    {
+        const { calls, deps } = withList();
+        for (const [name, d, status, re] of [['nope', deps, 404, /no repo named nope/], ['dead', deps, 404, /no repo named dead/], ['../x', deps, 400, /Invalid name/], ['new', { ...deps, exists: () => true }, 400, /already exists/]]) {
+            const e = await cloneProject({ name }, d).catch(e => e);
+            assert.deepEqual([e.status, re.test(e.message)], [status, true], name);
+        }
+        assert.ok(!calls.some(c => c.file === 'git' || c.file === 'tmux'), 'nothing cloned or started');
+        const e = await cloneProject({ name: 'new' }, withList({ failOn: 'git' }).deps).catch(e => e);
+        assert.match(e.message, /^Cloning to \/base\/new failed, so nothing is cloned:/);
+        assert.deepEqual(e.body.steps.map(s => s.state), ['failed', 'pending']);
+        const t = await cloneProject({ name: 'new' }, withList({ failOn: 'tmux' }).deps).catch(e => e);
+        assert.match(t.message, /^Cloned to \/base\/new, but starting Claude failed/);
+        assert.deepEqual(t.body.steps.map(s => s.state), ['done', 'failed']);
     }
     console.log('ok new project');
 }

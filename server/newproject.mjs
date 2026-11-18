@@ -17,7 +17,9 @@ const run = promisify(execFile);
 
 const NAME = /^[A-Za-z0-9._-]{1,100}$/;
 const DESC_MAX = 350;
-const STEPS = [['repo', 'Creating repo'], ['clone', 'Cloning'], ['chat', 'Starting chat']];
+const STEPS = [['clone', 'Cloning'], ['chat', 'Starting chat']];
+const CREATE_STEPS = [['repo', 'Creating repo'], ...STEPS];
+const LIST_TTL_MS = 60_000;
 const TIMEOUT = { gh: 60_000, git: 120_000, tmux: 10_000 };
 
 export const validName = n => typeof n === 'string' && NAME.test(n) && !n.startsWith('.');
@@ -30,6 +32,40 @@ const listTranscripts = dir => readdir(transcriptDir(dir)).then(fs => fs.filter(
 
 const inFlight = new Set();
 const bad = (msg, status = 400) => Object.assign(new Error(msg), { status });
+
+// Clone, start the chat, wait for its session id; `i` is the index of the Cloning step, `made` says what was done before
+// (e.g. "github.com/o/n was created"; empty when nothing was).
+async function cloneAndStart(c, i, made) {
+
+    const { name, dir, repo, sshHost, steps, fail, exec, tm, nap, transcripts, waitMs, trustMs } = c;
+    try {
+        await exec('git', ['clone', `git@${sshHost}:${repo}.git`, dir], { timeout: TIMEOUT.git, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+    } catch (e) {
+        throw fail(i, e, made ? `${made}, but cloning to ${dir} failed, so nothing is cloned:` : `Cloning to ${dir} failed, so nothing is cloned:`);
+    }
+    steps[i].state = 'done';
+
+    // the session id is only known once Claude has written its transcript
+    const tmuxName = `cc-new-${name}`;
+    try {
+        await tm(['new-session', '-d', '-s', tmuxName, '-x', '200', '-y', '50', '-c', dir, 'zsh', '-lic', 'claude']);
+    } catch (e) {
+        throw fail(i + 1, e, made ? `${made} and cloned to ${dir}, but starting Claude failed:` : `Cloned to ${dir}, but starting Claude failed:`);
+    }
+    steps[i + 1].state = 'done';
+
+    await trustNewProject(tmuxName, dir, { tm, nap, waitMs: trustMs }); // never throws; other startup prompts show in the chat
+
+    let sessionId = null;
+    for (let t = 0; t < waitMs && !sessionId; t += 500) {
+        sessionId = (await transcripts(dir))[0]?.replace(/\.jsonl$/, '') ?? null;
+        if (!sessionId) {
+            await nap(500);
+        }
+    }
+
+    return { ok: true, name, repo, dir, tmux: tmuxName, sessionId, steps };
+}
 
 // Runs the three steps. Throws { status, body: { ok: false, steps, error } } when one fails, with a message saying what exists;
 // every string that leaves here has the token scrubbed.
@@ -57,7 +93,7 @@ export async function createProject(body, deps = {}) {
 
     let token = null;
     const scrub = s => scrubToken(s, token);
-    const steps = STEPS.map(([id, label]) => ({ id, label, state: 'pending' }));
+    const steps = CREATE_STEPS.map(([id, label]) => ({ id, label, state: 'pending' }));
     const fail = (i, e, what) => {
         const detail = scrub(e?.stderr?.trim() || (e?.killed ? 'timed out' : e?.message) || 'failed');
         const error = `${what ? `${what} ` : ''}${detail}`;
@@ -66,6 +102,7 @@ export async function createProject(body, deps = {}) {
 
         return Object.assign(new Error(error), { status: 502, body: { ok: false, steps, error } });
     };
+    const ctx = { name, dir, repo, sshHost, steps, fail, exec, tm, nap, transcripts, waitMs, trustMs };
 
     try {
         // a. token, in memory only
@@ -88,34 +125,80 @@ export async function createProject(body, deps = {}) {
         steps[0].state = 'done';
         const made = `github.com/${repo} was created`;
 
-        // c.
-        try {
-            await exec('git', ['clone', `git@${sshHost}:${repo}.git`, dir], { timeout: TIMEOUT.git, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
-        } catch (e) {
-            throw fail(1, e, `${made}, but cloning to ${dir} failed, so nothing is cloned:`);
-        }
-        steps[1].state = 'done';
+        return await cloneAndStart(ctx, 1, made);
+    } finally {
+        inFlight.delete(name);
+    }
+}
 
-        // d. the session id is only known once Claude has written its transcript
-        const tmuxName = `cc-new-${name}`;
-        try {
-            await tm(['new-session', '-d', '-s', tmuxName, '-x', '200', '-y', '50', '-c', dir, 'zsh', '-lic', 'claude']);
-        } catch (e) {
-            throw fail(2, e, `${made} and cloned to ${dir}, but starting Claude failed:`);
-        }
-        steps[2].state = 'done';
+const fresh = new Map(); // owner -> { at, repos }
 
-        await trustNewProject(tmuxName, dir, { tm, nap, waitMs: trustMs }); // never throws; other startup prompts show in the chat
+// The owner's repos, newest first, archived left out (gh as the personal account, like createProject); cached for a minute.
+export async function listRepos(deps = {}) {
 
-        let sessionId = null;
-        for (let t = 0; t < waitMs && !sessionId; t += 500) {
-            sessionId = (await transcripts(dir))[0]?.replace(/\.jsonl$/, '') ?? null;
-            if (!sessionId) {
-                await nap(500);
-            }
-        }
+    const { config = loadConfig(), exec = run, ttl = LIST_TTL_MS } = deps;
+    const hit = fresh.get(config.owner);
+    if (ttl && hit && Date.now() - hit.at < ttl) {
+        return hit.repos;
+    }
 
-        return { ok: true, name, repo, dir, tmux: tmuxName, sessionId, steps };
+    let token = null, repos;
+    try {
+        token = await readToken(config.keychainService, exec, 0);
+        const env = { ...process.env, GH_TOKEN: token };
+        delete env.GITHUB_TOKEN;
+        const { stdout } = await exec('gh', ['repo', 'list', config.owner, '--limit', '200', '--json', 'name,description,isPrivate,updatedAt,isArchived'], { env, timeout: TIMEOUT.gh });
+        repos = JSON.parse(stdout).filter(r => !r.isArchived && validName(r.name)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+            .map(({ name, description, isPrivate, updatedAt }) => ({ name, description: description ?? '', isPrivate, updatedAt }));
+    } catch (e) {
+        const detail = scrubToken(e?.stderr?.trim() || (e?.killed ? 'timed out' : e?.message) || 'failed', token);
+        throw Object.assign(new Error(`Could not list repos: ${detail}`), { status: 502 });
+    }
+    fresh.set(config.owner, { at: Date.now(), repos });
+
+    return repos;
+}
+
+// GET /api/projects/github: the list, each marked with whether its folder already exists.
+export async function githubProjects(deps = {}) {
+
+    const { config = loadConfig(), exists = existsSync } = deps;
+
+    return (await listRepos({ ...deps, config })).map(r => ({ ...r, local: exists(join(config.baseDir, r.name)) }));
+}
+
+// POST /api/projects/clone: clone one of the owner's repos (the name must be in gh's list) and start a chat in it.
+export async function cloneProject(body, deps = {}) {
+
+    const { config = loadConfig(), exec = run, tmux: tm = tmux, exists = existsSync, transcripts = listTranscripts, nap = sleep, waitMs = 20_000, trustMs = 60_000 } = deps;
+    const name = body?.name;
+    if (!validName(name)) {
+        throw bad('Invalid name: use 1-100 letters, digits, ".", "_" or "-", not starting with a dot');
+    }
+    const dir = join(config.baseDir, name);
+    if (exists(dir)) {
+        throw bad(`${dir} already exists`);
+    }
+    if (!(await listRepos({ ...deps, config })).some(r => r.name === name)) {
+        throw bad(`${config.owner} has no repo named ${name}`, 404);
+    }
+    if (inFlight.has(name)) {
+        throw bad(`${name} is already being created`, 409);
+    }
+    inFlight.add(name);
+
+    const steps = STEPS.map(([id, label]) => ({ id, label, state: 'pending' }));
+    const fail = (i, e, what) => {
+        const detail = e?.stderr?.trim() || (e?.killed ? 'timed out' : e?.message) || 'failed';
+        const error = `${what} ${detail}`;
+        steps[i].state = 'failed';
+        steps[i].error = detail;
+
+        return Object.assign(new Error(error), { status: 502, body: { ok: false, steps, error } });
+    };
+
+    try {
+        return await cloneAndStart({ name, dir, repo: `${config.owner}/${name}`, sshHost: config.sshHost, steps, fail, exec, tm, nap, transcripts, waitMs, trustMs }, 0, '');
     } finally {
         inFlight.delete(name);
     }

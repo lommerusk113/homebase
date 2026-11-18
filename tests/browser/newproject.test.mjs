@@ -100,5 +100,43 @@ export default {
         assert.equal(await page.ev(`${byId('np-go')}.disabled`), false, 'can try again');
         assert.deepEqual(await page.ev(`JSON.parse(localStorage.getItem('tracked'))`), ['alpha', 'beta', 'gamma']);
         assert.equal(await page.ev(`localStorage.getItem('project')`), 'alpha');
+    },
+
+    'From my GitHub lists repos, filters, disables local ones, and picking one clones it like a new project': async ({ page, open }) => {
+        await open();
+        await openDialog(page);
+        const repos = [
+            { name: 'fresh', description: 'A fresh one', isPrivate: true, updatedAt: new Date(Date.now() - 3 * 86400_000).toISOString(), local: false },
+            { name: 'have', description: '', isPrivate: false, updatedAt: new Date().toISOString(), local: true }
+        ];
+        await page.ev(`(() => {
+            const real = window.fetch;
+            window.__posts = [];
+            window.fetch = (u, o) => {
+                if (String(u).includes('/api/projects/github')) {
+                    return Promise.resolve(new Response(${JSON.stringify(JSON.stringify(repos))}));
+                }
+                if (String(u).includes('/api/projects/clone')) {
+                    window.__posts.push(JSON.parse(o.body));
+                    return Promise.resolve(new Response(${JSON.stringify(JSON.stringify({ ...ok(NEW_ID), name: 'fresh', repo: 'lommerusk113/fresh', steps: ok(NEW_ID).steps.slice(1) }))}));
+                }
+                return real(u, o);
+            };
+        })()`);
+        await page.click('#np-tab-gh');
+        await page.waitFor(`document.querySelectorAll('.np-repo').length === 2`, { what: 'the repo list' });
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('.np-repo')].map(b => b.dataset.repo + '|' + b.disabled + '|' + b.textContent)`),
+            ['fresh|false|fresh · privateA fresh one · updated 3d ago', 'have|true|havealready cloned']);
+        assert.equal(await page.ev(`${byId('np-go')}.hidden`), true, 'picking is the action');
+        await page.ev(`${byId('np-filter')}.value = 'FRE'; ${byId('np-filter')}.dispatchEvent(new Event('input'))`);
+        assert.equal(await page.ev(`document.querySelectorAll('.np-repo').length`), 1, 'filtered');
+        await page.ev(`document.querySelector('.np-repo[data-repo=have]')?.click()`);
+        assert.equal(await page.ev(`window.__posts.length`), 0, 'a local repo is not clickable');
+        await page.click('.np-repo[data-repo=fresh]');
+        await page.waitFor(`!${byId('new-dlg')}.open`, { what: 'the dialog to close' });
+        assert.deepEqual(await page.ev(`window.__posts`), [{ name: 'fresh' }]);
+        assert.deepEqual(await page.ev(`JSON.parse(localStorage.getItem('tracked'))`), ['alpha', 'beta', 'gamma', 'fresh']);
+        assert.equal(await page.ev(`localStorage.getItem('project')`), 'fresh');
+        assert.equal(await page.ev(`localStorage.getItem('chat:fresh')`), NEW_ID);
     }
 };

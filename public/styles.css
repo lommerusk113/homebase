@@ -88,6 +88,15 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 #new-dlg::part(header) { border-bottom:1px solid var(--line); }
 #new-dlg::part(title) { font-size:14px; font-weight:600; padding-block:14px; }
 .np { display:flex; flex-direction:column; gap:12px; }
+.np-tabs { display:flex; gap:6px; }
+.np[hidden], #np-go[hidden] { display:none; }
+.np-repos { display:flex; flex-direction:column; max-height:300px; overflow-y:auto; border:1px solid var(--line); border-radius:8px; }
+.np-repo { all:unset; box-sizing:border-box; display:flex; flex-direction:column; gap:2px; padding:7px 10px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--line); }
+.np-repo:last-child { border-bottom:0; }
+.np-repo:hover:not(:disabled) { background:var(--accent-bg); }
+.np-repo:disabled { cursor:default; opacity:.55; }
+.np-repo b { font-weight:600; }
+.np-repo span, .np-repos .d-empty { color:var(--muted); font-size:12px; }
 .np-note { margin:0; color:var(--muted); font-size:12.5px; overflow-wrap:anywhere; }
 #np-name[data-invalid]::part(hint) { color:var(--c-needs); }
 .np-steps { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:4px; font-size:13px; }

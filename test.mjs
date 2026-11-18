@@ -2370,3 +2370,24 @@ import { pasteLabel, isLongPaste, expandPastes } from './public/chat.js';
     assert.equal(expandPastes(`see ${pasteLabel(3, long)} and [Pasted text #9 +2 lines]`, { 3: long }), `see ${long} and [Pasted text #9 +2 lines]`, 'unknown labels stay as typed');
     console.log('ok paste labels');
 }
+
+import { cancelQuestion, questionOpen } from './server.mjs';
+{
+    const q = '│ What bothers you?\n❯ 1. [✔] Logo looks bad\n  2. [ ] Too plain\n     Next\n  6. Chat about this\nEnter to select · Tab/Arrow keys to navigate · Esc to cancel\n';
+    const trust = ' Accessing workspace:\n /x\n\n❯ No, exit\n  Yes, I trust this folder\n\nEnter to confirm · Esc to cancel\n';
+    assert.ok(questionOpen(q) && !questionOpen(trust) && !questionOpen('❯ hello\n'));
+    const run = async panes => {
+        const sent = [];
+        const tm = async a => (a[0] === 'capture-pane' ? { stdout: panes.length > 1 ? panes.shift() : panes[0] } : void sent.push(a));
+        const r = await cancelQuestion('cc-new-x', { tm, nap: async () => {} }).catch(e => e);
+        return { r, sent };
+    };
+    let { r, sent } = await run(['idle']);
+    assert.equal(r, false); assert.deepEqual(sent, []);
+    ({ r, sent } = await run([q, q, 'declined']));
+    assert.equal(r, true); assert.deepEqual(sent, [['send-keys', '-t', '=cc-new-x:', 'Escape']]);
+    ({ r } = await run([q]));
+    assert.equal(r.status, 502, 'still open');
+    assert.equal((await cancelQuestion('zsh', { tm: async () => ({ stdout: q }) }).catch(e => e)).status, 400);
+    console.log('ok cancel question');
+}

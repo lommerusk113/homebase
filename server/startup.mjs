@@ -187,6 +187,34 @@ export async function refuseIfTrustDialog(name, { tm = tmux } = {}) {
     }
 }
 
+// An open question or permission prompt in a running chat: a ❯ selection over an "Esc to cancel" footer (not the trust dialog).
+export function questionOpen(pane) {
+
+    const lines = String(pane ?? '').split('\n').filter(l => l.trim());
+    const hint = lines.findLastIndex(l => /Esc to cancel/.test(l));
+
+    return hint >= lines.length - 3 && lines.slice(Math.max(0, hint - 40), hint).some(l => /^\s*❯\s+\S/.test(l)) && !/Accessing workspace:/.test(pane);
+}
+
+// A typed message instead of a click: Esc cancels the open question first, so the text arrives as a new message (Claude sees
+// the question declined, then the message) instead of being typed into the options. -> true if one was cancelled
+export async function cancelQuestion(name, { tm = tmux, nap = sleep } = {}) {
+
+    check(name);
+    if (!questionOpen(await capture(name, tm))) {
+        return false;
+    }
+    await tm(['send-keys', '-t', `=${name}:`, 'Escape']);
+    for (let t = 0; t < 3000; t += 250) {
+        await nap(250);
+        if (!questionOpen(await capture(name, tm))) {
+            cache.delete(name);
+            return true;
+        }
+    }
+    throw Object.assign(new Error("Couldn't close Claude's question, answer it in the terminal"), { status: 502 });
+}
+
 // New project only: the user creating `dir` is consent to trust exactly that folder. Waits for the trust dialog, and answers
 // "Yes" only when it names `dir` itself (not a parent or another folder). Anything else is left to the chat panel. -> true if answered
 export async function trustNewProject(name, dir, { tm = tmux, nap = sleep, waitMs = 60_000 } = {}) {

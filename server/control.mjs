@@ -6,7 +6,7 @@ import { join, basename } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { sessions } from './sessions.mjs';
-import { refuseIfTrustDialog } from './startup.mjs';
+import { refuseIfTrustDialog, cancelQuestion } from './startup.mjs';
 import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, sleep, NEW_TMUX } from './tmux.mjs';
 
 const run = promisify(execFile);
@@ -101,6 +101,7 @@ export async function send(id, text, session = null) {
     }
 
     await refuseIfTrustDialog(name);
+    await cancelQuestion(name);
     await typeSteps(steps);
 
     return name;
@@ -130,6 +131,7 @@ export async function sendToNew(name, text) {
     }
 
     await refuseIfTrustDialog(name);
+    await cancelQuestion(name);
     await typeSteps(steps);
 }
 

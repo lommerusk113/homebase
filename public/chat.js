@@ -372,6 +372,17 @@ async function showAsk(s, data) {
     }
     askKey = key;
     $('ask').hidden = false; // shown once filled, never empty
+    $('ask-dismiss').onclick = async () => {
+        $('ask').hidden = true; // Esc in the chat; the transcript then shows the question declined
+        try {
+            await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&dismiss=1`);
+        } catch (err) {
+            $('ask').hidden = false;
+            $('c-err').textContent = err.message;
+        } finally {
+            askKey = null;
+        }
+    };
 
     const questions = data.questions?.length ? data.questions : [{ question: data.asking, options: [] }];
     if (!pane) {

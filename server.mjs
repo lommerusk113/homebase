@@ -13,7 +13,7 @@ import { limits } from './server/limits.mjs';
 import { log } from './server/log.mjs';
 import { MAX_SEND } from './server/tmux.mjs';
 import { createProject, cloneProject, githubProjects, publicConfig } from './server/newproject.mjs';
-import { startupDialog, answerStartup, paneQuestion, answerQuestion } from './server/startup.mjs';
+import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion } from './server/startup.mjs';
 import { send, sendToNew, interrupt, clearChat, compactChat, editors, openInEditor } from './server/control.mjs';
 import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, bindOk } from './server/security.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
@@ -32,7 +32,7 @@ export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones, mi
 export { limitsOf, peakLimits, contextOf } from './server/limits.mjs';
 export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
 export { tmuxArgs, tmuxFor, findClearedSuccessor, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
-export { parseDialog, parseQuestion, answerQuestion, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
+export { parseDialog, parseQuestion, answerQuestion, cancelQuestion, questionOpen, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
 export { editorsFrom, openInEditor, refuseIfBusy } from './server/control.mjs';
 export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, bindOk } from './server/security.mjs';
 export { validName, mergeConfig, loadConfig, createProject, cloneProject, githubProjects, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
@@ -151,6 +151,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
             if (url.pathname === '/api/question' && req.method === 'GET') {
                 return json({ question: await paneQuestion(url.searchParams.get('tmux')) });
+            }
+            if (isPost('/api/question') && url.searchParams.has('dismiss')) {
+                await cancelQuestion(url.searchParams.get('tmux'));
+                return res.end('ok');
             }
             if (isPost('/api/question')) {
                 await answerQuestion(url.searchParams.get('tmux'), Number(url.searchParams.get('option')), url.searchParams.get('label'));

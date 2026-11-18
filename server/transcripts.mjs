@@ -528,7 +528,7 @@ export function quickReplies(tldr, text) {
     return twoOptions ? ['Yes', 'Do both', 'No'] : ['Yes', 'No'];
 }
 
-// The questions of an AskUserQuestion that has no tool_result yet, as [{ question, options: [label] }], else those of
+// The questions of an AskUserQuestion that has no tool_result yet, as [{ question, options: [label], descriptions }], else those of
 // the hook's marker (see askMarker), else null.
 export function pendingAsk(entries, marker = null) {
 
@@ -540,7 +540,11 @@ export function pendingAsk(entries, marker = null) {
         && e.message.content.some(b => b.type === 'tool_result' && b.tool_use_id === ask.id));
 
     if (ask && !answered) {
-        return (ask.input?.questions ?? []).map(q => ({ question: q.question ?? '', options: (q.options ?? []).map(o => o.label).filter(Boolean) }));
+        return (ask.input?.questions ?? []).map(q => {
+            const opts = (q.options ?? []).filter(o => o.label);
+
+            return { question: q.question ?? '', options: opts.map(o => o.label), descriptions: opts.map(o => o.description ?? '') };
+        });
     }
 
     return markerAsk(marker, entries);

@@ -13,7 +13,7 @@
 | `limits.mjs` | Rate limits from the status-line dumps |
 | `tmux.mjs` | tmux plumbing: socket override, session names, `/clear` aliases, keystroke steps |
 | `control.mjs` | POST actions: send, interrupt, `/clear`, open in editor |
-| `startup.mjs` | Blocking Claude Code startup dialogs in a `cc-*` tmux pane: parse the capture, answer an option, trust the new project's own folder |
+| `startup.mjs` | Blocking Claude Code startup dialogs and AskUserQuestion prompts in a `cc-*` tmux pane: parse the capture, answer an option, trust the new project's own folder |
 | `account.mjs` | which GitHub account a repo's gh calls run as (keychain token for personal repos), the shared token reader, config merge |
 | `newproject.mjs` | POST `/api/projects/new`: name check, the create/clone/start-chat steps with the keychain token kept out of every output |
 | `uploads.mjs` | Chat image uploads: POST `/api/upload` (type and size checks, generated name), GET `/api/upload/<name>` |

@@ -72,6 +72,32 @@ export function saveDraft(storage, sid, ta) {
         }
     } catch {}
 }
+// Long pastes sit in the box as "[Pasted text #n +L lines]", like Claude Code, and expand on send. Kept in sessionStorage
+// so a restored draft still expands after a reload.
+const PASTE_LINES = 5, PASTE_CHARS = 800;
+export const pasteLabel = (n, text) => `[Pasted text #${n} +${text.split('\n').length} lines]`;
+export const isLongPaste = text => text.split('\n').length >= PASTE_LINES || text.length > PASTE_CHARS;
+/** @param {string} text @param {Record<string, string>} pastes */
+export const expandPastes = (text, pastes) => text.replace(/\[Pasted text #(\d+) \+\d+ lines\]/g, (m, n) => pastes[n] ?? m);
+/** @returns {Record<string, string>} */
+const loadPastes = () => {
+    try {
+        return JSON.parse(sessionStorage.getItem('pastes') ?? '{}') ?? {};
+    } catch {
+        return {};
+    }
+};
+/** @param {string} text @returns {string} the label to insert */
+function stashPaste(text) {
+    const pastes = loadPastes();
+    const n = Math.max(0, ...Object.keys(pastes).map(Number)) + 1;
+    pastes[n] = text;
+    try {
+        sessionStorage.setItem('pastes', JSON.stringify(pastes));
+    } catch {}
+
+    return pasteLabel(n, text);
+}
 // Fills an empty ta from the saved draft; the selection is set once the component has rendered the value.
 /** @param {Storage | null} storage @param {string} sid @param {WaTextarea} ta @returns {Promise<boolean>} */
 export async function restoreDraft(storage, sid, ta) {
@@ -739,7 +765,7 @@ export function initChat() {
     $('send').onsubmit = async e => {
         e.preventDefault();
         const s = chatSession(), ta = $('msg'), files = attached;
-        let text = ta.value.trim();
+        let text = expandPastes(ta.value.trim(), loadPastes());
         if (!text && !files.length) {
             return;
         }
@@ -789,6 +815,18 @@ export function initChat() {
         if (files.length) {
             e.preventDefault(); // not also the file's name as text
             attach(files);
+            return;
+        }
+        const text = e.clipboardData?.getData('text/plain') ?? '';
+        if (isLongPaste(text)) {
+            e.preventDefault();
+            const ta = $('msg'), sel = /** @type {HTMLTextAreaElement} */ (('input' in ta && ta.input) || ta);
+            const label = stashPaste(text.replace(/\r\n?/g, '\n'));
+            const start = sel.selectionStart ?? ta.value.length, end = sel.selectionEnd ?? start;
+            ta.value = ta.value.slice(0, start) + label + ta.value.slice(end);
+            ta.updateComplete?.then(() => ta.setSelectionRange(start + label.length, start + label.length));
+            syncSend();
+            saveDraft(draftStorage(), chatSession()?.id, ta);
         }
     });
     const row = $('send').querySelector('.c-row');

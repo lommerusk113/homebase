@@ -80,5 +80,20 @@ export default {
             assert.deepEqual(await page.ev(geometry), before, `typing ${n} lines`);
         }
         assert.ok(await page.ev(`document.getElementById('msg').value.split('\\n').length === 8`));
+    },
+    'a long paste shows as [Pasted text #n +L lines] and is sent in full': async ({ page, open, answerPosts, IDS }) => {
+        await open();
+        await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
+        page.route = answerPosts;
+        await page.click('#msg');
+        await page.type('look: ');
+        const long = Array.from({ length: 12 }, (_, i) => `row ${i}`).join('\\n');
+        await page.ev(`(() => { const dt = new DataTransfer(); dt.setData('text/plain', '${long}');
+            document.getElementById('msg').input.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, composed: true })); })()`);
+        await page.waitFor(`/look: \\[Pasted text #\\d+ \\+12 lines\\]$/.test(document.getElementById('msg').value)`, { what: 'the paste label' });
+        await page.key('Enter');
+        await page.waitFor(`document.querySelector('#feed .bubble.user:last-of-type')?.textContent.includes('row 11')`, { what: 'the full text in the bubble' });
+        const send = page.posts.find(p => p.url.includes(`/api/send?id=${IDS.master}`));
+        assert.equal(send.body, 'look: ' + Array.from({ length: 12 }, (_, i) => `row ${i}`).join('\n'));
     }
 };

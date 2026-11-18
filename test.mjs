@@ -2361,3 +2361,12 @@ import { saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME } from './server.mjs';
     rmSync(dir, { recursive: true, force: true });
     console.log('ok uploads');
 }
+
+import { pasteLabel, isLongPaste, expandPastes } from './public/chat.js';
+{
+    const long = Array.from({ length: 12 }, (_, i) => `line ${i}`).join('\n');
+    assert.equal(pasteLabel(3, long), '[Pasted text #3 +12 lines]');
+    assert.ok(isLongPaste(long) && isLongPaste('x'.repeat(801)) && !isLongPaste('a\nb'));
+    assert.equal(expandPastes(`see ${pasteLabel(3, long)} and [Pasted text #9 +2 lines]`, { 3: long }), `see ${long} and [Pasted text #9 +2 lines]`, 'unknown labels stay as typed');
+    console.log('ok paste labels');
+}

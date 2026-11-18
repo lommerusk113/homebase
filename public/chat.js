@@ -424,7 +424,7 @@ export async function refreshChat() {
         renderBoard();
     }
     showNewer(s);
-    await showBoot(s ? s.tmux ?? `cc-${s.id.slice(0, 8)}` : state.startingTmux);
+    await showBoot(s ? null : state.startingTmux); // only a chat still starting: a running one's ❯ prompts and questions aren't startup dialogs
     if (s && !restored) {
         restored = true;
         restoreDraft(draftStorage(), s.id, $('msg')).then(ok => ok && syncSend());

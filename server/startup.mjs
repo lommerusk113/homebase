@@ -7,12 +7,14 @@ const MAX_OPTIONS = 10;
 const CACHE_MS = 3000;
 const cache = new Map(); // tmux name -> { at, dialog }
 
-// "❯ option … Enter to confirm": the contiguous lines around the ❯ line are the options. -> { question, options, selected } or null
+// "❯ option … Enter to confirm": the contiguous lines around the last ❯ line above the hint are the options (a ❯ further
+// up is the user's own echoed prompt). -> { question, options, selected } or null
 export function parseDialog(pane) {
 
     const lines = String(pane ?? '').split('\n').map(l => l.replace(/\s+$/, ''));
-    const at = lines.findIndex(l => /^\s*❯\s+\S/.test(l));
-    if (at < 0 || !lines.slice(at).some(l => /enter to (confirm|select)/i.test(l))) {
+    const hint = lines.findLastIndex(l => /enter to (confirm|select)/i.test(l));
+    const at = lines.slice(0, Math.max(hint, 0)).findLastIndex(l => /^\s*❯\s+\S/.test(l));
+    if (at < 0) {
         return null;
     }
 

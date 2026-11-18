@@ -2163,6 +2163,8 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
         assert.equal(d.selected, sel);
         assert.match(d.question, /^Quick safety check: Is this a project you created or one you trust\?/);
     }
+    // a running chat: the user's echoed prompt starts with ❯ too; the dialog is the last ❯ above the hint
+    assert.deepEqual(parseDialog(`❯ Please look at the\n  league table\n────\n${trust(1)}`).options, ['No, exit', 'Yes, I trust this folder']);
     assert.equal(parseDialog('some output\n❯ ls\nEnter to confirm'), null, 'a shell prompt is not a dialog');
     assert.equal(parseDialog(trust(0).replace('Enter to confirm', '')), null, 'needs the confirm hint');
 

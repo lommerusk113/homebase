@@ -176,7 +176,7 @@ function head(ms, hint) {
         title.append(s);
     }
     const big = el('div', 'is-big', `${open} open `);
-    big.append(el('small', null, `of ${ms.total}`));
+    big.append(el('small', null, `of ${ms.total ?? '…'}`));
     const segs = [[ms.closed, '--c-ready', 'closed'], [g.closable.length, '--c-ready', 'can be closed'], [g.doing.length, '--c-doing', 'in progress'],
         [g.assigned.length, '--c-idle', 'not started'], [g.unassigned.length, '--c-needs', 'unassigned']];
     const bar = el('div', 'is-bar'), legend = el('div', 'is-legend');
@@ -196,7 +196,9 @@ function head(ms, hint) {
     const mid = el('div');
     mid.append(bar, legend);
     const due = el('div', 'is-due');
-    if (ms.due) {
+    if (ms.mine) {
+        due.append('across ', el('b', null, 'all milestones'));
+    } else if (ms.due) {
         due.append('due ', el('b', null, new Date(ms.due + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })));
     } else {
         due.append(el('b', null, 'No due date'));
@@ -248,7 +250,11 @@ function card(c, ms) {
     if (!c.mrs.length) {
         ft.append(el('span', 'chip', 'no MR'));
     }
-    a.append(top, el('div', 'tt', open ? c.title : shortTitle(c.title, ms.title)), ft);
+    a.append(top, el('div', 'tt', open ? c.title : shortTitle(c.title, ms.title)));
+    if (ms.mine && c.milestoneTitle) {
+        a.append(el('small', 'is-ms', `⚑ ${c.milestoneTitle}`));
+    }
+    a.append(ft);
     if (open) {
         a.append(more(c));
     } else {

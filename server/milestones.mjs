@@ -29,19 +29,31 @@ async function fetchMilestones(repo) {
 // Only issues whose own milestone is the selected one; the API's milestone filter is not trusted on its own.
 export const keepMilestone = (issues, id) => issues.filter(i => i.milestone === id);
 
+// The API's issue payloads as the issue rows the front end draws; milestoneTitle shows on the "Assigned to me" rows.
+const glIssue = i => ({ iid: i.iid, title: i.title, state: i.state === 'closed' ? 'closed' : 'open', assignees: (i.assignees ?? []).map(person), url: i.web_url, milestone: i.milestone?.id, milestoneTitle: i.milestone?.title, desc: excerpt(i.description), updated: i.updated_at });
+const ghIssue = i => ({ iid: i.number, title: i.title, state: i.state, assignees: (i.assignees ?? []).map(person), url: i.html_url, milestone: i.milestone?.number, milestoneTitle: i.milestone?.title, desc: excerpt(i.body), updated: i.updated_at });
+
 async function fetchIssues(repo, ms) {
 
     if (isGitLab(repo)) {
         const p = encodeURIComponent(repo.path);
         // a project milestone by id; a group milestone has no project-scoped endpoint, so by title, then filtered by id
         const path = ms.group ? `projects/${p}/issues?milestone=${encodeURIComponent(ms.title)}&state=all` : `projects/${p}/milestones/${ms.id}/issues`;
-        const list = (await pages(repo, path)).map(i => ({ iid: i.iid, title: i.title, state: i.state === 'closed' ? 'closed' : 'open', assignees: (i.assignees ?? []).map(person), url: i.web_url, milestone: i.milestone?.id, desc: excerpt(i.description), updated: i.updated_at }));
-        return keepMilestone(list, ms.id);
+        return keepMilestone((await pages(repo, path)).map(glIssue), ms.id);
     }
-    const list = (await pages(repo, `repos/${repo.path}/issues?milestone=${ms.id}&state=all`)).filter(i => !i.pull_request)
-        .map(i => ({ iid: i.number, title: i.title, state: i.state, assignees: (i.assignees ?? []).map(person), url: i.html_url, milestone: i.milestone?.number, desc: excerpt(i.body), updated: i.updated_at }));
+    const list = (await pages(repo, `repos/${repo.path}/issues?milestone=${ms.id}&state=all`)).filter(i => !i.pull_request).map(ghIssue);
 
     return keepMilestone(list, ms.id);
+}
+
+// The user's open issues across all milestones.
+async function fetchMine(repo, me) {
+
+    if (isGitLab(repo)) {
+        return (await pages(repo, `projects/${encodeURIComponent(repo.path)}/issues?assignee_username=${encodeURIComponent(me.username)}&state=opened`)).map(glIssue);
+    }
+
+    return (await pages(repo, `repos/${repo.path}/issues?assignee=${encodeURIComponent(me.username)}&state=open`)).filter(i => !i.pull_request).map(ghIssue);
 }
 
 // An MR works on an issue when its title or source branch names the issue number ("#2223 - …", "2223-fix-…").
@@ -92,9 +104,9 @@ export function activeMilestones(mrs, list) {
 }
 
 // The issue groups of one milestone; its open issues' MRs in parallel (api's limiter bounds them).
-async function milestoneIssues(project, repo, ms) {
+async function milestoneIssues(project, repo, load) {
 
-    const issues = await fetchIssues(repo, ms);
+    const issues = await load();
     const links = {};
     if (isGitLab(repo)) {
         await Promise.all(issues.filter(i => i.state === 'open').map(async ({ iid }) => {
@@ -106,7 +118,8 @@ async function milestoneIssues(project, repo, ms) {
 }
 
 // A project's open milestones, the ids its MRs point at, and the issue groups of the chosen one.
-// pick: a milestone id (or a title, as older saved choices hold), "none" for no milestone, empty for the most active one.
+// pick: a milestone id (or a title, as older saved choices hold), "none" for no milestone, "mine" for the open issues
+// assigned to the signed-in user in every milestone (works without milestones too), empty for the most active one.
 export async function milestones(project, pick) {
 
     // right after start the projects come from the warm-up's session scan
@@ -129,6 +142,9 @@ export async function milestones(project, pick) {
     } catch (e) {
         return noMilestones(project, repo, 'error', e.stderr?.trim() || e.message);
     }
+    if (pick === 'mine') {
+        return mineView(project, repo, list, me);
+    }
     if (!list.length) {
         return { ...noMilestones(project, repo, 'none'), me };
     }
@@ -137,11 +153,24 @@ export async function milestones(project, pick) {
     const ms = pick === 'none' ? null : list.find(m => String(m.id) === pick || m.title === pick) ?? list.find(m => m.id === detected[0]);
 
     // the issue groups never wait: until the first load is in, selected has the list's counts and loading: true
-    const issues = ms && swrEntry(`issues:${project}:${ms.id}`, MS_ISSUES_TTL_MS, () => milestoneIssues(project, repo, ms));
+    const issues = ms && swrEntry(`issues:${project}:${ms.id}`, MS_ISSUES_TTL_MS, () => milestoneIssues(project, repo, () => fetchIssues(repo, ms)));
     const selected = !ms ? null : issues.value ? { ...ms, ...issues.value } : { ...ms, loading: !!issues.pending, error: issues.error?.message ?? null };
     const updating = !!(issues?.pending || swr.get(`ms:${project}`).pending);
 
     return { project, milestones: list, detected, me, selected, updating, loading: false, reason: null, url: milestonesPage(repo) };
+}
+
+// The "Assigned to me" pseudo-milestone: id "mine", no due date, the user's open issues from every milestone.
+export function mineView(project, repo, list, me) {
+
+    const base = { id: 'mine', title: 'Assigned to me', due: null, url: milestonesPage(repo).replace(/milestones$/, 'issues'), group: false, closed: 0, total: null, mine: true };
+    if (!me) {
+        return { project, milestones: list, detected: [], me, selected: { ...base, error: 'could not tell who you are on this forge' }, updating: false, loading: false, reason: null, url: milestonesPage(repo) };
+    }
+    const issues = swrEntry(`issues:${project}:mine`, MS_ISSUES_TTL_MS, () => milestoneIssues(project, repo, () => fetchMine(repo, me)));
+    const selected = issues.value ? { ...base, ...issues.value } : { ...base, loading: !!issues.pending, error: issues.error?.message ?? null };
+
+    return { project, milestones: list, detected: [], me, selected, updating: !!(issues.pending || swr.get(`ms:${project}`).pending), loading: false, reason: null, url: milestonesPage(repo) };
 }
 
 const milestonesPage = repo => (isGitLab(repo) ? `https://${repo.host}/${repo.path}/-/milestones` : `https://github.com/${repo.path}/milestones`);

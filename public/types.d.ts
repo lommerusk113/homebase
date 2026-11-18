@@ -188,6 +188,7 @@ interface Issue {
     assignees: Person[];
     url: string;
     milestone?: number;
+    milestoneTitle?: string;
     desc: string;
     updated: string;
     mrs: IssueMr[];
@@ -197,7 +198,10 @@ interface IssueGroups { closable: Issue[]; doing: Issue[]; assigned: Issue[]; un
 
 interface MilestoneSummary { id: number; title: string; due: string | null; url: string; group: boolean; closed: number; total: number }
 
-interface SelectedMilestone extends MilestoneSummary {
+interface SelectedMilestone extends Omit<MilestoneSummary, 'id' | 'total'> {
+    id: number | 'mine';
+    total: number | null;
+    mine?: boolean; // the "Assigned to me" view
     groups?: IssueGroups;
     loading?: boolean;
     error?: string | null;

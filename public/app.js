@@ -1,5 +1,5 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { api, $, el, state, store, saveTracked, inView, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks, setOffline, setFormatWarn, seenAt, authorSummary } from './core.js';
+import { api, $, el, state, store, saveTracked, inView, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, setOffline, setFormatWarn, seenAt, authorSummary } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat, bindChat, isMaster, chatSession } from './chat.js';
 import { openNewProject, initNewProject } from './newproject.js';
@@ -320,6 +320,9 @@ async function pollOnce() {
 
 // "Session ▬ 70%   Week ▬ 63%"; reset times live in each item's tooltip. Hidden without a dump.
 const leftColor = left => (left >= 50 ? 'var(--c-ready)' : left >= 10 ? 'var(--c-warn)' : 'var(--c-danger)');
+/** @type {[number, number][]} */
+let paceSamples = [];
+let paceReset = 0;
 async function refreshLimits() {
     /** @type {Limits | null} */
     let l = null;
@@ -340,6 +343,22 @@ async function refreshLimits() {
             s.append(el('span', 'limit-label'), bar, el('span'));
             return [s, tooltip(s, '')];
         }));
+    }
+    // pace of the 5-hour window: a sample a minute (reset by a new window), the last 8
+    const f = l?.fiveHour, now = Date.now();
+    if (f?.resetsAt !== paceReset) {
+        paceSamples = [];
+        paceReset = f?.resetsAt ?? 0;
+    }
+    if (f && (!paceSamples.length || now - paceSamples.at(-1)[0] >= 60_000)) {
+        paceSamples = [...paceSamples, /** @type {[number, number]} */ ([now, f.used])].slice(-8);
+    }
+    const out = f && runOutIn(paceSamples, f.resetsAt, now);
+    box.querySelector('.limit-pace')?.remove();
+    if (out) {
+        const p = el('span', 'limit-pace', `· empty in ~${out}m`);
+        p.style.color = 'var(--c-warn)';
+        box.append(p);
     }
     box.querySelectorAll('.limit').forEach((s, i) => {
         const v = wins[i], [name, bar, val] = s.children, fill = /** @type {HTMLElement} */ (bar.firstChild);

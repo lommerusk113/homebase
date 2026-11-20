@@ -194,6 +194,17 @@ export const limitLeft = (w, now = Date.now()) => {
 
     return { left: Math.max(0, Math.min(100, Math.round(100 - w.used))), until };
 };
+// Minutes until the window is empty at the pace of its samples [[time, used%]], or null when that is after the reset, the pace is flat or the samples span under 2 minutes.
+/** @param {[number, number][]} samples @param {number} resetsAt @returns {number | null} */
+export const runOutIn = (samples, resetsAt, now = Date.now()) => {
+    const [t0, u0] = samples[0] ?? [], [t1, u1] = samples.at(-1) ?? [];
+    if (samples.length < 2 || t1 - t0 < 120_000 || u1 <= u0) {
+        return null;
+    }
+    const min = (100 - u1) / ((u1 - u0) / (t1 - t0)) / 60000;
+
+    return now + min * 60000 < resetsAt ? Math.max(1, Math.round(min)) : null;
+};
 export const NEEDS_ANSWER = 'Claude needs your answer';
 // Claude's newest reply when it says something still waits on the user (its "Waiting on you: …") and that isn't answered.
 /** @param {{ items?: ChatItem[] } | null} d */

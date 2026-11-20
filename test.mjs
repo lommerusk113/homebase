@@ -838,7 +838,7 @@ assert.equal(peakLimits(peaks, [], now).fiveHour.used, 90); // remembered across
 assert.deepEqual(peakLimits(peaks, [dump(5, 1738443600)], 1738425600_000 + 1).fiveHour, { used: 5, resetsAt: 1738443600_000 }); // new window starts fresh
 assert.equal([...peaks.keys()].some(k => k.includes('1738425600000')), false); // expired window dropped
 assert.equal(peakLimits(new Map(), [{}], now), null);
-import { limitLeft } from './public/core.js';
+import { limitLeft, runOutIn } from './public/core.js';
 assert.deepEqual(limitLeft({ used: 30, resetsAt: now + 80 * 60_000 }, now), { left: 70, until: '1h20m' });
 assert.deepEqual(limitLeft({ used: 37, resetsAt: now + (4 * 1440 + 22 * 60 + 30) * 60_000 }, now), { left: 63, until: '4d22h' });
 assert.deepEqual(limitLeft({ used: 30.5, resetsAt: now + 45 * 60_000 }, now), { left: 70, until: '45m' }); // rounds what is left, like Contado
@@ -2828,3 +2828,12 @@ import { projectOf } from './server/sessions.mjs';
 assert.equal(itemUpdated(null, 0, { updatedAt: 5000 }), 5000);
 assert.equal(itemUpdated({ updated: 9000 }, 100, { updatedAt: 5000 }), 9000);
 assert.equal(itemUpdated(null, 0, null), 0);
+// limits pace: 10% in 10 minutes -> 90% left lasts 90 minutes, if that is before the reset
+{
+    const t = 1_000_000_000, m = 60_000;
+    assert.equal(runOutIn([[t, 40], [t + 10 * m, 50]], t + 10 * m + 120 * m, t + 10 * m), 50);
+    assert.equal(runOutIn([[t, 40], [t + 10 * m, 50]], t + 10 * m + 30 * m, t + 10 * m), null); // resets first
+    assert.equal(runOutIn([[t, 40], [t + 10 * m, 40]], t + 500 * m, t + 10 * m), null); // flat
+    assert.equal(runOutIn([[t, 40], [t + m, 45]], t + 500 * m, t + m), null); // too short to trust
+    assert.equal(runOutIn([[t, 40]], t + 500 * m, t), null);
+}

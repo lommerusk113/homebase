@@ -282,19 +282,23 @@ const DUP_MS = 60_000;
 const INTERRUPTED = /^\[Request interrupted by user(?: for tool use)?\]$/;
 
 // Master chat as bubbles: human prompts, Claude's text (consecutive chunks merged), and one activity line per run of tool calls.
-export function chatItems(entries, max = 60) {
+export const chatItems = (entries, max = 60) => chatFeed(entries, max).items;
+
+// The newest `max` items, plus any older question still waiting on you; earlier: how many older items were left out.
+export function chatFeed(entries, max = 60) {
 
     const items = dedupePrompts([...mergeChunks(rawItems(entries)), ...pendingPrompts(entries)]);
-    const out = pairAnswers(items.map(i => (i.role === 'assistant' ? topicAndTldr(i) : i))).slice(-max);
+    const all = pairAnswers(items.map(i => (i.role === 'assistant' ? topicAndTldr(i) : i)));
 
     // a question the user has answered or replied after no longer needs them
     let replied = false;
-    for (const i of out.toReversed()) {
+    for (const i of all.toReversed()) {
         replied ||= i.role === 'user';
         if (i.needsYou && (replied || i.answer)) {
             i.needsYou = false;
         }
     }
+    const out = all.filter((i, n) => n >= all.length - max || i.needsYou);
 
     // chips stay on every question still waiting, also after Claude said more; a later user message clears needsYou
     for (const i of out) {
@@ -308,7 +312,7 @@ export function chatItems(entries, max = 60) {
         last.replies = replyChips(last);
     }
 
-    return out;
+    return { items: out, earlier: all.length - out.length };
 }
 
 // What a main-chat entry adds to the bubbles, or null for nothing:
@@ -924,7 +928,7 @@ export function formatTokens(n) {
     return `${+(n / d).toFixed(n >= 10 * d || d === 1 ? 0 : 1)}${unit} tok`;
 }
 
-export async function transcript(dir, id) {
+export async function transcript(dir, id, max) {
 
     if (!dir || !id || dir.includes('/') || id.includes('/')) {
         throw Object.assign(new Error('bad path'), { status: 400 });
@@ -940,5 +944,7 @@ export async function transcript(dir, id) {
     const marker = await askMarker(id);
     const turn = turnState(entries, Date.now() - st.mtimeMs, marker, await liveSessions());
 
-    return { items: chatItems(entries), asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', stuck: turn.state === 'stuck', since: turn.since };
+    const { items, earlier } = chatFeed(entries, Math.min(Math.max(Math.trunc(Number(max)) || 60, 1), 10_000));
+
+    return { items, earlier, asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', stuck: turn.state === 'stuck', since: turn.since };
 }

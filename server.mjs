@@ -20,7 +20,7 @@ import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './
 import { saveUpload, readUpload } from './server/uploads.mjs';
 
 export {
-    readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, quickReplies, askList, optionLabels,
+    readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, chatFeed, quickReplies, askList, optionLabels,
     pendingAsk, pendingQuestion, askMarker, markerAsk, turnState, turnPrompts, spawnPrompts, latestTopic, queuedPrompts, addUsage, readUsage, formatDuration, formatTokens
 } from './server/transcripts.mjs';
 export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, stepOf, status, lastActivity, summarize, folderFor, sentSummaries } from './server/sessions.mjs';
@@ -215,7 +215,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return json(await limits());
             }
             if (url.pathname === '/api/transcript') {
-                return json(await transcript(url.searchParams.get('dir'), url.searchParams.get('id')));
+                return json(await transcript(url.searchParams.get('dir'), url.searchParams.get('id'), url.searchParams.get('max')));
             }
             res.statusCode = 404;
             res.end('not found');

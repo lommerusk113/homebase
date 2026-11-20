@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chatItems } from '../../server.mjs';
+import { chatItems, chatFeed } from '../../server.mjs';
 
 const bubble = text => `[...document.querySelectorAll('#feed .bubble')].find(b => b.textContent.includes(${JSON.stringify(text)}))`;
 const ready = page => page.waitFor(`${bubble('tag the release')}`, { what: 'the newest master bubble' });
@@ -140,6 +140,34 @@ export default {
         await ready(page);
         assert.equal(await page.ev(`${bubble('push the branch')}.querySelector('.answer.yes').textContent`), '✓ You: yes');
         assert.equal(await page.ev(`[...document.querySelectorAll('#feed .bubble.user')].some(b => b.textContent.trim() === 'yes')`), false, 'no bubble of its own');
+    },
+
+    '"Show earlier" loads 60 more items above, keeping the view where it was': async ({ page, open, answerPosts }) => {
+        const say = (text, n) => ({ type: 'assistant', timestamp: new Date(Date.UTC(2026, 10, 14, 10, n)).toISOString(), message: { content: [{ type: 'text', text }] } });
+        const turn = { type: 'user', message: { content: '<system-reminder>x</system-reminder>' } };
+        const entries = Array.from({ length: 70 }, (_, n) => [turn, say(`message ${n}`, n)]).flat();
+        const asked = [];
+        await open();
+        await ready(page);
+        page.route = q => {
+            if (!q.url.includes('/api/transcript')) {
+                return answerPosts(q);
+            }
+            const max = Number(new URL(q.url).searchParams.get('max'));
+            asked.push(max);
+            const { items, earlier } = chatFeed(entries, max);
+            return { status: 200, body: JSON.stringify({ items, earlier, working: false, asking: null }), headers: { 'content-type': 'application/json' } };
+        };
+        await page.waitFor(`${bubble('message 69')} && document.querySelector('#feed').firstElementChild.matches('.c-earlier')`, { what: 'the newest 60 under a Show earlier line' });
+        assert.equal(await page.ev(`!!${bubble('message 9')}`), false, 'the 61st newest is not loaded');
+        assert.equal(asked.at(-1), 60);
+        await page.click('#feed .c-earlier button');
+        await page.waitFor(`${bubble('message 0')}`, { what: 'the earlier items' });
+        assert.equal(asked.at(-1), 120);
+        assert.equal(await page.ev(`!!document.querySelector('#feed .c-earlier')`), false, 'nothing earlier left');
+        const box = `document.getElementById('feed').getBoundingClientRect()`;
+        assert.ok(await page.ev(`${bubble('message 0')}.getBoundingClientRect().bottom <= ${box}.top + 1`), 'the loaded items sit above the view');
+        assert.ok(await page.ev(`(() => { const t = ${bubble('message 10')}.getBoundingClientRect().top; return t >= ${box}.top - 30 && t < ${box}.bottom; })()`), 'the view stays at what was the top');
     },
 
     'an API error shows as a red line': async ({ page, open }) => {

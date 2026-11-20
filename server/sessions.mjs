@@ -405,7 +405,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
     const lastTurn = turns.at(-1);
     const turn = turnState(entries, ageMs, marker, live);
     const openPrompts = turnPrompts(entries, ageMs, marker, live);
-    const lastItem = chatItems(entries, 1)[0]; // the chat's newest bubble, so the Work tab and the chat agree on "needs you"
+    const lastItem = chatItems(entries, 1).at(-1); // the chat's newest bubble, so the Work tab and the chat agree on "needs you"
 
     return {
         id: meta.sessionId,

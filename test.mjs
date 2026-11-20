@@ -170,6 +170,16 @@ assert.equal(needy('Is it? Yes.\n\nTLDR: done').needsYou, false);
 // ...until the user replies: then it's history, not a question
 assert.deepEqual(chatItems([say('**▸ Ports · needs you**\n\nTLDR: pick one'), { type: 'user', message: { content: 'use 4478' } }]).map(i => i.needsYou), [false, undefined]);
 assert.equal(chatItems([say('TLDR: Ship it?'), { type: 'user', message: { content: 'yes' } }])[0].needsYou, false); // answered by a chip
+{
+    // the feed keeps the newest `max` items and says how many are earlier, but never cuts a question still waiting on you
+    const { chatFeed } = await import('./server.mjs');
+    const turn = { type: 'user', message: { content: '<system-reminder>x</system-reminder>' } };
+    const long = [{ type: 'user', message: { content: 'go' } }, say('**▸ Ports · needs you**\n\nPick one.'), ...['a', 'b', 'c'].flatMap(t => [turn, say(t)])];
+    const feed = max => { const f = chatFeed(long, max); return [f.items.map(i => i.topic ?? i.text), f.earlier]; };
+    assert.deepEqual(feed(2), [['Ports', 'b', 'c'], 2]);
+    assert.deepEqual(feed(60), [['go', 'Ports', 'a', 'b', 'c'], 0]);
+    assert.deepEqual(chatFeed([...long, { type: 'user', message: { content: 'use 4478' } }], 2).items.map(i => i.text), ['c', 'use 4478']); // answered: cut
+}
 // Two replies with only an agent message / task notification between them stay separate bubbles, each with its own TLDR.
 const twoTurns = chatItems([
     { type: 'user', message: { content: 'security issues?' } },

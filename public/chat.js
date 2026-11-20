@@ -43,6 +43,10 @@ export const chatSession = () => pickChat(visibleSessions(), store.get(bindKey()
 const startingTarget = () => (state.startingTmux === `cc-new-${state.project}` ? state.startingTmux : null);
 let chatKey = null;
 let stick = false; // set by a send: the next render scrolls to the bottom even if the user had scrolled up
+const FEED_STEP = 60; // items per load; "Show earlier" adds this many
+let feedMax = { sid: '', max: FEED_STEP };
+/** @type {number | null} */
+let keepFromBottom = null; // set by "Show earlier": the next render keeps the view where it was
 
 // cleared:<id> holds a timestamp (Clear view) or {"at","mode":"new"} (New conversation: the same cut, but not a "hidden" one)
 /** @param {string | null} raw @returns {{ at: number, fresh: boolean }} */
@@ -682,8 +686,11 @@ export async function refreshChat() {
 
     /** @type {Transcript} */
     let data;
+    if (feedMax.sid !== s.id) {
+        feedMax = { sid: s.id, max: FEED_STEP };
+    }
     try {
-        const r = await api(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}`);
+        const r = await api(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}&max=${feedMax.max}`);
         if (!r.ok) {
             throw new Error(await r.text());
         }
@@ -702,7 +709,7 @@ export async function refreshChat() {
 
     const { items, hidden, cut } = feedItems(s, data);
     const fresh = cut.fresh || !!s.clearedFrom; // a New conversation, before or after the successor is bound
-    const key = s.id + JSON.stringify([items, data.asking, data.working, hidden]);
+    const key = s.id + JSON.stringify([items, data.asking, data.working, hidden, data.earlier]);
     if (key === chatKey) {
         return;
     }
@@ -747,13 +754,23 @@ export async function refreshChat() {
         };
         line.append(btn);
         feed.prepend(line);
+    } else if (data.earlier && !hidden) {
+        const line = el('div', 'c-hidden c-earlier'), btn = el('button', 'show', 'Show earlier');
+        btn.onclick = () => {
+            feedMax.max += FEED_STEP;
+            keepFromBottom = feed.scrollHeight - feed.scrollTop;
+            refreshChat();
+        };
+        line.append(btn);
+        feed.prepend(line);
     } else if (!items.length) {
         feed.append(el('div', 'welcome', fresh ? 'New conversation — say something to Claude' : 'No messages yet. Send one below, or run `claude` in a terminal in this project.'));
     }
 
     addShowMore(feed);
-    feed.scrollTop = first || atBottom || stick ? feed.scrollHeight : top;
+    feed.scrollTop = keepFromBottom !== null ? feed.scrollHeight - keepFromBottom : first || atBottom || stick ? feed.scrollHeight : top;
     stick = false;
+    keepFromBottom = null;
 }
 
 /** @param {string} sid @param {string} key */

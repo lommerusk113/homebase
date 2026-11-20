@@ -3,7 +3,7 @@
 // it never sees real sessions, tmux, GitLab or the :4321 server. Exits non-zero when a test fails.
 // Prints only failures and the summary (full log in last-run.log; -v prints it all). One run at a time per machine: a lock file waits out parallel runs.
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, readdirSync, readFileSync, existsSync, writeFileSync, openSync, closeSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, readdirSync, readFileSync, existsSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -102,8 +102,13 @@ const env = {
     HOMEBASE_DIR: join(tmp, 'homebase'),
     HOMEBASE_STATUSLINE_DIR: join(tmp, 'statusline'),
     HOMEBASE_TMUX_SOCKET: `homebase-browser-test-${process.pid}`, // a tmux server that never exists
-    HOMEBASE_STUB_LOG: join(tmp, 'forge.log')
+    HOMEBASE_STUB_LOG: join(tmp, 'forge.log'),
+    HOMEBASE_CODE_DIR: join(tmp, 'code') // the restart test touches these stand-ins, never the real files other runs share
 };
+for (const f of ['server.mjs', 'server/rules.mjs', 'public/styles.css']) {
+    mkdirSync(join(env.HOMEBASE_CODE_DIR, f, '..'), { recursive: true });
+    writeFileSync(join(env.HOMEBASE_CODE_DIR, f), '');
+}
 delete env.HOMEBASE_LAN;
 // The remote (tailscale serve) port, reached in the tests as http://localhost:<port> instead of the tailnet name.
 const remotePort = await freePort();
@@ -156,7 +161,7 @@ const answerPosts = q => {
 
 const DEFAULTS = { tracked: '["alpha","beta","gamma"]', project: 'alpha', tab: 'work', chat: IDS.master, 'auto-compact': '0' }; // auto-compact is on by default; a test that wants it says so (null = unset)
 const ctx = {
-    page, base, remoteBase, IDS, answerPosts, homebase: env.HOMEBASE_DIR,
+    page, base, remoteBase, IDS, answerPosts, homebase: env.HOMEBASE_DIR, code: env.HOMEBASE_CODE_DIR,
     // Fresh page: storage reset to DEFAULTS plus overrides (null removes a key), then loaded and the board drawn.
     async open(storage = {}) {
         page.route = answerPosts;

@@ -1585,6 +1585,17 @@ import { swrEntry, swr, cached, refreshAll, refreshInfo } from './server.mjs';
 }
 console.log('ok refreshAll, cached');
 
+// A stand-in for the code tree whose mtimes the server watches (HOMEBASE_CODE_DIR): tests touch it, never the real files other runs share.
+function codeDir(dir = mkdtempSync(join(tmpdir(), 'hb-code-'))) {
+
+    for (const f of ['server.mjs', 'server/rules.mjs', 'public/styles.css']) {
+        mkdirSync(join(dir, f, '..'), { recursive: true });
+        writeFileSync(join(dir, f), '');
+    }
+
+    return dir;
+}
+
 // Integration: real server on a random port, over a temp HOME and data dir and a tmux socket nobody uses. Only GETs, rejected POSTs and a refresh with nothing to refresh.
 import { request } from 'node:http';
 import { createServer as netServer } from 'node:net';
@@ -1604,7 +1615,7 @@ import { createServer as netServer } from 'node:net';
         if (config) {
             writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
         }
-        const child = spawn(process.execPath, ['server.mjs'], { cwd: new URL('.', import.meta.url).pathname, env: { ...process.env, HOME: dir, PORT: String(port), HOMEBASE_DIR: dir, HOMEBASE_STATUSLINE_DIR: dir, HOMEBASE_TMUX_SOCKET: 'homebase-test-none', ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
+        const child = spawn(process.execPath, ['server.mjs'], { cwd: new URL('.', import.meta.url).pathname, env: { ...process.env, HOME: dir, PORT: String(port), HOMEBASE_DIR: dir, HOMEBASE_CODE_DIR: codeDir(join(dir, 'code')), HOMEBASE_STATUSLINE_DIR: dir, HOMEBASE_TMUX_SOCKET: 'homebase-test-none', ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
         let out = '';
         await new Promise((ok, fail) => { child.stdout.on('data', c => { out += c; if (out.includes('Homebase on')) ok(); }); child.on('exit', fail); });
         return { port, dir, out, stop: () => { child.kill(); rmSync(dir, { recursive: true, force: true }); } };
@@ -3231,20 +3242,26 @@ import { isStale, serverMtime, pageHash } from './server.mjs';
 {
     assert.equal(isStale(1000, 1000), false);
     assert.equal(isStale(1000, 1001), true);
-    // touching a server or browser file moves serverMtime or pageHash; the mtimes are put back afterwards
+    // touching a server or browser file moves serverMtime or pageHash; in a stand-in tree, as other runs and agents touch the real one
+    const dir = codeDir(), old = process.env.HOMEBASE_CODE_DIR;
+    process.env.HOMEBASE_CODE_DIR = dir;
     const bump = async (file, read) => {
-        const path = new URL(file, import.meta.url), { atime, mtime } = statSync(path), before = await read();
-        try {
-            utimesSync(path, atime, new Date(Date.now() + 60_000));
-            return [before, await read()];
-        } finally {
-            utimesSync(path, atime, mtime);
-        }
+        const before = await read();
+        utimesSync(join(dir, file), new Date(), new Date(Date.now() + 60_000));
+        return [before, await read()];
     };
-    const [m0, m1] = await bump('./server/rules.mjs', serverMtime);
-    assert.ok(isStale(m0, m1), 'server code change is stale');
-    const [h0, h1] = await bump('./public/styles.css', pageHash);
-    assert.notEqual(h0, h1, 'browser file change moves the page hash');
-    assert.equal(await pageHash(), h0);
+    try {
+        const [m0, m1] = await bump('server/rules.mjs', serverMtime);
+        assert.ok(isStale(m0, m1), 'server code change is stale');
+        const [h0, h1] = await bump('public/styles.css', pageHash);
+        assert.notEqual(h0, h1, 'browser file change moves the page hash');
+    } finally {
+        if (old === undefined) {
+            delete process.env.HOMEBASE_CODE_DIR;
+        } else {
+            process.env.HOMEBASE_CODE_DIR = old;
+        }
+        rmSync(dir, { recursive: true });
+    }
     console.log('ok stale detection');
 }

@@ -7,15 +7,17 @@ import { join, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url));
+const HERE = fileURLToPath(new URL('..', import.meta.url));
+// The tree whose mtimes count: this checkout, or HOMEBASE_CODE_DIR so tests touch a stand-in instead of the shared files.
+const root = () => process.env.HOMEBASE_CODE_DIR ?? HERE;
 
 // Paths in dir (relative to the repo) whose name ends in one of exts.
-const filesIn = async (dir, exts) => (await readdir(join(ROOT, dir))).filter(f => exts.some(e => f.endsWith(e))).map(f => join(ROOT, dir, f));
+const filesIn = async (dir, exts) => (await readdir(join(root(), dir))).filter(f => exts.some(e => f.endsWith(e))).map(f => join(root(), dir, f));
 // whole ms: a file whose mtime was set back through a Date (ms precision) reads as unchanged
 const mtimes = paths => Promise.all(paths.map(p => stat(p).then(st => Math.floor(st.mtimeMs), () => 0)));
 
 // Newest mtime of the server's own code: server.mjs and server/*.mjs.
-export const serverMtime = async () => Math.max(...await mtimes([join(ROOT, 'server.mjs'), ...await filesIn('server', ['.mjs'])]));
+export const serverMtime = async () => Math.max(...await mtimes([join(root(), 'server.mjs'), ...await filesIn('server', ['.mjs'])]));
 // A short hash of public/*.js and *.css mtimes: it changes when a browser file changes, without a restart.
 export const pageHash = async () => {
     const files = (await filesIn('public', ['.js', '.css'])).sort();

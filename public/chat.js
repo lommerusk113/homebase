@@ -206,7 +206,9 @@ function bubble(i, sid, prevTopic, look = {}) {
         // a question's options stay out of the fold, under the TLDR
         const parts = foldable(i.tldr, i.options ? i.text.replace(i.options, '') : i.text, key);
         if (i.options) {
-            parts.splice(1, 0, rich(i.options));
+            const opts = rich(i.options);
+            opts.classList.add('b-options');
+            parts.splice(1, 0, opts);
         }
         b.append(...parts);
     } else {
@@ -350,6 +352,7 @@ const postAnswer = async url => {
 
 const FREE_FORM = /^(type something\.?|chat about this)$/i; // Claude's own entries under a question: left to the terminal
 let askKey = null;
+let answeredAsk = null; // data.asking of the question last answered on the pane, until the transcript stops asking it
 
 // The "Claude is asking" card. The question on the tmux pane gets buttons (the server moves the ❯ there and confirms,
 // one question at a time); descriptions come from the transcript, else the pane. Not in tmux: the transcript's questions, read-only.
@@ -361,6 +364,7 @@ async function showAsk(s, data) {
     if (!data.asking) {
         $('ask').hidden = true;
         askKey = null;
+        answeredAsk = null;
         return;
     }
 
@@ -390,6 +394,10 @@ async function showAsk(s, data) {
     };
 
     const questions = data.questions?.length ? data.questions : [{ question: data.asking, options: [] }];
+    if (!pane && data.asking === answeredAsk) {
+        $('ask').hidden = true; // answered, the transcript just hasn't caught up: never re-show its options
+        return;
+    }
     if (!pane) {
         fillCard('ask', tmux, questions.map(q => q.question).join(' · '), questions.flatMap(q => q.options.map((label, i) => ({ label, desc: q.descriptions?.[i] }))), null);
         return;
@@ -401,6 +409,7 @@ async function showAsk(s, data) {
     fillCard('ask', tmux, known?.question ?? pane.question, options, async n => {
         try {
             await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&option=${options[n].i}&label=${encodeURIComponent(options[n].label)}`);
+            answeredAsk = data.asking;
         } finally {
             askKey = null;
             refreshChat(); // fresh transcript: the pane shows the next question or none, and `data` still has the answered one

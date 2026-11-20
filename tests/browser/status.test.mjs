@@ -38,9 +38,25 @@ export default {
         assert.deepEqual(await page.ev(`${opts}.map(b => [b.firstChild.textContent, b.querySelector('small')?.textContent, b.getAttribute('variant')])`),
             [['SQLite (Recommended)', 'file based', 'brand'], ['Postgres', 'from the pane', 'neutral']], 'free-form entries left out; the recommended one is primary');
         await page.ev(`${opts}[1].click()`);
-        await page.waitFor(`document.querySelectorAll('#ask-opts wa-button').length === 0`, { what: 'the read-only fallback once the pane has no question' });
+        await page.waitFor(`document.getElementById('ask').hidden`, { what: 'the card gone once the pane has no question, though the transcript still asks it' });
         const u = new URL(page.posts.find(p => p.url.includes('/api/question')).url);
         assert.deepEqual([u.searchParams.get('tmux'), u.searchParams.get('option'), u.searchParams.get('label')], [`cc-${IDS.asker.slice(0, 8)}`, '1', 'Postgres']);
+    },
+
+    'the ask card shows the current question\'s options, not a previous one\'s': async ({ page, open, IDS, answerPosts }) => {
+        const asking = (question, options) => ({ items: [], working: false, asking: question, questions: [{ question, options, descriptions: options.map(() => '') }] });
+        let transcript = asking('Which database should be the default?', ['Postgres', 'SQLite']);
+        let question = null; // no pane: the transcript's options, read-only
+        await open({ project: 'beta', chat: IDS.asker });
+        page.route = q => (q.url.includes('/api/transcript') ? { body: JSON.stringify(transcript), headers: { 'content-type': 'application/json' } }
+            : q.url.includes('/api/question') && q.method !== 'POST' ? { body: JSON.stringify({ question }), headers: { 'content-type': 'application/json' } }
+                : answerPosts(q));
+        const opts = `[...document.querySelectorAll('#ask-opts .c-opt')].map(b => b.firstChild.textContent)`;
+        await page.waitFor(`JSON.stringify(${opts}) === '["Postgres","SQLite"]'`, { what: 'the first question\'s options' });
+        transcript = asking('Which port?', ['4478', '8080']);
+        await page.waitFor(`document.getElementById('ask-q').textContent === 'Which port?' && JSON.stringify(${opts}) === '["4478","8080"]'`, { what: 'the next question replacing them' });
+        question = { question: 'Which port?', options: ['8080', '4478'], descriptions: ['', ''], selected: 0 }; // the pane, as answerable buttons
+        await page.waitFor(`JSON.stringify(${opts}) === '["8080","4478"]' && document.querySelectorAll('#ask-opts wa-button').length === 2`, { what: 'the pane\'s buttons' });
     },
 
     'status bar: error while the transcript fails, then back': async ({ page, open, answerPosts }) => {

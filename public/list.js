@@ -172,6 +172,26 @@ function starting(s, n) {
     return tr;
 }
 
+// "project · Now: <step> · for 2m" for a working main chat; the time is since its newest tool call, else its turn start.
+/** @param {Session} s */
+export function workingLine(s) {
+    const t = ago(s.stepAt ?? s.since ?? s.lastActivity ?? s.updated);
+    return `${s.project} · Now: ${s.step || 'thinking'}${t === 'now' ? '' : ` · for ${t}`}`;
+}
+// The project's main chat while it works: "<topic>" with "project · Now: <step> · for 2m". Click chats with it. Leaves with the status.
+/** @param {Session} s */
+function workingRow(s) {
+    const tr = el('tr', 'starting working'), what = el('td', 'what'), b = el('b');
+    tr.dataset.key = `working:${s.id}`;
+    tr.setAttribute('role', 'button');
+    b.append(el('span', 'pulse'), ` ${s.title || sessionTopic(s)} `, el('span', 'chip', 'main chat'));
+    what.append(b, el('small', 'next', workingLine(s)));
+    what.colSpan = 6;
+    tr.append(what);
+    tr.onclick = () => focusChat(s.id);
+    return tr;
+}
+
 // "<chat> is asking" (an AskUserQuestion or a permission prompt) or "<chat> needs you" (its idle reply wants a decision) atop Needs you. Click chats with it.
 /** @param {Session} s */
 function askingRow(s) {
@@ -337,10 +357,13 @@ function renderItems() {
     const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).map(x => optimistic(x)).sort((a, b) => b.updated - a.updated);
     const placeholders = visibleSessions().filter(isMaster).flatMap(s => startingIssues(s, visibleSessions().filter(o => o.project === s.project).flatMap(o => o.items || [])).map(n => starting(s, n)));
     const asking = visibleSessions().filter(waitsOnYou).map(askingRow);
+    // one row per session: a "starting #N" placeholder already stands for a working chat
+    const covered = new Set(placeholders.map(r => r.dataset.key.split(':')[1]));
+    const working = visibleSessions().filter(s => isMaster(s) && s.status === 'working' && !waitsOnYou(s) && !covered.has(s.id)).map(workingRow);
     const finishedKey = `fold:finished:${state.project}`, reviewKey = `fold:review:${state.project}`;
     const reviews = (state.reviews ?? []).filter(r => state.project === 'all' || r.project.split('/').pop() === state.project);
     const groups = COLUMNS.map(c => {
-        const list = items.filter(x => x.column === c.key), extra = c.key === 'doing' ? placeholders : c.key === 'needs-you' ? asking : [];
+        const list = items.filter(x => x.column === c.key), extra = c.key === 'doing' ? [...placeholders, ...working] : c.key === 'needs-you' ? asking : [];
         if (!list.length && !extra.length) {
             return null;
         }

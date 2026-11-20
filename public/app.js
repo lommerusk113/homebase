@@ -650,4 +650,4 @@ api('/api/tracked').then(r => (r.ok ? r.json() : undefined)).then(list => {
     }
 }).catch(() => {});
 poll();
-setInterval(poll, 3000);
+setInterval(poll, 1500); // /api/sessions costs ~40ms warm (GitLab stays behind its own caches), so a new row or Now: line lands within ~1.5s

@@ -1175,6 +1175,9 @@ import { turnState } from './server.mjs';
     assert.equal(status(turn.at(-1), 5 * 60_000, turnState(turn, 5 * 60_000)), 'working');
     assert.equal(status(turn.at(-1), 5 * 60_000, { state: 'asking' }), 'waiting');
     assert.equal(summarize([...turn, td('55:43')], 1_000).status, 'waiting');
+    // the open turn's newest tool call is its Now line, with when it started
+    const running = summarize([...turn, tool('n', '55:42', 'Bash')], 1_000);
+    assert.deepEqual([running.status, running.step, running.stepAt], ['working', 'running ', Date.parse(at('55:42'))]);
     console.log('ok turn state');
 }
 
@@ -2133,7 +2136,7 @@ import { latestTopic, queuedPrompts } from './server.mjs';
     console.log('ok queuedPrompts');
 }
 
-import { sessionRows, sessionTopic, sessionState, startingIssues } from './public/list.js';
+import { sessionRows, sessionTopic, sessionState, startingIssues, workingLine } from './public/list.js';
 {
     const ses = (id, project, at, extra = {}) => /** @type {any} */ ({ id, project, lastActivity: at, cwd: `/r/${project}`, sidechain: false, ...extra });
     const list = [ses('a', 'p', 1), ses('b', 'p', 3), ses('c', 'p', 2), ses('d', 'q', 5), ses('w', 'p', 9, { cwd: '/r/p/.claude/worktrees/x' }), ses('s', 'p', 9, { sidechain: true })];
@@ -2154,6 +2157,9 @@ import { sessionRows, sessionTopic, sessionState, startingIssues } from './publi
     assert.deepEqual(startingIssues(m, items), [], 'a subagent title, branch or MR issue covers it');
     assert.deepEqual(startingIssues({ ...m, status: 'idle', queued: [] }, []), [], 'turn over: no placeholder');
     assert.deepEqual(startingIssues({ ...m, now: 'see !2225 and #22250', queued: [] }, [{ title: '#2225' }]), ['22250'], 'MR refs are not issues; #2225 does not cover #22250');
+    assert.equal(workingLine(ses('x', 'p', now, { step: 'running npm test', stepAt: now - 125_000 })), 'p · Now: running npm test · for 2m');
+    assert.equal(workingLine(ses('x', 'p', now, { step: null, since: now - 300_000 })), 'p · Now: thinking · for 5m', 'no tool call yet: the turn start');
+    assert.equal(workingLine(ses('x', 'p', now, { step: 'editing a.js', stepAt: now })), 'p · Now: editing a.js', 'under a minute: no time');
     console.log('ok sessionRows');
 }
 

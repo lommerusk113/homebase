@@ -117,6 +117,21 @@ export default {
         }
     },
 
+    'a working main chat shows in Doing with its Now line, opens its chat, and leaves when idle': async ({ page, open }) => {
+        // the poll answers are patched: the idle master (alpha) works on a step for 2 minutes, until window.idle is set
+        await open({ chat: IDS.worker });
+        await page.ev(`(() => { window.t0 = Date.now(); const f = window.fetch; window.fetch = async (u, o) => { const r = await f(u, o); if (!String(u).startsWith("/api/sessions")) return r; const j = await r.json(); for (const s of j) if (s.id === "${IDS.master}" && !window.idle) { Object.assign(s, { status: 'working', asking: false, needsYou: false, needsText: null, step: 'running npm test', stepAt: window.t0 - 125_000, since: window.t0 - 300_000 }); } return new Response(JSON.stringify(j), { headers: { 'content-type': 'application/json' } }); }; })()`);
+        const key = `working:${IDS.master}`;
+        await page.waitFor(`document.querySelector('#masters .g-doing tr[data-key="${key}"]')`, { what: 'the main chat row in Doing' });
+        assert.equal(await page.ev(`${row(key)}.querySelector('b').textContent.trim()`), 'Login work main chat');
+        assert.equal(await page.ev(`${row(key)}.querySelector('.next').textContent`), 'alpha · Now: running npm test · for 2m');
+        assert.equal(await page.ev(`!!document.querySelector('#masters tr[data-key="asking:${IDS.master}"]')`), false, 'working, so not in Needs you');
+        await page.click(`#masters tr[data-key="${key}"]`);
+        await page.waitFor(`!document.getElementById('c-back').hidden`, { what: 'the master chat to open with a way back' });
+        await page.ev(`window.idle = true`);
+        await page.waitFor(`!document.querySelector('tr[data-key="${key}"]')`, { what: 'the row to leave Doing once idle' });
+    },
+
     'Recently finished is folded until opened': async ({ page, open }) => {
         await open();
         await page.waitFor(`document.querySelector('#masters .group.g-finished')`, { what: 'the finished group' });

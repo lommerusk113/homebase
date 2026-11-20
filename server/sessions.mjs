@@ -407,7 +407,7 @@ function turnStep(turns, since) {
         return null;
     }
 
-    return stepOf(e.message.content.findLast(b => b.type === 'tool_use'));
+    return { step: stepOf(e.message.content.findLast(b => b.type === 'tool_use')), at: Date.parse(e.timestamp) || null };
 }
 
 export function summarize(entries, ageMs, marker = null, live = null) {
@@ -420,6 +420,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
     const openPrompts = turnPrompts(entries, ageMs, marker, live);
     const lastItem = chatItems(entries, 1).at(-1); // the chat's newest bubble, so the Work tab and the chat agree on "needs you"
 
+    const step = turn.state === 'working' ? turnStep(turns, turn.since) : null;
     const needsYou = turn.state === 'idle' && lastItem?.role === 'assistant' && !!lastItem.needsYou && !lastItem.answer && !lastItem.error;
 
     return {
@@ -440,7 +441,8 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         topic: latestTopic(entries),
         openPrompts,
         now: openPrompts.at(-1)?.text ?? null, // the human prompt the running turn works on (newest absorbed one wins)
-        step: turn.state === 'working' ? turnStep(turns, turn.since) : null,
+        step: step?.step ?? null,
+        stepAt: step?.at ?? null, // when that call started, for "for 2m" on the Now line
         queued: queuedPrompts(entries).map(q => q.text),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),

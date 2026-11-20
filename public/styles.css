@@ -165,6 +165,7 @@ a.chip:hover { text-decoration:underline; }
 .c-focus[hidden] { display:none; }
 .c-focus b { color:var(--fg); }
 .c-back[hidden] { display:none; }
+.c-next { margin:0 0 0 8px; max-width:50%; overflow:hidden; text-overflow:ellipsis; }
 .c-branch, .c-unpushed { flex-shrink:1; min-width:0; max-width:35%; margin-left:6px; padding:1px 7px; border:1px solid var(--line); border-radius:9px; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); }
 .c-branch.warn { color:var(--c-warn); border-color:var(--c-warn); }
 .c-branch[hidden], .c-unpushed[hidden] { display:none; }

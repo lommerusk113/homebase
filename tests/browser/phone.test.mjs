@@ -31,7 +31,7 @@ export default {
             assert.equal(await page.ev(`${shown('feed')} && !${shown('log')}`), true);
             await pane(page, 'work');
             await page.click(`#masters tr[data-key="asking:${IDS.asker}"]`);
-            await page.waitFor(`localStorage.getItem('chat') === ${JSON.stringify(IDS.asker)} && ${shown('feed')}`, { what: 'the asking chat, in the chat pane' });
+            await page.waitFor(`!document.getElementById('c-back').hidden && ${shown('feed')}`, { what: 'the asking chat, in the chat pane' });
             await page.waitFor(`!document.getElementById('ask').hidden && getComputedStyle(document.querySelector('#ptabs .pt-dot')).display !== 'none'`, { what: 'the ask card and the Chat dot' });
         });
     },

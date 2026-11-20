@@ -1,6 +1,6 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision } from './core.js';
-import { renderBoard } from './list.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou } from './core.js';
+import { renderBoard, sessionTopic } from './list.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
 /** @param {Session} s */
@@ -147,11 +147,39 @@ export function bindChat(id) {
 /** @param {string} id */
 export function focusChat(id) {
     const main = pickChat(visibleSessions(), store.get(bindKey()), state.chat);
+    clearTimeout(returnTimer);
+    nextId = null;
+    $('c-next').hidden = true;
     state.focus = id === main?.id ? null : id;
     renderBoard();
     refreshChat();
 }
+// After a focused question is answered: back to the main chat in 1.5s, unless another chat waits on the user, then
+// the header offers "Next: <title> →" instead of jumping.
+let returnTimer;
+let nextId = null;
+/** @param {string} sid */
+function answered(sid) {
+    if (sid !== state.focus) {
+        return;
+    }
+    clearTimeout(returnTimer);
+    returnTimer = setTimeout(() => {
+        if (state.focus !== sid) {
+            return;
+        }
+        const next = visibleSessions().find(o => o.id !== sid && waitsOnYou(o));
+        if (next) {
+            nextId = next.id;
+            $('c-next').textContent = `Next: ${next.title || sessionTopic(next)} →`;
+            $('c-next').hidden = false;
+        } else {
+            unfocusChat();
+        }
+    }, 1500);
+}
 export function unfocusChat() {
+    clearTimeout(returnTimer);
     if (state.focus) {
         state.focus = null;
         renderBoard();
@@ -466,6 +494,7 @@ function showRules(s) {
 function showHead(s) {
 
     $('c-back').hidden = !(s && s.id === state.focus);
+    $('c-next').hidden = $('c-back').hidden || !nextId;
     const title = s ? [s.project, s.topic].filter(Boolean).join(' · ') : '';
     $('c-title').textContent = title;
     $('c-title').title = title;
@@ -645,6 +674,7 @@ async function showAsk(s, data) {
         try {
             await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&${options[n].i < 0 ? 'dismiss=1' : `option=${options[n].i}&label=${encodeURIComponent(options[n].label)}&seen=${seenHash(pane)}`}`);
             answeredAsk = data.asking;
+            answered(s.id);
             if (CHAT.test(options[n].label)) {
                 $('msg').focus(); // the user's turn to say what they want instead
             }
@@ -1109,6 +1139,7 @@ export async function sendText(sid, text, answerTo, note) {
             throw new Error(await r.text());
         }
         out.okAt = Date.now();
+        answered(sid);
         setTimeout(refreshChat, 1000);
         return true;
     } catch (err) {
@@ -1136,6 +1167,7 @@ export function initChat() {
     setAutoCompact(store.get('auto-compact') !== '0');
     initNewMarker();
     $('c-back').onclick = unfocusChat;
+    $('c-next').onclick = () => nextId && focusChat(nextId);
     document.addEventListener('keydown', e => e.key === 'Escape' && state.focus && !e.composedPath().some(n => /^(INPUT|WA-TEXTAREA|TEXTAREA|WA-DIALOG|WA-DROPDOWN)$/.test(/** @type {Element} */ (n).nodeName || '')) && unfocusChat());
     $('msg').addEventListener('input', () => {
         syncSend();

@@ -42,5 +42,27 @@ export default {
         await page.ev(`document.activeElement?.blur()`);
         await page.key('Escape');
         await page.waitFor(`${back}.hidden`, { what: 'the main chat' });
+    },
+
+    'after an answer the pane returns to the main chat 1.5s later': async ({ page, open, IDS }) => {
+        await open({ project: 'alpha', chat: IDS.worker }); // only the master waits in alpha
+        await page.waitFor(`document.querySelector('${row(IDS.master)}')`, { what: 'the row' });
+        await page.click(row(IDS.master));
+        await page.waitFor(`!${back}.hidden`, { what: 'the back button' });
+        await page.ev(`import('/chat.js').then(m => m.sendText(${JSON.stringify(IDS.master)}, 'Yes, tag it'))`);
+        await page.waitFor(`${back}.hidden && ${focus}.hidden`, { what: 'the automatic return', timeout: 5000 });
+        assert.equal(await page.ev(`document.getElementById('c-next').hidden`), true);
+    },
+
+    'after an answer with another needs-you waiting, a Next link replaces the return': async ({ page, open, IDS }) => {
+        await open({ project: 'all', chat: IDS.worker });
+        await page.waitFor(`document.querySelector('${row(IDS.master)}') && document.querySelector('${row(IDS.asker)}')`, { what: 'both rows' });
+        await page.click(row(IDS.master));
+        await page.waitFor(`!${back}.hidden`, { what: 'the back button' });
+        await page.ev(`import('/chat.js').then(m => m.sendText(${JSON.stringify(IDS.master)}, 'Yes, tag it'))`);
+        await page.waitFor(`!document.getElementById('c-next').hidden && /^Next: .* →$/.test(document.getElementById('c-next').textContent)`, { what: 'the Next link', timeout: 5000 });
+        assert.equal(await page.ev(`${back}.hidden`), false, 'no jump back');
+        await page.click('#c-next');
+        await page.waitFor(`!document.getElementById('ask').hidden && /Which database/.test(document.getElementById('ask-q').textContent) && document.getElementById('c-next').hidden`, { what: "the asker's question" });
     }
 };

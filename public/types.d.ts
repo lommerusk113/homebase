@@ -80,6 +80,7 @@ interface PrState {
     target: string;
     issue: string;
     sha: string;
+    updatedAt: number;
     replied: number;
     repliedTo: string[];
 }

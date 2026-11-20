@@ -239,7 +239,7 @@ function itemRows(x) {
     } else if (x.action && x.sessionId) {
         act.append(...actionButton(x));
     }
-    tr.append(what, prog, pr, br, act, el('td', 'when', ago(x.updated)));
+    tr.append(what, prog, pr, br, act, el('td', 'when', x.updated ? ago(x.updated) : ''));
     tr.onclick = () => select(x);
     if (state.selected !== x.key) {
         return [tr];

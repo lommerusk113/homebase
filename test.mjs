@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, re
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, execFileSync } from 'node:child_process';
-import { status, summarize, column } from './server.mjs';
+import { status, summarize, column, itemUpdated } from './server.mjs';
 
 assert.equal(column('working', { state: 'merged' }, true), 'doing');
 assert.equal(column('idle', { state: 'merged' }, true), 'done');
@@ -2823,3 +2823,8 @@ import { projectOf } from './server/sessions.mjs';
     assert.equal(opts.timeout, 5000);
     console.log('ok projectOf no cache on failure');
 }
+
+// item age: forge-seeded MRs (no agent, no link time) take the MR's own update; nothing known stays 0
+assert.equal(itemUpdated(null, 0, { updatedAt: 5000 }), 5000);
+assert.equal(itemUpdated({ updated: 9000 }, 100, { updatedAt: 5000 }), 9000);
+assert.equal(itemUpdated(null, 0, null), 0);

@@ -76,6 +76,7 @@ async function fetchPr(url) {
             state,
             title: mr.title,
             branch: mr.source_branch,
+            updatedAt: Date.parse(mr.updated_at) || 0,
             reviewers: (mr.reviewers ?? []).map(r => r.name),
             // ready means merge now, so a failing or running pipeline (GitLab allows it when CI isn't required) is not ready
             ready: (status === 'mergeable' || !!prev?.ready) && !ci,
@@ -95,7 +96,7 @@ async function fetchPr(url) {
 
     const repo = repoOfUrl(url);
     const view = fields => ghRun(repo, ['pr', 'view', url, '--json', fields], { timeout: apiTimeout() });
-    const fields = 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid';
+    const fields = 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid,updatedAt';
     // a token without read:org (the personal one) can't read reviewRequests; the reviewers then come from the reviews alone
     const { stdout } = await view(fields).catch(e => (/required scopes/.test(e.message) ? view(fields.replace('reviewRequests,', '')) : Promise.reject(e)));
     const pr = JSON.parse(stdout);
@@ -106,6 +107,7 @@ async function fetchPr(url) {
         state: pr.state.toLowerCase(),
         title: pr.title,
         branch: pr.headRefName,
+        updatedAt: Date.parse(pr.updatedAt) || 0,
         reviewers: [...new Set([...(pr.reviewRequests ?? []).map(r => r.login ?? r.name), ...reviews.map(r => r.author?.login)].filter(Boolean))],
         // an empty reviewDecision means the repo requires no review (hobby repos without branch protection)
         ready: (pr.reviewDecision === 'APPROVED' || !pr.reviewDecision) && !pr.isDraft && !ciOf(pipeline),

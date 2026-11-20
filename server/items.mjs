@@ -66,6 +66,9 @@ function lifecycle(pr, prState, agent) {
     return pr ? 2 : [0, 0, 1, 2, 2][agent?.stage ?? 0];
 }
 
+// Last activity: the newest of the agent's, the link's and the MR's own update (forge-seeded MRs have no agent or link time); 0 when none.
+export const itemUpdated = (agent, linkedAt, prState) => Math.max(agent?.updated ?? 0, linkedAt ?? 0, prState?.updatedAt ?? 0);
+
 export function itemColumn(prState, agent, hasPr) {
 
     if (prState?.state === 'merged' || prState?.state === 'closed') {
@@ -340,7 +343,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             stage,
             stageLabel: prState?.state === 'closed' ? 'Closed' : LIFECYCLE[stage],
             agentStatus: agent?.status ?? null,
-            updated: Math.max(agent?.updated ?? 0, it.linkedAt),
+            updated: itemUpdated(agent, it.linkedAt, prState),
             branch: [prState?.branch, agent?.branch].find(b => b && b !== 'HEAD') ?? null, // transcript gitBranch is unreliable inside worktrees; HEAD is a detached checkout
             stepAt: agent?.status === 'running' ? agent.stepAt ?? null : null,
             worktreePath: agent?.worktreePath ?? null,

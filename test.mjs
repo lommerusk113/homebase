@@ -1664,6 +1664,7 @@ import { createServer as netServer } from 'node:net';
         assert.equal((await remote({ ...subscribe, path: '/api/push/subscribe', headers: { ...subscribe.headers, cookie }, body: JSON.stringify(pushSub) })).status, 200);
         const subsFile = join(rs.dir, 'subscriptions.json');
         assert.equal(JSON.parse(readFileSync(subsFile, 'utf8')).length, 1);
+        assert.equal((await remote({ path: '/api/server/reload', method: 'POST', headers: { cookie, 'x-homebase-token': token, 'x-codetool': '1' } })).status, 403, 'a phone cannot reload the server');
         // revoke on the Mac: the device is back to the pair page
         const [dev] = JSON.parse((await call(rs.port, { path: '/api/pair/devices', headers: { 'x-homebase-token': local } })).body);
         assert.equal(dev.name, 'Phone');
@@ -1672,6 +1673,36 @@ import { createServer as netServer } from 'node:net';
         assert.deepEqual(JSON.parse(readFileSync(subsFile, 'utf8')), [], 'revoke drops the device\'s push subscriptions');
     } finally { rs.stop(); }
     console.log('ok remote access');
+
+    // Reload: POST /api/server/reload replaces the server with a fresh process on the same port.
+{
+    const s = await start({});
+    let pid;
+    try {
+        const token = meta((await call(s.port)).body);
+        const v = JSON.parse((await call(s.port, { path: '/api/version', headers: { 'x-homebase-token': token } })).body);
+        assert.equal(v.serverStale, false);
+        assert.match(v.page, /^[\w-]{12}$/);
+        assert.equal((await call(s.port, { path: '/api/server/reload', method: 'POST', headers: { 'x-homebase-token': token } })).status, 404, 'needs x-codetool');
+        assert.equal((await call(s.port, { path: '/api/server/reload', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token } })).body, 'ok');
+        for (let i = 0; !pid && i < 50; i++) {
+            await new Promise(r => setTimeout(r, 200));
+            const page = await call(s.port).catch(() => null);
+            const fresh = page?.status === 200 && meta(page.body);
+            if (fresh && fresh !== token) {
+                pid = JSON.parse((await call(s.port, { path: '/api/version', headers: { 'x-homebase-token': fresh } })).body).pid;
+            }
+        }
+        assert.ok(pid && pid !== v.pid, 'a new server answers on the same port');
+        assert.match(readFileSync(join(s.dir, 'server.log'), 'utf8'), /Homebase on/);
+    } finally {
+        if (pid) {
+            process.kill(pid);
+        }
+        s.stop();
+    }
+    console.log('ok server reload');
+}
 }
 
 import { limiter, dedupe } from './server.mjs';
@@ -3099,4 +3130,26 @@ import { encrypt, vapidKeys, vapidJwt, pushTo, validSub, readSubs, addSub, remov
     r = pushEvents(r.next, [s('a', { asking: true }), s('b', { needsYou: true })], sent, 41_000);
     assert.deepEqual(r.events.map(e => e.chat), ['b'], 'a still asking: no new push');
     console.log('ok push transitions');
+}
+
+import { isStale, serverMtime, pageHash } from './server.mjs';
+{
+    assert.equal(isStale(1000, 1000), false);
+    assert.equal(isStale(1000, 1001), true);
+    // touching a server or browser file moves serverMtime or pageHash; the mtimes are put back afterwards
+    const bump = async (file, read) => {
+        const path = new URL(file, import.meta.url), { atime, mtime } = statSync(path), before = await read();
+        try {
+            utimesSync(path, atime, new Date(Date.now() + 60_000));
+            return [before, await read()];
+        } finally {
+            utimesSync(path, atime, mtime);
+        }
+    };
+    const [m0, m1] = await bump('./server/rules.mjs', serverMtime);
+    assert.ok(isStale(m0, m1), 'server code change is stale');
+    const [h0, h1] = await bump('./public/styles.css', pageHash);
+    assert.notEqual(h0, h1, 'browser file change moves the page hash');
+    assert.equal(await pageHash(), h0);
+    console.log('ok stale detection');
 }

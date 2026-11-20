@@ -1,4 +1,18 @@
 import assert from 'node:assert/strict';
+import { statSync, utimesSync } from 'node:fs';
+import { sleep } from './cdp.mjs';
+
+// Moves a repo file's mtime a minute ahead while fn runs, then puts it back.
+async function touched(file, fn) {
+    const path = new URL(`../../${file}`, import.meta.url), { atime, mtime } = statSync(path);
+    utimesSync(path, atime, new Date(Date.now() + 60_000));
+    try {
+        await fn();
+    } finally {
+        utimesSync(path, atime, mtime);
+    }
+}
+const banner = `document.getElementById('updated').hidden ? '' : document.getElementById('updated').textContent`;
 
 const token = `import('/core.js').then(m => m.page.token ?? document.querySelector('meta[name=homebase-token]').content)`;
 
@@ -15,5 +29,12 @@ export default {
         assert.equal(page.navigations, before.navigations, 'no navigation');
         assert.equal(await page.ev(`document.getElementById('msg').value`), 'a draft that must survive');
         assert.equal(await page.ev(`document.getElementById('updated').hidden`), true, 'same build, no update banner');
+    },
+    'a changed browser file offers Refresh, changed server code offers Reload server': async ({ page, open }) => {
+        await open();
+        await sleep(1500); // the first poll's /api/version is the baseline
+        assert.equal(await page.ev(banner), '');
+        await touched('public/styles.css', () => page.waitFor(`(${banner}) === 'Page updated — Refresh'`, { timeout: 10_000, what: 'the refresh note' }));
+        await touched('server/rules.mjs', () => page.waitFor(`(${banner}) === 'Homebase was updated — Reload server'`, { timeout: 10_000, what: 'the reload note' }));
     }
 };

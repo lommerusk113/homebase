@@ -1,5 +1,5 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { api, $, el, state, store, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, setOffline, setFormatWarn, seenAt, authorSummary } from './core.js';
+import { api, $, el, state, store, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary } from './core.js';
 import { renderBoard, select, attentionEvents, askingEvents, sessionTopic } from './list.js';
 import { refreshChat, initChat, bindChat, isMaster, chatSession } from './chat.js';
 import { openNewProject, initNewProject } from './newproject.js';
@@ -386,6 +386,41 @@ api('/api/refresh').then(r => r.json()).then(/** @param {RefreshState} d */ d =>
     renderReload();
 }).catch(() => {});
 
+// Header note when Homebase changed on disk: server code (Reload server: the server replaces itself, and the page reloads
+// once a new server pid answers) or only browser files (Refresh). page.updated is a restart that brought new code.
+/** @type {{ pid: number, serverStale: boolean, page: string } | undefined} */
+let firstVersion;
+let reloadingSince = 0;
+async function refreshVersion() {
+    /** @type {typeof firstVersion} */
+    let v;
+    try {
+        const r = await api('/api/version');
+        v = r.ok ? await r.json() : undefined;
+    } catch {}
+    if (!v) {
+        return; // offline: the Offline note says so
+    }
+    firstVersion ??= v;
+    if (reloadingSince && v.pid !== firstVersion.pid) {
+        location.reload(); // fresh client files from the new server
+        return;
+    }
+    if (Date.now() - reloadingSince > 20_000) {
+        reloadingSince = 0; // the new server never came (see server.log in the Homebase dir): offer it again
+    }
+    const server = v.serverStale, fresh = page.updated || v.page !== firstVersion.page, go = $('updated-go');
+    $('updated').hidden = !server && !fresh && !reloadingSince;
+    $('updated-text').textContent = reloadingSince ? 'Reloading the server…' : server ? 'Homebase was updated —' : 'Page updated —';
+    go.hidden = Boolean(reloadingSince);
+    go.textContent = server ? 'Reload server' : 'Refresh';
+    go.onclick = !server ? () => location.reload() : async () => {
+        reloadingSince = Date.now();
+        refreshVersion();
+        await api('/api/server/reload', { method: 'POST' }).catch(() => {});
+    };
+}
+
 let lastSessions = '', lastRender = 0, polling = false;
 /** @type {Session[] | undefined} */
 let prevSessions; // the previous poll's, for askingEvents
@@ -466,6 +501,7 @@ async function pollOnce() {
     refreshLimits();
     renderReload();
     refreshLog();
+    refreshVersion();
 }
 
 // "Session ▬ 70%   Week ▬ 63%"; reset times live in each item's tooltip. Hidden without a dump.

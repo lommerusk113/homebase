@@ -64,10 +64,9 @@ export function refreshToken() {
                 page.token = token;
             }
             page.build ??= ownMeta('homebase-build');
-            // new code under a running page: say so in the header, never reload on our own
-            if (build && page.build && build !== page.build && !page.updated) {
+            // new code under a running page: the header says so (app.js refreshVersion), never reload on our own
+            if (build && page.build && build !== page.build) {
                 page.updated = true;
-                globalThis.document?.getElementById('updated')?.removeAttribute('hidden');
             }
             return page.token;
         })

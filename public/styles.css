@@ -78,6 +78,7 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .fmtwarn { margin-left:auto; color:var(--c-needs); font-size:12px; }
 .fmtwarn:not([hidden]) + #bell, .offline:not([hidden]) ~ .fmtwarn, .updated:not([hidden]) ~ .fmtwarn { margin-left:12px !important; }
 .updated { margin-left:auto; color:var(--muted); font-size:12px; }
+.updated .show { padding:0 2px; }
 .updated:not([hidden]) ~ .offline, .updated:not([hidden]) ~ #bell { margin-left:12px !important; }
 #bell { margin-left:auto; display:grid; place-items:center; height:26px; }
 #bell .b-on, #bell.on .b-off { display:none; }

@@ -20,6 +20,7 @@ import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedReque
 import { readConfigFile } from './server/account.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
 import { saveUpload, readUpload } from './server/uploads.mjs';
+import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 
 export {
@@ -43,6 +44,7 @@ export { validName, mergeConfig, loadConfig, createProject, cloneProject, openPr
 export { vendorPath } from './server/static.mjs';
 export { accountOf, readToken, ghRun, scrub } from './server/account.mjs';
 export { saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME } from './server/uploads.mjs';
+export { isStale, serverMtime, pageHash } from './server/reload.mjs';
 
 const PORT = Number(process.env.PORT ?? 4321);
 
@@ -171,6 +173,17 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 const list = await sessions();
                 watchSessions(DATA_DIR, list).catch(e => console.error(`push: ${e.message}`));
                 return json(list);
+            }
+            if (url.pathname === '/api/version') {
+                return json(await version());
+            }
+            // Local only: a paired phone can't restart the Mac's server.
+            if (isPost('/api/server/reload')) {
+                if (remote) {
+                    return deny(403, 'reload the server from the Mac');
+                }
+                res.end('ok');
+                return replaceSelf(listeners, PORT, join(DATA_DIR, 'server.log'));
             }
             if (url.pathname === '/api/push/key') {
                 return json({ key: (await vapidKeys(DATA_DIR)).publicKey });
@@ -312,9 +325,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             res.end(String(e.message));
         }
     };
-    const listenLocal = () => createServer(handler).listen(PORT, '127.0.0.1', () => console.log(`Homebase on http://localhost:${PORT}`));
+    const listeners = []; // [server, port], for replaceSelf
+    const listen = (port, done) => {
+        const server = createServer(handler);
+        listeners.push([server, port]);
+        listenRetry(server, port, done);
+    };
+    const listenLocal = () => listen(PORT, () => console.log(`Homebase on http://localhost:${PORT}`));
     if (REMOTE) { // the remote port first, so "Homebase on" means both listen
-        createServer(handler).listen(REMOTE.port, '127.0.0.1', () => {
+        listen(REMOTE.port, () => {
             console.log(`Remote access for https://${REMOTE.host} on 127.0.0.1:${REMOTE.port}; expose it with \`tailscale serve --bg http://127.0.0.1:${REMOTE.port}\``);
             listenLocal();
         });

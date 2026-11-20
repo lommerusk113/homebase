@@ -34,7 +34,7 @@
   <wa-select id="project" size="s" aria-label="Project"></wa-select>
   <span class="proj-chips" id="proj-chips" role="group" aria-label="Tracked projects"></span>
   <span id="milestone-slot"></span><!-- milestone pill goes here (milestoneSelector from milestone.js) -->
-  <span class="updated" id="updated" role="status" hidden>Homebase was updated — reload when convenient</span>
+  <span class="updated" id="updated" role="status" hidden><span id="updated-text"></span> <button class="show" id="updated-go" type="button"></button></span>
   <span class="offline" id="offline" hidden>Offline</span>
   <span class="fmtwarn" id="format-warn" hidden>Claude Code's format changed — status may be wrong</span>
   <button class="quiet" id="bell" title="Desktop notifications" aria-label="Desktop notifications" aria-pressed="false">

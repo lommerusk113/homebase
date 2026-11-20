@@ -9,7 +9,7 @@ const status = `document.getElementById('status').className + ' | ' + document.g
 export default {
     'status bar: idle': async ({ page, open }) => {
         await open();
-        await page.waitFor(`${status} === 'c-status idle | Claude needs your answer · 2 agents still working'`, { what: 'idle' });
+        await page.waitFor(`${status} === 'c-status idle | Claude needs your answer'`, { what: 'idle' });
         assert.equal(await page.ev(`document.getElementById('ask').hidden`), true);
     },
 
@@ -227,10 +227,10 @@ export default {
 
     'status bar: error while the transcript fails, then back': async ({ page, open, answerPosts }) => {
         await open();
-        await page.waitFor(`${status} === 'c-status idle | Claude needs your answer · 2 agents still working'`, { what: 'idle first' });
+        await page.waitFor(`${status} === 'c-status idle | Claude needs your answer'`, { what: 'idle first' });
         page.route = q => (q.url.includes('/api/transcript') ? { status: 503, body: 'down' } : answerPosts(q));
         await page.waitFor(`${status} === 'c-status error | Can’t reach Homebase — reconnecting…'`, { what: 'error' });
         page.route = answerPosts;
-        await page.waitFor(`${status} === 'c-status idle | Claude needs your answer · 2 agents still working'`, { what: 'idle again' });
+        await page.waitFor(`${status} === 'c-status idle | Claude needs your answer'`, { what: 'idle again' });
     }
 };

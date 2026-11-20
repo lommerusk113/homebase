@@ -252,7 +252,7 @@ export const openDecision = d => {
 // (Claude waits on you); working counts from the turn start (`since`), else from your last message. Idle says whether
 // Claude's last reply wants you (or its newest reply still waits on you, said since or not) and whether its agents
 // still work, from the session `s`.
-/** @param {(Partial<Transcript> & { error?: boolean }) | null} d @param {Pick<Session, 'needsYou' | 'subagents' | 'step'> | null} [s] */
+/** @param {(Partial<Transcript> & { error?: boolean }) | null} d @param {Pick<Session, 'needsYou' | 'step'> | null} [s] */
 export const chatStatus = (d, now = Date.now(), s = null) => {
     if (d?.error) {
         return { kind: 'error', text: 'Can’t reach Homebase — reconnecting…' };
@@ -264,8 +264,7 @@ export const chatStatus = (d, now = Date.now(), s = null) => {
         return { kind: 'stuck', text: 'No activity for 30 min — Claude may be stuck' };
     }
     if (!d?.working) {
-        const n = s?.subagents?.running ?? 0, agents = n ? ` · ${n} agent${n === 1 ? '' : 's'} still working` : '';
-        return { kind: 'idle', text: `${s?.needsYou || openDecision(d) ? NEEDS_ANSWER : 'Claude is done'}${agents}` };
+        return { kind: 'idle', text: s?.needsYou || openDecision(d) ? NEEDS_ANSWER : 'Claude is done' };
     }
     const at = d.since ?? Date.parse(d.items?.findLast(i => i.role === 'user' && !i.pending)?.at);
     const m = (now - at) / 60000 | 0;

@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou } from './core.js';
 import { renderBoard, sessionTopic } from './list.js';
 import { syncDiff } from './diff.js';
 
@@ -464,9 +464,6 @@ function setStatus(data) {
         $('status-text').textContent = text;
     }
     $('status-restart').hidden = kind !== 'stuck';
-    // the 5-hour limit near the composer once under 30% is left
-    const w = state.limits?.fiveHour, v = w && limitView(0, w);
-    $('status-lim').textContent = v && v.left < 30 ? `Session ${100 - v.left}% used · resets ${v.when}` : '';
     $('status-ctx').className = `c-ctx ${ctxLevel(s?.context ?? 0)}`;
     $('status-ctx').textContent = s?.context != null ? `context ${Math.round(s.context)}%` : '';
 }

@@ -1107,8 +1107,7 @@ assert.equal(chatStatus(null).kind, 'idle');
 assert.equal(chatStatus({}).text, 'Claude is done'); // nothing pending: no "your turn"
 assert.equal(chatStatus({ items: [{ role: 'assistant', text: '', waiting: 'which cache' }, { role: 'user', text: 'also fix the typo' }] }).text, 'Claude needs your answer', 'an open decision outlives a later message');
 assert.deepEqual(chatStatus({ stuck: true }), { kind: 'stuck', text: 'No activity for 30 min — Claude may be stuck' });
-assert.equal(chatStatus({}, 0, { needsYou: true, subagents: { running: 2, finished: 0 } }).text, 'Claude needs your answer · 2 agents still working');
-assert.equal(chatStatus({}, 0, { needsYou: false, subagents: { running: 1, finished: 0 } }).text, 'Claude is done · 1 agent still working');
+assert.equal(chatStatus({}, 0, { needsYou: true, subagents: { running: 2, finished: 0 } }).text, 'Claude needs your answer', 'running helpers are not mentioned');
 assert.equal(chatStatus({ error: true, working: true, asking: 'Pick one?' }).kind, 'error'); // a failed poll never reads as idle or stale working
 assert.match(chatStatus({ error: true }).text, /reconnecting/);
 assert.equal(chatStatus({ working: true, asking: 'Pick one?', items: [] }).kind, 'asking'); // asking wins

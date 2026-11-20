@@ -437,3 +437,11 @@ export function updateTitle() {
     badge.textContent = String(n);
     badge.hidden = !n;
 }
+
+// A transcript model id (claude-opus-5-5) as its family name for the chat's model chip; null for none or <synthetic>.
+/** @param {string | null | undefined} id @returns {string | null} */
+export const modelName = id => {
+    const m = /opus|sonnet|haiku|fable/i.exec(id ?? '')?.[0].toLowerCase();
+
+    return m ? m[0].toUpperCase() + m.slice(1) : null;
+};

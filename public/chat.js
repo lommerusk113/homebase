@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, NEEDS_ANSWER, openDecision } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision } from './core.js';
 import { renderBoard } from './list.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
@@ -456,7 +456,27 @@ function showHead(s) {
     branch.classList.toggle('warn', /^(main|master)$/.test(s?.branch ?? '') && !s?.hobby);
     un.hidden = !(s?.unpushed > 0);
     un.textContent = `${s?.unpushed} unpushed`;
+    showModel(s);
     $('msg').setAttribute('placeholder', s ? `Message Claude in ${s.project}…` : 'Message Claude…');
+}
+
+/** @type {{ sid: string, name: string, at: number } | null} */
+let pickedModel = null; // a /model sent, until the transcript shows that model (or MODEL_PENDING_MS passed)
+const MODEL_PENDING_MS = 60_000;
+
+// The model chip: the model of the chat's latest reply; "Sonnet…" while a picked one hasn't shown up there yet.
+/** @param {Session | null} s */
+function showModel(s) {
+
+    const name = modelName(s?.model);
+    if (pickedModel && (pickedModel.sid !== s?.id || name === pickedModel.name || Date.now() - pickedModel.at > MODEL_PENDING_MS)) {
+        pickedModel = null;
+    }
+
+    const btn = $('c-model-btn');
+    $('c-model').hidden = !s || s.id.startsWith('cc-new-') || !(name || pickedModel);
+    btn.textContent = pickedModel ? `${pickedModel.name}…` : `${name ?? ''} ▾`;
+    btn.classList.toggle('pending', !!pickedModel);
 }
 
 const DETAIL_LINES = 6;
@@ -1172,6 +1192,25 @@ export function initChat() {
             $('send').requestSubmit();
         }
     };
+    // Claude Code takes /model <alias> as a normal message and switches at once (it also saves it as the default for new chats)
+    $('c-model').addEventListener('wa-select', async e => {
+        const s = chatSession(), alias = e.detail.item.value;
+        if (!s) {
+            return;
+        }
+        pickedModel = { sid: s.id, name: alias === 'default' ? 'Default' : modelName(alias) ?? alias, at: Date.now() };
+        showModel(s);
+        try {
+            const r = await api(`/api/send?id=${encodeURIComponent(s.id)}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: `/model ${alias}` });
+            if (!r.ok) {
+                throw new Error(await r.text());
+            }
+        } catch (err) {
+            pickedModel = null;
+            showModel(s);
+            $('c-err').textContent = friendly(err.message);
+        }
+    });
     $('c-menu').addEventListener('wa-select', e => {
         if (e.detail.item.value === 'push') {
             return; // app.js

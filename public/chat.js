@@ -123,7 +123,6 @@ export async function restoreDraft(storage, sid, ta) {
         return false;
     }
 }
-let restored = false; // once per page load, for the first bound session
 const draftStorage = () => {
     try {
         return sessionStorage;
@@ -131,6 +130,27 @@ const draftStorage = () => {
         return null;
     }
 };
+let draftSid; // the chat the composer's text and error line belong to; null: a project still starting
+// The composer follows the chat: switching saves the old chat's draft, clears the box and the error line, and restores the
+// new chat's draft. A starting project's text stays for the session it becomes.
+/** @param {string | null} sid */
+function swapComposer(sid) {
+
+    if (sid === draftSid) {
+        return;
+    }
+    const ta = $('msg'), old = draftSid;
+    draftSid = sid;
+    if (old) {
+        saveDraft(draftStorage(), old, ta);
+        ta.value = '';
+        $('c-err').textContent = '';
+    }
+    syncSend();
+    if (sid) {
+        restoreDraft(draftStorage(), sid, ta).then(ok => ok && syncSend());
+    }
+}
 
 /** @param {string} id */
 export function bindChat(id) {
@@ -174,8 +194,8 @@ function answered(sid) {
     }
     clearTimeout(returnTimer);
     returnTimer = setTimeout(() => {
-        if (state.focus !== sid) {
-            return;
+        if (state.focus !== sid || $('msg').value) {
+            return; // a follow-up being typed stays with this chat
         }
         const next = visibleSessions().find(o => o.id !== sid && waitsOnYou(o));
         if (next) {
@@ -873,6 +893,7 @@ export async function refreshChat() {
     const seq = ++refreshSeq;
     followFocus();
     const s = chatSession(), feed = $('feed');
+    swapComposer(s?.id ?? null);
     // before the ask card can show and shorten the feed
     const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX;
     // persist the binding, or a successor it moved to
@@ -884,10 +905,6 @@ export async function refreshChat() {
     showHead(s);
     showRules(s);
     await showBoot(s ? null : state.startingTmux); // only a chat still starting: a running one's ❯ prompts and questions aren't startup dialogs
-    if (s && !restored) {
-        restored = true;
-        restoreDraft(draftStorage(), s.id, $('msg')).then(ok => ok && syncSend());
-    }
     if (!s) {
         $('compact-item').disabled = true;
         $('compact-nudge').hidden = true;
@@ -1198,13 +1215,17 @@ export async function sendText(sid, text, answerTo, note) {
         }
         out.okAt = Date.now();
         const said = await r.text();
-        $('c-err').textContent = said === 'ok' ? '' : said; // sent, with a warning (running twice)
+        if ((draftSid ?? startingTarget()) === sid) {
+            $('c-err').textContent = said === 'ok' ? '' : said; // sent, with a warning (running twice)
+        }
         answered(sid);
         setTimeout(refreshChat, 1000);
         return true;
     } catch (err) {
         out.error = friendly(err.message);
-        $('c-err').textContent = out.error;
+        if ((draftSid ?? startingTarget()) === sid) {
+            $('c-err').textContent = out.error; // not on another chat switched to meanwhile
+        }
         refreshChat();
         return false;
     }
@@ -1231,7 +1252,7 @@ export function initChat() {
     document.addEventListener('keydown', e => e.key === 'Escape' && state.focus && !e.composedPath().some(n => /^(INPUT|WA-TEXTAREA|TEXTAREA|WA-DIALOG|WA-DROPDOWN)$/.test(/** @type {Element} */ (n).nodeName || '')) && unfocusChat());
     $('msg').addEventListener('input', () => {
         syncSend();
-        saveDraft(draftStorage(), chatSession()?.id, $('msg'));
+        saveDraft(draftStorage(), draftSid, $('msg'));
     });
     $('send').onsubmit = async e => {
         e.preventDefault();
@@ -1268,7 +1289,13 @@ export function initChat() {
         // clear at once; the "sending…" bubble shows progress
         ta.value = '';
         syncSend();
-        if (!await sendText(target, text) && !ta.value) {
+        const ok = await sendText(target, text);
+        if (draftSid !== (s?.id ?? null)) {
+            // switched chats meanwhile: the box is the other chat's now, so a failed text goes back into its own chat's draft
+            if (!ok && s && !draftStorage()?.getItem(`draft:${s.id}`)) {
+                saveDraft(draftStorage(), s.id, /** @type {any} */ ({ value: text }));
+            }
+        } else if (!ok && !ta.value) {
             // give the text back so it isn't lost
             ta.value = text;
             syncSend();

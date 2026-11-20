@@ -64,6 +64,26 @@ export default {
         assert.equal(page.posts.filter(p => p.url.includes('/api/send')).length, 1);
     },
 
+    'the draft and the error line follow the chat: a focused chat starts empty, and going back restores the draft': async ({ page, open, IDS }) => {
+        const asker = `#masters tr[data-key="asking:${IDS.asker}"]`;
+        await open({ project: 'all', chat: IDS.worker });
+        await page.waitFor(`document.querySelector('${asker}')`, { what: "the asker's row" });
+        await page.click('#msg');
+        await page.type('draft for main');
+        await page.ev(`document.getElementById('c-err').textContent = 'Claude is busy'`);
+        await page.click(asker);
+        await page.waitFor(`!document.getElementById('c-back').hidden`, { what: 'the focused chat' });
+        assert.deepEqual(await page.ev(`[document.getElementById('msg').value, document.getElementById('c-err').textContent]`), ['', '']);
+        await page.click('#msg');
+        await page.type('draft for asker');
+        await page.click('#c-back');
+        await page.waitFor(`document.getElementById('c-back').hidden`, { what: 'the main chat' });
+        assert.equal(await page.ev(`document.getElementById('msg').value`), 'draft for main');
+        await page.waitFor(`document.querySelector('${asker}')`, { what: "the asker's row" });
+        await page.click(asker);
+        await page.waitFor(`document.getElementById('msg').value === 'draft for asker'`, { what: "the asker's draft" });
+    },
+
     'a failed send marks the bubble, shows the error and gives the text back': async ({ page, open, answerPosts }) => {
         await open();
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });

@@ -508,14 +508,15 @@ function topicAndTldr(i) {
 
     const { topic, needsYou, text } = splitTopic(i.text), t = splitTldr(text);
 
-    // no marker: a TLDR that ends in a question still needs the user
-    const needs = needsYou || /\?[*_\s]*$/.test(t.tldr ?? '');
-    const asks = needs || quickReplies(t.tldr, t.text).length > 0; // needs you, or ends in a question that gets chips
-    const options = asks ? askList(t.text) : null;
+    // no marker: a TLDR that asks a question ("Merge now? Yes or later.") still needs the user
+    const needs = needsYou || /\?(?=[\s*_]|$)/.test(t.tldr ?? '');
+    const body = withoutInFlight(t.text); // the closing In flight list is status, not choices
+    const asks = needs || quickReplies(t.tldr, body).length > 0; // needs you, or ends in a question that gets chips
+    const options = asks ? optionsBlock(body) ?? askList(body) : null;
 
     // asks but no TLDR: its last paragraph (the ask, past the options) is what shows while folded, next to its chips
     if (asks && !t.tldr) {
-        const ask = (options ? t.text.replace(options, '') : t.text).trim().split(/\n\s*\n/).at(-1);
+        const ask = (options ? body.replace(options, '') : body).trim().split(/\n\s*\n/).at(-1);
         if (ask) {
             t.tldr = ask;
             t.text = t.text.replace(ask, '').trim();
@@ -523,6 +524,31 @@ function topicAndTldr(i) {
     }
 
     return { ...i, topic, needsYou: needs, ...t, ...(options && { options }) };
+}
+
+// The reply's closing "**In flight**" list (homebase-rules.md), cut off so its rows never read as options or the ask.
+const IN_FLIGHT = /(?:^|\n)[ \t]*(?:#+[ \t]*|\*\*)In flight\b[\s\S]*$/i;
+const withoutInFlight = text => (text ?? '').replace(IN_FLIGHT, '').trim();
+
+// An explicit "**Options**" header and the list under it, as the exact substring of the text, else null.
+function optionsBlock(text) {
+
+    const m = text.match(/^[ \t]*\*\*Options\b.*$/im);
+    if (!m) {
+        return null;
+    }
+
+    const lines = text.slice(m.index).split('\n');
+    let end = 1;
+    for (let k = 1; k < lines.length; k++) {
+        if (LIST_ITEM.test(lines[k]) || /^\s+\S/.test(lines[k])) {
+            end = k + 1;
+        } else if (lines[k].trim()) {
+            break;
+        }
+    }
+
+    return end > 1 ? lines.slice(0, end).join('\n') : null;
 }
 
 const MAX_CHIPS = 6;
@@ -547,7 +573,7 @@ export function optionLabels(options) {
 // A question's chips: one per option it lists, else Yes / No (/ Do both).
 const replyChips = i => {
     const labels = optionLabels(i.options);
-    return labels.length ? labels : quickReplies(i.tldr, i.text);
+    return labels.length ? labels : quickReplies(i.tldr, withoutInFlight(i.text));
 };
 
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)]|[A-Da-d][.)]|\**Option\b)\s/;

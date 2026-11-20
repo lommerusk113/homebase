@@ -710,6 +710,12 @@ import { optionLabels } from './server.mjs';
 assert.deepEqual(optionLabels('Which?\n\n1. **Postgres** (Recommended) — fast\n   more detail\n2. **SQLite**: simple'), ['Postgres (Recommended)', 'SQLite']);
 assert.deepEqual(optionLabels('- Keep it — less work\n- Drop it: cleaner\n  - a sub-point'), ['Keep it', 'Drop it']);
 assert.deepEqual(optionLabels('**Option A**: x\n**Option B**: y'), ['Option A', 'Option B']);
+{ // the closing In flight list never becomes the chips; an explicit **Options** list does
+    const [r] = chatItems([say('**▸ Cache layer**\n\nTwo things block the cache.\n\n**Options**\n1. **Redis** — shared, needs a server\n2. **In-memory** — simplest\n3. **Skip it** — revisit later\n\nI lean Redis.\n\n**In flight**\n- Nothing running\n- Waiting on you: which cache\n\n**TLDR:** Which cache should I build? **Redis** is my pick.')]);
+    assert.equal(r.needsYou, true, 'a TLDR with a question mid-line needs you');
+    assert.deepEqual(r.replies, ['Redis', 'In-memory', 'Skip it']);
+    assert.ok(r.options.startsWith('**Options**') && r.text.includes(r.options) && !r.options.includes('In flight'));
+}
 assert.deepEqual(optionLabels('- only one'), []);
 assert.deepEqual(optionLabels(Array.from({ length: 7 }, (_, n) => `- item ${n}`).join('\n')), []); // too many to be choices
 assert.equal(optionLabels(`- ${'x'.repeat(80)}\n- y`)[0].length, 60);

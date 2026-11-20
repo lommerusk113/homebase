@@ -77,6 +77,38 @@ export default {
         assert.equal(await page.ev(`[...document.querySelectorAll('#feed .bubble.user')].length`), 0, 'no bubble with the note');
     },
 
+    'a listed choice shows its options under the TLDR while folded, one chip each, and a chip sends its label': async ({ page, open, IDS, answerPosts }) => {
+        const items = chatItems([{ type: 'assistant', timestamp: '2026-11-14T10:00:00.000Z', message: { content: [{ type: 'text',
+            text: '**▸ Database · needs you**\n\nThe schema works on both, migrations differ.\n\nWhich one should be the default?\n1. **Postgres** (Recommended) — what prod runs\n2. **SQLite** — no server\n\n**TLDR:** pick the default database, **Postgres** recommended' }] } }]);
+        await open();
+        await ready(page);
+        page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: false, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        const b = bubble('pick the default database');
+        await page.waitFor(`${b}?.querySelector('.b-options')`, { what: 'the options outside the fold' });
+        assert.equal(await page.ev(`${b}.querySelector('.body:not(.b-options)').hidden`), true, 'the rest is folded');
+        assert.match(await page.ev(`${b}.querySelector('.b-options').textContent`), /Which one should be the default\?[\s\S]*Postgres[\s\S]*SQLite/);
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#feed .replies wa-button')].map(c => [c.textContent, c.getAttribute('appearance')])`),
+            [['Postgres (Recommended)', 'accent'], ['SQLite', 'filled-outlined']], 'one chip per option, the recommended one primary');
+        await page.click('#feed .replies wa-button:last-child');
+        await page.waitFor(`${b}.querySelector('.answer')?.textContent === '✓ You: SQLite · sending…'`, { what: 'the answer tag' });
+        assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [[`/api/send?id=${IDS.master}`, 'SQLite']]);
+    },
+
+    'an AskUserQuestion answered in the card leaves no chips on the message that asked': async ({ page, open, answerPosts }) => {
+        const items = chatItems([
+            { type: 'assistant', timestamp: '2026-11-14T10:00:00.000Z', message: { content: [{ type: 'text', text: '**▸ Database · needs you**\n\n**TLDR:** Which database should be the default?' }] } },
+            { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'q1', name: 'AskUserQuestion', input: { questions: [{ question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite' }] }] } }] } },
+            { type: 'user', timestamp: '2026-11-14T10:01:00.000Z', message: { content: [{ type: 'tool_result', tool_use_id: 'q1' }] }, toolUseResult: { answers: { 'Which database?': 'Postgres' } } }
+        ]);
+        await open();
+        await ready(page);
+        page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: false, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        const b = bubble('Which database should be the default');
+        await page.waitFor(`${b}?.querySelector('.answer')?.textContent === '✓ You: Postgres'`, { what: 'the card answer as the answer tag' });
+        assert.equal(await page.ev(`document.querySelector('#feed .replies')`), null, 'no chips');
+        assert.equal(await page.ev(`!!${b}.querySelector('.need-pill')`), false, 'no longer needs you');
+    },
+
     'a short reply becomes the answer tag of the question before it': async ({ page, open }) => {
         await open();
         await ready(page);

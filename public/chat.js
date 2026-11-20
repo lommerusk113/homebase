@@ -260,7 +260,8 @@ function bubble(i, sid, prevTopic, look = {}) {
     if (i.role === 'compact') {
         return el('div', 'tools compact', i.text);
     }
-    const needs = i.role === 'assistant' && i.needsYou && !i.error;
+    // only the newest reply can be waiting on the user: an older one reads as a plain card
+    const needs = i.role === 'assistant' && i.needsYou && !i.error && !!look.latest;
     const kind = i.role !== 'assistant' || i.error ? '' : needs ? ' needs' : ` fyi${look.latest ? ' latest' : ''}`;
     const b = el('div', `bubble ${i.role}${kind}${i.error || /** @type {OutboxItem} */ (i).unconfirmed ? ' failed' : ''}${i.interrupted ? ' interrupted' : ''}`);
     const key = `${sid}:${i.at}`;
@@ -303,13 +304,15 @@ function bubble(i, sid, prevTopic, look = {}) {
     }
     if (i.role === 'assistant') {
         // a question's options stay out of the fold, under the TLDR
-        const parts = foldable(i.tldr, i.options ? i.text.replace(i.options, '') : i.text, key);
+        // an older reply's Heads-up goes into its fold: the newest one says it
+        const heads = i.headsUp && !look.latest ? `**Heads-up:** ${i.headsUp}\n\n` : '';
+        const parts = foldable(i.tldr, heads + (i.options ? i.text.replace(i.options, '') : i.text), key);
         if (i.options) {
             const opts = rich(i.options);
             opts.classList.add('b-options');
             parts.splice(1, 0, opts);
         }
-        if (i.headsUp) {
+        if (i.headsUp && look.latest) {
             const heads = el('div', 'b-heads');
             heads.append(el('b', null, 'Heads-up: '), ...rich(i.headsUp, true).childNodes);
             parts.splice(1, 0, heads);
@@ -789,12 +792,19 @@ function showWait(s, data, items) {
 
     waitKey = key;
     $('wait').dataset.key = `${s.id}:${w.at}`;
-    $('wait-q').replaceChildren(...rich(w.waiting, true).childNodes);
+    // "issue — what led here — question — (1) … (2) …": the question on top, the rest muted and clamped, the options as chips
+    $('wait-q').replaceChildren(...rich(w.ask?.question ?? w.waiting, true).childNodes);
     $('wait-q').onclick = jumpToNeeds;
+    const ctx = $('wait-ctx');
+    ctx.hidden = !w.ask?.context;
+    ctx.replaceChildren(...rich(w.ask?.context ?? '', true).childNodes);
+    ctx.classList.add('clamp');
+    ctx.onclick = () => ctx.classList.toggle('clamp');
     const n = items.indexOf(w);
-    $('wait-opts').replaceChildren(...(w.replies ?? []).map((t, k) => {
-        const b = optButton(t, k);
-        b.onclick = () => sendText(s.id, t, w.at, answerNote(items, n));
+    const opts = w.ask?.options ?? (w.replies ?? []).map(label => ({ label, desc: '' }));
+    $('wait-opts').replaceChildren(...opts.map(({ label, desc }, k) => {
+        const b = optButton(label, k, { desc });
+        b.onclick = () => sendText(s.id, label, w.at, answerNote(items, n));
 
         return b;
     }));
@@ -807,6 +817,9 @@ function showWait(s, data, items) {
 function quickReplyRow(s, data, items, n) {
 
     const q = items[n], newest = n === items.length - 1;
+    if (q === openDecision({ items }) && !data.asking) {
+        return null; // the strip above the composer has its chips
+    }
     if (!(q.replies?.length && (!q.answer || q.answer.error || q.answer.unconfirmed) && !data.asking && (newest || !items.slice(n + 1).some(x => x.role === 'user')) && !(newest && data.working))) {
         return null;
     }

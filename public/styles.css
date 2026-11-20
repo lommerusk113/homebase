@@ -273,6 +273,8 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); box-shadow:none; tran
 .c-wait::before { content:''; position:absolute; inset:0 auto 0 0; width:4px; background:var(--c-needs); }
 .c-wait-q { appearance:none; border:0; background:none; padding:0; font:inherit; font-weight:600; text-align:left; color:var(--fg); cursor:pointer; overflow-wrap:anywhere; }
 .c-wait-q::before { content:'Waiting on you: '; color:var(--c-needs); }
+.c-wait-ctx { color:var(--muted); font-size:12px; cursor:pointer; overflow-wrap:anywhere; }
+.c-wait-ctx.clamp { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
 /* Input dock: a fixed height (the composer's one-row height) that never changes, so the feed's height never does while
    typing or when the status changes. Its column is bottom-aligned, so anything taller (a growing textarea, the error)
    overflows upward over the feed. */

@@ -220,5 +220,36 @@ export default {
         await page.click('#wait-opts wa-button:first-child');
         await page.waitFor(`document.getElementById('wait').hidden`, { what: 'the strip to go once answered' });
         assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [[`/api/send?id=${IDS.master}`, 'Redis']]);
+    },
+
+    'three replies waiting on the same thing: only the newest needs you, older ones stay quiet, the strip shows question, context and chips': async ({ page, open, answerPosts }) => {
+        const say = (text, at) => ({ type: 'assistant', timestamp: at, message: { content: [{ type: 'text', text }] } });
+        const turn = { type: 'user', message: { content: '<system-reminder>x</system-reminder>' } };
+        const W = "**Waiting on you:** #2281, naming the rule's supplier — you wanted to clarify something — what do you want to clarify? — (1) how the supplier name is read: a database lookup (recommended); (2) the tooltip text; (3) something else.";
+        const HU = '**Heads-up:** five MRs need force-pushes.';
+        const items = chatItems([
+            say(`**▸ Agents waiting · needs you**\n\n${HU}\n\n${W}\n\n**TLDR:** First check-in.`, '2026-11-20T11:51:00.000Z'), turn,
+            say(`**▸ Polish done · needs you**\n\n${HU}\n\nAdded tests for three things:\n\n- the duplicate dialog comes first\n- cancelling the dialog skips payment\n\n${W}\n\n**TLDR:** Polish done.`, '2026-11-20T11:52:00.000Z'), turn,
+            say(`**▸ Agents waiting · needs you**\n\n${HU}\n\n${W}\n\n**TLDR:** Second check-in.`, '2026-11-20T11:53:00.000Z')
+        ]);
+        await open();
+        await ready(page);
+        page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: false, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        await page.waitFor(`!document.getElementById('wait').hidden && ${bubble('Second check-in')}`, { what: 'the strip and the newest reply' });
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#feed .bubble.needs')].map(b => b.textContent.includes('Second check-in'))`), [true], 'only the newest reply needs you');
+        assert.equal(await page.ev(`document.querySelectorAll('#feed .need-pill').length`), 1);
+        assert.equal(await page.ev(`document.querySelectorAll('#feed .b-heads').length`), 1, 'the Heads-up shows on the newest reply only');
+        assert.ok(await page.ev(`${bubble('Polish done')}.querySelector('.body').textContent.includes('five MRs need force-pushes')`), 'an older Heads-up sits in its fold');
+        assert.equal(await page.ev(`document.querySelectorAll('#feed .replies').length`), 0, 'no chips in the feed: the strip has them, and a plain list is not a choice');
+        assert.equal(await page.ev(`document.getElementById('wait-q').textContent`), 'what do you want to clarify?');
+        assert.equal(await page.ev(`document.getElementById('wait-ctx').textContent`), "#2281, naming the rule's supplier — you wanted to clarify something");
+        assert.ok(await page.ev(`document.getElementById('wait-ctx').classList.contains('clamp')`), 'the context is clamped');
+        await page.click('#wait-ctx');
+        assert.ok(await page.ev(`!document.getElementById('wait-ctx').classList.contains('clamp')`), 'a click shows it all');
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#wait-opts wa-button')].map(b => b.firstChild.textContent)`), ['how the supplier name is read', 'the tooltip text', 'something else']);
+        assert.ok(await page.ev(`document.querySelector('#wait-opts wa-button').classList.contains('primary')`), 'the recommended option stands out');
+        await page.click('#wait-opts wa-button:last-child');
+        await page.waitFor(`document.getElementById('wait').hidden`, { what: 'the strip to go once answered' });
+        assert.deepEqual(page.posts.map(p => p.body), ['something else']);
     }
 };

@@ -735,7 +735,8 @@ assert.equal(noTools([...askedDb])[0].needsYou, true);
 console.log('ok ask answers');
 import { askList } from './server.mjs';
 assert.equal(askList('Two ways.\n\nWhich one?\n\n1. **A** fast\n   but risky\n2. **B** safe\n\nI pick A.'), 'Which one?\n\n1. **A** fast\n   but risky\n2. **B** safe');
-assert.equal(askList('Pick:\n- A\n\n- B'), 'Pick:\n- A\n\n- B');
+assert.equal(askList('Pick one?\n- A\n\n- B'), 'Pick one?\n- A\n\n- B');
+assert.equal(askList('Pick:\n- A\n\n- B'), null); // not asked: a list, not a choice
 assert.equal(askList('**Option A**: x\n**Option B**: y'), '**Option A**: x\n**Option B**: y');
 assert.equal(askList('No list here. Ship it?'), null);
 assert.equal(askList('Long intro.\nOptions:\nprose after'), null);
@@ -768,7 +769,7 @@ assert.deepEqual(namedChoices('Shipped the fix. Nothing else to do.'), []);
     assert.equal(h.headsUp, 'the migration locks the table for a minute.');
     assert.equal(h.text, 'Done.');
 }
-import { waitingOn } from './server.mjs';
+import { waitingOn, waitingAsk } from './server.mjs';
 assert.equal(waitingOn('**In flight**\n- Nothing running\n- Waiting on you: which cache'), 'which cache');
 assert.equal(waitingOn('**Waiting on you:** merge **!12**'), 'merge **!12**');
 assert.equal(waitingOn('**Waiting on you: pick a port**'), 'pick a port');
@@ -797,6 +798,34 @@ assert.deepEqual([noTldr.tldr, noTldr.text], ['Deploy to prod now?', 'Built it.\
 // no needs-you marker but a closing question with chips: the same, so the question shows next to them
 const plainAsk = chatItems([say('Built it.\n\nThe tests pass.\n\nDeploy to prod now?')]).at(-1);
 assert.deepEqual([plainAsk.needsYou, plainAsk.tldr, plainAsk.text, plainAsk.replies], [false, 'Deploy to prod now?', 'Built it.\n\nThe tests pass.', ['Yes', 'No']]);
+{ // a "what changed" list in a needs-you reply is not a set of choices: no options, no chips from it
+    const body = "**▸ !1850 polish done · needs you**\n\nThe polish pass on !1850 (asking before booking items that supplier automation stopped) added tests for three things:\n\n- the duplicate dialog comes first\n- cancelling the dialog skips payment\n- a double click doesn't open a second dialog\n\n**TLDR:** !1850 (confirm stopped items) is polished locally. Tell me what to clarify about #2281 (rule supplier naming) before it's pushed.";
+    const [r] = chatItems([say(body)]);
+    assert.equal(r.needsYou, true);
+    assert.equal(r.options, undefined);
+    assert.ok(!r.replies.includes('the duplicate dialog comes first'), `got ${r.replies}`);
+}
+{ // the Waiting on you line as the rules write it: question, context and one chip per numbered option
+    const w = "#2281, naming the rule's supplier in Aktivitetslogg, on «Forhåndsutfylt av regel» and in the voucher timeline — it's implemented and all its tests pass, and you stopped my push question because you wanted to clarify something — what do you want to clarify? — (1) how the supplier name is read: a read-only database lookup when the rule is loaded, so no new column and never out of date (recommended, already built); (2) the tooltip text «Forhåndsutfylt av leverandørautomatisering, regel for {leverandør}»; (3) something else.";
+    assert.deepEqual(waitingAsk(w), {
+        question: 'what do you want to clarify?',
+        context: "#2281, naming the rule's supplier in Aktivitetslogg, on «Forhåndsutfylt av regel» and in the voucher timeline — it's implemented and all its tests pass, and you stopped my push question because you wanted to clarify something",
+        options: [
+            { label: 'how the supplier name is read (recommended)', desc: 'a read-only database lookup when the rule is loaded, so no new column and never out of date (recommended, already built)' },
+            { label: 'the tooltip text «Forhåndsutfylt av leverandørautomatisering, regel for {leverandør}»', desc: '' },
+            { label: 'something else', desc: '' }
+        ]
+    });
+    assert.deepEqual(waitingAsk('Merge !12? 1. **Yes** — now 2. Later').options.map(o => o.label), ['Yes', 'Later']);
+    assert.deepEqual(waitingAsk('which cache — A) Redis — shared, B) in-memory').options.map(o => o.label), ['Redis', 'in-memory']);
+    assert.equal(waitingAsk('which cache, Redis or in-memory'), null);
+    assert.equal(waitingAsk('merge !1850 (1) only'), null);
+    const [r] = chatItems([say(`Built it.\n\n**Waiting on you:** ${w}\n\n**TLDR:** Tell me what to clarify.`)]);
+    assert.deepEqual(r.replies, ['how the supplier name is read (recommended)', 'the tooltip text «Forhåndsutfylt av leverandørautomatisering, regel for {leverandør}»', 'something else']);
+    assert.equal(r.ask.question, 'what do you want to clarify?');
+    const [a, b] = chatItems([say(`Built it.\n\n**Waiting on you:** ${w}`), { type: 'user', message: { content: '<system-reminder>x</system-reminder>' } }, say(`Still waiting.\n\n**Waiting on you:** ${w}`)]);
+    assert.deepEqual([a.replies, b.replies.length], [undefined, 3], 'a later Waiting on you takes the older one\'s chips');
+}
 console.log('ok ask list');
 console.log('ok quick replies');
 

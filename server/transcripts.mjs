@@ -327,9 +327,11 @@ export function chatFeed(entries, max = 60) {
     const pinned = all.findLast(i => i.role === 'assistant');
     const out = all.filter((i, n) => n >= all.length - max || i.needsYou || (i === pinned && i.waiting && !i.answer));
 
-    // chips stay on every question still waiting, also after Claude said more; a later user message clears needsYou
+    // chips stay on every question still waiting, also after Claude said more; a later user message clears needsYou,
+    // a later Waiting on you replaces an older one's
+    const lastWait = out.findLast(i => i.role === 'assistant' && i.waiting);
     for (const i of out) {
-        if (i.role === 'assistant' && i.needsYou && !i.answer) {
+        if (i.role === 'assistant' && i.needsYou && !i.answer && !(i.waiting && i !== lastWait)) {
             i.replies = replyChips(i);
         }
     }
@@ -555,7 +557,7 @@ function topicAndTldr(i) {
     }
 
     // no marker: a TLDR that asks a question ("Merge now? Yes or later.") still needs the user
-    const waiting = waitingOn(text);
+    const waiting = waitingOn(text), ask = waitingAsk(waiting);
     const needs = needsYou || !!waiting || /\?(?=[\s*_]|$)/.test(t.tldr ?? '');
     const body = withoutInFlight(t.text); // the closing In flight list is status, not choices
     const asks = needs || quickReplies(t.tldr, body).length > 0; // needs you, or ends in a question that gets chips
@@ -570,7 +572,7 @@ function topicAndTldr(i) {
         }
     }
 
-    return { ...i, topic, needsYou: needs, ...t, ...(options && { options }), ...(waiting && { waiting }), ...(heads && { headsUp: heads[1].trim() }) };
+    return { ...i, topic, needsYou: needs, ...t, ...(options && { options }), ...(waiting && { waiting }), ...(ask && { ask }), ...(heads && { headsUp: heads[1].trim() }) };
 }
 
 // What a reply says waits on the user ("- Waiting on you: <question>" in its In flight list, or a "**Waiting on you:**"
@@ -584,6 +586,40 @@ export function waitingOn(text) {
     }
 
     return said && !/^(?:nothing|none|n\/a)\b/i.test(said) ? said : null;
+}
+
+// A "Waiting on you" line as homebase-rules.md writes it, "<issue> — <what led here> — <question> — (1) <option>; (2) …"
+// (also "1. …" or "A) …"), as { question, context, options: [{ label, desc }] } (label: the option up to its first
+// ": " or " — ", plus "(recommended)" when it says so), else null when it lists fewer than 2 options.
+// ponytail: options split on their markers only; a marker-like "(2)" inside an option's own text cuts it short.
+const OPTION_MARKERS = [/\((\d)\)\s+/g, /(?<=^|\s)(\d)[.)]\s+/g, /(?<=^|\s)\(?([A-Da-d])\)\s+/g];
+export function waitingAsk(text) {
+
+    for (const re of OPTION_MARKERS) {
+        const all = [...(text ?? '').matchAll(re)], at = all.findIndex(m => /^[1Aa]$/.test(m[1]));
+        const marks = [];
+        for (const m of all.slice(Math.max(at, 0))) {
+            if (at >= 0 && parseInt(m[1], 36) === parseInt(all[at][1], 36) + marks.length) {
+                marks.push(m);
+            }
+        }
+        if (marks.length < 2) {
+            continue;
+        }
+
+        const options = marks.map((m, k) => {
+            const s = text.slice(m.index + m[0].length, marks[k + 1]?.index ?? text.length).trim().replace(/(?:[;,.]|\s+or)+$/i, '').trim();
+            const [head, ...rest] = s.split(/:\s|\s+[—–]\s+/), label = head.replace(/[*_`]/g, '').trim();
+            const rec = /\brecommended\b/i.test(s) && !/\brecommended\b/i.test(label);
+
+            return { label: rec ? `${label} (recommended)` : label, desc: rest.join(': ') };
+        });
+        const head = text.slice(0, marks[0].index).replace(/[\s—–:;,-]+$/, '').split(/\s+[—–]\s+/);
+
+        return { question: head.at(-1), context: head.slice(0, -1).join(' — '), options };
+    }
+
+    return null;
 }
 
 const HEADS_UP = /^[ \t]*\*\*Heads-up:?\*\*:?[ \t]*(\S.*)$\n?/im;
@@ -639,6 +675,10 @@ const replyChips = i => {
     if (labels.length) {
         return labels;
     }
+    const asked = waitingAsk(i.waiting);
+    if (asked) {
+        return asked.options.map(o => o.label);
+    }
     const yesNo = quickReplies(i.tldr, withoutInFlight(i.text));
     return yesNo.length || !i.needsYou ? yesNo : namedChoices(`${i.tldr ?? ''}\n${i.waiting ?? ''}`);
 };
@@ -665,8 +705,8 @@ export function namedChoices(text) {
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)]|[A-Da-d][.)]|\**Option\b)\s/;
 
 // The choices in a message that asks something: its last list, with the line just above that introduces it, as the
-// exact substring of the text. The page keeps it out of the fold so the options show next to the TLDR.
-// ponytail: any last list counts, so a "what changed" list in a question message also stays unfolded
+// exact substring of the text, when that line asks a question (or the items are "**Option …**"), else null. The page
+// keeps it out of the fold so the options show next to the TLDR.
 export function askList(text) {
 
     const parts = (text ?? '').split(/(\n\s*\n)/); // paragraphs at even indexes, their separators between
@@ -689,7 +729,11 @@ export function askList(text) {
         start -= 2;
     }
 
-    return parts.slice(start, end + 1).join('');
+    // a choice, not a "what changed" list: the line above it asks a question, or its items are "**Option …**"
+    const list = parts.slice(start, end + 1).join(''), lines = list.split('\n'), first = lines.findIndex(l => LIST_ITEM.test(l));
+    const lead = lines.slice(0, first).filter(l => l.trim()).at(-1) ?? '';
+
+    return /\?[*_\s]*$/.test(lead) || /^\s*\**Option\b/.test(lines[first]) ? list : null;
 }
 
 const SHORT_ANSWER = /^(?:yes|yeah|yep|sure|ok|okay|no|nope|do it|go ahead|do both)(?: please)?[.!]*$/i;

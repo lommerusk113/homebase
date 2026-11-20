@@ -33,7 +33,7 @@ export { limitsOf, peakLimits, contextOf } from './server/limits.mjs';
 export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
 export { tmuxArgs, tmuxFor, findClearedSuccessor, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
 export { parseDialog, parseQuestion, answerQuestion, cancelQuestion, questionOpen, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
-export { editorsFrom, openInEditor, refuseIfBusy, restartChat, promptUp } from './server/control.mjs';
+export { editorsFrom, openInEditor, refuseIfBusy, restartChat, promptUp, send, interrupt } from './server/control.mjs';
 export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, bindOk } from './server/security.mjs';
 export { validName, mergeConfig, loadConfig, createProject, cloneProject, openProject, allowedDir, githubProjects, localProjects, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
 export { vendorPath } from './server/static.mjs';

@@ -21,12 +21,18 @@ const claudeCmd = id => [process.env.SHELL || '/bin/zsh', '-lic', claudeLine(` -
 export const tmuxName = id => `cc-${id.slice(0, 8)}`;
 
 // /clear starts a new session id in the same process, so the new id keeps the old tmux name.
-// ponytail: in memory; after a server restart a cleared session gets its own tmux on the next send
+// In memory only; after a server restart Claude Code's registry (liveSessions) still knows the tmux a live session runs in.
 export const aliases = new Map(); // new session id -> { tmux, from }
 export const clears = []; // pending { from, tmux, cwd, clearedAt }, until the new transcript shows up
 export const CLEAR_WAIT_MS = 60_000;
 
-export const tmuxFor = (id, map = aliases) => map.get(id)?.tmux ?? tmuxName(id);
+// reg: liveSessions() (id -> tmux name); its cc-* name wins, as it survives a server restart
+export const OUR_TMUX = /^cc-[A-Za-z0-9._-]{1,120}$/;
+export const tmuxFor = (id, map = aliases, reg = null) => {
+    const t = reg?.get(id);
+
+    return (t && OUR_TMUX.test(t) ? t : null) ?? map.get(id)?.tmux ?? tmuxName(id);
+};
 
 // The newest transcript in the same cwd created after a /clear (within CLEAR_WAIT_MS): the cleared session's successor.
 // ponytail: a session started by hand in the same folder within that minute could be mistaken for it

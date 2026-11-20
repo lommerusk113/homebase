@@ -2391,7 +2391,12 @@ import { liveSessions, closedSession } from './server/transcripts.mjs';
     writeFileSync(join(dir, `${dead.pid}.json`), JSON.stringify({ pid: dead.pid, sessionId: 'down' }));
     writeFileSync(join(dir, '1.json'), '{"pid": 1, "sessi');
     writeFileSync(join(dir, `${process.pid}.abc.key`), 'x');
-    assert.deepEqual([...await liveSessions(dir)], ['up']);
+    assert.deepEqual([...(await liveSessions(dir)).keys()], ['up']);
+    // its "tmux" field names the tmux session (pane suffix dropped); two live processes in different places -> null
+    writeFileSync(join(dir, '2.json'), JSON.stringify({ pid: process.pid, sessionId: 'cleared', tmux: 'cc-35ed361f:@1.%1' }));
+    writeFileSync(join(dir, '3.json'), JSON.stringify({ pid: process.pid, sessionId: 'twice', tmux: 'cc-aaaaaaaa:@1.%1' }));
+    writeFileSync(join(dir, '4.json'), JSON.stringify({ pid: process.pid, sessionId: 'twice' }));
+    assert.deepEqual(Object.fromEntries(await liveSessions(dir)), { up: null, cleared: 'cc-35ed361f', twice: null });
     assert.equal(await liveSessions(join(dir, 'nope')), null);
     rmSync(dir, { recursive: true });
 
@@ -2541,6 +2546,49 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     assert.equal((await restartChat(sid, { ...stuck.opts, waitMs: 1000 }).catch(e => e)).status, 504);
     assert.deepEqual([promptUp('❯ '), promptUp('loading'), promptUp('Do you trust?\n\n❯ 1. Yes\n  2. No\nEnter to confirm')], [true, false, false]);
     console.log('ok restart chat');
+}
+
+// Send: stubbed tmux and registry, nothing real is touched
+{
+    const { send, tmuxFor } = await import('./server.mjs');
+    const sid = 'dddddddd-0000-4000-8000-000000000001', session = { id: sid, cwd: '/tmp', updated: 0 };
+    // tmux: live = names has-session finds; panes(calls) = what capture-pane shows
+    const fake = ({ live = ['cc-dddddddd'], panes = () => '❯ ' } = {}) => {
+        const calls = [];
+        const tm = async a => {
+            calls.push(a);
+            if (a[0] === 'has-session' && !live.includes(a[2].slice(1))) {
+                throw new Error('no session');
+            }
+            return { stdout: a[0] === 'capture-pane' ? panes(calls) : '' };
+        };
+        return { calls, keys: () => calls.filter(c => c[0] !== 'capture-pane'), opts: reg => ({ tm, nap: async () => {}, reg: async () => reg }) };
+    };
+    const typed = (name, text) => [['send-keys', '-t', name, '-l', '--', text], ['send-keys', '-t', name, 'Enter']];
+
+    // registry first: after a server restart (no alias) a /clear'd session is found in its old tmux
+    assert.equal(tmuxFor(sid, new Map(), new Map([[sid, 'cc-aaaaaaaa']])), 'cc-aaaaaaaa');
+    assert.equal(tmuxFor(sid, new Map(), new Map([[sid, 'main']])), 'cc-dddddddd', 'a non cc-* tmux is not ours');
+    let f = fake({ live: ['cc-aaaaaaaa'] });
+    assert.equal(await send(sid, 'hi', session, f.opts(new Map([[sid, 'cc-aaaaaaaa']]))), 'cc-aaaaaaaa');
+    assert.deepEqual(f.keys(), [['has-session', '-t', '=cc-aaaaaaaa'], ...typed('cc-aaaaaaaa', 'hi')]);
+    // live outside a cc-* tmux, or in one this tmux server lacks: refused, nothing started
+    for (const t of [null, 'main', 'cc-gone']) {
+        f = fake();
+        assert.equal((await send(sid, 'hi', session, f.opts(new Map([[sid, t]]))).catch(e => e)).status, 409, String(t));
+        assert.ok(!f.calls.some(c => c[0] === 'new-session' || c[0] === 'send-keys'), String(t));
+    }
+    // registry says not live: a fresh transcript write doesn't refuse
+    const fresh = { ...session, updated: Date.now() };
+    f = fake({ live: [] });
+    assert.equal(await send(sid, 'hi', fresh, f.opts(new Map())), 'cc-dddddddd');
+    assert.deepEqual(f.calls.map(c => c[0]).slice(0, 2), ['has-session', 'new-session']);
+    assert.deepEqual(f.keys().slice(-2), typed('cc-dddddddd', 'hi'));
+    // no registry: the old mtime check still refuses
+    f = fake({ live: [] });
+    assert.equal((await send(sid, 'hi', fresh, f.opts(null)).catch(e => e)).status, 409);
+    assert.deepEqual(f.calls.map(c => c[0]), ['has-session']);
+    console.log('ok send');
 }
 
 import { parseQuestion, answerQuestion } from './server.mjs';

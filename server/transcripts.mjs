@@ -14,8 +14,9 @@ const TURN_STALE_MS = 30 * 60_000; // an open turn with no transcript write this
 export const cache = new Map(); // path -> { mtimeMs, entries }
 
 // Session ids held by a running Claude Code, from the registry it keeps in ~/.claude/sessions/<pid>.json (it follows
-// /clear and --resume), as a Set; null when there is no registry (older Claude Code), so nothing is inferred.
-// ponytail: liveness is kill(pid, 0); a reused pid keeps a dead session "live", which is the old behaviour
+// /clear and --resume), as a Map id -> its tmux session name ("tmux": "cc-x:@0.%0") or null outside tmux, or when two
+// live processes hold the id in different places; null when there is no registry (older Claude Code), so nothing is inferred.
+// ponytail: liveness is kill(pid, 0); a reused pid keeps a dead session "live", which is the old behaviour. "tmux" is undocumented
 export async function liveSessions(dir = join(homedir(), '.claude', 'sessions')) {
 
     let names;
@@ -25,12 +26,13 @@ export async function liveSessions(dir = join(homedir(), '.claude', 'sessions'))
         return null;
     }
 
-    const live = Object.assign(new Set(), { busy: new Set() }); // busy: the ones whose registry status says "busy"
+    const live = Object.assign(new Map(), { busy: new Set() }); // busy: the ones whose registry status says "busy"
     for (const name of names) {
         try {
-            const { pid, sessionId, status } = JSON.parse(await readFile(join(dir, name), 'utf8'));
+            const { pid, sessionId, tmux, status } = JSON.parse(await readFile(join(dir, name), 'utf8'));
             if (alive(pid)) {
-                live.add(sessionId);
+                const t = typeof tmux === 'string' ? tmux.split(':')[0] || null : null;
+                live.set(sessionId, live.has(sessionId) && live.get(sessionId) !== t ? null : t);
                 if (status === 'busy') {
                     live.busy.add(sessionId);
                 }

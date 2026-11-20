@@ -1,7 +1,6 @@
 // The session list: repo names, subagent summaries and status, session summaries, and sessions(), which joins them with
 // PR/MR state, work items and /clear aliases for GET /api/sessions.
 import { readdir, stat, open, readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -567,7 +566,6 @@ function attachItems(out, items, now) {
     for (const s of out) {
         s.items = items.filter(i => i.sessionId === s.id);
         s.subagents = { running: s.agents.filter(a => a.status === 'running').length, finished: s.agents.filter(a => a.status === 'done' && now - a.updated < FINISHED_MS).length };
-        s.items.forEach(i => { i.folder = folderFor(i.worktreePath, s.cwd); });
         delete s.agents; // folded into items
         delete s.gates;
         delete s.openPrompts;
@@ -653,6 +651,3 @@ export async function sessions() {
 
     return out.sort(byActivity);
 }
-
-// Open in editor: the item's agent worktree if it's still there, else its session's cwd. Absolute paths only, so none reads as a flag.
-export const folderFor = (worktreePath, cwd, exists = existsSync) => [worktreePath, cwd].find(p => p?.startsWith('/') && exists(p)) ?? null;

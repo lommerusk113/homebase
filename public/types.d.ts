@@ -136,7 +136,6 @@ interface WorkItem {
     updated: number;
     branch: string;
     worktreePath: string | null;
-    folder: string;
     tldr: string | null;
     body: string;
     files: string[];
@@ -260,12 +259,11 @@ interface Milestones {
     url: string | null;
 }
 
-// ---- /api/limits, /api/refresh, /api/editors ----
+// ---- /api/limits, /api/refresh ----
 
 interface LimitWindow { used: number; resetsAt: number }
 interface Limits { fiveHour?: LimitWindow; sevenDay?: LimitWindow; updated?: number }
 interface RefreshState { refreshing: boolean; lastRefreshedAt: number }
-interface Editor { id: string; name: string }
 
 // ---- page globals (index.html <script> tags) ----
 

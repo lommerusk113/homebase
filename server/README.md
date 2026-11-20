@@ -5,7 +5,7 @@
 | Module | What lives there |
 |---|---|
 | `transcripts.mjs` | Tail reading and its mtime cache, chat bubbles, TLDR/topic, turn state (with the `hooks/asking.mjs` marker), review-gate runs, token usage, `transcript()` for `/api/transcript` |
-| `sessions.mjs` | Repo names, subagent summaries and status, session summaries, `sessions()` for `/api/sessions`, `folderFor` |
+| `sessions.mjs` | Repo names, subagent summaries and status, session summaries, `sessions()` for `/api/sessions` |
 | `items.mjs` | Work-item rules (pure): columns, lifecycle, next step, row action, gate badge, milestone of an MR |
 | `forge.mjs` | glab/gh calls: PR/MR state, comments and threads, limiter, dedupe, the `prs` and `swr` caches, refresh button |
 | `reviews.mjs` | MRs by others that ask me for a review (`/api/reviews`), read-only, cached |
@@ -13,7 +13,7 @@
 | `log.mjs` | Log tab: finished subagents, git commits, chat topics and closed MRs of a project's last 7 days, `log()` for `/api/log` |
 | `limits.mjs` | Rate limits from the status-line dumps |
 | `tmux.mjs` | tmux plumbing: socket override, session names, `/clear` aliases, keystroke steps |
-| `control.mjs` | POST actions: send, interrupt, `/clear`, open in editor |
+| `control.mjs` | POST actions: send, interrupt, `/clear` |
 | `startup.mjs` | Blocking Claude Code startup dialogs and AskUserQuestion prompts in a `cc-*` tmux pane: parse the capture, answer an option, trust the new project's own folder |
 | `account.mjs` | which GitHub account a repo's gh calls run as (keychain token for personal repos), the shared token reader, config merge |
 | `newproject.mjs` | POST `/api/projects/new`, `/clone` and `/open`, GET `/github` and `/local`: name check, the create/clone/start-chat steps, the folder check for Open, the owner's repo list with the keychain token kept out of every output |

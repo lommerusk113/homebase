@@ -15,7 +15,7 @@ import { log } from './server/log.mjs';
 import { MAX_SEND, withLock } from './server/tmux.mjs';
 import { createProject, cloneProject, openProject, githubProjects, localProjects, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion, confirmModelSwitch } from './server/startup.mjs';
-import { send, runningTwice, keepModelSetting, sendToNew, interrupt, clearChat, compactChat, restartChat, editors, openInEditor } from './server/control.mjs';
+import { send, runningTwice, keepModelSetting, sendToNew, interrupt, clearChat, compactChat, restartChat } from './server/control.mjs';
 import { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
 import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedRequest, pair, deviceOf, cookieOf, deviceCookie, pairPage, newCode, pairedDevices, revoke } from './server/pairing.mjs';
 import { readConfigFile } from './server/account.mjs';
@@ -30,7 +30,7 @@ export {
     readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, chatFeed, quickReplies, askList, optionLabels, waitingOn, waitingAsk, namedChoices,
     RISKY, pendingAsk, pendingQuestion, askMarker, markerAsk, turnState, turnPrompts, spawnPrompts, latestTopic, queuedPrompts, addUsage, readUsage, formatDuration, formatTokens
 } from './server/transcripts.mjs';
-export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, stepOf, status, lastActivity, summarize, folderFor, sentSummaries } from './server/sessions.mjs';
+export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, stepOf, status, lastActivity, summarize, sentSummaries } from './server/sessions.mjs';
 export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments, signedIn, me, repoOfUrl, swrEntry, swr, cached, refreshAll, refreshInfo } from './server/forge.mjs';
 export {
     column, gateFor, toGate, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf, itemUpdated
@@ -41,7 +41,7 @@ export { limitsOf, peakLimits, contextOf } from './server/limits.mjs';
 export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
 export { tmuxArgs, tmuxFor, withLock, findClearedSuccessor, linkClears, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
 export { parseDialog, parseQuestion, answerQuestion, cancelQuestion, questionOpen, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
-export { editorsFrom, openInEditor, refuseIfBusy, restartChat, promptUp, send, runningTwice, interrupt } from './server/control.mjs';
+export { refuseIfBusy, restartChat, promptUp, send, runningTwice, interrupt } from './server/control.mjs';
 export { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
 export { remoteFrom, setupPairing, newCode, pair, deviceOf, cookieOf, deviceCookie, pairedDevices, revoke, isRemote, loginOk, isPairedRequest, pairPage, CODE_TTL_MS, MAX_FAILS, FAIL_WINDOW_MS } from './server/pairing.mjs';
 export { validName, mergeConfig, loadConfig, createProject, cloneProject, openProject, allowedDir, githubProjects, localProjects, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
@@ -78,7 +78,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     const REMOTE = remoteFrom(readConfigFile(), PORT);
     setupPairing(join(DATA_DIR, 'devices.json'), REMOTE);
-    editors();
     warmMilestones();
     const handler = async (req, res) => {
         const url = new URL(req.url, 'http://x');
@@ -293,10 +292,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 await interrupt(url.searchParams.get('id'));
                 return res.end('ok');
             }
-            if (isPost('/api/open')) {
-                await openInEditor(url.searchParams.get('item'), url.searchParams.get('editor'));
-                return res.end('ok');
-            }
             if (isPost('/api/projects/new') || isPost('/api/projects/clone') || isPost('/api/projects/open')) {
                 let input;
                 try {
@@ -321,9 +316,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     await refreshAll();
                 }
                 return json(refreshInfo());
-            }
-            if (url.pathname === '/api/editors') {
-                return json((await editors()).map(({ id, name }) => ({ id, name })));
             }
             if (url.pathname === '/api/reviews') {
                 return json(reviewRequests());

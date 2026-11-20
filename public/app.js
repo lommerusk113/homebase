@@ -614,10 +614,6 @@ board.addEventListener('click', e => {
 });
 initKeys(); // includes Esc collapsing the expanded row
 initChat();
-api('/api/editors').then(r => r.json()).then(e => {
-    state.editors = e;
-    renderBoard();
-}).catch(() => {});
 // The last good list survives a manual reload, so a failing server shows dimmed data rather than an empty board.
 try {
     state.sessions = JSON.parse(sessionStorage.getItem('sessions')) || [];

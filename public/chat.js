@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, setOffline, ctxLevel, canCompact, autoCompactDue } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, setOffline, ctxLevel, canCompact, autoCompactDue, NEEDS_ANSWER } from './core.js';
 import { renderBoard } from './list.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
@@ -193,7 +193,9 @@ function bubble(i, sid, prevTopic, look = {}) {
             row.append(el('span', 'b-topic-name', i.topic));
         }
         if (needs) {
-            const pill = el('span', 'need-pill', 'needs you');
+            const pill = el('button', 'need-pill', 'needs you');
+            pill.type = 'button';
+            pill.onclick = jumpToNeeds;
             if (look.unread) {
                 pill.prepend(el('span', 'unread'));
             }
@@ -297,7 +299,27 @@ function addShowMore(feed) {
 function setStatus(data) {
     const { kind, text } = chatStatus(data, Date.now(), chatSession());
     $('status').className = `c-status ${kind}`;
-    $('status-text').textContent = text;
+    if (kind === 'idle' && text.startsWith(NEEDS_ANSWER)) {
+        const go = el('button', 'show', NEEDS_ANSWER);
+        go.type = 'button';
+        go.onclick = jumpToNeeds;
+        $('status-text').replaceChildren(go, text.slice(NEEDS_ANSWER.length));
+    } else {
+        $('status-text').textContent = text;
+    }
+}
+
+// Scrolls to and focuses what needs the user: the ask card when it shows, else the newest needs-you bubble.
+function jumpToNeeds() {
+
+    const t = /** @type {HTMLElement | undefined} */ ($('ask').hidden ? [...$('feed').querySelectorAll('.bubble.needs')].at(-1) : $('ask'));
+    if (!t) {
+        return;
+    }
+
+    t.tabIndex = -1;
+    t.scrollIntoView({ block: 'nearest' });
+    t.focus({ preventScroll: true });
 }
 
 // same unwrap as the server's unwrapPasted, plus whitespace collapsed, for matching sent text to transcript text

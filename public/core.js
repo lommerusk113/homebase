@@ -162,6 +162,7 @@ export const limitLeft = (w, now = Date.now()) => {
 
     return { left: Math.max(0, Math.min(100, Math.round(100 - w.used))), until };
 };
+export const NEEDS_ANSWER = 'Claude needs your answer';
 // Chat status bar: a failed poll wins (never claim "Idle" on data we couldn't fetch), then asking over working
 // (Claude waits on you); working counts from the turn start (`since`), else from your last message. Idle says whether
 // Claude's last reply wants you and whether its agents still work, from the session `s`.
@@ -175,7 +176,7 @@ export const chatStatus = (d, now = Date.now(), s = null) => {
     }
     if (!d?.working) {
         const n = s?.subagents?.running ?? 0, agents = n ? ` · ${n} agent${n === 1 ? '' : 's'} still working` : '';
-        return { kind: 'idle', text: `${s?.needsYou ? 'Claude needs your answer' : agents ? 'Claude is done' : 'Claude is done — your turn'}${agents}` };
+        return { kind: 'idle', text: `${s?.needsYou ? NEEDS_ANSWER : agents ? 'Claude is done' : 'Claude is done — your turn'}${agents}` };
     }
     const at = d.since ?? Date.parse(d.items?.findLast(i => i.role === 'user' && !i.pending)?.at);
     const m = (now - at) / 60000 | 0;

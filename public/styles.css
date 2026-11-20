@@ -138,7 +138,7 @@ a.chip:hover { text-decoration:underline; }
 .c-head { flex-shrink:0; height:var(--bar-h); display:flex; align-items:center; justify-content:flex-end; padding:0 8px; border-bottom:1px solid var(--line); }
 .c-newer { margin-right:auto; font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .c-hidden { align-self:center; flex-shrink:0; font-size:12px; color:var(--muted); }
-.c-hidden .show, .c-newer .show { padding:0; }
+.c-hidden .show, .c-newer .show, .c-status .show { padding:0; }
 .c-feed { flex:1; overflow:auto; padding:14px 12px; display:flex; flex-direction:column; gap:10px; background:var(--canvas); }
 .bubble { flex-shrink:0; max-width:92%; border-radius:12px; padding:2px 12px; font-size:13.5px; line-height:1.6; overflow-wrap:anywhere; }
 .bubble.assistant { position:relative; align-self:flex-start; background:var(--bg); border:1px solid var(--line); border-bottom-left-radius:4px; }
@@ -151,7 +151,7 @@ a.chip:hover { text-decoration:underline; }
    The newest Claude bubble keeps normal contrast even when fyi. Topic: a tick in its hue at the top-left of every bubble. */
 .bubble.topical::before { content:''; position:absolute; top:-1px; left:12px; width:20px; height:3px; border-radius:0 0 3px 3px; background:var(--tc); }
 .bubble.needs { border-left:3px solid var(--c-needs); background:color-mix(in srgb, var(--c-needs) 7%, var(--bg)); }
-.need-pill { display:inline-flex; align-items:center; gap:4px; flex-shrink:0; padding:0 7px; border-radius:99px; font-size:10px; line-height:16px; letter-spacing:.04em; color:var(--c-needs); background:color-mix(in srgb, var(--c-needs) 16%, transparent); }
+.need-pill { appearance:none; border:0; font:inherit; text-transform:inherit; cursor:pointer; display:inline-flex; align-items:center; gap:4px; flex-shrink:0; padding:0 7px; border-radius:99px; font-size:10px; line-height:16px; letter-spacing:.04em; color:var(--c-needs); background:color-mix(in srgb, var(--c-needs) 16%, transparent); }
 .need-pill .unread { width:6px; height:6px; border-radius:50%; background:var(--c-needs); }
 .bubble.fyi:not(.latest) { font-size:12.5px; border-color:var(--line-soft); background:color-mix(in srgb, var(--bg) 55%, var(--canvas)); }
 .bubble.fyi:not(.latest) .lead { font-size:13px; margin:5px 0; color:var(--muted); }

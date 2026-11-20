@@ -39,6 +39,19 @@ export default {
         assert.ok(await page.ev(`getComputedStyle(${bubble('tag the release')}).borderLeftWidth === '3px'`));
     },
 
+    '"Claude needs your answer" and the needs-you pill scroll to and focus the newest needs-you bubble': async ({ page, open }) => {
+        await open();
+        await ready(page);
+        const last = `[...document.querySelectorAll('#feed .bubble.needs')].at(-1)`;
+        const inView = `(() => { const f = document.getElementById('feed').getBoundingClientRect(), b = ${last}.getBoundingClientRect(); return b.top >= f.top - 1 && b.bottom <= f.bottom + 1; })()`;
+        for (const go of ['#status-text button', '#feed .need-pill']) {
+            await page.ev(`document.activeElement.blur(), document.getElementById('feed').scrollTop = 0`);
+            await page.click(go);
+            await page.waitFor(`document.activeElement === ${last}`, { what: `${go} to focus the needs-you bubble` });
+            assert.ok(await page.ev(inView), `${go}: the bubble is scrolled into view`);
+        }
+    },
+
     'TLDR folds the rest of the message': async ({ page, open }) => {
         await open();
         await ready(page);

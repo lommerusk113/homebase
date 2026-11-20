@@ -2993,3 +2993,96 @@ import { rulesStale } from './server/rules.mjs';
     rmSync(dir, { recursive: true });
     console.log('ok rules stale');
 }
+
+import { encrypt, vapidKeys, vapidJwt, pushTo, validSub, readSubs, addSub, removeSub, pushEvents, watchSessions, pageFocused, localRequest } from './server/push.mjs';
+{
+    // RFC 8291 section 5 test vector
+    const out = encrypt('When I grow up, I want to be a watermelon', { p256dh: 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4', auth: 'BTBZMqHH6r4Tts7J_aSIgg' },
+        { salt: Buffer.from('DGv6ra1nlYgDCS1FRnbzlw', 'base64url'), privateKey: Buffer.from('yfWPiYE-n46HLnH0KqZOF1fJJU3MYrct3AELtAQ-oRw', 'base64url') });
+    assert.equal(out.toString('base64url'), 'DGv6ra1nlYgDCS1FRnbzlwAAEABBBP4z9KsN6nGRTbVYI_c7VJSPQTBtkgcy27mlmlMoZIIgDll6e3vCYLocInmYWAmS6TlzAC8wEqKK6PBru3jl7A_yl95bQpu6cVPTpK4Mqgkf1CXztLVBSt2Ks3oZwbuwXPXLWyouBWLVWGNWQexSgSxsj_Qulcy4a-fN');
+    console.log('ok push RFC 8291 vector');
+}
+{
+    // VAPID: keys made once (0600, same on a second call), JWT is ES256 over header.payload with the push service's origin as aud
+    const { createPublicKey, verify, createECDH } = await import('node:crypto');
+    const dir = mkdtempSync(join(tmpdir(), 'hb-push-'));
+    const keys = await vapidKeys(dir);
+    assert.equal(statSync(join(dir, 'vapid.json')).mode & 0o777, 0o600);
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'vapid.json'), 'utf8')), keys);
+    assert.equal(Buffer.from(keys.publicKey, 'base64url').length, 65);
+    const jwt = vapidJwt('https://web.push.apple.com', keys, 1_000_000_000);
+    const [h, p, sig] = jwt.split('.');
+    assert.deepEqual(JSON.parse(String(Buffer.from(h, 'base64url'))), { typ: 'JWT', alg: 'ES256' });
+    assert.deepEqual(JSON.parse(String(Buffer.from(p, 'base64url'))), { aud: 'https://web.push.apple.com', exp: 1_000_000 + 43200, sub: 'mailto:homebase@example.com' });
+    const pub = Buffer.from(keys.publicKey, 'base64url');
+    const key = createPublicKey({ format: 'jwk', key: { kty: 'EC', crv: 'P-256', x: pub.subarray(1, 33).toString('base64url'), y: pub.subarray(33).toString('base64url') } });
+    assert.equal(Buffer.from(sig, 'base64url').length, 64);
+    assert.ok(verify('sha256', Buffer.from(`${h}.${p}`), { key, dsaEncoding: 'ieee-p1363' }, Buffer.from(sig, 'base64url')));
+    assert.ok(!verify('sha256', Buffer.from(`${h}.${p}x`), { key, dsaEncoding: 'ieee-p1363' }, Buffer.from(sig, 'base64url')));
+
+    // a push carries the headers and an encrypted body the subscriber can open
+    const ua = createECDH('prime256v1');
+    ua.generateKeys();
+    const sub = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', keys: { p256dh: ua.getPublicKey().toString('base64url'), auth: Buffer.alloc(16, 7).toString('base64url') } };
+    let got;
+    assert.equal(await pushTo(sub, { title: 't' }, keys, async (url, headers, body) => { got = { url, headers, body }; return 201; }), 201);
+    assert.equal(got.url, sub.endpoint);
+    assert.match(got.headers.authorization, new RegExp(`^vapid t=[\\w-]+\\.[\\w-]+\\.[\\w-]+, k=${keys.publicKey}$`));
+    assert.equal(JSON.parse(String(Buffer.from(got.headers.authorization.split('.')[1], 'base64url'))).aud, 'https://fcm.googleapis.com');
+    assert.deepEqual([got.headers.ttl, got.headers.urgency, got.headers['content-encoding'], got.headers['content-length']], ['3600', 'high', 'aes128gcm', got.body.length]);
+    assert.equal(got.body.readUInt32BE(16), 4096);
+    assert.equal(got.body[20], 65);
+
+    // the subscription store: validated, deduped by endpoint, 0600, removed on 404/410 from the push service
+    assert.ok(validSub(sub));
+    assert.ok(!validSub({ ...sub, endpoint: 'https://evil.example/push' }));
+    assert.ok(!validSub({ ...sub, endpoint: 'https://fcm.googleapis.com.evil.example/x' }));
+    assert.ok(!validSub({ ...sub, endpoint: 'http://fcm.googleapis.com/x' }));
+    assert.ok(!validSub({ ...sub, keys: { ...sub.keys, auth: 'AAAA' } }));
+    assert.ok(!validSub({ endpoint: sub.endpoint }));
+    assert.ok(!validSub(null));
+    await addSub(dir, sub);
+    await addSub(dir, { ...sub, extra: 1 });
+    const other = { ...sub, endpoint: 'https://web.push.apple.com/xyz' };
+    await addSub(dir, other);
+    assert.deepEqual(await readSubs(dir), [sub, other]);
+    assert.equal(statSync(join(dir, 'subscriptions.json')).mode & 0o777, 0o600);
+    await removeSub(dir, other.endpoint);
+    assert.deepEqual(await readSubs(dir), [sub]);
+
+    // the watcher: the first list only sets the baseline; a new transition pushes to every device unless a page was focused
+    const s = (id, extra = {}) => ({ id, project: 'alpha', status: 'idle', asking: false, needsYou: false, ...extra });
+    const sent = [];
+    const post = async url => { sent.push(url); return url === other.endpoint ? 410 : 201; };
+    await addSub(dir, other);
+    await watchSessions(dir, [s('a', { asking: true, question: 'Which one?' })], 0, post);
+    assert.equal(sent.length, 0);
+    await watchSessions(dir, [s('a', { asking: true, question: 'Which one?' }), s('b', { needsYou: true, lastReply: 'Cookie scope?' })], 1000, post);
+    assert.deepEqual(sent.sort(), [other.endpoint, sub.endpoint].sort());
+    assert.deepEqual(await readSubs(dir), [sub], 'the 410 one is gone');
+    pageFocused(2000);
+    await watchSessions(dir, [s('a'), s('b'), s('c', { asking: true })], 3000, post);
+    assert.equal(sent.length, 2, 'a focused page within the minute: no push');
+    rmSync(dir, { recursive: true });
+    console.log('ok push vapid, send, store, watcher');
+}
+{
+    // transitions: into asking or needs-you, one per session per 30s, never from subagent transcripts or a working chat
+    const s = (id, extra = {}) => ({ id, project: 'alpha', status: 'idle', asking: false, needsYou: false, ...extra });
+    const sent = new Map();
+    let r = pushEvents(null, [s('a', { asking: true })], sent, 0);
+    assert.deepEqual(r.events, []);
+    r = pushEvents(r.next, [s('a', { asking: true }), s('b', { needsYou: true, lastReply: 'Pick one' }), s('w', { needsYou: true, status: 'working' }), s('x', { asking: true, sidechain: true })], sent, 1000);
+    assert.deepEqual(r.events, [{ title: 'alpha needs you', body: 'Pick one', tag: 'b', chat: 'b' }]);
+    r = pushEvents(r.next, [s('a'), s('b')], sent, 2000);
+    r = pushEvents(r.next, [s('a', { asking: true, question: 'Which?' }), s('b', { needsYou: true })], sent, 3000);
+    assert.deepEqual(r.events.map(e => [e.chat, e.body]), [['a', 'Which?']], 'b again within 30s is debounced');
+    r = pushEvents(r.next, [s('a', { asking: true }), s('b')], sent, 40_000);
+    r = pushEvents(r.next, [s('a', { asking: true }), s('b', { needsYou: true })], sent, 41_000);
+    assert.deepEqual(r.events.map(e => e.chat), ['b'], 'a still asking: no new push');
+    assert.ok(localRequest('127.0.0.1', { host: 'localhost:4321' }, ['localhost:4321']));
+    assert.ok(!localRequest('127.0.0.1', { host: 'mac.tail1.ts.net' }, ['localhost:4321']));
+    assert.ok(!localRequest('127.0.0.1', { host: 'localhost:4321', 'x-forwarded-for': '100.1.2.3' }, ['localhost:4321']));
+    assert.ok(!localRequest('100.1.2.3', { host: 'localhost:4321' }, ['localhost:4321']));
+    console.log('ok push transitions');
+}

@@ -145,6 +145,25 @@ export default {
         assert.equal(await page.ev(`document.getElementById('attached').hidden`), true, 'attachments cleared');
     },
 
+    'pasted images get their own row: thumbnails, status line and the last feed item never overlap, at desktop and phone width': async ({ page, open }) => {
+        await open();
+        await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
+        await page.ev(`(() => { const b = atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='); const dt = new DataTransfer();
+            for (let n = 0; n < 9; n++) dt.items.add(new File([Uint8Array.from(b, c => c.charCodeAt(0))], 'dot' + n + '.png', { type: 'image/png' }));
+            const i = document.getElementById('attach-input'); i.files = dt.files; i.dispatchEvent(new Event('change')); })()`);
+        await page.waitFor(`document.querySelectorAll('#attached .c-thumb').length === 9`, { what: 'nine thumbnails' });
+        for (const [w, mobile] of [[1440, false], [390, true]]) {
+            await page.cmd('Emulation.setDeviceMetricsOverride', { width: w, height: 900, deviceScaleFactor: 1, mobile });
+            await sleep(100);
+            const r = await page.ev(`(() => { const R = s => document.querySelector(s).getBoundingClientRect(), items = document.getElementById('feed').children, last = items[items.length - 1].getBoundingClientRect(), th = R('#attached'), st = R('#status'), row = R('.c-row'), f = R('#feed');
+                return { statusBelowFeedItem: st.top >= last.bottom - 1, thumbsBelowStatus: th.top >= st.bottom - 1, rowBelowThumbs: row.top >= th.bottom - 1, feedAboveDock: f.bottom <= st.top + 1, sideScroll: document.documentElement.scrollWidth > innerWidth }; })()`);
+            assert.deepEqual(r, { statusBelowFeedItem: true, thumbsBelowStatus: true, rowBelowThumbs: true, feedAboveDock: true, sideScroll: false }, `at ${w}px`);
+            const shot = await page.cmd('Page.captureScreenshot', { format: 'png' });
+            (await import('node:fs')).writeFileSync(`/private/tmp/claude-501/-Users-bruinen-IdeaProjects-Privat-codetool/a0da2e79-0e88-4132-aa8a-4f82c6fe07ad/scratchpad/paste-${w}.png`, Buffer.from(shot.data, 'base64'));
+        }
+        await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    },
+
     'the feed does not jump when the status changes or while typing': async ({ page, open }) => {
         await open();
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });

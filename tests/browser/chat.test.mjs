@@ -1,11 +1,24 @@
 import assert from 'node:assert/strict';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { sleep } from './cdp.mjs';
 import { chatItems, chatFeed } from '../../server.mjs';
 
 const feedHas = t => `document.getElementById('feed').textContent.includes(${JSON.stringify(t)})`;
 const bubble = text => `[...document.querySelectorAll('#feed .bubble')].find(b => b.textContent.includes(${JSON.stringify(text)}))`;
+
+// Puts a fixture transcript back after fn, so a later test still sees its chat as idle.
+async function restored(path, fn) {
+
+    const body = readFileSync(path), { atime, mtime } = statSync(path);
+    try {
+        await fn();
+    } finally {
+        writeFileSync(path, body);
+        utimesSync(path, atime, mtime);
+    }
+}
+
 const ready = page => page.waitFor(`${bubble('tag the release')}`, { what: 'the newest master bubble' });
 
 export default {
@@ -257,7 +270,7 @@ export default {
         assert.deepEqual(page.posts.map(p => p.body), ['something else']);
     },
 
-    'a slow transcript response that lands after a newer one does not roll the feed back': async ({ page, open, IDS, touchSession }) => {
+    'a slow transcript response that lands after a newer one does not roll the feed back': async ({ page, open, IDS, touchSession, homebase }) => restored(join(dirname(homebase), 'home', '.claude', 'projects', '-fx-alpha', `${IDS.master}.jsonl`), async () => {
         await open();
         await page.waitFor(feedHas('tag the release'), { what: 'the chat' });
         // hold the next transcript response 4s in the page, as a slow poll would
@@ -281,36 +294,38 @@ export default {
         await page.ev(`(() => { window.__lost = false; const t = setInterval(() => { if (!${feedHas('FRESH-REPLY-R1')}) { window.__lost = true; clearInterval(t); } }, 20); })()`);
         await sleep(4500);
         assert.equal(await page.ev('window.__lost'), false, 'the fresh reply vanished when the held (older) response rendered');
-    },
+    }),
 
     'reading scrolled up: a new reply at the bottom does not shift what you read': async ({ page, open, IDS, homebase }) => {
         const home = join(dirname(homebase), 'home');
         const file = join(home, '.claude', 'projects', '-fx-gamma', `${IDS.gamma}.jsonl`);
-        const base = { isSidechain: false, cwd: join(home, 'repos', 'gamma'), sessionId: IDS.gamma, version: '2.1.322', gitBranch: 'main' };
-        const at = s => new Date(Date.now() - s * 1000).toISOString();
-        const lines = [];
-        for (let k = 0; k < 80; k++) {
-            const s = 900 - k * 10;
-            lines.push({ ...base, type: 'user', uuid: `ru${k}`, timestamp: at(s), origin: { kind: 'human' }, promptSource: 'typed', message: { role: 'user', content: `question ${k}` } });
-            lines.push({ ...base, type: 'assistant', uuid: `ra${k}`, timestamp: at(s - 5), message: { model: 'claude-opus-5-5', content: [{ type: 'text', text: `reply ${k}\n\nline two of reply ${k}` }] } });
-            lines.push({ ...base, type: 'system', subtype: 'turn_duration', durationMs: 1000, timestamp: at(s - 6) });
-        }
-        appendFileSync(file, lines.map(l => JSON.stringify(l)).join('\n') + '\n');
-        await open({ project: 'gamma', chat: IDS.gamma });
-        await page.waitFor(feedHas('reply 79'), { what: 'the long chat' });
-        await page.ev(`(() => { const f = document.getElementById('feed'); f.scrollTop = f.scrollHeight / 2; })()`);
-        await sleep(500);
-        const probe = `(() => { const f = document.getElementById('feed'), top = f.getBoundingClientRect().top; const b = [...f.querySelectorAll('.bubble')].find(b => b.getBoundingClientRect().bottom > top + 5); return { text: b.textContent.slice(0, 30), y: Math.round(b.getBoundingClientRect().top - top) }; })()`;
-        const before = await page.ev(probe);
-        const s = 0;
-        appendFileSync(file, [
-            { ...base, type: 'user', uuid: 'rux', timestamp: at(s + 2), origin: { kind: 'human' }, promptSource: 'typed', message: { role: 'user', content: 'question x' } },
-            { ...base, type: 'assistant', uuid: 'rax', timestamp: at(s + 1), message: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'reply x' }] } },
-            { ...base, type: 'system', subtype: 'turn_duration', durationMs: 1000, timestamp: at(s) }
-        ].map(l => JSON.stringify(l)).join('\n') + '\n');
-        await page.waitFor(feedHas('reply x'), { what: 'the new reply', timeout: 8000 });
-        await sleep(300);
-        const after = await page.ev(probe);
-        assert.deepEqual(after, before, 'the item the user was reading moved');
+        await restored(file, async () => {
+            const base = { isSidechain: false, cwd: join(home, 'repos', 'gamma'), sessionId: IDS.gamma, version: '2.1.322', gitBranch: 'main' };
+            const at = s => new Date(Date.now() - s * 1000).toISOString();
+            const lines = [];
+            for (let k = 0; k < 80; k++) {
+                const s = 900 - k * 10;
+                lines.push({ ...base, type: 'user', uuid: `ru${k}`, timestamp: at(s), origin: { kind: 'human' }, promptSource: 'typed', message: { role: 'user', content: `question ${k}` } });
+                lines.push({ ...base, type: 'assistant', uuid: `ra${k}`, timestamp: at(s - 5), message: { model: 'claude-opus-5-5', content: [{ type: 'text', text: `reply ${k}\n\nline two of reply ${k}` }] } });
+                lines.push({ ...base, type: 'system', subtype: 'turn_duration', durationMs: 1000, timestamp: at(s - 6) });
+            }
+            appendFileSync(file, lines.map(l => JSON.stringify(l)).join('\n') + '\n');
+            await open({ project: 'gamma', chat: IDS.gamma });
+            await page.waitFor(feedHas('reply 79'), { what: 'the long chat' });
+            await page.ev(`(() => { const f = document.getElementById('feed'); f.scrollTop = f.scrollHeight / 2; })()`);
+            await sleep(500);
+            const probe = `(() => { const f = document.getElementById('feed'), top = f.getBoundingClientRect().top; const b = [...f.querySelectorAll('.bubble')].find(b => b.getBoundingClientRect().bottom > top + 5); return { text: b.textContent.slice(0, 30), y: Math.round(b.getBoundingClientRect().top - top) }; })()`;
+            const before = await page.ev(probe);
+            const s = 0;
+            appendFileSync(file, [
+                { ...base, type: 'user', uuid: 'rux', timestamp: at(s + 2), origin: { kind: 'human' }, promptSource: 'typed', message: { role: 'user', content: 'question x' } },
+                { ...base, type: 'assistant', uuid: 'rax', timestamp: at(s + 1), message: { model: 'claude-opus-5-5', content: [{ type: 'text', text: 'reply x' }] } },
+                { ...base, type: 'system', subtype: 'turn_duration', durationMs: 1000, timestamp: at(s) }
+            ].map(l => JSON.stringify(l)).join('\n') + '\n');
+            await page.waitFor(feedHas('reply x'), { what: 'the new reply', timeout: 8000 });
+            await sleep(300);
+            const after = await page.ev(probe);
+            assert.deepEqual(after, before, 'the item the user was reading moved');
+        });
     }
 };

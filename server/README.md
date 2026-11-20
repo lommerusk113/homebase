@@ -17,12 +17,13 @@
 | `account.mjs` | which GitHub account a repo's gh calls run as (keychain token for personal repos), the shared token reader, config merge |
 | `newproject.mjs` | POST `/api/projects/new`, `/clone` and `/open`, GET `/github` and `/local`: name check, the create/clone/start-chat steps, the folder check for Open, the owner's repo list with the keychain token kept out of every output |
 | `uploads.mjs` | Chat image uploads: POST `/api/upload` (type and size checks, generated name), GET `/api/upload/<name>` |
+| `push.mjs` | Web Push: VAPID keys and JWT, RFC 8291 encryption, sending, `subscriptions.json`, the asking/needs-you transition watcher behind POST `/api/push/subscribe` and `/unsubscribe` |
 | `security.mjs` | Host/Origin/token checks, the local host list |
 | `pairing.mjs` | Remote access through `tailscale serve`: the `remote` config, the remote port test, one-time codes and their rate limit, device cookies (hashes in `devices.json`), revoke, the pair page, `isPairedRequest(req)` for other features |
 | `static.mjs` | App file map, build hash, CSP, `public/vendor` serving, revalidation |
 
 Imports only go one way, with no cycles:
-`transcripts`, `tmux`, `security`, `pairing`, `static`, `uploads` and `limits` import no other module; `forge` neither.
+`transcripts`, `tmux`, `security`, `pairing`, `static`, `uploads`, `push` and `limits` import no other module; `forge` neither.
 `items` → transcripts, forge.
 `sessions` → transcripts, forge, items, tmux.
 `milestones` → forge, items, sessions.

@@ -20,6 +20,7 @@ import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedReque
 import { readConfigFile } from './server/account.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
 import { saveUpload, readUpload } from './server/uploads.mjs';
+import { vapidKeys, validSub, addSub, removeSub, readSubs, watchSessions, watchedAt, pageFocused, localRequest } from './server/push.mjs';
 
 export {
     readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, chatFeed, quickReplies, askList, optionLabels, waitingOn, namedChoices,
@@ -159,7 +160,36 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return revoke(url.searchParams.get('id')) ? res.end('ok') : deny(404, 'no such device');
             }
             if (url.pathname === '/api/sessions') {
-                return json(await sessions());
+                if (url.searchParams.has('focused')) {
+                    pageFocused();
+                }
+                const list = await sessions();
+                watchSessions(DATA_DIR, list).catch(e => console.error(`push: ${e.message}`));
+                return json(list);
+            }
+            if (url.pathname === '/api/push/key') {
+                return json({ key: (await vapidKeys(DATA_DIR)).publicKey });
+            }
+            if (isPost('/api/push/subscribe') || isPost('/api/push/unsubscribe')) {
+                // TODO pairing: require isPairedRequest (until then only this machine's own browser may subscribe)
+                if (!localRequest(req.socket.remoteAddress, req.headers, localHosts(PORT))) {
+                    return deny(403, 'only this computer or a paired device can get notifications');
+                }
+                let input;
+                try {
+                    input = JSON.parse(await readBody(req, 4096));
+                } catch {
+                    return deny(400, 'expected a JSON body');
+                }
+                if (url.pathname === '/api/push/unsubscribe') {
+                    await removeSub(DATA_DIR, String(input?.endpoint));
+                    return res.end('ok');
+                }
+                if (!validSub(input)) {
+                    return deny(400, 'not a push subscription from a known push service');
+                }
+                await addSub(DATA_DIR, input);
+                return res.end('ok');
             }
             if (isPost('/api/send')) {
                 const body = await readBody(req, MAX_SEND);
@@ -286,4 +316,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     } else {
         listenLocal();
     }
+    // With no page polling /api/sessions, the push watcher looks every 5s itself, and only while a device is subscribed.
+    setInterval(async () => {
+        if (Date.now() - watchedAt() < 5000 || !(await readSubs(DATA_DIR)).length) {
+            return;
+        }
+        try {
+            await watchSessions(DATA_DIR, await sessions());
+        } catch (e) {
+            console.error(`push: ${e.message}`);
+        }
+    }, 5000);
 }

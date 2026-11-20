@@ -559,6 +559,22 @@ assert.deepEqual(cev([cm('a')], [cm('a', CT(2))], S(0)), [['comment', 'a', 1]]);
 assert.deepEqual(ev([it('a', 'review')], [it('a', 'needs-you')]), [['needs-you', 'a']]); // default seen keeps old calls working
 console.log('ok attention');
 import { freshComments, authorSummary } from './public/core.js';
+import { projectCounts } from './public/core.js';
+{
+    const items = cols => cols.map((column, i) => ({ key: `${column}${i}`, column }));
+    const sessions = [
+        { id: 'a', project: 'alpha', status: 'idle', needsYou: true, asking: false, items: items(['doing', 'review', 'needs-you', 'done', 'finished']) },
+        { id: 'b', project: 'beta', status: 'working', needsYou: true, asking: false, items: items(['ready']) },
+        { id: 'c', project: 'beta', status: 'idle', asking: true, sidechain: true },
+        { id: 'd', project: 'other', status: 'idle', asking: true }
+    ];
+    assert.deepEqual(projectCounts(sessions, ['beta', 'alpha', 'gamma']), [
+        { project: 'alpha', open: 2, waiting: 2 },
+        { project: 'beta', open: 1, waiting: 0 }, // working, so not waiting; a sidechain's question isn't the user's
+        { project: 'gamma', open: 0, waiting: 0 }
+    ]);
+    console.log('ok project counts');
+}
 import { isBot, humanComments } from './server.mjs';
 const c3 = { items: [{ at: CT(3), author: 'Børre Stellander' }, { at: CT(2), author: 'Ann Lee' }, { at: CT(1), author: 'Børre Stellander' }] };
 assert.deepEqual(freshComments(c3, S(1)).map(c => c.at), [CT(3), CT(2)]);

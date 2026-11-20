@@ -377,19 +377,33 @@ export function foldable(tldr, rest, key) {
     return [top, body, btn];
 }
 
-// Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected), hooks.milestoneId to the picked one and hooks.refresh for keys.js's r;
+// Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected), hooks.milestoneId to the picked one, hooks.refresh for keys.js's r and hooks.setProject for its [ and ];
 // keys.js sets hooks.rendered, which list.js and issues.js call after each render.
-/** @type {{ inMilestone: (x: WorkItem) => boolean, milestoneId: () => number | null, refresh: () => void, rendered?: (refocus: boolean) => void }} */
-export const hooks = { inMilestone: () => true, milestoneId: () => null, refresh: () => {} };
+/** @type {{ inMilestone: (x: WorkItem) => boolean, milestoneId: () => number | null, refresh: () => void, setProject: (name: string) => void, rendered?: (refocus: boolean) => void }} */
+export const hooks = { inMilestone: () => true, milestoneId: () => null, refresh: () => {}, setProject: () => {} };
 
+/** @param {{ project: string }} x */
+export const isTracked = x => state.tracked.includes(x.project);
 // In a tracked project and in the selected one (or "All").
 /** @param {{ project: string }} x */
-export const inView = x => state.tracked.includes(x.project) && (state.project === 'all' || x.project === state.project);
+export const inView = x => isTracked(x) && (state.project === 'all' || x.project === state.project);
 /** @returns {Session[]} */
 export const visibleSessions = () => state.sessions.filter(inView);
 // Waits on the user: a question or permission prompt, or idle with a reply that asks for a decision.
 /** @param {Session} s */
 export const waitsOnYou = s => !s.sidechain && (s.asking || (s.needsYou && s.status !== 'working'));
+// Per tracked project (by name), for its header chip: open work items, and what waits on you (Needs you items plus chats asking or needing you).
+/** @param {Session[]} sessions @param {string[]} tracked @returns {{ project: string, open: number, waiting: number }[]} */
+export function projectCounts(sessions, tracked) {
+    return [...tracked].sort((a, b) => a.localeCompare(b)).map(project => {
+        const mine = sessions.filter(s => s.project === project), items = mine.flatMap(s => s.items || []);
+        return {
+            project,
+            open: items.filter(x => x.column === 'doing' || x.column === 'review' || x.column === 'ready').length,
+            waiting: items.filter(x => x.column === 'needs-you').length + mine.filter(waitsOnYou).length
+        };
+    });
+}
 // "Since last checked" per MR: seen:<mrUrl> in localStorage. An MR never seen before counts as seen now, so the first load doesn't flood.
 /** @param {string} pr @returns {number} */
 export const seenAt = pr => {
@@ -413,9 +427,11 @@ export const authorSummary = items => {
 };
 /** @param {WorkItem} x */
 const newCount = x => (x.pr ? freshComments(x.comments, seenAt(x.pr)).length : 0);
+// Counts every tracked project, not only the selected one: the tab title is how another project's waiting chat gets seen.
 export function updateTitle() {
+    const tracked = state.sessions.filter(isTracked);
     // the chat's own poll can see its question before the session list does; max, so it isn't counted twice
-    const asking = Math.max(visibleSessions().filter(waitsOnYou).length, state.asking ? 1 : 0);
-    const n = visibleSessions().flatMap(s => s.items || []).filter(x => x.column === 'needs-you' || x.column === 'ready' || newCount(x)).length + asking;
+    const asking = Math.max(tracked.filter(waitsOnYou).length, state.asking ? 1 : 0);
+    const n = tracked.flatMap(s => s.items || []).filter(x => x.column === 'needs-you' || x.column === 'ready' || newCount(x)).length + asking;
     document.title = n ? `(${n}) Homebase` : 'Homebase';
 }

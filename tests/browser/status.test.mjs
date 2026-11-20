@@ -37,7 +37,7 @@ export default {
     },
 
     'status bar: asking, with the question and its options': async ({ page, open, IDS }) => {
-        await open({ project: 'beta', chat: IDS.asker });
+        await open({ tracked: '["beta"]', project: 'beta', chat: IDS.asker }); // only beta: the title counts every tracked project
         await page.waitFor(`${status} === 'c-status asking | Claude is asking — see the question above'`, { what: 'asking' });
         assert.equal(await page.ev(`document.getElementById('ask').hidden`), false);
         // not in tmux (no pane to answer on): the transcript's question, its options read-only

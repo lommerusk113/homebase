@@ -15,6 +15,23 @@ export default {
         await page.waitFor(`${pill}?.textContent.includes('No milestones')`, { what: 'the beta pill' });
     },
 
+    'project chips count every tracked project, and a click switches to it': async ({ page, open, IDS }) => {
+        const chip = name => `[...document.querySelectorAll('#proj-chips .proj-chip')].find(b => b.firstChild.textContent === '${name}')`;
+        const titleCount = `Number(document.title.match(/^\\((\\d+)\\)/)?.[1] ?? 0)`;
+        await open({ tracked: '["alpha"]' });
+        await page.waitFor(`${titleCount} > 0`, { what: 'a count in the title' });
+        const alphaOnly = await page.ev(titleCount);
+        await open();
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#proj-chips .proj-chip')].map(b => b.firstChild.textContent)`), ['alpha', 'beta', 'gamma']);
+        assert.equal(await page.ev(`${chip('alpha')}.getAttribute('aria-pressed')`), 'true');
+        await page.waitFor(`${chip('beta')}?.querySelector('.warn')?.textContent === '⚠1'`, { what: "beta's asking chat on its chip" });
+        assert.ok(await page.ev(titleCount) > alphaOnly, 'the title counts beta, though alpha is selected');
+        assert.ok(!(await page.ev(`document.querySelector('#masters tr[data-key="asking:${IDS.asker}"]')`)), "beta's row stays off alpha's board");
+        await page.click('#proj-chips .proj-chip:nth-child(2)');
+        await page.waitFor(`localStorage.getItem('project') === 'beta' && document.getElementById('project').value === 'beta'`, { what: 'beta to be picked' });
+        await page.waitFor(`document.querySelector('#masters tr[data-key="asking:${IDS.asker}"]')`, { what: "beta's board" });
+    },
+
     'milestone pill shows the active milestone and its counts': async ({ page, open }) => {
         await open();
         await page.waitFor(`${pill}?.querySelector('summary .n')?.textContent === '· 4 open'`, { what: '"4 open"' });

@@ -1,5 +1,5 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { api, $, el, state, store, saveTracked, inView, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, setOffline, setFormatWarn, seenAt, authorSummary } from './core.js';
+import { api, $, el, state, store, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, setOffline, setFormatWarn, seenAt, authorSummary } from './core.js';
 import { renderBoard, select, attentionEvents, askingEvents, sessionTopic } from './list.js';
 import { refreshChat, initChat, bindChat, isMaster, chatSession } from './chat.js';
 import { openNewProject, initNewProject } from './newproject.js';
@@ -84,8 +84,38 @@ function renderProjects() {
     }
     const names = [...state.tracked].sort((a, b) => a.localeCompare(b));
     fillSelect($('project'), [['all', 'All my projects'], ...names.map(n => /** @type {[string, string]} */ ([n, n]))], state.project);
+    renderChips();
     renderMilestone();
 }
+// One chip per tracked project beside the select, "alpha 3 ⚠1": open work items, and what waits on you in the warn colour. Click switches to it.
+function renderChips() {
+    $('proj-chips').replaceChildren(...projectCounts(state.sessions, state.tracked).map(({ project: p, open, waiting }) => {
+        const b = el('button', `proj-chip${p === state.project ? ' on' : ''}`, p);
+        if (open) {
+            b.append(el('small', null, String(open)));
+        }
+        if (waiting) {
+            b.append(el('small', 'warn', `⚠${waiting}`));
+        }
+        b.setAttribute('aria-pressed', String(p === state.project));
+        b.setAttribute('aria-label', `${p}: ${open} open${waiting ? `, ${waiting} waiting on you` : ''}`);
+        b.onclick = () => setProject(p);
+        return b;
+    }));
+}
+/** @param {string} name a tracked project or 'all' */
+function setProject(name) {
+    if (name === state.project) {
+        return;
+    }
+    state.project = name;
+    store.set('project', name);
+    renderProjects();
+    renderBoard();
+    refreshChat();
+    refreshLog();
+}
+hooks.setProject = setProject;
 
 function renderDialog() {
     const c = counts(), body = $('dlg-body');
@@ -307,9 +337,9 @@ async function pollOnce() {
             if (activeTab() === 'issues') {
                 renderIssues(); // the cards' Start button and "starting…" follow the chat session
             }
-            // diffed over all items, then filtered, so changing the project filter doesn't read as transitions
+            // diffed over all items, then filtered to every tracked project (not only the selected one), so changing the project filter doesn't read as transitions
             const items = state.sessions.flatMap(s => s.items || []);
-            const events = [...askingEvents(prevSessions, state.sessions), ...attentionEvents(state.items, items, x => seenAt(x.pr))].filter(e => inView(e.item ?? e.session));
+            const events = [...askingEvents(prevSessions, state.sessions), ...attentionEvents(state.items, items, x => seenAt(x.pr))].filter(e => isTracked(e.item ?? e.session));
             events.forEach(notify);
             // screen readers hear the same transitions, notifications on or not
             if (events.length) {
@@ -391,15 +421,9 @@ project.addEventListener('wa-after-hide', e => {
     }
 });
 project.addEventListener('change', () => {
-    if (!project.value || project.value === state.project) {
-        return;
+    if (project.value) {
+        setProject(project.value);
     }
-    state.project = project.value;
-    store.set('project', state.project);
-    renderMilestone();
-    renderBoard();
-    refreshChat();
-    refreshLog();
 });
 for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) {
     b.onclick = () => showTab(b.dataset.tab);

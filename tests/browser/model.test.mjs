@@ -30,6 +30,18 @@ export default {
         await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }); // the harness's size (cdp.mjs)
     },
 
+    'picking a model leaves the typed draft in the box and posts only /model': async ({ page, open, IDS }) => {
+        await open();
+        await page.waitFor(`${btn}?.textContent === 'Opus ▾'`, { what: 'the Opus chip' });
+        await page.click('#msg');
+        await page.type('my unsent draft');
+        await page.click('#c-model-btn');
+        await page.clickOn(`document.querySelector('#c-model wa-dropdown-item[value="haiku"]')`);
+        await page.waitFor(`${btn}.classList.contains('pending')`, { what: 'the pending chip' });
+        assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [[`/api/send?id=${IDS.master}`, '/model haiku']]);
+        assert.equal(await page.ev(`document.getElementById('msg').value`), 'my unsent draft');
+    },
+
     'the model chip is disabled while Claude asks, since /model would decline the question': async ({ page, open, IDS }) => {
         await open({ project: 'beta', chat: IDS.asker });
         await page.waitFor(`!document.getElementById('ask').hidden && !document.getElementById('c-model').hidden`, { what: 'the ask card and the chip' });

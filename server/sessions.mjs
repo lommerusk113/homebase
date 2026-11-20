@@ -386,11 +386,13 @@ function prLinks(entries) {
     return [...at].map(([url, v]) => ({ url, ...v }));
 }
 
-// When the session last really did something: a human prompt (typed or queued) or Claude's text/tool call. File mtime
-// isn't it, since an idle claude process keeps appending cost-state, bridge-session and similar bookkeeping lines.
+// When the session last really did something: a human prompt (typed or queued), a slash command (a /model pick: the user
+// is there, so auto-compact waits) or Claude's text/tool call. File mtime isn't it, since an idle claude process keeps
+// appending cost-state, bridge-session and similar bookkeeping lines.
 export function lastActivity(entries) {
 
     const e = entries.findLast(e => !e.isSidechain && (isHumanPrompt(e)
+        || (e.type === 'user' && textOf(e).startsWith('<command-name>'))
         || (e.type === 'attachment' && e.attachment?.type === 'queued_command' && e.attachment.origin?.kind === 'human')
         || (e.type === 'assistant' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'text' || b.type === 'tool_use'))));
     const at = Date.parse(e?.timestamp);

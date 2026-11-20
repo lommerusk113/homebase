@@ -1270,6 +1270,8 @@ import { findClearedSuccessor, tmuxFor, lastActivity, linkClears } from './serve
     assert.equal(lastActivity([...real, ...book]), Date.parse(ts('01')), 'bookkeeping, tool results and sidechains are not activity');
     assert.equal(lastActivity([...real, { type: 'attachment', timestamp: ts('05'), attachment: { type: 'queued_command', prompt: 'q', origin: { kind: 'human' } } }]), Date.parse(ts('05')), 'a queued human prompt is');
     assert.equal(lastActivity(book), null);
+    const pick = { type: 'user', timestamp: ts('06'), message: { role: 'user', content: '<command-name>/model</command-name>\n            <command-message>model</command-message>\n            <command-args>opus</command-args>' } };
+    assert.equal(lastActivity([...real, pick, ...book]), Date.parse(ts('06')), 'a slash command the user ran (a /model pick) is: auto-compact waits');
     console.log('ok last activity');
 }
 {
@@ -2936,6 +2938,15 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     f = fake();
     await send(sid, 'hi', session, f.opts(new Map()));
     assert.deepEqual(f.keys().slice(1), typed('cc-dddddddd', 'hi'), 'only the next send');
+
+    // Claude is compacting (tests/fixtures/pane-compacting.txt): nothing is typed, neither a message (Claude would queue it
+    // with no text in the transcript, so the page could never show it) nor a second /compact from another page
+    const compacting = readFileSync(new URL('./tests/fixtures/pane-compacting.txt', import.meta.url), 'utf8');
+    for (const text of ['hi', '/compact']) {
+        f = fake({ panes: () => compacting });
+        assert.match((await send(sid, text, session, f.opts(new Map())).catch(e => e)).message, /compacting/i, text);
+        assert.ok(!f.calls.some(c => c[0] === 'send-keys'), text);
+    }
 
     // one action per tmux at a time, in arrival order; a failure doesn't block the next
     const order = [];

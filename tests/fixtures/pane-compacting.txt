@@ -1,0 +1,17 @@
+❯ add a cancel button to the request list, and show the amount with a loading
+  state until it is confirmed
+
+❯ add a cancel button to the request list, and show the amount with a loading
+  state until it is confirmed
+  ctrl+x ctrl+s to send now
+
+✽ Compacting conversation… (35s · ↓ 2.6k tokens)
+                                         ✔ Update installed · Restart to apply
+────────────────────────────────────────────────────────────────────────────────
+❯ Press up to edit queued messages
+────────────────────────────────────────────────────────────────────────────────
+  5h 10% · 7d 68% · ctx 0%
+  ⏵⏵ auto mode on · 2 shells
+
+  ⏺ main
+  ◯ general-purpose  Editing SomeServiceTest.java c… 6m 54s · ↓ 93.1k tokens

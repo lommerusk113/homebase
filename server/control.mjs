@@ -68,6 +68,7 @@ const targetOf = (id, live) => {
     return name;
 };
 const BOOT_MS = 30_000;
+const COMPACTING = /^\S Compacting conversation…/m; // its spinner line, tests/fixtures/pane-compacting.txt
 export const NEEDS_CLICK = 'Claude is showing a question that typing can\'t answer: pick one of its options on the card above';
 
 // Types `text` into the session's tmux, starting one (claude --resume) when none runs. Claude Code's registry (reg) says
@@ -109,6 +110,11 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
         const pane = started ? '' : await capture(name, tm);
         if (!started && !questionOpen(pane) && parseQuestion(pane)) {
             throw conflict(NEEDS_CLICK);
+        }
+        // Claude queues what's typed during a compaction with no text in the transcript, so the page can't show it (it turns
+        // "not confirmed"); a /compact from another page would run a second compaction after it
+        if (COMPACTING.test(pane)) {
+            throw conflict('Claude is compacting the conversation: send again when it\'s done');
         }
         if (!started && session.asking && !questionOpen(pane)) {
             throw conflict("Claude is asking something Homebase can't see: answer it in the terminal");

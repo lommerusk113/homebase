@@ -350,6 +350,16 @@ function showNewer(s) {
     }
 }
 
+// The bound session's project (and topic) in the chat header, and in the input's placeholder.
+/** @param {Session | null} s */
+function showHead(s) {
+
+    const title = s ? [s.project, s.topic].filter(Boolean).join(' · ') : '';
+    $('c-title').textContent = title;
+    $('c-title').title = title;
+    $('msg').setAttribute('placeholder', s ? `Message Claude in ${s.project}…` : 'Message Claude…');
+}
+
 // The ask and startup cards: the question, an option per button (its description under it) that `answer` picks, else
 // read-only rows; and the tmux command to answer in the terminal.
 /** @param {string} id @param {string} tmux @param {string} question @param {{ label: string, desc?: string, primary?: boolean }[]} options @param {((i: number) => Promise<void>) | null} answer */
@@ -572,6 +582,7 @@ export async function refreshChat() {
         renderBoard();
     }
     showNewer(s);
+    showHead(s);
     await showBoot(s ? null : state.startingTmux); // only a chat still starting: a running one's ❯ prompts and questions aren't startup dialogs
     if (s && !restored) {
         restored = true;

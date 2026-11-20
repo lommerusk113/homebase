@@ -52,6 +52,18 @@ export default {
         }
     },
 
+    'the header and the input name the bound project, a long title truncated at the same header height': async ({ page, open }) => {
+        await open();
+        await ready(page);
+        await page.waitFor(`document.getElementById('c-title').textContent === 'alpha · Release'`, { what: 'the project and topic in the header' });
+        assert.equal(await page.ev(`document.getElementById('msg').getAttribute('placeholder')`), 'Message Claude in alpha…');
+        const height = `document.querySelector('#chat .c-head').getBoundingClientRect().height`, h = await page.ev(height);
+        await page.ev(`document.getElementById('c-title').textContent = 'alpha · ' + 'a very long topic '.repeat(20)`);
+        assert.equal(await page.ev(height), h, 'header height unchanged');
+        assert.ok(await page.ev(`(() => { const t = document.getElementById('c-title'); return t.scrollWidth > t.clientWidth && getComputedStyle(t).textOverflow === 'ellipsis'; })()`), 'truncated with an ellipsis');
+        assert.ok(await page.ev(`document.querySelector('#c-menu button[slot="trigger"]').getBoundingClientRect().right <= document.getElementById('chat').getBoundingClientRect().right`), 'the menu stays in view');
+    },
+
     'TLDR folds the rest of the message': async ({ page, open }) => {
         await open();
         await ready(page);

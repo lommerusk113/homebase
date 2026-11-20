@@ -136,6 +136,7 @@ a.chip:hover { text-decoration:underline; }
 #chat { position:relative; width:420px; flex-shrink:0; background:var(--bg); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
 /* slim header row for the chat menu (wa-dropdown is display:contents, so the trigger is the flex item) */
 .c-head { flex-shrink:0; height:var(--bar-h); display:flex; align-items:center; justify-content:flex-end; padding:0 8px; border-bottom:1px solid var(--line); }
+.c-title { flex:1; min-width:0; font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .c-newer { margin-right:auto; font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .c-hidden { align-self:center; flex-shrink:0; font-size:12px; color:var(--muted); }
 .c-hidden .show, .c-newer .show, .c-status .show { padding:0; }

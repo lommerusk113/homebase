@@ -8,6 +8,7 @@
 | `sessions.mjs` | Repo names, subagent summaries and status, session summaries, `sessions()` for `/api/sessions`, `folderFor` |
 | `items.mjs` | Work-item rules (pure): columns, lifecycle, next step, row action, gate badge, milestone of an MR |
 | `forge.mjs` | glab/gh calls: PR/MR state, comments and threads, limiter, dedupe, the `prs` and `swr` caches, refresh button |
+| `reviews.mjs` | MRs by others that ask me for a review (`/api/reviews`), read-only, cached |
 | `milestones.mjs` | Milestones tab: milestone lists, issue groups, linked MRs, start-up warm-up |
 | `log.mjs` | Log tab: finished subagents, git commits, chat topics and closed MRs of a project's last 7 days, `log()` for `/api/log` |
 | `limits.mjs` | Rate limits from the status-line dumps |
@@ -28,6 +29,7 @@ Imports only go one way, with no cycles:
 `items` → transcripts, forge.
 `sessions` → transcripts, forge, items, tmux.
 `milestones` → forge, items, sessions.
+`reviews` → forge, account.
 `log` → transcripts, forge, sessions.
 `control` → sessions, tmux.
 `newproject` → transcripts, tmux, startup, sessions.

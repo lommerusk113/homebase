@@ -193,6 +193,27 @@ function askingRow(s) {
     return tr;
 }
 
+// "Review requested": an open MR by someone else that asks me for a review. Click opens it in GitLab.
+/** @param {ReviewRequest} r */
+function reviewRow(r) {
+    const tr = el('tr', 'rv'), what = el('td', 'what'), b = el('b', null, r.title), tag = el('span', 'chip mono', `!${r.iid}`);
+    tr.dataset.key = `review:${r.url}`;
+    tr.setAttribute('role', 'link');
+    tr.tabIndex = 0;
+    what.colSpan = 6;
+    what.append(b, el('small', 'next', ''));
+    what.lastElementChild.append(tag, ` ${r.project} · ${r.author}${r.draft ? ' · draft' : ''} · ${ago(r.updatedAt)}`, ...ciPill(r.pipeline).map(n => (n instanceof HTMLElement ? [' ', n] : [n])).flat());
+    tr.append(what);
+    const open = () => window.open(r.url, '_blank', 'noopener');
+    tr.onclick = open;
+    tr.onkeydown = e => {
+        if (e.key === 'Enter') {
+            open();
+        }
+    };
+    return tr;
+}
+
 // One work item's row, plus its detail row while selected.
 /** @param {WorkItem} x @returns {HTMLElement[]} */
 function itemRows(x) {
@@ -314,6 +335,7 @@ function renderItems() {
     const placeholders = visibleSessions().filter(isMaster).flatMap(s => startingIssues(s, visibleSessions().filter(o => o.project === s.project).flatMap(o => o.items || [])).map(n => starting(s, n)));
     const asking = visibleSessions().filter(waitsOnYou).map(askingRow);
     const finishedKey = `fold:finished:${state.project}`, reviewKey = `fold:review:${state.project}`;
+    const reviews = (state.reviews ?? []).filter(r => state.project === 'all' || r.project.split('/').pop() === state.project);
     const groups = COLUMNS.map(c => {
         const list = items.filter(x => x.column === c.key), extra = c.key === 'doing' ? placeholders : c.key === 'needs-you' ? asking : [];
         if (!list.length && !extra.length) {
@@ -337,6 +359,13 @@ function renderItems() {
         sec.append(h, t);
         return sec;
     }).filter(Boolean);
+    if (reviews.length) { // after Needs you, else first
+        const h = el('h2', 'g-head'), t = el('table', 'rows'), sec = el('section', 'group g-reviews');
+        h.append(dot('review'), `Review requested · ${reviews.length}`);
+        t.append(...reviews.map(reviewRow));
+        sec.append(h, t);
+        groups.splice(groups.findIndex(g => g.classList.contains('g-needs-you')) + 1, 0, sec);
+    }
     const hadFocus = $('masters').contains(document.activeElement); // replaceChildren drops it; keys.js puts it back
     const strip = renderSessions();
     // nothing open (only the folded Recently finished / Merged, or nothing at all): a calm line under the strip

@@ -9,6 +9,7 @@ import { transcript } from './server/transcripts.mjs';
 import { sessions, startingChats } from './server/sessions.mjs';
 import { refreshAll, refreshInfo } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
+import { reviewRequests } from './server/reviews.mjs';
 import { limits } from './server/limits.mjs';
 import { log } from './server/log.mjs';
 import { MAX_SEND, withLock } from './server/tmux.mjs';
@@ -32,6 +33,7 @@ export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refres
 export {
     column, gateFor, toGate, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf, itemUpdated
 } from './server/items.mjs';
+export { reviewRows } from './server/reviews.mjs';
 export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones, mineView } from './server/milestones.mjs';
 export { limitsOf, peakLimits, contextOf } from './server/limits.mjs';
 export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
@@ -304,6 +306,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
             if (url.pathname === '/api/editors') {
                 return json((await editors()).map(({ id, name }) => ({ id, name })));
+            }
+            if (url.pathname === '/api/reviews') {
+                return json(reviewRequests());
             }
             if (url.pathname === '/api/milestones') {
                 return json(await milestones(url.searchParams.get('project'), url.searchParams.get('milestone')));

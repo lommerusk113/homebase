@@ -457,7 +457,27 @@ async function findStarting() {
         }
     } catch {}
 }
+// Review requests change slowly (the server caches them for 2 min): ask every 5 s (a local cache hit; GitLab is asked at most every 2 min); a failure hides the rows.
+let reviewsAt = 0;
+async function pollReviews() {
+    if (Date.now() - reviewsAt < 5_000) {
+        return;
+    }
+    reviewsAt = Date.now();
+    try {
+        const r = await api('/api/reviews');
+        const list = r.ok ? await r.json() : [];
+        if (JSON.stringify(list) !== JSON.stringify(state.reviews ?? [])) {
+            state.reviews = list;
+            renderBoard();
+        }
+    } catch {
+        state.reviews = [];
+    }
+}
+
 async function pollOnce() {
+    pollReviews();
     try {
         const r = await api(`/api/sessions${document.hasFocus() ? '?focused=1' : ''}`); // a focused page holds back phone pushes
         if (!r.ok) {

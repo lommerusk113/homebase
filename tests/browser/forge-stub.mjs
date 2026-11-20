@@ -25,6 +25,10 @@ const MRS = {
 };
 // the user's open MRs as the list endpoint returns them: authored (the merged one is not open), plus one only assigned
 const OPEN_AUTHORED = [101, 102, 103, 104, 106], OPEN_ASSIGNED = [102, 105];
+MRS[201] = mr(201, { title: 'Refactor the tax lookup', author: ann, reviewers: [me], detailed_merge_status: 'not_approved', head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/9`, finished_at: ago(300) }, updated_at: ago(7200), references: { full: 'acme/alpha!201' } });
+MRS[202] = mr(202, { title: 'Draft: new onboarding', author: ann, draft: true, reviewers: [me], detailed_merge_status: 'draft_status', updated_at: ago(86400 * 3), references: { full: 'acme/alpha!202' } });
+// review requests: the instance-wide list (scope=all); my own MR 102 is in it and must be dropped
+const REVIEW_REQUESTED = [201, 202, 102];
 const DISCUSSIONS = {
     101: [{ notes: [{ id: 9001, system: false, author: ann, created_at: ago(3600), body: 'Please keep the **return URL** when redirecting.', resolvable: true, resolved: false }] }],
     104: [{ notes: [{ id: 9002, system: false, author: ann, created_at: ago(500), body: 'On your question about the TTL: I think it matters more than it looks.', resolvable: false }] }]
@@ -52,6 +56,11 @@ function glab(path) {
     }
     if (p === 'user') {
         return out(me);
+    }
+    if (p === 'merge_requests') {
+        const q = new URLSearchParams(path.split('?')[1]);
+
+        return q.get('reviewer_username') === 'tester' && q.get('scope') === 'all' ? out(REVIEW_REQUESTED.map(i => ({ ...MRS[i], ...(i === 102 && { reviewers: [me] }) }))) : fail(`stub: unexpected MR list ${path}`);
     }
     if (p === 'projects/acme%2Falpha/merge_requests') {
         const q = new URLSearchParams(path.split('?')[1]);

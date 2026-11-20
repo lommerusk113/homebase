@@ -12,6 +12,7 @@ export default {
         await page.waitFor(`${row(MR(102))} && ${row(MR(106))}`, { what: 'the !102 row and the forge-seeded !106' });
         assert.deepEqual(await page.ev(groups), {
             'needs-you': ['agent-stopped', MR(104), `asking:${IDS.master}`], // the master's last reply asks for a decision
+            reviews: [MR(201), MR(202)].map(u => `review:${u}`), // newest first; my own !102 is dropped
             doing: [MR(101), MR(105), `starting:${IDS.worker}:7`], // placeholders after the item rows
             review: [MR(103), MR(107), MR(106)],
             ready: [MR(102)],
@@ -19,7 +20,7 @@ export default {
             done: [MR(100)]
         });
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters .g-head')].map(h => h.textContent)`),
-            ['Needs you · 3', 'Doing · 3', 'In review (3)', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
+            ['Needs you · 3', 'Review requested · 2', 'Doing · 3', 'In review (3)', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.next').textContent`), 'Next: Agent stopped — check the chat');
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.act-btn').textContent`), 'Continue');
         assert.equal(await page.ev(`${row(`asking:${IDS.master}`)}.querySelector('b').textContent.trim()`), 'Should I tag the release now or wait for QA?', 'the needs-you title is what the reply asks');
@@ -29,6 +30,29 @@ export default {
         assert.equal(await page.ev(`${row(MR(102))}.querySelector('.act-btn').textContent`), 'Merge + close issue');
         await page.waitFor(`!${row(MR(101))}.querySelector('.ms-tag')`, { what: 'no milestone tag while the pill has Sprint 12 picked' });
         assert.equal(await page.ev(`${row(MR(101))}.querySelector('a.chip').textContent`), '!101', 'an open MR shows no "open"');
+    },
+
+    'review requested rows show the MR facts and open it in GitLab': async ({ page, open }) => {
+        await open();
+        await page.waitFor(`${row(`review:${MR(201)}`)}`, { what: 'the review-requested row' });
+        const txt = await page.ev(`${row(`review:${MR(201)}`)}.textContent`);
+        assert.match(txt, /Refactor the tax lookup.*!201.*acme\/alpha.*Ann Reviewer.*2h/);
+        assert.ok(await page.ev(`!!${row(`review:${MR(201)}`)}.querySelector('.ci-success')`), 'pipeline shown');
+        assert.match(await page.ev(`${row(`review:${MR(202)}`)}.textContent`), /draft/);
+        await page.ev(`window.open = (u, t) => { window.__opened = [u, t]; }; ${row(`review:${MR(201)}`)}.click()`);
+        assert.deepEqual(await page.ev(`window.__opened`), [MR(201), '_blank']);
+        // never side-scrolls, also at phone width
+        await page.cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+        try {
+            await page.click('#ptabs [data-pane="work"]');
+            await page.waitFor(`document.scrollingElement.scrollWidth <= innerWidth && ${row(`review:${MR(201)}`)}.getBoundingClientRect().right <= innerWidth`, { what: 'no side-scroll at 390px' });
+            if (process.env.HOMEBASE_SHOT) {
+                writeFileSync(process.env.HOMEBASE_SHOT, Buffer.from((await page.cmd('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
+            }
+        } finally {
+            await page.click('#ptabs [data-pane="chat"]');
+            await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+        }
     },
 
     'in All my projects each row names its project': async ({ page, open }) => {

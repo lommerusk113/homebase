@@ -951,6 +951,13 @@ import { unpushedOf } from './server/sessions.mjs';
 }
 
 import { repoPath, groupIssues, milestoneOf, activeMilestones, keepMilestone, worksOn, noMilestones, mineView } from './server.mjs';
+import { reviewRows } from './server.mjs';
+{
+    const mr = (iid, o) => ({ iid, state: 'opened', title: `T${iid}`, web_url: `https://gitlab.com/g/p/-/merge_requests/${iid}`, references: { full: `g/p!${iid}` }, author: { username: 'ann', name: 'Ann' }, draft: false, updated_at: `2026-01-0${iid}T00:00:00Z`, ...o });
+    const rows = reviewRows([mr(1), mr(2, { author: { username: 'me' } }), mr(3, { draft: true, head_pipeline: { status: 'failed' } }), mr(4, { state: 'merged' })], 'me');
+    assert.deepEqual(rows.map(r => r.iid), [3, 1]); // mine and non-open dropped, newest first
+    assert.deepEqual([rows[0].draft, rows[0].pipeline?.status, rows[0].project, rows[0].author, rows[1].pipeline], [true, 'failed', 'g/p', 'Ann', null]);
+}
 import { inMilestone, toData, isLoading, emptyPill } from './public/milestone.js';
 assert.deepEqual(repoPath('git@gitlab.com:tritt/accounting/pracsys.git\n'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
 assert.deepEqual(repoPath('https://gitlab.com/tritt/accounting/pracsys.git'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });

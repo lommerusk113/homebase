@@ -113,6 +113,8 @@ interface RowAction { label: string; message: string }
 
 interface Activity { id: string; description: string; status: string; tldr: string | null }
 
+interface ReviewRequest { url: string; iid: number; title: string; project: string; author: string; draft: boolean; updatedAt: number; pipeline: Pipeline | null }
+
 interface WorkItem {
     key: string;
     project: string;

@@ -410,6 +410,9 @@ wa-details.group::part(icon) { color:var(--muted); font-size:12px; }
 .s-more:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 .rows tr.starting b, .rows tr.asking b { display:flex; align-items:center; gap:6px; color:var(--muted); }
 .rows tr.asking b { color:inherit; }
+.rows tr.rv td { white-space:normal; }
+.rows tr.rv .next { white-space:normal; overflow:visible; }
+.rows tr.rv .chip { margin-right:2px; }
 .rows tr.starting .pulse, .rows tr.asking .pulse { flex-shrink:0; }
 .rows tr.asking .pulse { background:var(--c-needs); }
 .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--c); flex-shrink:0; }

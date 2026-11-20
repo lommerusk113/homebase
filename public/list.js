@@ -178,13 +178,18 @@ export function workingLine(s) {
     const t = ago(s.stepAt ?? s.since ?? s.lastActivity ?? s.updated);
     return `${s.project} · Now: ${s.step || 'thinking'}${t === 'now' ? '' : ` · for ${t}`}`;
 }
-// The project's main chat while it works: "<topic>" with "project · Now: <step> · for 2m". Click chats with it. Leaves with the status.
+// What a working chat is on: the request its turn handles (no pasted image paths), else its newest reply's topic, else its title.
+/** @param {Session} s */
+export function workingTitle(s) {
+    return excerpt((s.now ?? '').replace(/\[Image: [^\]]*\]/g, ''), 100) || s.topic || s.title || sessionTopic(s);
+}
+// The project's main chat while it works: "<request>" with "project · Now: <step> · for 2m". Click chats with it. Leaves with the status.
 /** @param {Session} s */
 function workingRow(s) {
     const tr = el('tr', 'starting working'), what = el('td', 'what'), b = el('b');
     tr.dataset.key = `working:${s.id}`;
     tr.setAttribute('role', 'button');
-    b.append(el('span', 'pulse'), ` ${s.title || sessionTopic(s)} `, el('span', 'chip', 'main chat'));
+    b.append(el('span', 'pulse'), ` ${workingTitle(s)} `, el('span', 'chip', 'main chat'));
     what.append(b, el('small', 'next', workingLine(s)));
     what.colSpan = 6;
     tr.append(what);

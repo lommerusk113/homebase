@@ -569,10 +569,9 @@ import { projectCounts } from './public/core.js';
         { id: 'd', project: 'other', status: 'idle', asking: true }
     ];
     assert.deepEqual(projectCounts(sessions, ['beta', 'alpha', 'gamma']), [
-        { project: 'alpha', open: 2, waiting: 2 },
-        { project: 'beta', open: 1, waiting: 0 }, // working, so not waiting; a sidechain's question isn't the user's
-        { project: 'gamma', open: 0, waiting: 0 }
+        { project: 'alpha', waiting: 2 } // beta is working and its sidechain's question isn't the user's; gamma has nothing: both left out
     ]);
+    assert.deepEqual(projectCounts([], ['alpha']), []);
     console.log('ok project counts');
 }
 import { isBot, humanComments } from './server.mjs';

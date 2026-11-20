@@ -63,6 +63,7 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 #project { width:220px; font-size:14px; --wa-form-control-value-font-weight:600; --wa-form-control-height:32px; }
 #project wa-option { font-size:13.5px; }
 .proj-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.proj-chips:empty { display:none; }
 .proj-chip { appearance:none; border:1px solid var(--line); background:var(--bg); color:var(--muted); font:inherit; font-size:12px; line-height:18px; padding:2px 9px; border-radius:99px; cursor:pointer; display:inline-flex; gap:5px; align-items:baseline; }
 .proj-chip:hover { color:var(--fg); background:var(--hover); }
 .proj-chip.on { color:var(--fg); border-color:var(--accent); font-weight:600; }

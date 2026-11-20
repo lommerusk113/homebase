@@ -15,14 +15,15 @@ export default {
         await page.waitFor(`${pill}?.textContent.includes('No milestones')`, { what: 'the beta pill' });
     },
 
-    'project chips count every tracked project, and a click switches to it': async ({ page, open, IDS }) => {
+    'project chips show only projects that need you, as a warn count, and a click switches to it': async ({ page, open, IDS }) => {
         const chip = name => `[...document.querySelectorAll('#proj-chips .proj-chip')].find(b => b.firstChild.textContent === '${name}')`;
         const titleCount = `Number(document.title.match(/^\\((\\d+)\\)/)?.[1] ?? 0)`;
         await open({ tracked: '["alpha"]' });
         await page.waitFor(`${titleCount} > 0`, { what: 'a count in the title' });
         const alphaOnly = await page.ev(titleCount);
         await open();
-        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#proj-chips .proj-chip')].map(b => b.firstChild.textContent)`), ['alpha', 'beta', 'gamma']);
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#proj-chips .proj-chip')].map(b => b.firstChild.textContent)`), ['alpha', 'beta'], 'gamma needs nothing: no chip');
+        assert.equal(await page.ev(`${chip('alpha')}.querySelectorAll('small').length`), 1, 'only the warn count, no open number');
         assert.equal(await page.ev(`${chip('alpha')}.getAttribute('aria-pressed')`), 'true');
         await page.waitFor(`${chip('beta')}?.querySelector('.warn')?.textContent === '⚠1'`, { what: "beta's asking chat on its chip" });
         assert.ok(await page.ev(titleCount) > alphaOnly, 'the title counts beta, though alpha is selected');
@@ -30,6 +31,12 @@ export default {
         await page.click('#proj-chips .proj-chip:nth-child(2)');
         await page.waitFor(`localStorage.getItem('project') === 'beta' && document.getElementById('project').value === 'beta'`, { what: 'beta to be picked' });
         await page.waitFor(`document.querySelector('#masters tr[data-key="asking:${IDS.asker}"]')`, { what: "beta's board" });
+    },
+
+    'project chips container is gone when no project needs you': async ({ page, open }) => {
+        await open({ tracked: '["gamma"]' });
+        await page.waitFor(`document.getElementById('project')`, { what: 'the header' });
+        assert.equal(await page.ev(`getComputedStyle(document.getElementById('proj-chips')).display`), 'none');
     },
 
     'milestone pill shows the active milestone and its counts': async ({ page, open }) => {

@@ -56,7 +56,7 @@ export default {
         await page.waitFor(`localStorage.getItem('project') === 'beta'`, { what: 'beta' });
         await page.key('[', 'BracketLeft');
         await page.key('[', 'BracketLeft');
-        await page.waitFor(`localStorage.getItem('project') === 'gamma' && document.querySelector('#proj-chips .on')?.firstChild.textContent === 'gamma'`, { what: 'gamma, wrapped around' });
+        await page.waitFor(`localStorage.getItem('project') === 'gamma' && document.getElementById('project').value === 'gamma'`, { what: 'gamma, wrapped around' });
     },
 
     'j moves through the Log tab entries': async ({ page, open }) => {

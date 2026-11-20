@@ -87,18 +87,13 @@ function renderProjects() {
     renderChips();
     renderMilestone();
 }
-// One chip per tracked project beside the select, "alpha 3 ⚠1": open work items, and what waits on you in the warn colour. Click switches to it.
+// A chip per tracked project that waits on you, "alpha ⚠3" in the warn colour; none, no container. Click switches to it.
 function renderChips() {
-    $('proj-chips').replaceChildren(...projectCounts(state.sessions, state.tracked).map(({ project: p, open, waiting }) => {
+    $('proj-chips').replaceChildren(...projectCounts(state.sessions, state.tracked).map(({ project: p, waiting }) => {
         const b = el('button', `proj-chip${p === state.project ? ' on' : ''}`, p);
-        if (open) {
-            b.append(el('small', null, String(open)));
-        }
-        if (waiting) {
-            b.append(el('small', 'warn', `⚠${waiting}`));
-        }
+        b.append(el('small', 'warn', `⚠${waiting}`));
         b.setAttribute('aria-pressed', String(p === state.project));
-        b.setAttribute('aria-label', `${p}: ${open} open${waiting ? `, ${waiting} waiting on you` : ''}`);
+        b.setAttribute('aria-label', `${p}: ${waiting} waiting on you`);
         b.onclick = () => setProject(p);
         return b;
     }));

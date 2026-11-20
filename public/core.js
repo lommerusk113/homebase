@@ -395,17 +395,13 @@ export const visibleSessions = () => state.sessions.filter(inView);
 // Waits on the user: a question or permission prompt, or idle with a reply that asks for a decision.
 /** @param {Session} s */
 export const waitsOnYou = s => !s.sidechain && (s.asking || (s.needsYou && s.status !== 'working'));
-// Per tracked project (by name), for its header chip: open work items, and what waits on you (Needs you items plus chats asking or needing you).
-/** @param {Session[]} sessions @param {string[]} tracked @returns {{ project: string, open: number, waiting: number }[]} */
+// Tracked projects (by name) with something waiting on you, for the header chips: Needs you items plus chats asking or needing you.
+/** @param {Session[]} sessions @param {string[]} tracked @returns {{ project: string, waiting: number }[]} */
 export function projectCounts(sessions, tracked) {
     return [...tracked].sort((a, b) => a.localeCompare(b)).map(project => {
-        const mine = sessions.filter(s => s.project === project), items = mine.flatMap(s => s.items || []);
-        return {
-            project,
-            open: items.filter(x => x.column === 'doing' || x.column === 'review' || x.column === 'ready').length,
-            waiting: items.filter(x => x.column === 'needs-you').length + mine.filter(waitsOnYou).length
-        };
-    });
+        const mine = sessions.filter(s => s.project === project);
+        return { project, waiting: mine.flatMap(s => s.items || []).filter(x => x.column === 'needs-you').length + mine.filter(waitsOnYou).length };
+    }).filter(c => c.waiting > 0);
 }
 // "Since last checked" per MR: seen:<mrUrl> in localStorage. An MR never seen before counts as seen now, so the first load doesn't flood.
 /** @param {string} pr @returns {number} */

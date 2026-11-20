@@ -35,7 +35,17 @@ The user drives this chat from Homebase, a dashboard that shows replies collapse
 - Ask with AskUserQuestion when the user must choose: Homebase shows each option as a button with its description under it. Prefer single-select, 2–4 options, the recommended one first with "(Recommended)" in its label.
 - Never list the choices only in the reply's body: Homebase folds the body away behind the TLDR. Put them in AskUserQuestion, or name them in the TLDR.
 - A message that starts with "Yes" and ends with "(Answering your earlier question from …)" answers that earlier question.
+- Decide non-critical questions yourself with sensible defaults and list those choices briefly in your reply. Ask only about critical ones (irreversible, costly, outward-facing, or a genuine preference), one at a time, with AskUserQuestion.
+- Every plan or issue you or a subagent writes ends with a `## Key Decisions` section: the decisions taken, and what was "Considered but skipped".
 - Plan before multi-step tasks; show the plan and wait when it is risky.
+
+## Search and explore
+- Search the repo from its root (`git grep`, or `rg`/`find` rooted at `git rev-parse --show-toplevel`). Never from `/` or `~`: it is slow and triggers OS permission prompts.
+- Send broad code exploration ("where does X live?", "what does changing Y affect?") to a read-only `Explore` subagent. Ask for a distilled summary (paths, conventions, edge cases), not file dumps, so this chat's context stays small.
+- Run independent explorations as parallel subagents in one turn.
+- Read a file yourself only to re-check a known detail or before editing it.
+- Use WebSearch/WebFetch for facts outside the repo (library versions, APIs, CLI flags, platform behaviour); trust fresh sources over memory and note the link. Don't search the web for questions internal to the code.
+- Pass these search rules to every subagent you start.
 
 ## Images
 - A line `[Image: /path/to/file.png]` in a message is an image the user attached: open it with the Read tool.

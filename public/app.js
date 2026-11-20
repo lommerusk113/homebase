@@ -1,10 +1,11 @@
-// Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
+// Entry point: header (project picker, bell, projects dialog), polling, notifications, limits strip.
 import { api, $, el, state, store, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary, waitsOnYou } from './core.js';
 import { renderBoard, select, attentionEvents, askingEvents, sessionTopic } from './list.js';
 import { refreshChat, initChat, bindChat, focusChat, isMaster, chatSession } from './chat.js';
 import { openNewProject, initNewProject } from './newproject.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
 import { initKeys } from './keys.js';
+import { picker } from './picker.js';
 import { renderIssues, showTab, activeTab } from './issues.js';
 import { refreshLog } from './log.js';
 
@@ -50,25 +51,6 @@ const syncTheme = () => document.documentElement.classList.toggle('wa-dark', dar
 dark.addEventListener('change', syncTheme);
 syncTheme();
 
-// Rebuild options only when they changed, and never while the list is open: the open listbox would lose its options.
-/** @param {WaSelect} sel @param {[string, string][]} opts @param {string} value */
-function fillSelect(sel, opts, value) {
-    if (sel.open) {
-        return;
-    }
-    const now = [...sel.querySelectorAll('wa-option')];
-    if (!(now.length === opts.length && now.every((o, i) => o.value === opts[i][0] && o.textContent === opts[i][1]))) {
-        sel.replaceChildren(...opts.map(([v, t]) => {
-            const o = el('wa-option', null, t);
-            o.setAttribute('value', v);
-            return o;
-        }));
-    }
-    if (sel.value !== value) {
-        sel.value = value;
-    }
-}
-
 /** @returns {Record<string, number>} */
 const counts = () => {
     const c = /** @type {Record<string, number>} */ ({});
@@ -78,12 +60,23 @@ const counts = () => {
     return c;
 };
 
+// One row of the project picker: a dot for the loudest state among its chats, and what they are doing underneath.
+/** @param {string} value @param {string} name @param {Session[]} mine @returns {import('./picker.js').PickItem} */
+function pickItem(value, name, mine) {
+    const chats = mine.filter(s => !s.sidechain);
+    const waiting = mine.flatMap(s => s.items || []).filter(x => x.column === 'needs-you').length + mine.filter(waitsOnYou).length; // as projectCounts
+    const working = chats.filter(s => s.status === 'working').length;
+    const parts = [waiting && `${waiting} waiting on you`, working && `${working} working`, `${chats.length || 'No'} chat${chats.length === 1 ? '' : 's'}`];
+
+    return { value, name, sub: parts.filter(Boolean).join(' · '), state: waiting ? 'needs' : working ? 'working' : 'idle' };
+}
+
 function renderProjects() {
     if (state.project !== 'all' && !state.tracked.includes(state.project)) {
         state.project = 'all';
     }
     const names = [...state.tracked].sort((a, b) => a.localeCompare(b));
-    fillSelect($('project'), [['all', 'All my projects'], ...names.map(n => /** @type {[string, string]} */ ([n, n]))], state.project);
+    projects.update([pickItem('all', 'All my projects', state.sessions.filter(isTracked)), ...names.map(n => pickItem(n, n, state.sessions.filter(s => s.project === n)))], state.project);
     renderChips();
     renderMilestone();
 }
@@ -118,6 +111,12 @@ function setProject(name) {
     refreshLog();
 }
 hooks.setProject = setProject;
+const projects = picker($('project'), {
+    onPick: setProject,
+    placeholder: 'Filter projects…',
+    actions: [['New project…', () => openNewProject()], ['Manage projects…', () => $('manage').click()]]
+});
+hooks.openProjects = projects.open;
 
 function renderDialog() {
     const c = counts(), body = $('dlg-body');
@@ -584,18 +583,6 @@ async function refreshLimits() {
     });
 }
 
-const project = $('project');
-// catch up on option updates skipped while the list was open (tooltips' wa-after-hide bubble too, hence the target check)
-project.addEventListener('wa-after-hide', e => {
-    if (e.target === project) {
-        renderProjects();
-    }
-});
-project.addEventListener('change', () => {
-    if (project.value) {
-        setProject(project.value);
-    }
-});
 for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) {
     b.onclick = () => showTab(b.dataset.tab);
 }

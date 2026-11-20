@@ -56,8 +56,8 @@ const rowOf = key => rows().find(r => r.dataset.key === key);
 /** @param {string | null} key @returns {WorkItem | undefined} */
 const itemOf = key => state.sessions.flatMap(s => s.items || []).find(x => x.key === key);
 const typing = path => path.some(n => n.isContentEditable || ['input', 'textarea', 'wa-input', 'wa-textarea'].includes(n.localName));
-const menuOpen = path => !!document.querySelector('wa-dialog[open], wa-select[open], wa-dropdown[open], details.ms-pick[open]')
-    || path.some(n => ['wa-select', 'wa-dialog', 'wa-dropdown'].includes(n.localName) || n.classList?.contains('ms-pick'));
+const menuOpen = path => !!document.querySelector('wa-dialog[open], wa-dropdown[open], details.ms-pick[open], .pp.open')
+    || path.some(n => ['wa-dialog', 'wa-dropdown'].includes(n.localName) || n.classList?.contains('ms-pick') || n.classList?.contains('pp'));
 
 // Roving tabindex and ARIA state on the rows; refocus puts DOM focus back on the tracked row after a re-render took it away.
 function syncRows(refocus) {
@@ -168,9 +168,7 @@ function onKey(e) {
         log: () => showTab('log'),
         help,
         project: () => {
-            const p = $('project');
-            p.focus();
-            p.open = true;
+            hooks.openProjects();
         },
         milestone: () => {
             const m = /** @type {HTMLDetailsElement | null} */ (document.querySelector('.ms-pick:not([hidden])'));

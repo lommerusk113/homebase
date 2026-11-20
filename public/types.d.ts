@@ -278,8 +278,6 @@ interface WaDialog extends HTMLElement { open: boolean }
 interface WaInput extends HTMLElement { value: string; hint: string; disabled: boolean }
 interface WaSwitch extends HTMLElement { checked: boolean; disabled: boolean }
 interface WaDetails extends HTMLElement { open: boolean }
-interface WaSelect extends HTMLElement { open: boolean; value: string }
-interface WaOption extends HTMLElement { value: string }
 interface WaDropdown extends HTMLElement { open: boolean }
 interface WaDropdownItem extends HTMLElement { value: string; checked: boolean; disabled: boolean }
 interface WaButton extends HTMLElement { disabled: boolean }
@@ -294,8 +292,6 @@ interface WaTextarea extends HTMLElement {
 interface HTMLElementTagNameMap {
     'wa-dialog': WaDialog;
     'wa-details': WaDetails;
-    'wa-select': WaSelect;
-    'wa-option': WaOption;
     'wa-dropdown': WaDropdown;
     'wa-dropdown-item': WaDropdownItem;
     'wa-button': WaButton;
@@ -335,7 +331,7 @@ interface LogResponse { project: string; repo: string | null; defaultBranch: str
 
 /** Elements in index.html that $() callers use beyond HTMLElement. */
 interface PageIds {
-    project: WaSelect;
+    project: HTMLButtonElement;
     dlg: WaDialog;
     'clear-dlg': WaDialog;
     'new-dlg': WaDialog;

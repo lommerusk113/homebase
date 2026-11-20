@@ -66,8 +66,41 @@ body { margin:0; font:var(--fs-l)/1.5 Inter, -apple-system, system-ui, sans-seri
 header.top { background:var(--bg); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:var(--sp-3); padding:var(--sp-2) var(--sp-5); flex-wrap:wrap; }
 .brand { display:flex; align-items:center; gap:var(--sp-2); font-weight:600; font-size:var(--fs-l); letter-spacing:-.01em; }
 .sep { color:var(--line); font-size:18px; font-weight:300; }
-#project { width:220px; font-size:var(--fs-m); --wa-form-control-value-font-weight:600; --wa-form-control-height:30px; }
-#project wa-option { font-size:var(--fs-m); }
+/* Project picker (picker.js): a button with the current choice, and a filterable list in a popover; a bottom sheet on phones */
+.pp { position:relative; display:inline-flex; min-width:0; }
+.pp-btn { appearance:none; display:inline-flex; align-items:center; gap:var(--sp-2); max-width:260px; height:30px; padding:0 var(--sp-2) 0 10px; border:1px solid transparent; border-radius:var(--r-s); background:none; color:var(--fg); font:inherit; font-size:var(--fs-m); font-weight:600; cursor:pointer; transition:background-color .12s, border-color .12s; }
+.pp-btn:hover, .pp.open .pp-btn { background:var(--hover); border-color:var(--line); }
+.pp-btn:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.pp-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pp-dot { flex-shrink:0; width:8px; height:8px; border-radius:50%; background:var(--c-idle); }
+[data-state="needs"] > .pp-dot { background:var(--c-needs); }
+[data-state="working"] > .pp-dot { background:var(--c-doing); }
+.pp-chev { flex-shrink:0; width:7px; height:7px; margin:-3px 3px 0 2px; border:solid var(--muted); border-width:0 1.5px 1.5px 0; transform:rotate(45deg); transition:transform .15s var(--ease), margin .15s var(--ease); }
+.pp.open .pp-chev { transform:rotate(225deg); margin-top:4px; }
+.pp-pop { position:absolute; z-index:30; top:calc(100% + 6px); left:0; }
+.pp-panel { width:320px; display:flex; flex-direction:column; max-height:min(75vh, 620px); background:var(--bg); border:1px solid var(--line); border-radius:var(--r-m); box-shadow:var(--shadow); overflow:hidden; transform-origin:top left; animation:pp-in .14s var(--ease); }
+@keyframes pp-in { from { opacity:0; transform:translateY(-4px) scale(.98); } }
+@keyframes pp-up { from { transform:translateY(100%); } }
+@keyframes pp-fade { from { opacity:0; } }
+.pp-search { appearance:none; flex-shrink:0; width:100%; border:0; border-bottom:1px solid var(--line-soft); outline:0; background:none; color:var(--fg); font:inherit; font-size:var(--fs-m); padding:10px var(--sp-3); }
+.pp-search::placeholder { color:var(--muted); }
+/* a short list needs no filter field: it shows up once something is typed */
+.pp-panel.few .pp-search:placeholder-shown { position:absolute; height:0; padding:0; border:0; opacity:0; pointer-events:none; }
+.pp-list { overflow-y:auto; padding:var(--sp-1); outline:0; overscroll-behavior:contain; }
+.pp-row { display:flex; align-items:center; gap:10px; padding:6px var(--sp-2); border-radius:var(--r-s); cursor:pointer; }
+.pp-row.act { background:var(--hover); }
+.pp-text { flex:1; min-width:0; display:flex; flex-direction:column; line-height:1.35; }
+.pp-row .pp-name { font-size:var(--fs-m); font-weight:500; }
+.pp-row[aria-selected="true"] .pp-name { font-weight:600; }
+.pp-row small { font-size:var(--fs-s); color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pp-row[data-state="needs"] small { color:var(--c-needs); }
+.pp-check { flex-shrink:0; width:12px; height:7px; margin:-3px 4px 0; border:solid var(--accent); border-width:0 0 2px 2px; transform:rotate(-45deg); visibility:hidden; }
+.pp-row[aria-selected="true"] .pp-check { visibility:visible; }
+.pp-none { padding:var(--sp-4) var(--sp-3); color:var(--muted); font-size:var(--fs-m); text-align:center; }
+.pp-foot { flex-shrink:0; display:flex; flex-direction:column; padding:var(--sp-1); border-top:1px solid var(--line-soft); }
+.pp-foot button { appearance:none; border:0; background:none; color:var(--muted); font:inherit; font-size:var(--fs-m); text-align:left; padding:6px var(--sp-2); border-radius:var(--r-s); cursor:pointer; }
+.pp-foot button:hover, .pp-foot button:focus-visible { background:var(--hover); color:var(--fg); outline:0; }
+@media (prefers-reduced-motion: reduce) { .pp-pop, .pp-panel { animation:none !important; } .pp-btn, .pp-chev { transition:none; } }
 .proj-chips { display:flex; flex-wrap:wrap; gap:6px; }
 .proj-chips:empty { display:none; }
 .proj-chip { appearance:none; border:1px solid var(--line); background:var(--bg); color:var(--muted); font:inherit; font-size:var(--fs-s); line-height:18px; padding:2px 9px; border-radius:var(--r-pill); cursor:pointer; display:inline-flex; gap:5px; align-items:baseline; }
@@ -650,7 +683,15 @@ wa-details[open] .g-note { display:none; }
   header.top { gap:8px; padding:max(8px, env(safe-area-inset-top)) 12px 8px; }
   header.top > * { min-width:0; }
   .brand { font-size:0; } /* the logo only */
-  #project { width:170px; }
+  .pp-btn { max-width:170px; height:40px; }
+  .pp-pop { position:fixed; z-index:900; inset:0; display:flex; align-items:flex-end; background:rgba(0,0,0,.4); animation:pp-fade .18s ease-out; }
+  .pp-panel { width:100%; max-height:75dvh; border-width:1px 0 0; border-radius:16px 16px 0 0; padding-bottom:env(safe-area-inset-bottom); animation:pp-up .22s var(--ease); }
+  .pp-panel::before { content:''; flex-shrink:0; align-self:center; width:36px; height:4px; margin:8px 0 4px; border-radius:var(--r-pill); background:var(--line); }
+  .pp-search { font-size:16px; padding:12px var(--sp-4); } /* under 16px iOS zooms in on focus */
+  .pp-list, .pp-foot { padding:var(--sp-1) var(--sp-2); }
+  .pp-row, .pp-foot button { min-height:44px; padding-inline:var(--sp-2); }
+  .pp-row .pp-name, .pp-foot button { font-size:var(--fs-xl); }
+  .pp-row small { font-size:var(--fs-m); }
   .ms-menu { position:fixed; top:calc(max(8px, env(safe-area-inset-top)) + 44px); left:8px; right:8px; width:auto; }
   .main { flex-direction:row; overflow:hidden; }
   .left { flex:1; min-height:0; }

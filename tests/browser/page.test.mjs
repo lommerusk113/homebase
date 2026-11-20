@@ -8,7 +8,7 @@ export default {
         await page.waitFor(`document.querySelector('.ms-pick summary .t')?.textContent === 'Sprint 12'`, { what: 'the milestone pill' });
         await page.waitFor(`document.querySelectorAll('#feed .bubble').length > 3`, { what: 'chat bubbles' });
         await sleep(3500);
-        assert.deepEqual(await page.ev(`['wa-select', 'wa-button', 'wa-textarea', 'wa-details'].filter(n => !customElements.get(n))`), [], 'Web Awesome components defined');
+        assert.deepEqual(await page.ev(`['wa-button', 'wa-textarea', 'wa-details'].filter(n => !customElements.get(n))`), [], 'Web Awesome components defined');
         assert.equal(await page.ev(`typeof marked + typeof DOMPurify`), 'objectfunction');
         assert.deepEqual(page.errors, []);
         assert.deepEqual(await page.ev('window.__csp'), []);

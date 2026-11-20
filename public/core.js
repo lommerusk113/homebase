@@ -413,10 +413,10 @@ export function foldable(tldr, rest, key) {
     return [top, body, btn];
 }
 
-// Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected), hooks.milestoneId to the picked one, hooks.refresh for keys.js's r and hooks.setProject for its [ and ];
+// Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected), hooks.milestoneId to the picked one, hooks.refresh for keys.js's r, hooks.setProject for its [ and ] and hooks.openProjects for its g p;
 // keys.js sets hooks.rendered, which list.js and issues.js call after each render.
-/** @type {{ inMilestone: (x: WorkItem) => boolean, milestoneId: () => number | null, refresh: () => void, setProject: (name: string) => void, rendered?: (refocus: boolean) => void }} */
-export const hooks = { inMilestone: () => true, milestoneId: () => null, refresh: () => {}, setProject: () => {} };
+/** @type {{ inMilestone: (x: WorkItem) => boolean, milestoneId: () => number | null, refresh: () => void, setProject: (name: string) => void, openProjects: () => void, rendered?: (refocus: boolean) => void }} */
+export const hooks = { inMilestone: () => true, milestoneId: () => null, refresh: () => {}, setProject: () => {}, openProjects: () => {} };
 
 /** @param {{ project: string }} x */
 export const isTracked = x => state.tracked.includes(x.project);

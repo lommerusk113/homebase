@@ -721,7 +721,7 @@ export function closedSession(entries, ageMs, live) {
 }
 
 // live: see closedSession; a closed session's open turn is over.
-// Returns { state: 'working' | 'asking' | 'idle', since: turn start ms | null }.
+// Returns { state: 'working' | 'asking' | 'stuck' | 'idle', since: turn start ms | null }.
 export function turnState(entries, ageMs, marker = null, live = null) {
 
     if (closedSession(entries, ageMs, live)) {
@@ -762,6 +762,9 @@ export function turnState(entries, ageMs, marker = null, live = null) {
     }
 
     // ponytail: a tail with no turn markers at all (older Claude Code, or one turn longer than the tail) falls back to the mtime
+    if (known && open && ageMs >= TURN_STALE_MS) {
+        return { state: 'stuck', since: null }; // idle for everything but the chat status, which says Claude may be stuck
+    }
     const working = known ? open && ageMs < TURN_STALE_MS : ageMs < WORKING_MS;
 
     return { state: working ? 'working' : 'idle', since: working && known ? Date.parse(start?.timestamp) || null : null };
@@ -924,5 +927,5 @@ export async function transcript(dir, id) {
     const marker = await askMarker(id);
     const turn = turnState(entries, Date.now() - st.mtimeMs, marker, await liveSessions());
 
-    return { items: chatItems(entries), asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', since: turn.since };
+    return { items: chatItems(entries), asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', stuck: turn.state === 'stuck', since: turn.since };
 }

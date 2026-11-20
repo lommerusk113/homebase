@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, friendly, setOffline, ctxLevel, canCompact, autoCompactDue, NEEDS_ANSWER } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, setOffline, ctxLevel, canCompact, autoCompactDue, NEEDS_ANSWER } from './core.js';
 import { renderBoard } from './list.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
@@ -367,6 +367,10 @@ function setStatus(data) {
     } else {
         $('status-text').textContent = text;
     }
+    $('status-restart').hidden = kind !== 'stuck';
+    // the 5-hour limit near the composer once under 30% is left
+    const w = state.limits?.fiveHour, v = w && limitView(0, w);
+    $('status-lim').textContent = v && v.left < 30 ? `Session ${100 - v.left}% used · resets ${v.when}` : '';
     $('status-ctx').className = `c-ctx ${ctxLevel(s?.context ?? 0)}`;
     $('status-ctx').textContent = s?.context != null ? `context ${Math.round(s.context)}%` : '';
 }
@@ -405,6 +409,12 @@ function showHead(s) {
     const title = s ? [s.project, s.topic].filter(Boolean).join(' · ') : '';
     $('c-title').textContent = title;
     $('c-title').title = title;
+    const branch = $('c-branch'), un = $('c-unpushed');
+    branch.hidden = !s?.branch;
+    branch.textContent = branch.title = s?.branch ?? '';
+    branch.classList.toggle('warn', /^(main|master)$/.test(s?.branch ?? '') && !s?.hobby);
+    un.hidden = !(s?.unpushed > 0);
+    un.textContent = `${s?.unpushed} unpushed`;
     $('msg').setAttribute('placeholder', s ? `Message Claude in ${s.project}…` : 'Message Claude…');
 }
 
@@ -1048,6 +1058,7 @@ export function initChat() {
             restart(s.id);
         }
     };
+    $('status-restart').onclick = () => { $('restart-dlg').open = true; };
     $('compact-nudge').onclick = () => { $('compact-dlg').open = true; };
     $('compact-go').onclick = () => {
         $('compact-dlg').open = false;

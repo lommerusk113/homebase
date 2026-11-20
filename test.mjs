@@ -771,12 +771,24 @@ assert.deepEqual(limitLeft({ used: 0, resetsAt: now + 2 * 1440 * 60_000 }, now),
 import { limitView } from './public/core.js';
 const thu = new Date(2026, 10, 12, 23, 43).getTime(); // local time, so the reset clock reads the same in any zone
 assert.deepEqual(limitView(false, { used: 30, resetsAt: thu + 97 * 60_000 }, thu),
-    { label: 'Session', left: 70, text: '70%', tip: '70% left of your 5-hour limit · resets in 1h37m (01:20)' });
+    { label: 'Session', left: 70, when: '01:20', text: '70%', tip: '70% left of your 5-hour limit · resets in 1h37m (01:20)' });
 assert.deepEqual(limitView(true, { used: 37, resetsAt: new Date(2026, 10, 17, 19, 0).getTime() }, thu),
-    { label: 'Week', left: 63, text: '63%', tip: '63% left of your weekly limit · resets in 4d19h (Tue 19:00)' });
+    { label: 'Week', left: 63, when: 'Tue 19:00', text: '63%', tip: '63% left of your weekly limit · resets in 4d19h (Tue 19:00)' });
 assert.equal(limitView(false, { used: 81, resetsAt: thu + 97 * 60_000 }, thu).text, '19% · resets 1h37m'); // countdown inline only under 20%
 assert.equal(limitView(false, { used: 80, resetsAt: thu + 97 * 60_000 }, thu).text, '20%');
 console.log('ok limit peaks');
+
+import { unpushedOf } from './server/sessions.mjs';
+{
+    let calls = 0;
+    const ahead = n => async () => { calls++; return { stdout: `${n}\n` }; };
+    assert.equal(await unpushedOf('/x/a', 1000, ahead(3)), 3);
+    assert.equal(await unpushedOf('/x/a', 1000 + 29_000, ahead(9)), 3, 'cached for 30 s');
+    assert.equal(await unpushedOf('/x/a', 1000 + 31_000, ahead(9)), 9);
+    assert.equal(calls, 2);
+    assert.equal(await unpushedOf('/x/b', 1000, async () => { throw new Error('no upstream configured'); }), null, 'no upstream: no count, no throw');
+    console.log('ok unpushed');
+}
 
 import { repoPath, groupIssues, milestoneOf, activeMilestones, keepMilestone, worksOn, noMilestones, mineView } from './server.mjs';
 import { inMilestone, toData, isLoading, emptyPill } from './public/milestone.js';
@@ -887,6 +899,7 @@ console.log('ok issues');
 import { chatStatus } from './public/core.js';
 assert.equal(chatStatus(null).kind, 'idle');
 assert.equal(chatStatus({}).text, 'Claude is done — your turn');
+assert.deepEqual(chatStatus({ stuck: true }), { kind: 'stuck', text: 'No activity for 30 min — Claude may be stuck' });
 assert.equal(chatStatus({}, 0, { needsYou: true, subagents: { running: 2, finished: 0 } }).text, 'Claude needs your answer · 2 agents still working');
 assert.equal(chatStatus({}, 0, { needsYou: false, subagents: { running: 1, finished: 0 } }).text, 'Claude is done · 1 agent still working');
 assert.equal(chatStatus({ error: true, working: true, asking: 'Pick one?' }).kind, 'error'); // a failed poll never reads as idle or stale working
@@ -918,7 +931,7 @@ import { turnState } from './server.mjs';
     assert.equal(state([...turn, td('55:43')], 1_000), 'idle');
     // a long thinking gap: no write for 5 minutes and no turn_duration yet is still working; 30+ minutes is stale
     assert.equal(state([td('40:00'), prompt('p', '50:00')], 5 * 60_000), 'working');
-    assert.equal(state([td('40:00'), prompt('p', '50:00')], hour), 'idle');
+    assert.equal(state([td('40:00'), prompt('p', '50:00')], hour), 'stuck');
     // Esc interrupt ends the turn without a turn_duration
     assert.equal(state([...turn, interrupt('b', '55:41')]), 'idle');
     // a prompt sent mid-turn interrupts it: the marker is parented on the new prompt, and the new turn goes on
@@ -948,6 +961,9 @@ import { turnState } from './server.mjs';
     const old = [{ type: 'user', timestamp: at('55:20'), message: { content: 'fix it' } }, reply('b', '55:39')];
     assert.deepEqual(turnState(old, 1_000), { state: 'working', since: null });
     assert.equal(state(old, 60_000), 'idle');
+    // an open turn with no write for 30 min is stuck, not working; a closed turn is just idle
+    assert.deepEqual(turnState(turn, 31 * 60_000), { state: 'stuck', since: null });
+    assert.equal(state([...turn, td('55:43')], 31 * 60_000), 'idle');
     // the session list uses it too
     assert.equal(status(turn.at(-1), 5 * 60_000, turnState(turn, 5 * 60_000)), 'working');
     assert.equal(status(turn.at(-1), 5 * 60_000, { state: 'asking' }), 'waiting');

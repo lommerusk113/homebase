@@ -319,6 +319,7 @@ async function refreshLimits() {
     try {
         l = await api('/api/limits').then(r => r.json());
     } catch {}
+    state.limits = l;
     const box = $('limits'), wins = [l?.fiveHour, l?.sevenDay].map((w, week) => w && limitView(week, w)).filter(Boolean);
     const a = l?.updated && ago(l.updated), updated = !a ? '' : a === 'now' ? 'Updated just now' : `Updated ${a} ago`;
     box.hidden = !wins.length;

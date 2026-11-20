@@ -43,6 +43,10 @@ interface Session {
     /** the transcript was written by a subagent */
     sidechain: boolean;
     items: WorkItem[];
+    /** origin is the personal (hobby) GitHub account */
+    hobby?: boolean;
+    /** commits ahead of the upstream; null when there is no upstream */
+    unpushed?: number | null;
     /** context window used, % (from the status-line dump); null when there is none */
     context: number | null;
     /** when that dump was written, ms */
@@ -178,6 +182,8 @@ interface Transcript {
     asking: string | null;
     questions: { question: string; options: string[]; descriptions?: string[] }[] | null;
     working: boolean;
+    /** an open turn with no write for 30 min */
+    stuck?: boolean;
     since?: number;
 }
 

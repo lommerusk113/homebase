@@ -37,10 +37,10 @@ const parse = v => {
 // ponytail: tracked list lives in this browser's localStorage; move to a projects.json if you want it across browsers
 /**
  * @type {{ sessions: Session[], tracked: string[], project: string, selected: string | null, chat: string | null, unfold: Set<string>,
- *   outbox: OutboxItem[], nudged: Set<string>, offline?: boolean, asking?: string | null, items?: WorkItem[], editors?: Editor[],
+ *   outbox: OutboxItem[], nudged: Set<string>, offline?: boolean, limits?: Limits | null, asking?: string | null, items?: WorkItem[], editors?: Editor[],
  *   opened?: { key: string, since: number }, showMerged?: boolean, starting?: string | null, startingTmux?: string | null, boot?: { question: string, options: string[], selected: number } | null }}
  */
-export const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [], nudged: new Set() };
+export const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [], nudged: new Set(), limits: null };
 export const saveTracked = () => { store.set('tracked', JSON.stringify(state.tracked)); };
 
 // Every API call goes through here: the per-start token from index.html's meta tag, plus x-codetool on POSTs.
@@ -186,6 +186,9 @@ export const chatStatus = (d, now = Date.now(), s = null) => {
     if (d?.asking) {
         return { kind: 'asking', text: 'Claude is asking — see the question above' };
     }
+    if (d?.stuck && !d.working) {
+        return { kind: 'stuck', text: 'No activity for 30 min — Claude may be stuck' };
+    }
     if (!d?.working) {
         const n = s?.subagents?.running ?? 0, agents = n ? ` · ${n} agent${n === 1 ? '' : 's'} still working` : '';
         return { kind: 'idle', text: `${s?.needsYou ? NEEDS_ANSWER : agents ? 'Claude is done' : 'Claude is done — your turn'}${agents}` };
@@ -214,7 +217,7 @@ export const limitView = (week, w, now = Date.now()) => {
     const { left, until } = limitLeft(w, now), at = new Date(w.resetsAt), pad = n => String(n).padStart(2, '0');
     const when = `${week ? at.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' : ''}${pad(at.getHours())}:${pad(at.getMinutes())}`;
     return {
-        label: week ? 'Week' : 'Session', left,
+        label: week ? 'Week' : 'Session', left, when,
         text: `${left}%${left < 20 ? ` · resets ${until}` : ''}`,
         tip: `${left}% left of your ${week ? 'weekly' : '5-hour'} limit · resets in ${until} (${when})`,
     };

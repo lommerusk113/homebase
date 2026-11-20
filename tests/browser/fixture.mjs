@@ -98,6 +98,7 @@ export function buildFixture(root) {
     commit(alphaRepo, 'Draft NOTES.md', 400);
     git('checkout', '-q', 'main');
     commit(alphaRepo, 'Add a perks simulator', 100);
+    git('branch', '--set-upstream-to=origin/main', 'main'); // one commit ahead of it, for the header's unpushed count
 
     // status-line dumps (HOMEBASE_STATUSLINE_DIR): context % per session; master amber, asker red, worker under the gauge
     mkdirSync(join(root, 'statusline'), { recursive: true });

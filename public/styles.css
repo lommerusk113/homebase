@@ -144,6 +144,9 @@ a.chip:hover { text-decoration:underline; }
 #chat { position:relative; width:33%; min-width:420px; max-width:720px; flex-shrink:0; background:var(--bg); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
 /* slim header row for the chat menu (wa-dropdown is display:contents, so the trigger is the flex item) */
 .c-head { flex-shrink:0; height:var(--bar-h); display:flex; align-items:center; justify-content:flex-end; padding:0 8px; border-bottom:1px solid var(--line); }
+.c-branch, .c-unpushed { flex-shrink:1; min-width:0; max-width:35%; margin-left:6px; padding:1px 7px; border:1px solid var(--line); border-radius:9px; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); }
+.c-branch.warn { color:var(--c-warn); border-color:var(--c-warn); }
+.c-branch[hidden], .c-unpushed[hidden] { display:none; }
 .c-title { flex:1; min-width:0; font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .c-newer { margin-right:auto; font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .c-hidden { align-self:center; flex-shrink:0; font-size:12px; color:var(--muted); }
@@ -241,6 +244,9 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); box-shadow:none; tran
 .composer { margin:0 12px; border-radius:var(--card-r); background:var(--bg); border:1px solid var(--line); box-shadow:var(--card-shadow); transition:border-color .15s, box-shadow .15s; }
 .composer:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
 .c-status { --c:var(--c-idle); height:24px; display:flex; align-items:center; gap:7px; padding:6px 12px 0; font-size:11.5px; font-weight:500; white-space:nowrap; overflow:hidden; color:var(--muted); }
+.c-lim { margin-left:auto; flex-shrink:0; font-weight:400; font-variant-numeric:tabular-nums; color:var(--c-warn); }
+.c-lim:not(:empty) + .c-ctx { margin-left:0; }
+.c-status.stuck { --c:var(--c-warn); color:var(--c-warn); }
 .c-ctx { margin-left:auto; flex-shrink:0; font-weight:400; font-variant-numeric:tabular-nums; }
 .c-ctx.warn { color:var(--c-warn); }
 .c-ctx.hot { color:var(--c-danger); }

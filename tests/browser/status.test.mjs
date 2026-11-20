@@ -11,6 +11,23 @@ export default {
         assert.equal(await page.ev(`document.getElementById('ask').hidden`), true);
     },
 
+    'header shows the branch chip, amber on main of a work repo, with the unpushed count': async ({ page, open }) => {
+        await open();
+        await page.waitFor(`document.getElementById('c-branch').textContent === 'main'`, { what: 'the branch chip' });
+        assert.equal(await page.ev(`document.getElementById('c-branch').classList.contains('warn')`), true);
+        await page.waitFor(`document.getElementById('c-unpushed').textContent === '1 unpushed' && !document.getElementById('c-unpushed').hidden`, { what: 'the unpushed count' });
+    },
+
+    'a stuck turn says so and offers Restart chat behind the confirm': async ({ page, open, IDS, answerPosts }) => {
+        await open({ chat: IDS.worker });
+        page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items: [], working: false, stuck: true, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        await page.waitFor(`${status} === 'c-status stuck | No activity for 30 min — Claude may be stuck'`, { what: 'the stuck status' });
+        assert.equal(await page.ev(`document.getElementById('status-restart').hidden`), false);
+        await page.click('#status-restart');
+        await page.waitFor(`document.getElementById('restart-dlg').open`, { what: 'the confirm' });
+        assert.deepEqual(page.posts.filter(p => new URL(p.url).pathname === '/api/restart'), []);
+    },
+
     'status bar: working, with the queued message': async ({ page, open, IDS }) => {
         await open({ chat: IDS.worker });
         await page.waitFor(`${status}.startsWith('c-status working | Claude is working…')`, { what: 'working' });

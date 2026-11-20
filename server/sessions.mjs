@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { ROOT, WORKING_MS, cache, liveSessions, closedSession, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, pendingQuestion, askMarker, readUsage, usageCache, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
 import { loadStore, record, seeds, flush } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, errorText, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
-import { repoPaths } from './account.mjs';
+import { repoPaths, accountOf } from './account.mjs';
 import { contextOf } from './limits.mjs';
 import { workItems, milestoneOf, sameRepo } from './items.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor, liveTmux, mapNewProjects, startingProjects } from './tmux.mjs';
@@ -70,6 +70,27 @@ export async function projectOf(cwd) {
     }
 
     return projects.get(cwd);
+}
+
+// Commits ahead of the upstream per cwd, refreshed at most every UNPUSHED_TTL_MS; null with no upstream or on any git error.
+const UNPUSHED_TTL_MS = 30_000;
+const unpushed = new Map(); // cwd -> { at, n }
+export async function unpushedOf(cwd, now = Date.now(), exec = run) {
+
+    if (!cwd) {
+        return null;
+    }
+    const hit = unpushed.get(cwd);
+    if (hit && now - hit.at < UNPUSHED_TTL_MS) {
+        return hit.n;
+    }
+
+    unpushed.set(cwd, { at: now, n: hit?.n ?? null }); // concurrent callers within the ttl reuse the old value
+    const n = await exec('git', ['-C', cwd, 'rev-list', '--count', '@{u}..HEAD'], { timeout: 3000 })
+        .then(({ stdout }) => Number(stdout.trim()), () => null);
+    unpushed.set(cwd, { at: now, n });
+
+    return n;
 }
 
 const STAGES = ['Explore', 'Implement', 'Verify', 'Ship', 'Done'];
@@ -571,6 +592,9 @@ export async function sessions() {
 
     await Promise.all(out.map(async s => {
         s.project = await projectOf(s.cwd);
+        const repo = repoPaths.get(s.project);
+        s.hobby = !!repo && accountOf(repo) === 'personal';
+        s.unpushed = await unpushedOf(s.cwd);
     }));
 
     attachItems(out, await itemsOf(out), now);

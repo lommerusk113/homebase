@@ -315,15 +315,22 @@ export function chatItems(entries, max = 60) {
 // - interrupt: the Esc marker, which flags Claude's message before it;
 // - prompt: a typed prompt, or one queued while Claude worked and absorbed into the running turn;
 // - turn: any other non-tool-result user entry (agent message, task notification, reminder), which starts a new turn;
+// - agent: a subagent's task notification absorbed mid-turn, which does not start a new turn;
 // - error: an API error line;
 // - assistant: Claude's text and tool calls.
-// A subagent's task notification as a chat line ("Agent finished: Fix login"), else null; background commands and the like stay out.
-const AGENT_DONE = /^\s*<task-notification>[\s\S]*?<status>(\w+)<\/status>\s*<summary>(?:Background )?[Aa]gent "([^"]+)"/;
+// A subagent's task notification as a chat line ({ text: "Agent finished: Fix login", failed }), else null. Background
+// commands, and an agent that only waits on its own background work, stay out; failed and stopped agents are error lines.
+const AGENT_DONE = /^\s*<task-notification>[\s\S]*?<status>(\w+)<\/status>\s*<summary>(?:Background )?[Aa]gent "([^"]+)"(?! is waiting on its own background work)/;
 function agentDone(text) {
 
     const m = text.match(AGENT_DONE);
+    if (!m) {
+        return null;
+    }
 
-    return m ? `Agent ${m[1] === 'completed' ? 'finished' : m[1] === 'failed' ? 'failed' : 'stopped'}: ${m[2]}` : null;
+    const done = m[1] === 'completed';
+
+    return { text: `Agent ${done ? 'finished' : m[1] === 'failed' ? 'failed' : 'stopped'}: ${m[2]}`, failed: !done };
 }
 
 function entryKind(e) {
@@ -350,6 +357,11 @@ function entryKind(e) {
     const a = e.type === 'attachment' ? e.attachment : null;
     if (a?.type === 'queued_command' && a.origin?.kind === 'human') {
         return { kind: 'prompt', text: unwrapPasted(textOf({ message: { content: a.prompt } })), src: 'queued' };
+    }
+    // a notification absorbed mid-turn: its line, but the turn goes on
+    if (a?.type === 'queued_command' && a.origin?.kind === 'task-notification') {
+        const agent = agentDone(textOf({ message: { content: a.prompt } }));
+        return agent && { kind: 'agent', agent };
     }
     if (e.type === 'user' && !(Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result'))) {
         return { kind: 'turn', agent: agentDone(textOf(e)) };
@@ -400,13 +412,14 @@ function rawItems(entries) {
             flush();
             items.push({ role: 'compact', text: 'Conversation compacted', at: e.timestamp });
             newTurn = true;
-        } else if (entry?.kind === 'turn') {
+        } else if (entry?.kind === 'turn' || entry?.kind === 'agent') {
             // an agent notifies again each time it stops: once per prompt of yours is the news
-            if (entry.agent && !items.slice(items.findLastIndex(i => i.role === 'user') + 1).some(i => i.text === entry.agent)) {
+            const a = entry.agent;
+            if (a && !items.slice(items.findLastIndex(i => i.role === 'user') + 1).some(i => i.text === a.text)) {
                 flush();
-                items.push({ role: 'tools', text: entry.agent, at: e.timestamp });
+                items.push({ role: a.failed ? 'error' : 'tools', text: a.text, at: e.timestamp });
             }
-            newTurn = true;
+            newTurn ||= entry.kind === 'turn';
         } else if (entry?.kind === 'error') {
             flush();
             items.push({ role: 'error', text: entry.text, at: e.timestamp });

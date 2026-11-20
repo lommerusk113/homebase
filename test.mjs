@@ -146,7 +146,13 @@ const taskNote = (status, summary) => ({ type: 'user', message: { content: `<tas
 assert.deepEqual(chatItems([
     { type: 'user', message: { content: 'go' } }, taskNote('completed', 'Agent "Fix login" finished'), say('Fixed.'), taskNote('completed', 'Agent "Fix login" finished'),
     taskNote('failed', 'Agent "Docs" failed'), taskNote('completed', 'Background command "npm test" completed (exit code 0)')
-]).map(i => [i.role, i.text]), [['user', 'go'], ['tools', 'Agent finished: Fix login'], ['assistant', 'Fixed.'], ['tools', 'Agent failed: Docs']]);
+]).map(i => [i.role, i.text]), [['user', 'go'], ['tools', 'Agent finished: Fix login'], ['assistant', 'Fixed.'], ['error', 'Agent failed: Docs']]);
+// absorbed mid-turn as a queued_command it is the same line, without starting a new turn; waiting on its own work is no news
+const absorbed = (status, summary) => ({ type: 'attachment', attachment: { type: 'queued_command', origin: { kind: 'task-notification' }, prompt: taskNote(status, summary).message.content } });
+assert.deepEqual(chatItems([
+    { type: 'user', message: { content: 'go' } }, say('On it.'), absorbed('completed', 'Agent "Fix login" is waiting on its own background work'),
+    absorbed('completed', 'Agent "Docs" finished'), absorbed('killed', 'Agent "Lint" was stopped by Claude'), taskNote('completed', 'Agent "Fix login" is waiting on its own background work')
+]).map(i => [i.role, i.text]), [['user', 'go'], ['assistant', 'On it.'], ['tools', 'Agent finished: Docs'], ['error', 'Agent stopped: Lint']]);
 const topical = chatItems([{ type: 'user', message: { content: 'go' } }, say('**▸ Topic headers**\n\nDone.\n\n**TLDR:** shipped')]).at(-1);
 assert.deepEqual([topical.topic, topical.text, topical.tldr, topical.needsYou], ['Topic headers', 'Done.', 'shipped', false]);
 // needs-you: the topic marker, or (no marker) a TLDR ending in "?"

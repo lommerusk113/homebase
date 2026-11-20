@@ -2,11 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="homebase-token" content="__HOMEBASE_TOKEN__">
 <meta name="homebase-build" content="__HOMEBASE_BUILD__">
 <title>Homebase</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
+<!-- PWA: opens standalone from a phone's home screen. Theme colours are --bg in styles.css; use-credentials so a
+     pairing cookie reaches the manifest fetch too. -->
+<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Homebase">
 <link rel="stylesheet" href="/vendor/fonts/fonts.css">
 <!-- Web Awesome theme only (no native.css, which would restyle every native element) -->
 <link rel="stylesheet" href="/vendor/webawesome/styles/themes/default.css">

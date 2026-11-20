@@ -22,7 +22,12 @@ export const STATIC = {
     '/log.js': ['log.js', JS],
     '/newproject.js': ['newproject.js', JS],
     '/icon.svg': ['icon.svg', 'image/svg+xml'],
-    '/sw.js': ['sw.js', JS]
+    '/sw.js': ['sw.js', JS],
+    // PWA: rendered once from icon.svg; the iOS one full-bleed, since iOS rounds it itself
+    '/icon-192.png': ['icon-192.png', 'image/png'],
+    '/icon-512.png': ['icon-512.png', 'image/png'],
+    '/apple-touch-icon.png': ['apple-touch-icon.png', 'image/png'],
+    '/manifest.webmanifest': ['manifest.webmanifest', 'application/manifest+json']
 };
 // Hash of the app files as of this start, in index.html's homebase-build meta: a page whose build differs from a
 // freshly served index.html runs old code and says "reload when convenient". A restart without code changes keeps it.

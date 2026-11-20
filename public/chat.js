@@ -203,7 +203,12 @@ function bubble(i, sid, prevTopic, look = {}) {
         b.append(row);
     }
     if (i.role === 'assistant') {
-        b.append(...foldable(i.tldr, i.text, key));
+        // a question's options stay out of the fold, under the TLDR
+        const parts = foldable(i.tldr, i.options ? i.text.replace(i.options, '') : i.text, key);
+        if (i.options) {
+            parts.splice(1, 0, rich(i.options));
+        }
+        b.append(...parts);
     } else {
         const body = rich(i.text);
         if (!state.unfold.has(key)) {

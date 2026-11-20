@@ -152,6 +152,8 @@ interface ChatItem {
     /** queued in the server's send queue */
     pending?: boolean;
     replies?: string[];
+    /** the choices in a message that asks something (an exact substring of text), shown outside the fold */
+    options?: string;
     answer?: Answer;
     // client-only (chat.js outbox and decorations)
     sending?: boolean;

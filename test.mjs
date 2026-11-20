@@ -671,6 +671,16 @@ assert.deepEqual(noTools([...askedDb, answeredDb]).map(i => [i.answer, i.needsYo
 assert.deepEqual(noTools([...askedDb, { ...answeredDb, toolUseResult: 'Error', message: { content: [{ ...answeredDb.message.content[0], is_error: true }] } }])[0].answer.text, 'No answer');
 assert.equal(noTools([...askedDb])[0].needsYou, true);
 console.log('ok ask answers');
+import { askList } from './server.mjs';
+assert.equal(askList('Two ways.\n\nWhich one?\n\n1. **A** fast\n   but risky\n2. **B** safe\n\nI pick A.'), 'Which one?\n\n1. **A** fast\n   but risky\n2. **B** safe');
+assert.equal(askList('Pick:\n- A\n\n- B'), 'Pick:\n- A\n\n- B');
+assert.equal(askList('**Option A**: x\n**Option B**: y'), '**Option A**: x\n**Option B**: y');
+assert.equal(askList('No list here. Ship it?'), null);
+assert.equal(askList('Long intro.\nOptions:\nprose after'), null);
+const opts = chatItems([say('**▸ DB · needs you**\n\nChanged things.\n\nWhich DB?\n- Postgres\n- SQLite\n\n**TLDR:** pick one, **Postgres** recommended')]).at(-1);
+assert.equal(opts.options, 'Which DB?\n- Postgres\n- SQLite');
+assert.equal(chatItems([say('Did:\n- a\n- b\n\nTLDR: done')]).at(-1).options, undefined); // not a question
+console.log('ok ask list');
 console.log('ok quick replies');
 
 import { addUsage, readUsage, formatDuration, formatTokens, limitsOf } from './server.mjs';

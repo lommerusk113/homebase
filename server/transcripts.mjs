@@ -492,7 +492,40 @@ function topicAndTldr(i) {
     const { topic, needsYou, text } = splitTopic(i.text), t = splitTldr(text);
 
     // no marker: a TLDR that ends in a question still needs the user
-    return { ...i, topic, needsYou: needsYou || /\?[*_\s]*$/.test(t.tldr ?? ''), ...t };
+    const needs = needsYou || /\?[*_\s]*$/.test(t.tldr ?? '');
+    const options = needs || quickReplies(t.tldr, t.text).length ? askList(t.text) : null;
+
+    return { ...i, topic, needsYou: needs, ...t, ...(options && { options }) };
+}
+
+const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)]|[A-Da-d][.)]|\**Option\b)\s/;
+
+// The choices in a message that asks something: its last list, with the line just above that introduces it, as the
+// exact substring of the text. The page keeps it out of the fold so the options show next to the TLDR.
+// ponytail: any last list counts, so a "what changed" list in a question message also stays unfolded
+export function askList(text) {
+
+    const parts = (text ?? '').split(/(\n\s*\n)/); // paragraphs at even indexes, their separators between
+    const listy = p => {
+        const lines = p.split('\n'), first = lines.findIndex(l => LIST_ITEM.test(l));
+        return first >= 0 && lines.slice(first).every(l => LIST_ITEM.test(l) || /^\s/.test(l));
+    };
+    let end = parts.length - 1;
+    while (end >= 0 && !listy(parts[end])) {
+        end -= 2;
+    }
+    if (end < 0) {
+        return null;
+    }
+    let start = end;
+    while (start >= 2 && listy(parts[start - 2])) {
+        start -= 2;
+    }
+    if (start >= 2 && !parts[start - 2].includes('\n') && /[:?][*_\s]*$/.test(parts[start - 2])) {
+        start -= 2;
+    }
+
+    return parts.slice(start, end + 1).join('');
 }
 
 const SHORT_ANSWER = /^(?:yes|yeah|yep|sure|ok|okay|no|nope|do it|go ahead|do both)(?: please)?[.!]*$/i;

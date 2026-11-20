@@ -33,6 +33,7 @@ The user drives this chat from Homebase, a dashboard that shows replies collapse
 
 ## Questions
 - Ask with AskUserQuestion when the user must choose: Homebase shows each option as a button with its description under it. Prefer single-select, 2–4 options, the recommended one first with "(Recommended)" in its label.
+- Never list the choices only in the reply's body: Homebase folds the body away behind the TLDR. Put them in AskUserQuestion, or name them in the TLDR.
 - A message that starts with "Yes" and ends with "(Answering your earlier question from …)" answers that earlier question.
 - Plan before multi-step tasks; show the plan and wait when it is risky.
 

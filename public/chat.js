@@ -416,6 +416,22 @@ function showNewer(s) {
     }
 }
 
+// "Rules changed since this chat started" above the composer; Dismiss hides it until a watched file changes again.
+/** @param {Session | null} s */
+function showRules(s) {
+
+    const key = s && `rules-dismissed:${s.id}`;
+    const dismissed = s?.rulesStale && Number(store.get(key)) >= (s.rulesAt ?? 0);
+    $('rules').hidden = !s?.rulesStale || dismissed;
+    if (!$('rules').hidden) {
+        $('rules-text').textContent = `Rules changed since this chat started (${s.rulesStale.join(', ')}). Restart chat to load them.`;
+        $('rules-dismiss').onclick = () => {
+            store.set(key, String(s.rulesAt ?? 0));
+            showRules(s);
+        };
+    }
+}
+
 // The bound session's project (and topic) in the chat header, and in the input's placeholder.
 /** @param {Session | null} s */
 function showHead(s) {
@@ -725,6 +741,7 @@ export async function refreshChat() {
     }
     showNewer(s);
     showHead(s);
+    showRules(s);
     await showBoot(s ? null : state.startingTmux); // only a chat still starting: a running one's ❯ prompts and questions aren't startup dialogs
     if (s && !restored) {
         restored = true;
@@ -1167,7 +1184,7 @@ export function initChat() {
             restart(s.id);
         }
     };
-    $('status-restart').onclick = () => { $('restart-dlg').open = true; };
+    $('status-restart').onclick = $('rules-restart').onclick = () => { $('restart-dlg').open = true; };
     $('compact-nudge').onclick = () => { $('compact-dlg').open = true; };
     $('compact-go').onclick = () => {
         $('compact-dlg').open = false;

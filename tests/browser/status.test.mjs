@@ -29,6 +29,24 @@ export default {
         assert.deepEqual(page.posts.filter(p => new URL(p.url).pathname === '/api/restart'), []);
     },
 
+    'old rules: the strip names the files, Restart chat opens the confirm, Dismiss hides it until a file changes again': async ({ page, open, IDS }) => {
+        await open({ chat: IDS.worker });
+        // the fixture has no registry, so mark the bound session stale in the polled list
+        await page.ev(`(() => { window.rulesAt = 100; const f = window.fetch; window.fetch = async (u, o) => { const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const j = await r.json(); for (const s of j) if (s.id === '${IDS.worker}') { s.rulesStale = ['homebase-rules.md', 'CLAUDE.md']; s.rulesAt = window.rulesAt; } return new Response(JSON.stringify(j), { headers: { 'content-type': 'application/json' } }); }; })()`);
+        const strip = `document.getElementById('rules')`;
+        await page.waitFor(`!${strip}.hidden`, { what: 'the strip' });
+        assert.equal(await page.ev(`document.getElementById('rules-text').textContent`), 'Rules changed since this chat started (homebase-rules.md, CLAUDE.md). Restart chat to load them.');
+        assert.ok(await page.ev(`[...document.querySelectorAll('.s-row')].some(r => r.textContent.includes('old rules'))`), 'board tag');
+        await page.click('#rules-restart');
+        await page.waitFor(`document.getElementById('restart-dlg').open`, { what: 'the confirm' });
+        await page.ev(`document.getElementById('restart-dlg').open = false`);
+        await page.waitFor(`!document.getElementById('restart-dlg').open`, { what: 'the confirm closed' });
+        await page.click('#rules-dismiss');
+        await page.waitFor(`${strip}.hidden`, { what: 'dismissed' });
+        await page.ev(`window.rulesAt = 200`);
+        await page.waitFor(`!${strip}.hidden`, { timeout: 15_000, what: 'back after a file changed again' });
+    },
+
     'status bar: working, with the queued message': async ({ page, open, IDS }) => {
         await open({ chat: IDS.worker });
         await page.waitFor(`${status}.startsWith('c-status working | Claude is working…')`, { what: 'working' });

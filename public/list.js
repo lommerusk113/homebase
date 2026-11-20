@@ -124,6 +124,9 @@ function renderSessions() {
             if (s.context != null) {
                 r.append(el('span', `s-ctx${ctxLevel(s.context) && ` ${ctxLevel(s.context)}`}`, `context ${Math.round(s.context)}%`));
             }
+            if (s.rulesStale) {
+                r.append(el('span', 's-counts', 'old rules'));
+            }
             if (s.id === bound) {
                 r.append(el('span', 's-chat', 'chat'));
             }
@@ -133,6 +136,7 @@ function renderSessions() {
                 now && s.topic ? s.topic : null,
                 st.kind === 'idle' && `idle ${since === 'now' ? 'just now' : `for ${since}`}`,
                 st.kind === 'needs' && 'Claude’s last reply wants your decision',
+                s.rulesStale && `Started before ${s.rulesStale.join(', ')} changed`,
                 s.context != null && `Context ${Math.round(s.context)}% full${ctxLevel(s.context) ? ' — compact it soon' : ''}`,
                 agents && `Subagents: ${agents}`,
                 q.length && `Queued: ${q.map(t => excerpt(t, 80)).join(' · ')}`,

@@ -11,6 +11,7 @@ import { PR_TTL_MS, openMrUrls, prState, prError, errorText, swrEntry, fetchComm
 import { repoPaths, accountOf } from './account.mjs';
 import { contextOf } from './limits.mjs';
 import { workItems, milestoneOf, sameRepo } from './items.mjs';
+import { rulesStale } from './rules.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor, liveTmux, mapNewProjects, startingProjects } from './tmux.mjs';
 
 const run = promisify(execFile);
@@ -563,7 +564,7 @@ function attachItems(out, items, now) {
 }
 
 // Each session's tmux target. A /clear sent from Homebase starts a new transcript that keeps typing into the old tmux session.
-async function attachTmux(out, now) {
+async function attachTmux(out, now, live) {
 
     for (const c of clears.splice(0)) {
         const next = findClearedSuccessor(out, c);
@@ -574,7 +575,8 @@ async function attachTmux(out, now) {
         }
     }
 
-    mapNewProjects(out, await liveTmux());
+    const tmuxList = await liveTmux();
+    mapNewProjects(out, tmuxList);
 
     for (const s of out) {
         const a = aliases.get(s.id);
@@ -583,6 +585,15 @@ async function attachTmux(out, now) {
             s.clearedFrom = a.from;
         }
     }
+
+    await Promise.all(out.map(async s => {
+        const started = live?.started.get(s.id) ?? tmuxList.find(t => t.name === s.tmux)?.created;
+        const stale = await rulesStale(started, s.cwd, now);
+        if (stale) {
+            s.rulesStale = stale.names;
+            s.rulesAt = stale.at;
+        }
+    }));
 }
 
 // By real activity, so an idle process's bookkeeping writes don't float it to the top.
@@ -628,7 +639,7 @@ export async function sessions() {
     }));
 
     attachItems(out, await itemsOf(out), now);
-    await attachTmux(out, now);
+    await attachTmux(out, now, live);
 
     return out.sort(byActivity);
 }

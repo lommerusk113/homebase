@@ -56,6 +56,10 @@ interface Session {
     /** when that dump was written, ms */
     contextAt: number | null;
     tmux?: string;
+    /** watched instruction files changed since this chat's Claude started; absent when none */
+    rulesStale?: string[];
+    /** newest mtime among them, ms; a dismissed notice stays hidden until this grows */
+    rulesAt?: number;
     /** set on the session a /clear started: the id of the one it replaced */
     clearedFrom?: string;
 }

@@ -26,13 +26,16 @@ export async function liveSessions(dir = join(homedir(), '.claude', 'sessions'))
         return null;
     }
 
-    const live = Object.assign(new Map(), { busy: new Set() }); // busy: the ones whose registry status says "busy"
+    const live = Object.assign(new Map(), { busy: new Set(), started: new Map() }); // busy: registry status "busy"; started: sessionId -> process start (ms)
     for (const name of names) {
         try {
-            const { pid, sessionId, tmux, status } = JSON.parse(await readFile(join(dir, name), 'utf8'));
+            const { pid, sessionId, tmux, status, startedAt } = JSON.parse(await readFile(join(dir, name), 'utf8'));
             if (alive(pid)) {
                 const t = typeof tmux === 'string' ? tmux.split(':')[0] || null : null;
                 live.set(sessionId, live.has(sessionId) && live.get(sessionId) !== t ? null : t);
+                if (startedAt) {
+                    live.started.set(sessionId, startedAt);
+                }
                 if (status === 'busy') {
                     live.busy.add(sessionId);
                 }

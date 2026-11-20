@@ -328,6 +328,8 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); box-shadow:none; tran
 .files li b { color:var(--fg); font-weight:500; }
 .c-info { color:var(--muted); font-size:12px; margin:0 14px 6px; }
 .c-info:empty { display:none; }
+.c-rules[hidden] { display:none; }
+.c-rules .show { padding:0 4px; }
 .error { color:var(--c-needs); font-size:12px; margin-top:6px; }
 .body { font-size:13.5px; line-height:1.6; overflow-wrap:anywhere; }
 .body strong { font-weight:700; color:var(--strong); }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, utimesSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, execFileSync } from 'node:child_process';
@@ -2874,3 +2874,24 @@ assert.equal(chatMessage({ iid: 9, st: 'closable', mrs: [{ iid: 30, state: 'merg
 assert.equal(reviewNote([{ next: 'Waiting for review by Ann' }, { next: 'Waiting for review by Ann' }]), 'all waiting on Ann');
 assert.equal(reviewNote([{ next: 'Waiting for review by Ann' }, { next: 'Needs a reviewer' }]), '');
 assert.equal(reviewNote([]), '');
+
+import { rulesStale } from './server/rules.mjs';
+{
+    const dir = mkdtempSync(join(tmpdir(), 'rules-'));
+    const home = join(dir, 'home'), cwd = join(dir, 'proj');
+    mkdirSync(join(home, '.claude'), { recursive: true });
+    mkdirSync(cwd);
+    const touch = (p, ms) => { writeFileSync(p, 'x'); utimesSync(p, ms / 1000, ms / 1000); };
+    touch(join(home, '.claude', 'CLAUDE.md'), 1_000_000);
+    touch(join(cwd, 'CLAUDE.md'), 2_000_000);
+    const stale = (started, now) => rulesStale(started, cwd, now, home);
+    assert.equal(await stale(Date.now(), 1e12), undefined, 'newer process: fresh');
+    assert.equal(await stale(undefined, 1e13), undefined, 'unknown start: nothing inferred');
+    const r = await stale(1_500_000, 1e14); // past the 10s cache, so the files are re-read; the real homebase-rules.md is listed too
+    assert.ok(r.names.includes('CLAUDE.md') && r.at >= 2_000_000);
+    touch(join(cwd, 'AGENTS.md'), 5_000_000);
+    assert.ok(!(await stale(1_500_000, 1e14 + 1000)).names.includes('AGENTS.md'), 'mtimes are cached for 10s');
+    assert.ok((await stale(1_500_000, 1e14 + 20_000)).names.includes('AGENTS.md'));
+    rmSync(dir, { recursive: true });
+    console.log('ok rules stale');
+}

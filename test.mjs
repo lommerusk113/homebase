@@ -2267,6 +2267,37 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     console.log('ok startup dialog');
 }
 
+// Restart chat: stubbed tmux, nothing real is touched
+{
+    const { restartChat, promptUp } = await import('./server.mjs');
+    const sid = 'cccccccc-0000-4000-8000-000000000001', session = { id: sid, cwd: '/tmp', status: 'idle' };
+    const fake = (live = true, pane = '╭──╮\n│ > │\n') => {
+        const calls = [];
+        const tm = async a => {
+            calls.push(a);
+            if (a[0] === 'has-session' && !live) {
+                throw new Error('no session');
+            }
+            return { stdout: a[0] === 'capture-pane' ? pane : '' };
+        };
+        return { calls, opts: { tm, nap: async () => {}, session } };
+    };
+    const busy = fake();
+    assert.equal((await restartChat(sid, { ...busy.opts, session: { ...session, status: 'working' } }).catch(e => e)).status, 409);
+    assert.equal((await restartChat(sid, { ...busy.opts, session: { ...session, asking: true } }).catch(e => e)).message, 'busy');
+    assert.deepEqual(busy.calls, [], 'busy: tmux untouched');
+    const gone = fake(false);
+    assert.deepEqual([(await restartChat(sid, gone.opts).catch(e => e)).status, gone.calls.map(c => c[0])], [409, ['has-session']], 'not ours: nothing killed');
+    const ok = fake();
+    assert.equal(await restartChat(sid, ok.opts), 'cc-cccccccc');
+    assert.deepEqual(ok.calls.map(c => c[0]), ['has-session', 'kill-session', 'new-session', 'capture-pane'], 'kill, then new, then wait for the prompt');
+    assert.ok(ok.calls[2].join(' ').includes(`--resume ${sid}`));
+    const stuck = fake(true, 'loading');
+    assert.equal((await restartChat(sid, { ...stuck.opts, waitMs: 1000 }).catch(e => e)).status, 504);
+    assert.deepEqual([promptUp('❯ '), promptUp('loading'), promptUp('Do you trust?\n\n❯ 1. Yes\n  2. No\nEnter to confirm')], [true, false, false]);
+    console.log('ok restart chat');
+}
+
 import { parseQuestion, answerQuestion } from './server.mjs';
 {
     const ask = sel => `❯ Ask me which color

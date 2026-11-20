@@ -6,7 +6,7 @@ import { join, basename } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { sessions } from './sessions.mjs';
-import { refuseIfTrustDialog, cancelQuestion } from './startup.mjs';
+import { refuseIfTrustDialog, cancelQuestion, parseDialog } from './startup.mjs';
 import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, sleep, NEW_TMUX } from './tmux.mjs';
 
 const run = promisify(execFile);
@@ -178,4 +178,36 @@ export async function clearChat(id) {
         clears.splice(clears.indexOf(c), 1);
         throw e;
     }
+}
+
+// Claude's input line: a ❯ or > at the start of a (boxed) line, with no startup dialog on screen
+export const promptUp = pane => /^[│\s]*[❯>]/m.test(pane) && !parseDialog(pane);
+
+// Kills the chat's Homebase tmux session and resumes it, so Claude reloads (e.g. an edited homebase-rules.md). Refused while Claude
+// is busy. No live-elsewhere check: Homebase closed the old one itself. Answers once the new Claude shows its prompt.
+export async function restartChat(id, { tm = tmux, nap = sleep, waitMs = 20_000, session = null } = {}) {
+
+    const s = session ?? await resumable(id);
+    refuseIfBusy(s);
+
+    try {
+        await tm(['has-session', '-t', `=${tmuxFor(id)}`]);
+    } catch {
+        throw Object.assign(new Error("Not running in Homebase's tmux"), { status: 409 });
+    }
+
+    await tm(['kill-session', '-t', `=${tmuxFor(id)}`]);
+    aliases.delete(id);
+    const name = tmuxName(id);
+    await tm(['new-session', '-d', ...tmuxSession(id, s.cwd)]);
+
+    for (let waited = 0; waited < waitMs; waited += 500) {
+        await nap(500);
+        const pane = await tm(['capture-pane', '-p', '-t', `=${name}:`]).then(r => r?.stdout ?? '', () => '');
+        if (promptUp(pane)) {
+            return name;
+        }
+    }
+
+    throw Object.assign(new Error("Claude restarted but its prompt didn't show within 20s"), { status: 504 });
 }

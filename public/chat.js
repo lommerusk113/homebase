@@ -654,6 +654,21 @@ async function compact(sid) {
     }
 }
 
+/** @param {string} sid */
+async function restart(sid) {
+    $('c-err').textContent = 'Restarting Claude…';
+    try {
+        const r = await api(`/api/restart?id=${encodeURIComponent(sid)}`, { method: 'POST' });
+        if (!r.ok) {
+            throw new Error(await r.text());
+        }
+        $('c-err').textContent = '';
+    } catch (err) {
+        $('c-err').textContent = err.message;
+    }
+    refreshChat();
+}
+
 const syncSend = () => { $('send-btn').disabled = !$('msg').value?.trim() && !attached.length; };
 
 // Images attached to the next message. Sent as "[Image: <path>]" lines after uploading; Claude reads them by path.
@@ -872,6 +887,9 @@ export function initChat() {
         }
         if (e.detail.item.value === 'auto-compact') {
             return setAutoCompact(store.get('auto-compact') !== '1');
+        }
+        if (e.detail.item.value === 'restart') {
+            return void restart(s.id);
         }
         if (e.detail.item.value === 'compact') {
             return void ($('compact-dlg').open = true);

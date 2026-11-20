@@ -95,5 +95,18 @@ export default {
         await loaded(page);
         await sleep(3500);
         assert.deepEqual(compactPosts(page), []);
+    },
+
+    'the Restart chat menu item POSTs /api/restart for the bound session without a confirm': async ({ page, open, IDS }) => {
+        await open();
+        await loaded(page);
+        await page.click('#c-menu button[slot="trigger"]');
+        await page.clickOn(`document.getElementById('restart-item')`);
+        for (let i = 0; i < 100 && !page.posts.some(p => new URL(p.url).pathname === '/api/restart'); i++) {
+            await sleep(100);
+        }
+        const posts = page.posts.filter(p => new URL(p.url).pathname === '/api/restart').map(p => new URL(p.url).search);
+        assert.deepEqual(posts, [`?id=${IDS.master}`]);
+        await page.waitFor(`document.getElementById('c-err').textContent !== ''`, { what: 'the server refusing (no tmux in the fixture)' });
     }
 };

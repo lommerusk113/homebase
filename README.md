@@ -100,4 +100,5 @@ Open `http://<mac>.local:4321` (or the Mac's LAN IP) on the other device; there 
 LAN mode is plain HTTP and has no authentication, so use it only on a network where you trust every device.
 
 Until Claude writes its first transcript (on the first prompt) the chat sends to `cc-new-<name>` by tmux name (`/api/send?tmux=`, only that name pattern and only while the session runs), and `/api/starting` lets a reloaded page find it again.
+The chat menu's "Restart chat" (`POST /api/restart?id=`) kills the chat's Homebase tmux session and resumes it so Claude reloads (e.g. an edited `homebase-rules.md`); refused while Claude is working or asking, or when the chat doesn't run in Homebase's tmux.
 Once the transcript exists, Homebase maps it to that tmux session on every poll (same start folder, no tmux of its own), so no second Claude is started.

@@ -1,4 +1,4 @@
-:root {
+:root { --bar-h:39.5px; /* tab bar + chat header: button 9+19.5(13px*1.5)+8+2, plus 1px border */
   --bg:#ffffff; --canvas:#f6f8fa; --fg:#1f2328; --muted:#59636e; --line:#d1d9e0; --line-soft:#e6ebf1;
   --hover:#f3f5f8; --accent:#0969da; --accent-bg:#ddf4ff; --chip:#eff2f5; --strong:#000;
   --c-doing:#0969da; --c-needs:#bc4c00; --c-review:#8250df; --c-ready:#1a7f37; --c-done:#59636e; --c-idle:#8c959f;
@@ -135,7 +135,7 @@ a.chip:hover { text-decoration:underline; }
 .left { flex:1; min-width:0; display:flex; flex-direction:column; container-type:inline-size; }
 #chat { position:relative; width:420px; flex-shrink:0; background:var(--bg); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
 /* slim header row for the chat menu (wa-dropdown is display:contents, so the trigger is the flex item) */
-.c-head { flex-shrink:0; height:30px; display:flex; align-items:center; justify-content:flex-end; padding:0 8px; border-bottom:1px solid var(--line-soft); }
+.c-head { flex-shrink:0; height:var(--bar-h); display:flex; align-items:center; justify-content:flex-end; padding:0 8px; border-bottom:1px solid var(--line); }
 .c-newer { margin-right:auto; font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .c-hidden { align-self:center; flex-shrink:0; font-size:12px; color:var(--muted); }
 .c-hidden .show, .c-newer .show { padding:0; }
@@ -362,7 +362,7 @@ ul.comments a { color:var(--fg); }
 }
 
 /* Work | Issues tabs (issues.js) */
-.tabs { display:flex; gap:4px; padding:0 24px; background:var(--bg); border-bottom:1px solid var(--line); flex-shrink:0; }
+.tabs { display:flex; height:var(--bar-h); gap:4px; padding:0 24px; background:var(--bg); border-bottom:1px solid var(--line); flex-shrink:0; }
 .tabs button { appearance:none; border:0; background:none; font:inherit; font-size:13px; font-weight:500; color:var(--muted); padding:9px 10px 8px; border-bottom:2px solid transparent; cursor:pointer; display:flex; gap:6px; align-items:center; }
 .tabs button:hover { color:var(--fg); }
 .tabs button[aria-selected="true"] { color:var(--fg); font-weight:600; border-bottom-color:var(--accent); }

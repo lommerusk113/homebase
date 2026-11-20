@@ -2402,6 +2402,23 @@ import { liveSessions, closedSession } from './server/transcripts.mjs';
     assert.equal(turnState(turn, 5_000, null, new Set()).state, 'working', 'a fresh write still counts');
     assert.equal(closedSession(turn.map(e => ({ ...e, entrypoint: 'sdk-cli' })), 60_000, new Set()), false, 'only interactive CLI sessions register');
     console.log('ok closed session');
+
+    // a live process the registry calls busy is working past the stale limit, not stuck; idle or unknown is still stuck
+    const old = 31 * 60_000;
+    const busy = Object.assign(new Set(['s']), { busy: new Set(['s']) });
+    assert.equal(turnState(turn, old, null, new Set(['s'])).state, 'stuck');
+    assert.equal(turnState(turn, old, null, busy).state, 'working');
+    assert.equal(turnState(turn, old, null, Object.assign(new Set(['s']), { busy: new Set() })).state, 'stuck');
+    const reg = mkdtempSync(join(tmpdir(), 'hb-reg-'));
+    writeFileSync(join(reg, `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: 's', status: 'busy' }));
+    assert.deepEqual([...(await liveSessions(reg)).busy], ['s']);
+    rmSync(reg, { recursive: true });
+
+    // known: false when assistant turns carry no turn markers; true with markers or before any reply
+    assert.equal(summarize(turn, 60_000).known, true);
+    assert.equal(summarize(turn.map(({ turnPosition, ...e }) => e), 60_000).known, false);
+    assert.equal(summarize(turn.slice(0, 1).map(({ turnPosition, ...e }) => e), 60_000).known, true);
+    console.log('ok busy not stuck, known flag');
 }
 
 import { transcript } from './server/transcripts.mjs';

@@ -124,6 +124,14 @@ export const setOffline = off => {
     $('offline').hidden = !off;
     document.body.classList.toggle('disconnected', off);
 };
+// Header warning when Claude Code's transcript or screen no longer parses: any reason shown keeps it up.
+/** @type {Set<string>} */
+const formatReasons = new Set();
+/** @param {string} reason @param {boolean} on */
+export const setFormatWarn = (reason, on) => {
+    formatReasons[on ? 'add' : 'delete'](reason);
+    $('format-warn').hidden = !formatReasons.size;
+};
 /**
  * @template {string} K
  * @param {K} tag

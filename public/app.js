@@ -1,5 +1,5 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { api, $, el, state, store, saveTracked, inView, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks, setOffline, seenAt, authorSummary } from './core.js';
+import { api, $, el, state, store, saveTracked, inView, updateTitle, prLabel, waButton, ago, limitView, tooltip, hooks, setOffline, setFormatWarn, seenAt, authorSummary } from './core.js';
 import { renderBoard, select, attentionEvents } from './list.js';
 import { refreshChat, initChat, bindChat, isMaster, chatSession } from './chat.js';
 import { openNewProject, initNewProject } from './newproject.js';
@@ -306,6 +306,7 @@ async function pollOnce() {
             state.items = items;
         }
         setOffline(false);
+        setFormatWarn('transcript', state.sessions.some(s => s.known === false));
         updateTitle();
     } catch {
         setOffline(true);

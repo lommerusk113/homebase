@@ -19,6 +19,8 @@ interface Session {
     lastReply: string;
     /** topic of Claude's newest reply that has one (▸ header) */
     topic: string | null;
+    /** false: a recent transcript has no turn markers, so Claude Code's format probably changed */
+    known: boolean;
     /** a question (AskUserQuestion) or a permission prompt waits on the user */
     asking: boolean;
     /** the text of that question or prompt; null when not asking */

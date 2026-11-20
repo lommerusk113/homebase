@@ -25,12 +25,15 @@ export async function liveSessions(dir = join(homedir(), '.claude', 'sessions'))
         return null;
     }
 
-    const live = new Set();
+    const live = Object.assign(new Set(), { busy: new Set() }); // busy: the ones whose registry status says "busy"
     for (const name of names) {
         try {
-            const { pid, sessionId } = JSON.parse(await readFile(join(dir, name), 'utf8'));
+            const { pid, sessionId, status } = JSON.parse(await readFile(join(dir, name), 'utf8'));
             if (alive(pid)) {
                 live.add(sessionId);
+                if (status === 'busy') {
+                    live.busy.add(sessionId);
+                }
             }
         } catch {
             continue; // half-written or removed as the process exits
@@ -869,13 +872,19 @@ export function turnState(entries, ageMs, marker = null, live = null) {
     }
 
     // ponytail: a tail with no turn markers at all (older Claude Code, or one turn longer than the tail) falls back to the mtime
-    if (known && open && ageMs >= TURN_STALE_MS) {
+    // a long tool call writes nothing, so a live process the registry calls busy is working however old the transcript
+    const busy = !!live?.busy?.has(entries.findLast(e => e.sessionId)?.sessionId);
+    if (known && open && ageMs >= TURN_STALE_MS && !busy) {
         return { state: 'stuck', since: null }; // idle for everything but the chat status, which says Claude may be stuck
     }
-    const working = known ? open && ageMs < TURN_STALE_MS : ageMs < WORKING_MS;
+    const working = known ? open && (ageMs < TURN_STALE_MS || busy) : ageMs < WORKING_MS;
 
     return { state: working ? 'working' : 'idle', since: working && known ? Date.parse(start?.timestamp) || null : null };
 }
+
+// False when a transcript with real turns has none of the markers turnState reads: Claude Code's format changed.
+export const hasTurnMarkers = entries => !entries.some(e => !e.isSidechain && e.type === 'assistant')
+    || entries.some(e => (e.type === 'system' && e.subtype === 'turn_duration') || (e.type === 'user' && e.turnPosition));
 
 // The human prompts of the open turn (the one that started it, typed or queued, and any queued into it), as [{ at, text }].
 export function turnPrompts(entries, ageMs, marker = null, live = null) {

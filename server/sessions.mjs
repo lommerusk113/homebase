@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ROOT, WORKING_MS, cache, liveSessions, closedSession, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, turnPrompts, pendingQuestion, askMarker, readUsage, usageCache, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
+import { ROOT, WORKING_MS, cache, liveSessions, closedSession, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, hasTurnMarkers, turnPrompts, pendingQuestion, askMarker, readUsage, usageCache, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
 import { loadStore, record, seeds, flush } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, errorText, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { repoPaths, accountOf } from './account.mjs';
@@ -422,6 +422,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         prs: prLinks(entries),
         model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? null,
         status: status(lastTurn, ageMs, turn),
+        known: hasTurnMarkers(entries), // false: no turn markers in a recent transcript, so the status is only a guess
         asking: turn.state === 'asking',
         question: turn.state === 'asking' ? pendingQuestion(entries, marker) : null,
         needsYou: turn.state === 'idle' && lastItem?.role === 'assistant' && !!lastItem.needsYou && !lastItem.answer && !lastItem.error,

@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, seenHash, setOffline, ctxLevel, canCompact, autoCompactDue, NEEDS_ANSWER, openDecision } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, NEEDS_ANSWER, openDecision } from './core.js';
 import { renderBoard } from './list.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
@@ -509,6 +509,7 @@ async function showAsk(s, data) {
     state.asking = data.asking;
     updateTitle();
     if (!data.asking) {
+        setFormatWarn('pane', false);
         $('ask').hidden = true;
         askKey = null;
         answeredAsk = null;
@@ -522,6 +523,7 @@ async function showAsk(s, data) {
         const r = await api(`/api/question?tmux=${encodeURIComponent(tmux)}`);
         pane = r.ok ? (await r.json()).question : null;
     } catch {}
+    setFormatWarn('pane', !pane && data.asking !== answeredAsk); // the transcript asks but the screen shows no question we can parse
     const key = JSON.stringify([tmux, data.questions, data.asking, pane && [pane.question, pane.detail, pane.options, pane.descriptions]]); // not the moving ❯
     if (key === askKey) {
         return;

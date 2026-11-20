@@ -716,6 +716,17 @@ assert.deepEqual(optionLabels('**Option A**: x\n**Option B**: y'), ['Option A', 
     assert.deepEqual(r.replies, ['Redis', 'In-memory', 'Skip it']);
     assert.ok(r.options.startsWith('**Options**') && r.text.includes(r.options) && !r.options.includes('In flight'));
 }
+import { namedChoices } from './server.mjs';
+assert.deepEqual(namedChoices('**Rebased onto main.** Merge it now? Yes or later.'), ['Yes', 'Later']);
+assert.deepEqual(namedChoices('Ready to deploy; say **go**'), ['Go']);
+assert.deepEqual(namedChoices('Shipped the fix. Nothing else to do.'), []);
+{ // a needs-you reply with no ?-options gets chips for the choices its TLDR or Waiting on you names
+    const [a] = chatItems([say('Rebased.\n\n**TLDR:** Rebased **!12** onto main. Merge now? Yes or later.')]);
+    assert.deepEqual(a.replies, ['Yes', 'Later']);
+    const [b] = chatItems([say('Built it.\n\n**In flight**\n- Waiting on you: say go to deploy\n\n**TLDR:** Build is green.')]);
+    assert.deepEqual(b.replies, ['Go']);
+    assert.deepEqual(chatItems([say('Built it.\n\n**TLDR:** Build is green, say go to deploy when you like')])[0].replies, [], 'not a needs-you reply');
+}
 import { waitingOn } from './server.mjs';
 assert.equal(waitingOn('**In flight**\n- Nothing running\n- Waiting on you: which cache'), 'which cache');
 assert.equal(waitingOn('**Waiting on you:** merge **!12**'), 'merge **!12**');

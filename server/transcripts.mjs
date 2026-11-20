@@ -592,11 +592,35 @@ export function optionLabels(options) {
     return labels.length >= 2 && labels.length <= MAX_CHIPS ? [...new Set(labels)] : [];
 }
 
-// A question's chips: one per option it lists, else Yes / No (/ Do both).
+// A question's chips: one per option it lists, else Yes / No (/ Do both), else the choices a needs-you reply names in
+// its TLDR or Waiting on you ("Yes or later", "say go").
 const replyChips = i => {
     const labels = optionLabels(i.options);
-    return labels.length ? labels : quickReplies(i.tldr, withoutInFlight(i.text));
+    if (labels.length) {
+        return labels;
+    }
+    const yesNo = quickReplies(i.tldr, withoutInFlight(i.text));
+    return yesNo.length || !i.needsYou ? yesNo : namedChoices(`${i.tldr ?? ''}\n${i.waiting ?? ''}`);
 };
+
+// "say go" → [Go]; a sentence that is just "A or B" ("…merge now? Yes or later.") → [A, B]; else [].
+// ponytail: one or two words a side only; longer phrasings get no chips.
+export function namedChoices(text) {
+
+    const flat = text.replace(/[*_`"“”]/g, ''), cap = w => w[0].toUpperCase() + w.slice(1);
+    const say = flat.match(/\bsay\s+'?(\w+)/i);
+    if (say) {
+        return [cap(say[1])];
+    }
+    for (const part of flat.split(/[.?!;:\n]/)) {
+        const m = part.trim().match(/^(\w+(?: \w+)?),? or (\w+(?: \w+)?)$/i);
+        if (m) {
+            return [cap(m[1]), cap(m[2])];
+        }
+    }
+
+    return [];
+}
 
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)]|[A-Da-d][.)]|\**Option\b)\s/;
 

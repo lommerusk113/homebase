@@ -221,8 +221,7 @@ a.chip:hover { text-decoration:underline; }
 .tools::before { content:'⚙ '; }
 .tools.quiet { display:none; }
 .tools.api-error { color:var(--c-danger); }
-.tools.risky { color:var(--c-danger); font-family:var(--wa-font-family-code); font-size:11.5px; white-space:pre-wrap; overflow-wrap:anywhere; }
-.tools.risky::before { content:'⚠ '; }
+.tools.risky { font-family:var(--wa-font-family-code); font-size:11.5px; white-space:pre-wrap; overflow-wrap:anywhere; }
 .c-feed.needs-only .tools.risky { display:block; }
 .tools.api-error::before { content:'⚠ '; }
 .c-feed.needs-only .tools.api-error { display:block; }

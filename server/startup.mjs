@@ -196,6 +196,9 @@ export async function paneQuestion(name, { tm = tmux } = {}) {
 
 // Picks option `index` (labelled `label`) of the AskUserQuestion on screen, never the "Type something." text box.
 export async function answerQuestion(name, index, label, { tm = tmux, nap = sleep, seen = null } = {}) {
+    if (!seen) {
+        throw Object.assign(new Error('seen is required'), { status: 400 });
+    }
     if (FREE_FORM.test(label ?? '')) {
         throw Object.assign(new Error('Answer that one in the terminal'), { status: 400 });
     }

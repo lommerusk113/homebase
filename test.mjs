@@ -2482,10 +2482,12 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     const run = async (panes, index, label, name = 'cc-new-probe') => {
         const sent = [];
         const tm = async a => (a[0] === 'capture-pane' ? { stdout: panes.length > 1 ? panes.shift() : panes[0] } : void sent.push(a));
-        const err = await answerQuestion(name, index, label, { tm, nap: async () => {} }).then(() => null, e => e);
+        const seen = seenHash(parseQuestion(panes[0]) ?? { question: '' });
+        const err = await answerQuestion(name, index, label, { tm, nap: async () => {}, seen }).then(() => null, e => e);
 
         return { sent, err };
     };
+    assert.equal((await answerQuestion('cc-new-probe', 0, 'Red', { tm: async () => ({ stdout: '' }) }).catch(e => e)).status, 400, 'no seen: refused');
     let r = await run([ask(0), ask(1), 'Red'], 1, 'Red');
     assert.equal(r.err, null);
     assert.deepEqual(r.sent.map(a => a.slice(3)), [['Down'], ['Enter']]);

@@ -20,7 +20,7 @@ import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedReque
 import { readConfigFile } from './server/account.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
 import { saveUpload, readUpload } from './server/uploads.mjs';
-import { vapidKeys, validSub, addSub, removeSub, readSubs, watchSessions, watchedAt, pageFocused, localRequest } from './server/push.mjs';
+import { vapidKeys, validSub, addSub, removeSub, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 
 export {
     readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, chatFeed, quickReplies, askList, optionLabels, waitingOn, namedChoices,
@@ -171,9 +171,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return json({ key: (await vapidKeys(DATA_DIR)).publicKey });
             }
             if (isPost('/api/push/subscribe') || isPost('/api/push/unsubscribe')) {
-                // TODO pairing: require isPairedRequest (until then only this machine's own browser may subscribe)
-                if (!localRequest(req.socket.remoteAddress, req.headers, localHosts(PORT))) {
-                    return deny(403, 'only this computer or a paired device can get notifications');
+                // The gate above already turned unpaired remote devices away; checked again here so a change there can't open this.
+                if (!isPairedRequest(req)) {
+                    return deny(401, 'pair this device first');
                 }
                 let input;
                 try {

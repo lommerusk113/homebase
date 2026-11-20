@@ -152,11 +152,6 @@ export function pushEvents(prev, list, sent, now = Date.now()) {
     };
 }
 
-// Who may subscribe: a request from this machine's own browser (loopback, a local Host, not via a proxy such as
-// tailscale serve). TODO pairing: require isPairedRequest
-export const localRequest = (remote, headers, hosts) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote)
-    && hosts.includes(headers.host) && !headers['x-forwarded-for'];
-
 // The server's watcher: fed every sessions list, it pushes new transitions to every device, unless a page was focused in
 // the last minute. Subscriptions the push service says are gone (404/410) are dropped.
 const watch = { prev: null, sent: new Map(), focusedAt: -Infinity, at: 0 };

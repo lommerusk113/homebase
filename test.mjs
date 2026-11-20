@@ -1626,7 +1626,7 @@ import { createServer as netServer } from 'node:net';
         assert.match(pairHtml.body, /Pair this device/);
         assert.equal(meta(pairHtml.body), undefined);
         assert.equal(pairHtml.headers['cache-control'], 'no-store');
-        for (const path of ['/app.js', '/api/limits', '/api/pair/devices']) {
+        for (const path of ['/app.js', '/sw.js', '/icon.svg', '/api/limits', '/api/pair/devices', '/api/push/key']) {
             assert.equal((await remote({ path })).status, 401, path);
         }
         // the Mac makes a code; a remote device can't
@@ -1650,6 +1650,13 @@ import { createServer as netServer } from 'node:net';
         assert.equal((await remote({ path: '/api/limits', headers: { cookie } })).status, 401);
         assert.equal((await remote({ path: '/api/limits', headers: { cookie, 'x-homebase-token': token } })).status, 200);
         assert.equal((await remote({ path: '/api/pair/devices', headers: { cookie, 'x-homebase-token': token } })).status, 403);
+        // what a paired phone needs for push: the service worker, the icon, and the subscribe route
+        const sw = await remote({ path: '/sw.js', headers: { cookie } });
+        assert.deepEqual([sw.status, sw.headers['content-type']], [200, 'text/javascript; charset=utf-8']);
+        assert.equal((await remote({ path: '/icon.svg', headers: { cookie } })).status, 200);
+        const subscribe = { path: '/api/push/unsubscribe', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token, origin: `https://${rhost}`, 'content-type': 'application/json' }, body: '{"endpoint":"https://fcm.googleapis.com/x"}' };
+        assert.equal((await remote(subscribe)).status, 401, 'unpaired');
+        assert.equal((await remote({ ...subscribe, headers: { ...subscribe.headers, cookie } })).status, 200);
         // revoke on the Mac: the device is back to the pair page
         const [dev] = JSON.parse((await call(rs.port, { path: '/api/pair/devices', headers: { 'x-homebase-token': local } })).body);
         assert.equal(dev.name, 'Phone');
@@ -2994,7 +3001,7 @@ import { rulesStale } from './server/rules.mjs';
     console.log('ok rules stale');
 }
 
-import { encrypt, vapidKeys, vapidJwt, pushTo, validSub, readSubs, addSub, removeSub, pushEvents, watchSessions, pageFocused, localRequest } from './server/push.mjs';
+import { encrypt, vapidKeys, vapidJwt, pushTo, validSub, readSubs, addSub, removeSub, pushEvents, watchSessions, pageFocused } from './server/push.mjs';
 {
     // RFC 8291 section 5 test vector
     const out = encrypt('When I grow up, I want to be a watermelon', { p256dh: 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4', auth: 'BTBZMqHH6r4Tts7J_aSIgg' },
@@ -3080,9 +3087,5 @@ import { encrypt, vapidKeys, vapidJwt, pushTo, validSub, readSubs, addSub, remov
     r = pushEvents(r.next, [s('a', { asking: true }), s('b')], sent, 40_000);
     r = pushEvents(r.next, [s('a', { asking: true }), s('b', { needsYou: true })], sent, 41_000);
     assert.deepEqual(r.events.map(e => e.chat), ['b'], 'a still asking: no new push');
-    assert.ok(localRequest('127.0.0.1', { host: 'localhost:4321' }, ['localhost:4321']));
-    assert.ok(!localRequest('127.0.0.1', { host: 'mac.tail1.ts.net' }, ['localhost:4321']));
-    assert.ok(!localRequest('127.0.0.1', { host: 'localhost:4321', 'x-forwarded-for': '100.1.2.3' }, ['localhost:4321']));
-    assert.ok(!localRequest('100.1.2.3', { host: 'localhost:4321' }, ['localhost:4321']));
     console.log('ok push transitions');
 }

@@ -20,7 +20,7 @@ Images attached in the chat (paste, drop or the paperclip) are stored in `~/.cla
 
 Push notifications: "Enable notifications on this device" in the chat's ⋯ menu makes the server send a Web Push when a chat starts asking or needs you, at most one per chat per 30s, and none while a Homebase page was focused in the last minute.
 They arrive with the page closed. On an iPhone (iOS 16.4+), open Homebase over HTTPS, add it to the Home Screen, open it from there and enable it in the menu.
-The VAPID keys and subscriptions live in `~/.claude/homebase/vapid.json` and `subscriptions.json` (`HOMEBASE_DIR` moves them); until pairing exists, only a browser on this computer may subscribe.
+The VAPID keys and subscriptions live in `~/.claude/homebase/vapid.json` and `subscriptions.json` (`HOMEBASE_DIR` moves them); this computer's browser and paired devices may subscribe.
 
 ## Asking hook
 

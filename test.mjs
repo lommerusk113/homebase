@@ -2837,3 +2837,5 @@ assert.equal(itemUpdated(null, 0, null), 0);
     assert.equal(runOutIn([[t, 40], [t + m, 45]], t + 500 * m, t + m), null); // too short to trust
     assert.equal(runOutIn([[t, 40]], t + 500 * m, t), null);
 }
+
+assert.equal(chatMessage({ iid: 9, st: 'closable', mrs: [{ iid: 30, state: 'merged' }] }), 'Close #9, its MR !30 is merged');

@@ -1,7 +1,7 @@
 // Issues tab: the selected milestone's open issues in one lane per person (you first, then A–Z, then Unassigned).
 // Read-only towards GitLab; "Send to chat" only types into the bound chat session. Draws from milestone.js's /api/milestones data.
-import { $, el, link, ago, prChip, tooltip, waButton, store, hooks, firstName } from './core.js';
-import { ciPill } from './list.js';
+import { $, el, link, ago, prChip, tooltip, waButton, store, hooks, firstName, visibleSessions } from './core.js';
+import { ciPill, startingIssues } from './list.js';
 import { chatSession, sendText } from './chat.js';
 import { refreshLog } from './log.js';
 
@@ -66,10 +66,14 @@ export function closedBy(done) {
     return [...n].sort((a, b) => (a[0] === 'unassigned') - (b[0] === 'unassigned') || a[0].localeCompare(b[0]));
 }
 
-// What "Send to chat" types: start a not-started issue, or check on one with an MR (its open MR first).
-/** @param {Issue} card */
+// What "Send to chat" types: start a not-started issue, close one whose MR is merged, or check on one with an MR (its open MR first).
+/** @param {Issue & { st?: string }} card */
 export function chatMessage(card) {
     const mr = card.mrs.find(m => m.state === 'open') ?? card.mrs[0];
+    if (card.st === 'closable' && mr) {
+        const m = card.mrs.find(x => x.state === 'merged') ?? mr;
+        return `Close #${card.iid}, its MR !${m.iid} is merged`;
+    }
     return mr ? `Check on #${card.iid} and !${mr.iid}` : `Implement #${card.iid}`;
 }
 
@@ -87,7 +91,31 @@ const initials = n => n.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpper
 let data;
 let openIid = null, closedOpen = false;
 const sentAt = new Map(); // iid -> last send, so a re-render keeps the button showing it
-const SENT_SHOWN_MS = 3000; // how long "Sent ✓" shows; further sends of that issue are ignored meanwhile
+const SENT_SHOWN_MS = 3000; // after a send, until the chat's running prompt names the issue (startingIssues): "Starting…" shows and further sends of that issue are ignored
+
+// The bound chat was just sent this issue, or is running or has queued a prompt naming it that no work item covers yet.
+/** @param {Card} c */
+function startingNow(c) {
+    const s = chatSession();
+    if (!s) {
+        return false;
+    }
+
+    return Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_SHOWN_MS
+        || startingIssues(s, visibleSessions().filter(o => o.project === s.project).flatMap(o => o.items || [])).includes(String(c.iid));
+}
+
+/** @param {Card} c */
+function sendIssue(c) {
+    const s = chatSession();
+    if (!s || startingNow(c)) {
+        return;
+    }
+    sentAt.set(c.iid, Date.now());
+    renderIssues();
+    setTimeout(() => renderIssues(), SENT_SHOWN_MS);
+    sendText(s.id, chatMessage(c));
+}
 
 // Tabs: Work (the item list), Issues and Log. 1, 2 and 3 switch (keys.js); the choice survives reloads.
 /** @param {string | null} tab */
@@ -237,9 +265,11 @@ function card(c, ms) {
     const open = openIid === c.iid, a = el('article', `card ${c.st}${open ? ' open' : ''}`);
     a.dataset.key = `issue:${c.iid}`;
     a.dataset.url = c.url;
+    a.dataset.msg = chatMessage(c); // what the a key confirms and sends, through the card's .act-btn
+    a.dataset.label = `${c.mrs.length ? (c.st === 'closable' ? 'Close' : 'Check on') : 'Start'} #${c.iid}`;
     a.setAttribute('aria-expanded', open);
     const top = el('div', 'top');
-    top.append(el('span', 'mono', `#${c.iid}`), el('span', 'st', STATES[c.st]), el('span', 'age', c.updated ? ago(Date.parse(c.updated)) : ''));
+    top.append(el('span', 'mono', `#${c.iid}`), el('span', 'st', startingNow(c) ? 'starting…' : STATES[c.st]), el('span', 'age', c.updated ? ago(Date.parse(c.updated)) : ''));
     if (c.updated) {
         /** @type {HTMLElement} */ (top.lastChild).title = `Updated ${new Date(c.updated).toLocaleString()}`;
     }
@@ -249,6 +279,15 @@ function card(c, ms) {
     }
     if (!c.mrs.length) {
         ft.append(el('span', 'chip', 'no MR'));
+    }
+    if (!open && (c.st === 'todo' || c.st === 'free')) {
+        const go = startingNow(c);
+        const start = waButton(go ? 'Starting…' : 'Start', 'act-btn', { variant: 'brand', appearance: 'filled', ...(go || !chatSession() ? { disabled: true } : {}) });
+        start.onclick = e => {
+            e.stopPropagation();
+            sendIssue(c);
+        };
+        ft.append(start);
     }
     a.append(top, el('div', 'tt', open ? c.title : shortTitle(c.title, ms.title)));
     if (ms.mine && c.milestoneTitle) {
@@ -273,18 +312,11 @@ function more(c) {
     if (c.desc) {
         box.append(el('div', 'desc', c.desc));
     }
-    const sent = Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_SHOWN_MS;
-    const send = waButton(sent ? 'Sent ✓' : 'Send to chat', null, { variant: 'brand', appearance: 'filled', ...(sent || !chatSession() ? { disabled: true } : {}) });
+    const sent = startingNow(c);
+    const send = waButton(sent ? 'Starting…' : 'Send to chat', 'act-btn', { variant: 'brand', appearance: 'filled', ...(sent || !chatSession() ? { disabled: true } : {}) });
     send.onclick = e => {
         e.stopPropagation();
-        const s = chatSession();
-        if (!s || Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_SHOWN_MS) {
-            return;
-        }
-        sentAt.set(c.iid, Date.now());
-        renderIssues();
-        setTimeout(() => renderIssues(), SENT_SHOWN_MS);
-        sendText(s.id, msg);
+        sendIssue(c);
     };
     const note = el('span', 'msg', 'sends ');
     note.append(el('code', null, msg));

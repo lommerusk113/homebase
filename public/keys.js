@@ -95,7 +95,7 @@ function help() {
 }
 // The action types into the user's Claude session, so it asks first, showing the message; the dialog itself has focus,
 // so a stray Enter or a second a does nothing, and only a click (or Tab to Send) sends.
-/** @param {WorkItem} x */
+/** @param {{ key: string, action: { label: string, message: string } }} x */
 function confirmAction(x) {
     const cancel = waButton('Cancel'), go = waButton(`Send "${x.action.label}"`, null, { variant: 'brand', appearance: 'accent' });
     cancel.slot = go.slot = 'footer';
@@ -132,7 +132,9 @@ function onKey(e) {
         prev: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, -1)),
         toggle: () => (card ? card.click() : x && rowOf(x.key) && select(x)),
         open: () => (card ? card.dataset.url && window.open(card.dataset.url, '_blank', 'noopener') : x?.pr && window.open(x.pr, '_blank', 'noopener')),
-        act: () => x?.action && x.sessionId && rowOf(x.key)?.querySelector('.act-btn') && confirmAction(x),
+        act: () => (card?.dataset.msg
+            ? card.querySelector('.act-btn:not([disabled])') && confirmAction({ key: focusKey, action: { label: card.dataset.label, message: card.dataset.msg } })
+            : x?.action && x.sessionId && rowOf(x.key)?.querySelector('.act-btn') && confirmAction(x)),
         chat: () => $('msg').focus(),
         escape: () => {
             if (activeTab() === 'issues') {

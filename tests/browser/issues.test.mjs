@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { IDS } from './fixture.mjs';
 
 const lanes = `[...document.querySelectorAll('#issues .lane')].map(l => ({ name: l.querySelector('.name').childNodes[1].textContent, you: !!l.querySelector('.you'), cards: [...l.querySelectorAll('.card')].map(c => c.dataset.key) }))`;
 
@@ -49,5 +50,24 @@ export default {
         assert.equal(await page.ev(`document.querySelector('#milestone-slot .ms-pick summary').textContent`), '⚑No milestones');
         assert.equal(await page.ev(`document.querySelectorAll('#issues .card').length`), 0, 'no alpha issue cards');
         assert.match(await page.ev(`document.querySelector('#issues .welcome')?.textContent`), /^No open milestones in beta\./);
+    },
+
+    'Start on a collapsed card sends Implement #N to the chat and marks it starting': async ({ page, open }) => {
+        await open({ tab: 'issues' });
+        await page.waitFor(`document.querySelector('#issues .card[data-key="issue:6"] .act-btn:not([disabled])')`, { what: 'the enabled Start button' });
+        assert.equal(await page.ev(`document.querySelector('#issues .card[data-key="issue:6"] .act-btn').textContent`), 'Start');
+        await page.click('#issues .card[data-key="issue:6"] .act-btn');
+        await page.waitFor(`document.querySelector('#issues .card[data-key="issue:6"] .st').textContent === 'starting…'`, { what: 'the card to say starting' });
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')).map(p => [new URL(p.url).search, p.body]), [[`?id=${IDS.master}`, 'Implement #6']]);
+        assert.equal(await page.ev(`document.querySelector('#issues .card[data-key="issue:6"]').classList.contains('open')`), false, 'the click did not expand the card');
+    },
+
+    'a on an issue card asks first, and only the dialog button sends': async ({ page, open }) => {
+        await open({ tab: 'issues' });
+        await page.waitFor(`document.querySelector('#issues .card[data-key="issue:6"] .act-btn:not([disabled])')`, { what: 'the card' });
+        await page.ev(`document.activeElement?.blur(); document.querySelector('#issues .card[data-key="issue:6"]').focus()`);
+        await page.key('a');
+        await page.waitFor(`document.querySelector('.keys-msg')?.textContent === 'Implement #6'`, { what: 'the confirm dialog' });
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')), []);
     }
 };

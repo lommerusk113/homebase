@@ -5,7 +5,7 @@ import { refreshChat, initChat, bindChat, isMaster, chatSession } from './chat.j
 import { openNewProject, initNewProject } from './newproject.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
 import { initKeys } from './keys.js';
-import { renderIssues, showTab } from './issues.js';
+import { renderIssues, showTab, activeTab } from './issues.js';
 import { refreshLog } from './log.js';
 
 // One milestone pill for the selected project (none for "All"); it filters the list. Rebuilt only when the project changes.
@@ -295,6 +295,9 @@ async function pollOnce() {
             }
             renderProjects();
             renderBoard();
+            if (activeTab() === 'issues') {
+                renderIssues(); // the cards' Start button and "starting…" follow the chat session
+            }
             // diffed over all items, then filtered, so changing the project filter doesn't read as transitions
             const items = state.sessions.flatMap(s => s.items || []);
             const events = attentionEvents(state.items, items, x => seenAt(x.pr)).filter(e => inView(e.item));

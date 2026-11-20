@@ -56,7 +56,7 @@ const check = name => {
 };
 
 // ponytail: only cc-* sessions; a capture failure (no such session) just means no dialog
-const capture = (name, tm) => tm(['capture-pane', '-p', '-t', `=${name}:`]).then(r => r?.stdout ?? '', () => '');
+export const capture = (name, tm = tmux) => tm(['capture-pane', '-p', '-t', `=${name}:`]).then(r => r?.stdout ?? '', () => '');
 
 export async function startupDialog(name, { tm = tmux, now = Date.now() } = {}) {
 

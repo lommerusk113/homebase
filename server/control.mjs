@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { sessions } from './sessions.mjs';
 import { liveSessions } from './transcripts.mjs';
-import { refuseIfTrustDialog, cancelQuestion, parseDialog } from './startup.mjs';
+import { refuseIfTrustDialog, cancelQuestion, parseDialog, capture } from './startup.mjs';
 import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, sleep, NEW_TMUX, OUR_TMUX } from './tmux.mjs';
 
 const run = promisify(execFile);
@@ -86,10 +86,11 @@ async function resumable(id) {
 
 const conflict = msg => Object.assign(new Error(msg), { status: 409 });
 const ELSEWHERE = 'This session is open in another terminal. Close it there first.';
+const BOOT_MS = 30_000;
 
 // Types `text` into the session's tmux, starting one (claude --resume) when none runs. Claude Code's registry (reg) says
 // which tmux a live session is in; without a registry, a dead tmux plus a fresh transcript write means another terminal.
-export async function send(id, text, session = null, { tm = tmux, nap = sleep, reg = liveSessions } = {}) {
+export async function send(id, text, session = null, { tm = tmux, nap = sleep, reg = liveSessions, waitMs = BOOT_MS } = {}) {
 
     session ??= await resumable(id);
     const live = await reg();
@@ -113,7 +114,7 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
             refuseIfLiveElsewhere(Date.now() - session.updated);
         }
         await tm(['new-session', '-d', ...tmuxSession(id, session.cwd)]);
-        await nap(5000); // ponytail: fixed wait for claude to boot; poll capture-pane for its prompt if this proves flaky
+        await waitForPrompt(name, { tm, nap, waitMs });
     }
 
     await refuseIfTrustDialog(name, { tm });
@@ -130,6 +131,20 @@ async function typeSteps(steps, { tm = tmux, nap = sleep } = {}) {
         }
         await tm(args);
     }
+}
+
+// Polls until Claude's prompt (or a startup dialog, which the caller handles) shows. -> the pane; 504 after waitMs
+async function waitForPrompt(name, { tm = tmux, nap = sleep, waitMs = BOOT_MS } = {}) {
+
+    for (let waited = 0; waited < waitMs; waited += 500) {
+        await nap(500);
+        const pane = await capture(name, tm);
+        if (promptUp(pane) || parseDialog(pane)) {
+            return pane;
+        }
+    }
+
+    throw Object.assign(new Error(`Claude started but its prompt didn't show within ${waitMs / 1000}s`), { status: 504 });
 }
 
 // A new project's chat before its transcript exists: typed into its cc-new-<name> tmux session, if that is running.
@@ -218,13 +233,7 @@ export async function restartChat(id, { tm = tmux, nap = sleep, waitMs = 20_000,
     const name = tmuxName(id);
     await tm(['new-session', '-d', ...tmuxSession(id, s.cwd)]);
 
-    for (let waited = 0; waited < waitMs; waited += 500) {
-        await nap(500);
-        const pane = await tm(['capture-pane', '-p', '-t', `=${name}:`]).then(r => r?.stdout ?? '', () => '');
-        if (promptUp(pane)) {
-            return name;
-        }
-    }
+    await waitForPrompt(name, { tm, nap, waitMs });
 
-    throw Object.assign(new Error("Claude restarted but its prompt didn't show within 20s"), { status: 504 });
+    return name;
 }

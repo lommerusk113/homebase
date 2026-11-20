@@ -2562,7 +2562,7 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
             }
             return { stdout: a[0] === 'capture-pane' ? panes(calls) : '' };
         };
-        return { calls, keys: () => calls.filter(c => c[0] !== 'capture-pane'), opts: reg => ({ tm, nap: async () => {}, reg: async () => reg }) };
+        return { calls, keys: () => calls.filter(c => c[0] !== 'capture-pane'), opts: reg => ({ tm, nap: async () => {}, reg: async () => reg, waitMs: 2000 }) };
     };
     const typed = (name, text) => [['send-keys', '-t', name, '-l', '--', text], ['send-keys', '-t', name, 'Enter']];
 
@@ -2578,16 +2578,21 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
         assert.equal((await send(sid, 'hi', session, f.opts(new Map([[sid, t]]))).catch(e => e)).status, 409, String(t));
         assert.ok(!f.calls.some(c => c[0] === 'new-session' || c[0] === 'send-keys'), String(t));
     }
-    // registry says not live: a fresh transcript write doesn't refuse
+    // registry says not live: a fresh transcript write doesn't refuse; the new Claude's prompt is awaited before typing
     const fresh = { ...session, updated: Date.now() };
-    f = fake({ live: [] });
+    f = fake({ live: [], panes: calls => (calls.filter(c => c[0] === 'capture-pane').length < 3 ? 'loading' : '❯ ') });
     assert.equal(await send(sid, 'hi', fresh, f.opts(new Map())), 'cc-dddddddd');
-    assert.deepEqual(f.calls.map(c => c[0]).slice(0, 2), ['has-session', 'new-session']);
+    assert.deepEqual(f.calls.map(c => c[0]).slice(0, 5), ['has-session', 'new-session', 'capture-pane', 'capture-pane', 'capture-pane']);
     assert.deepEqual(f.keys().slice(-2), typed('cc-dddddddd', 'hi'));
     // no registry: the old mtime check still refuses
     f = fake({ live: [] });
     assert.equal((await send(sid, 'hi', fresh, f.opts(null)).catch(e => e)).status, 409);
     assert.deepEqual(f.calls.map(c => c[0]), ['has-session']);
+    // the prompt never shows: 504, nothing typed
+    f = fake({ live: [], panes: () => 'loading' });
+    assert.equal((await send(sid, 'hi', session, f.opts(new Map())).catch(e => e)).status, 504);
+    assert.ok(!f.calls.some(c => c[0] === 'send-keys'));
+
     console.log('ok send');
 }
 

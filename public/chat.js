@@ -630,6 +630,7 @@ let answeredAsk = null; // data.asking of the question last answered on the pane
 async function showAsk(s, data) {
 
     state.asking = data.asking;
+    $('c-model-btn').toggleAttribute('disabled', !!data.asking); // /model goes through send, whose Esc would decline the question
     updateTitle();
     if (!data.asking) {
         setFormatWarn('pane', false);
@@ -1324,7 +1325,7 @@ export function initChat() {
     // Claude Code takes /model <alias> as a normal message and switches at once (it also saves it as the default for new chats)
     $('c-model').addEventListener('wa-select', async e => {
         const s = chatSession(), alias = e.detail.item.value;
-        if (!s) {
+        if (!s || state.asking) {
             return;
         }
         pickedModel = { sid: s.id, name: alias === 'default' ? 'Default' : modelName(alias) ?? alias, at: Date.now() };

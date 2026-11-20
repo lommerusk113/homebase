@@ -28,5 +28,14 @@ export default {
         const phone = await page.cmd('Page.captureScreenshot', { format: 'png' });
         writeFileSync('/private/tmp/claude-501/-Users-bruinen-IdeaProjects-Privat-codetool/a0da2e79-0e88-4132-aa8a-4f82c6fe07ad/scratchpad/model-chip-390.png', Buffer.from(phone.data, 'base64'));
         await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }); // the harness's size (cdp.mjs)
+    },
+
+    'the model chip is disabled while Claude asks, since /model would decline the question': async ({ page, open, IDS }) => {
+        await open({ project: 'beta', chat: IDS.asker });
+        await page.waitFor(`!document.getElementById('ask').hidden && !document.getElementById('c-model').hidden`, { what: 'the ask card and the chip' });
+        assert.equal(await page.ev(`${btn}.disabled`), true);
+        await open();
+        await page.waitFor(`!document.getElementById('c-model').hidden && document.getElementById('ask').hidden`, { what: 'the chip on a chat that is not asking' });
+        assert.equal(await page.ev(`${btn}.disabled`), false);
     }
 };

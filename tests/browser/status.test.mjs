@@ -35,7 +35,8 @@ export default {
         await page.ev(`(() => { window.rulesAt = 100; const f = window.fetch; window.fetch = async (u, o) => { const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const j = await r.json(); for (const s of j) if (s.id === '${IDS.worker}') { s.rulesStale = ['homebase-rules.md', 'CLAUDE.md']; s.rulesAt = window.rulesAt; } return new Response(JSON.stringify(j), { headers: { 'content-type': 'application/json' } }); }; })()`);
         const strip = `document.getElementById('rules')`;
         await page.waitFor(`!${strip}.hidden`, { what: 'the strip' });
-        assert.equal(await page.ev(`document.getElementById('rules-text').textContent`), 'Rules changed since this chat started (homebase-rules.md, CLAUDE.md).');
+        assert.equal(await page.ev(`${strip}.textContent`), 'New rules since this chat startedLoad new rulesRestart chat×');
+        assert.equal(await page.ev(`${strip}.title`), 'Changed: homebase-rules.md, CLAUDE.md');
         assert.ok(await page.ev(`[...document.querySelectorAll('.s-row')].some(r => r.textContent.includes('old rules'))`), 'board tag');
         await page.click('#rules-restart');
         await page.waitFor(`document.getElementById('restart-dlg').open`, { what: 'the confirm' });

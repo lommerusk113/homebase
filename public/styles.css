@@ -259,8 +259,9 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); box-shadow:none; tran
 .c-term wa-button { --wa-form-control-height:22px; font-size:11.5px; }
 .c-term wa-button::part(base) { color:var(--muted); padding-inline:4px; text-decoration:underline dotted; text-underline-offset:2px; }
 .c-term wa-button:hover::part(base) { color:var(--fg); }
-/* The ask and startup cards sit between the feed and the dock and take their own room, so they never cover a card in the feed */
+/* The ask, startup, waiting and old-rules cards and the info line sit between the feed and the dock and take their own room, so they never cover a card in the feed */
 .c-cards { flex-shrink:0; background:var(--canvas); }
+.c-cards:has(> :not([hidden]):not(:empty)) { padding-bottom:8px; }
 .c-cards > .c-ask { margin:8px 12px 0; }
 .c-wait { position:relative; overflow:hidden; flex-direction:column; align-items:stretch; gap:6px; margin:8px 12px 0; padding:8px 12px 8px 16px; background:var(--needs-bg); border:1px solid var(--needs-line); }
 .c-wait::before { content:''; position:absolute; inset:0 auto 0 0; width:4px; background:var(--c-needs); }
@@ -272,7 +273,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); box-shadow:none; tran
 .c-input { position:relative; z-index:1; flex-shrink:0; height:88px; display:flex; flex-direction:column; justify-content:flex-end; padding-bottom:12px; background:var(--canvas); }
 .c-input > * { flex-shrink:0; }
 /* the composer card: the status as a slim coloured top line (context use on the right), then the input and the send button */
-.composer { margin:0 12px; border-radius:var(--card-r); background:var(--bg); border:1px solid var(--line); box-shadow:var(--card-shadow); transition:border-color .15s, box-shadow .15s; }
+.composer { margin:0 12px; border-radius:var(--card-r); background:var(--bg); border:1px solid var(--line-soft); box-shadow:var(--card-shadow); transition:border-color .15s, box-shadow .15s; }
 .composer:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
 .c-status { --c:var(--c-idle); height:24px; display:flex; align-items:center; gap:7px; padding:6px 12px 0; font-size:11.5px; font-weight:500; white-space:nowrap; overflow:hidden; color:var(--muted); }
 .c-lim { margin-left:auto; flex-shrink:0; font-weight:400; font-variant-numeric:tabular-nums; color:var(--c-warn); }
@@ -334,8 +335,17 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); box-shadow:none; tran
 .files li b { color:var(--fg); font-weight:500; }
 .c-info { color:var(--muted); font-size:12px; margin:0 14px 6px; }
 .c-info:empty { display:none; }
+/* the old-rules strip: one line in the .c-cards dock, actions on the right; wraps under the text when narrow */
+.c-rules { display:flex; flex-wrap:wrap; align-items:center; gap:2px 10px; margin:8px 12px 0; padding:5px 6px 5px 12px; border:1px solid var(--line-soft); border-radius:8px; background:var(--bg); color:var(--muted); font-size:12px; }
 .c-rules[hidden] { display:none; }
-.c-rules .show { padding:0 4px; }
+.c-rules-text { flex:1 1 auto; min-width:0; }
+.c-rules-acts { display:flex; align-items:center; gap:10px; margin-left:auto; }
+.c-rules .show { padding:0; }
+.c-rules .quiet-act { color:var(--muted); }
+.c-rules .quiet-act:hover { color:var(--fg); }
+.c-x { appearance:none; border:0; background:none; padding:0 4px; font-size:16px; line-height:1; color:var(--muted); cursor:pointer; border-radius:4px; }
+.c-x:hover { color:var(--fg); background:var(--chip); }
+.c-cards > .c-info { margin:8px 14px 0; }
 .error { color:var(--c-needs); font-size:12px; margin-top:6px; }
 .body { font-size:13.5px; line-height:1.6; overflow-wrap:anywhere; }
 .body strong { font-weight:700; color:var(--strong); }

@@ -247,7 +247,11 @@ function bubble(i, sid, prevTopic, look = {}) {
             }
         }
         if (i.at) {
-            row.append(el('span', 'b-time', shortTime(i.at)));
+            // the full date sits on the time itself, so it doesn't pop up over the whole card
+            const t = el('span', 'b-time', shortTime(i.at));
+            t.title = b.title;
+            b.removeAttribute('title');
+            row.append(t);
         }
         b.append(row);
     }
@@ -424,7 +428,7 @@ function showRules(s) {
     const dismissed = s?.rulesStale && Number(store.get(key)) >= (s.rulesAt ?? 0);
     $('rules').hidden = !s?.rulesStale || dismissed;
     if (!$('rules').hidden) {
-        $('rules-text').textContent = `Rules changed since this chat started (${s.rulesStale.join(', ')}).`;
+        $('rules').title = `Changed: ${s.rulesStale.join(', ')}`;
         const dismiss = () => {
             store.set(key, String(s.rulesAt ?? 0));
             showRules(s);
@@ -866,6 +870,14 @@ export async function refreshChat() {
 function initNewMarker() {
 
     const feed = $('feed');
+    // a strip appearing above the composer shrinks the feed: keep the newest in view if it was
+    let atEnd = true;
+    feed.addEventListener('scroll', () => { atEnd = feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX; });
+    new ResizeObserver(() => {
+        if (atEnd) {
+            feed.scrollTop = feed.scrollHeight;
+        }
+    }).observe(feed);
     const bottom = () => feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX;
     const leave = () => {
         const s = chatSession();

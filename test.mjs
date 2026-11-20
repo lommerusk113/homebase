@@ -2940,6 +2940,13 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     f = fake({ panes: calls => (calls.some(c => c.includes('-l')) ? q : '❯ ') });
     assert.equal((await send(sid, 'hi', session, f.opts(new Map())).catch(e => e)).status, 409);
     assert.ok(!f.calls.some(c => c.at(-1) === 'Enter'));
+    // the refused text stays in Claude's input: sending it again only presses Enter, so Claude doesn't get it twice
+    f = fake();
+    await send(sid, 'hi', session, f.opts(new Map()));
+    assert.deepEqual(f.keys().slice(1), [['send-keys', '-t', 'cc-dddddddd', 'Enter']]);
+    f = fake();
+    await send(sid, 'hi', session, f.opts(new Map()));
+    assert.deepEqual(f.keys().slice(1), typed('cc-dddddddd', 'hi'), 'only the next send');
 
     // one action per tmux at a time, in arrival order; a failure doesn't block the next
     const order = [];

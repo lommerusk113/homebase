@@ -181,13 +181,26 @@ export async function runningTwice(id, reg = liveSessions) {
     return older?.length ? `This chat is running twice; sent to the newest. Close the older one: tmux kill-session -t ${older.join(' / ')}` : null;
 }
 
+// tmux name -> text a refused send left typed in Claude's input box
+const leftTyped = new Map();
+
 // Enter goes separately, later, so Claude doesn't treat it as part of the typed/pasted text; and not into a dialog that
-// opened meanwhile (the text stays in the input box).
+// opened meanwhile (the text stays in the input box, and sending the same text again only presses Enter).
+// ponytail: a different text is typed after the leftover; clearing the box needs keys whose meaning varies by Claude version
 async function typeSteps(name, steps, { tm = tmux, nap = sleep } = {}) {
+
+    const text = steps[0].at(-1);
+    const left = leftTyped.get(name);
+    leftTyped.delete(name);
+    if (left === text) {
+        steps = steps.slice(-1);
+    }
+
     for (const args of steps) {
         if (args.at(-1) === 'Enter') {
             await nap(300);
             if (questionOpen(await capture(name, tm))) {
+                leftTyped.set(name, text);
                 throw conflict('A question showed up while typing: check it, then send again');
             }
         }

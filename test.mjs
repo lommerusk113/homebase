@@ -2498,7 +2498,9 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     // A tool permission prompt, captured from a real Claude Code: an "Esc to cancel" footer, the command as the question
     const perm = readFileSync(new URL('./tests/fixtures/permission-bash.txt', import.meta.url), 'utf8');
     const p = parseQuestion(perm);
-    assert.equal(p.question, 'Bash command · Write and remove a test file · echo hi > out-from-test.txt && rm out-from-test.txt · Do you want to proceed?');
+    assert.equal(p.question, 'Bash command · Write and remove a test file · Do you want to proceed?');
+    assert.equal(p.detail, 'echo hi > out-from-test.txt && rm out-from-test.txt', 'the command, apart from the question');
+    assert.equal(p.risky, false);
     assert.deepEqual(p.options, ['Yes', "Yes, and don't ask again for echo hi and rm out-from-test.txt commands in", 'Yes, and switch to auto mode · auto mode handles these prompts for you', 'No']);
     assert.equal(p.selected, 0);
     assert.match(p.descriptions[1], /-to-wrap-it-x\/0123456789abcdef-4f82c6fe07ad\/scratchpad\/perm$/, 'a path cut at the pane edge is joined back');
@@ -2509,9 +2511,18 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     assert.equal(r.err, null);
     assert.deepEqual(r.sent.map(a => a.slice(3)), [['Down', 'Down', 'Down'], ['Enter']], 'answered by the same ❯ path');
     const edit = readFileSync(new URL('./tests/fixtures/permission-edit.txt', import.meta.url), 'utf8');
-    assert.equal(parseQuestion(edit).question, 'Edit file · foo.js · 1  const a = 1; 2 -const b = 2; 2 +const b = 3; 3  console.log(a + b); · Do you want to make this edit to foo.js?', 'a short diff is shown');
-    const long = edit.replace(' 3  console.log(a + b);', ' 3  console.log(a + b);\n 4 +console.log(b);');
-    assert.equal(parseQuestion(long).question, 'Edit file · foo.js · Do you want to make this edit to foo.js?', 'a longer diff is left out');
+    assert.equal(parseQuestion(edit).question, 'Edit file · foo.js · Do you want to make this edit to foo.js?');
+    assert.equal(parseQuestion(edit).detail, '1  const a = 1;\n2 -const b = 2;\n2 +const b = 3;\n3  console.log(a + b);', 'the diff is the detail');
+    // a command past 4 lines used to be dropped: approved blind. Now all of it, its indentation kept, and the risky parts flagged
+    const longPane = readFileSync(new URL('./tests/fixtures/permission-bash-long.txt', import.meta.url), 'utf8');
+    const longCmd = parseQuestion(longPane);
+    assert.equal(longCmd.question, 'Bash command · Rebase onto main and force-push the branch · Do you want to proceed?');
+    assert.equal(longCmd.detail.split('\n').length, 8);
+    assert.equal(longCmd.detail.split('\n')[6], '  git push --force origin feature &&');
+    assert.equal(longCmd.risky, true);
+    r = await run([longPane, longPane.replace('glab mr merge 42', 'glab mr merge 43')], 3, 'No');
+    assert.equal(r.err.status, 409, 'a command that changed under the arrows is not answered');
+    assert.ok(!r.sent.some(a => a.includes('Enter')));
     assert.deepEqual(parseQuestion(edit).options, ['Yes', 'Yes, and switch to accept edits (auto-approve file edits and common file commands) for this', 'No']);
     console.log('ok ask question');
 }

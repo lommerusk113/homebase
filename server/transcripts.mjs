@@ -243,6 +243,9 @@ export function gateRuns(entries, brief = null) {
     return runs;
 }
 
+// Commands that change shared state or are hard to undo: a red permission card (startup.mjs parseQuestion) and their own
+// "Ran:" line in the feed (rawItems). The one list for both.
+export const RISKY = /\bgit\s+(?:push|merge)\b|--force\b|\breset\s+--hard\b|\brm\s+-\w*(?:r\w*f|f\w*r)|\b(?:mr|pr)\s+merge\b|\bdrop\s+table\b|\bkubectl\b/i;
 const TOOL_KIND = { Bash: 'cmd', Edit: 'edit', Write: 'edit', MultiEdit: 'edit', NotebookEdit: 'edit', Read: 'read', Grep: 'search', Glob: 'search', Agent: 'agent', Task: 'agent', WebFetch: 'web', WebSearch: 'web' };
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const PHRASES = {

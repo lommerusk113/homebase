@@ -176,7 +176,7 @@ function markRead(sid, key, b) {
 function optButton(label, n, { desc, ro, quiet } = {}) {
 
     if (quiet && !ro) {
-        return waButton(label, 'c-opt quiet', { variant: 'neutral', appearance: 'plain' });
+        return waButton(desc ? `${label} ${desc}` : label, 'c-opt quiet', { variant: 'neutral', appearance: 'plain' }); // a grant's scope stays readable
     }
     const rec = /\(recommended\)/i.test(label);
     const text = label.replace(/\s*\(recommended\)/i, '');
@@ -432,10 +432,13 @@ function showHead(s) {
     $('msg').setAttribute('placeholder', s ? `Message Claude in ${s.project}…` : 'Message Claude…');
 }
 
+const DETAIL_LINES = 6;
+
 // The ask and startup cards: the question, an option per button (its description under it) that `answer` picks, else
-// read-only rows; and the tmux command to answer in the terminal.
-/** @param {string} id @param {string} tmux @param {string} question @param {{ label: string, desc?: string, primary?: boolean, quiet?: boolean }[]} options @param {((i: number) => Promise<void>) | null} answer */
-function fillCard(id, tmux, question, options, answer) {
+// read-only rows; and the tmux command to answer in the terminal. The ask card also shows a permission prompt's command
+// or diff (`detail`, its first lines and "+N more lines"), in red when the server flags it risky.
+/** @param {string} id @param {string} tmux @param {string} question @param {{ label: string, desc?: string, primary?: boolean, quiet?: boolean }[]} options @param {((i: number) => Promise<void>) | null} answer @param {{ detail?: string, risky?: boolean }} [prompt] */
+function fillCard(id, tmux, question, options, answer, { detail = '', risky = false } = {}) {
 
     $(`${id}-q`).textContent = question;
     $(`${id}-cmd`).textContent = `tmux attach -t ${tmux}`;
@@ -450,6 +453,17 @@ function fillCard(id, tmux, question, options, answer) {
             toggle.setAttribute('aria-expanded', String(!term.hidden));
         };
         $('announce').textContent = `Claude is asking: ${question}`;
+
+        const pre = $('ask-detail'), more = $('ask-more'), lines = detail ? detail.split('\n') : [], rest = lines.length - DETAIL_LINES;
+        pre.hidden = !detail;
+        pre.textContent = lines.slice(0, DETAIL_LINES).join('\n');
+        more.hidden = rest <= 0;
+        more.textContent = `+${rest} more line${rest === 1 ? '' : 's'}`;
+        more.onclick = () => {
+            pre.textContent = detail;
+            more.hidden = true;
+        };
+        $('ask').classList.toggle('risky', risky);
     }
     $(`${id}-opts`).replaceChildren(...options.map((o, i) => {
         const b = optButton(o.label, i, { desc: o.desc, ro: !answer, quiet: o.quiet });
@@ -483,6 +497,7 @@ const postAnswer = async url => {
 
 const TEXT_BOX = /^type something\.?$/i; // Claude's own text-box entry under a question: the chat input below covers it
 const CHAT = /^chat about this$/i; // declines the question as "the user wants to clarify"; Claude then asks what about
+const GRANT = /^yes, .*(?:don't ask again|auto mode|accept edits)/i; // a permission option that also approves what comes later
 let askKey = null;
 let answeredAsk = null; // data.asking of the question last answered on the pane, until the transcript stops asking it
 
@@ -501,13 +516,13 @@ async function showAsk(s, data) {
     }
 
     const tmux = s.tmux ?? `cc-${s.id.slice(0, 8)}`;
-    /** @type {{ question: string, options: string[], descriptions: string[], selected: number } | null} */
+    /** @type {{ question: string, options: string[], descriptions: string[], selected: number, detail?: string, risky?: boolean } | null} */
     let pane = null;
     try {
         const r = await api(`/api/question?tmux=${encodeURIComponent(tmux)}`);
         pane = r.ok ? (await r.json()).question : null;
     } catch {}
-    const key = JSON.stringify([tmux, data.questions, data.asking, pane && [pane.question, pane.options, pane.descriptions]]); // not the moving ❯
+    const key = JSON.stringify([tmux, data.questions, data.asking, pane && [pane.question, pane.detail, pane.options, pane.descriptions]]); // not the moving ❯
     if (key === askKey) {
         return;
     }
@@ -536,23 +551,24 @@ async function showAsk(s, data) {
     }
     const flat = t => t.replace(/\s+/g, ' ').trim();
     const known = questions.find(q => flat(q.question) === pane.question);
-    const options = pane.options.map((label, i) => ({ i, label, desc: known?.descriptions?.[known.options.indexOf(label)] || pane.descriptions[i], primary: /\(recommended\)/i.test(label), quiet: CHAT.test(label) }))
-        .filter(o => !TEXT_BOX.test(o.label));
-    if (data.questions?.length && !options.some(o => o.quiet)) {
+    const options = pane.options.map((label, i) => ({ i, label, desc: known?.descriptions?.[known.options.indexOf(label)] || pane.descriptions[i], primary: /\(recommended\)/i.test(label), quiet: CHAT.test(label) || GRANT.test(label) }))
+        .filter(o => !TEXT_BOX.test(o.label))
+        .sort((a, b) => Number(a.quiet) - Number(b.quiet)); // quiet ones last: Yes and No stay the big pair
+    if (data.questions?.length && !options.some(o => CHAT.test(o.label))) {
         options.push({ i: -1, label: 'Chat about this', desc: '', primary: false, quiet: true }); // no such entry on the pane: Esc declines instead
     }
     fillCard('ask', tmux, known?.question ?? pane.question, options, async n => {
         try {
             await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&${options[n].i < 0 ? 'dismiss=1' : `option=${options[n].i}&label=${encodeURIComponent(options[n].label)}`}`);
             answeredAsk = data.asking;
-            if (options[n].quiet) {
+            if (CHAT.test(options[n].label)) {
                 $('msg').focus(); // the user's turn to say what they want instead
             }
         } finally {
             askKey = null;
             refreshChat(); // fresh transcript: the pane shows the next question or none, and `data` still has the answered one
         }
-    });
+    }, pane);
 }
 
 // A blocking Claude Code startup dialog (workspace trust, first run) read off the tmux pane: its question, an option per button.

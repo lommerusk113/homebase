@@ -1,6 +1,7 @@
 // Claude Code's blocking startup dialogs (workspace trust, first-run prompts) in a Homebase tmux pane: read them off the screen
 // and answer by moving the ❯ selection to the option the user clicked. Homebase never picks an option by itself.
 import { tmux, sleep } from './tmux.mjs';
+import { RISKY } from './transcripts.mjs';
 
 const NAME = /^cc-[A-Za-z0-9._-]{1,120}$/;
 const MAX_OPTIONS = 10;
@@ -95,7 +96,7 @@ export async function answerStartup(name, index, label, { tm = tmux, nap = sleep
         }
         await nap(300);
         const now = parse(await capture(name, tm));
-        if (!now || now.question !== dialog.question || now.options.join('|') !== dialog.options.join('|')) {
+        if (!now || now.question !== dialog.question || now.detail !== dialog.detail || now.options.join('|') !== dialog.options.join('|')) {
             throw Object.assign(new Error('The question changed, check it and try again'), { status: 409 });
         }
         on = now.selected;
@@ -105,7 +106,7 @@ export async function answerStartup(name, index, label, { tm = tmux, nap = sleep
     await nap(700);
     const after = parse(await capture(name, tm));
     cache.delete(name);
-    if (after && after.question === dialog.question && after.options.join('|') === dialog.options.join('|')) {
+    if (after && after.question === dialog.question && after.detail === dialog.detail && after.options.join('|') === dialog.options.join('|')) {
         throw Object.assign(new Error('The question is still showing, answer it in the terminal'), { status: 502 });
     }
 }
@@ -119,8 +120,9 @@ const OPTION = /^(?: {0,3}|\s*❯\s+)(\d+)\.\s+(.+)$/;
 // option's indented lines its description. One question at a time (a ☐ tab bar above is ignored); a multi-select
 // ([ ] boxes) isn't parsed. The last step of several questions, "Review your answers", has no hint: its options run to
 // the bottom and its question is the answers summary. A tool permission prompt ("Do you want to proceed?") ends in
-// "Esc to cancel" instead: its question is the dialog from its top rule, its ╌ sections (title, command or a short diff,
-// the ask) joined by " · ", Tips dropped; tests/fixtures/permission-*.txt are real ones. │ box borders are stripped. -> { question, options, descriptions, selected } or null
+// "Esc to cancel" instead: its question is the dialog's title and ask sections (╌ rules between) joined by " · ", Tips dropped,
+// and the command or diff between them its whole `detail`, `risky` when it matches RISKY; tests/fixtures/permission-*.txt
+// are real ones. │ box borders are stripped. -> { question, options, descriptions, selected, detail?, risky? } or null
 export function parseQuestion(pane) {
 
     const lines = String(pane ?? '').split('\n').map(l => l.replace(/^\s*│ ?|\s*│\s*$/g, '').replace(/\s+$/, ''));
@@ -161,20 +163,24 @@ export function parseQuestion(pane) {
     while (top > 0 && lines[top - 1].trim() && !/^[\s─]+$/.test(lines[top - 1])) {
         top--;
     }
-    // a permission prompt's ╌ sections: its title lines, the command or diff (dropped past 4 lines), the ask
+    // a permission prompt's ╌ sections: its title lines, the command or diff (kept whole, as `detail`), the ask
     const sections = [[]];
     for (const l of lines.slice(top, from)) {
         if (/^[\s╌]+$/.test(l)) {
             sections.push([]);
         } else if (l.trim() && !/^\s*Tip:/.test(l)) {
-            sections.at(-1).push(l.trim());
+            sections.at(-1).push(l);
         }
     }
-    const parts = sections.length < 2 ? [sections[0].join(' ')]
-        : [sections[0].join(' · '), ...sections.slice(1, -1).filter(s => s.length <= 4).map(s => s.join(' ')), sections.at(-1).join(' ')];
+    const trim = s => s.map(l => l.trim());
+    const parts = sections.length < 2 ? [trim(sections[0]).join(' ')] : [trim(sections[0]).join(' · '), trim(sections.at(-1)).join(' ')];
     const question = parts.filter(Boolean).join(' · ').replace(/\s*●\s*/g, ' · ');
+    const block = sections.slice(1, -1).flat();
+    const indent = Math.min(...block.map(l => l.match(/^ */)[0].length));
+    const detail = block.map(l => l.slice(indent)).join('\n');
 
-    return question && !/^[☐☒✔←]/.test(question) ? { question, options, descriptions, selected } : null;
+    return question && !/^[☐☒✔←]/.test(question)
+        ? { question, options, descriptions, selected, ...(detail && { detail, risky: RISKY.test(detail) }) } : null;
 }
 
 export async function paneQuestion(name, { tm = tmux } = {}) {

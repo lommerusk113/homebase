@@ -207,6 +207,13 @@ a.chip:hover { text-decoration:underline; }
 .c-ask-label { display:flex; align-items:center; gap:7px; font-size:11px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--c-needs); }
 .c-ask-label::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--c-needs); animation:ping 2s var(--ease) infinite; }
 .c-ask-q { margin-bottom:4px; font-size:15px; font-weight:600; line-height:1.4; color:var(--fg); overflow-wrap:anywhere; }
+/* a permission prompt's command or diff, its first lines until expanded; red when it pushes, merges, force-resets or deletes */
+.c-ask-detail { margin:0 0 2px; padding:8px 10px; max-height:40vh; overflow:auto; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); font-size:12px; line-height:1.45; white-space:pre-wrap; overflow-wrap:anywhere; }
+.c-ask-more { align-self:flex-start; margin-top:-4px; --wa-form-control-height:22px; font-size:12px; }
+.c-ask.risky { background:color-mix(in srgb, var(--c-danger) 7%, var(--bg)); border-color:color-mix(in srgb, var(--c-danger) 45%, transparent); }
+.c-ask.risky::before, .c-ask.risky .c-ask-label::before { background:var(--c-danger); }
+.c-ask.risky .c-ask-label { color:var(--c-danger); }
+.c-ask.risky .c-ask-detail { border-color:color-mix(in srgb, var(--c-danger) 45%, transparent); }
 .c-opts { display:grid; gap:6px; }
 .c-opts:empty { display:none; }
 /* Big options (chat.js optButton), in the ask card and the needs-you card: a number badge, the label, "Recommended" on the primary one */

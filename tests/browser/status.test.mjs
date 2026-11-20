@@ -106,7 +106,7 @@ export default {
         await page.waitFor(`JSON.stringify(${opts}) === '["8080","4478","Chat about this"]' && document.querySelectorAll('#ask-opts wa-button').length === 3`, { what: 'the pane\'s buttons' });
     },
 
-    'a permission prompt gets its options as buttons, with the command as the question': async ({ page, open, IDS, answerPosts }) => {
+    'a permission prompt gets its options as buttons, with the command under the question': async ({ page, open, IDS, answerPosts }) => {
         const transcript = { items: [], working: false, asking: 'Claude needs your permission to use Bash' }; // the hook's text, no options
         let question = parseQuestion(readFileSync(new URL('../fixtures/permission-bash.txt', import.meta.url), 'utf8'));
         await open({ project: 'beta', chat: IDS.asker });
@@ -115,11 +115,34 @@ export default {
                 : (q.url.includes('/api/question') && (question = null), answerPosts(q)));
         const opts = `[...document.querySelectorAll('#ask-opts wa-button')]`;
         await page.waitFor(`${opts}.length === 4`, { what: 'the four permission options' });
-        assert.match(await page.ev(`document.getElementById('ask-q').textContent`), /echo hi > out-from-test\.txt .* Do you want to proceed\?$/);
-        await page.ev(`${opts}[3].click()`);
+        assert.equal(await page.ev(`document.getElementById('ask-q').textContent`), 'Bash command · Write and remove a test file · Do you want to proceed?');
+        assert.deepEqual(await page.ev(`[document.getElementById('ask-detail').textContent, document.getElementById('ask-more').hidden, document.getElementById('ask').classList.contains('risky')]`),
+            ['echo hi > out-from-test.txt && rm out-from-test.txt', true, false]);
+        assert.deepEqual(await page.ev(`${opts}.map(b => [b.firstChild.textContent, b.getAttribute('appearance')])`), [
+            ['Yes', 'outlined'], ['No', 'outlined'],
+            ["Yes, and don't ask again for echo hi and rm out-from-test.txt commands in /private/tmp/claude-501/scratch-projects-some-long-folder-name-to-wrap-it-x/0123456789abcdef-4f82c6fe07ad/scratchpad/perm", 'plain'],
+            ['Yes, and switch to auto mode · auto mode handles these prompts for you', 'plain']
+        ], 'Yes and No the big pair; the standing grants quiet, last, with their whole scope');
+        await page.ev(`${opts}[1].click()`);
         await page.waitFor(`document.getElementById('ask').hidden`, { what: 'the card gone once answered' });
         const u = new URL(page.posts.find(p => p.url.includes('/api/question')).url);
         assert.deepEqual([u.searchParams.get('option'), u.searchParams.get('label')], ['3', 'No']);
+    },
+
+    'a long risky command is shown, its first lines then the rest on demand, on a red card': async ({ page, open, IDS, answerPosts }) => {
+        const transcript = { items: [], working: false, asking: 'Claude needs your permission to use Bash' };
+        const question = parseQuestion(readFileSync(new URL('../fixtures/permission-bash-long.txt', import.meta.url), 'utf8'));
+        await open({ project: 'beta', chat: IDS.asker });
+        page.route = q => (q.url.includes('/api/transcript') ? { body: JSON.stringify(transcript), headers: { 'content-type': 'application/json' } }
+            : q.url.includes('/api/question') && q.method !== 'POST' ? { body: JSON.stringify({ question }), headers: { 'content-type': 'application/json' } }
+                : answerPosts(q));
+        await page.waitFor(`!document.getElementById('ask-detail').hidden`, { what: 'the command' });
+        const detail = `document.getElementById('ask-detail').textContent`, more = `document.getElementById('ask-more')`;
+        assert.equal(await page.ev(`${detail}.split('\\n').length`), 6);
+        assert.deepEqual(await page.ev(`[${more}.hidden, ${more}.textContent, document.getElementById('ask').classList.contains('risky')]`), [false, '+2 more lines', true]);
+        await page.ev(`${more}.click()`);
+        assert.equal(await page.ev(detail), question.detail, 'expanded: the whole command, up to the merge');
+        assert.equal(await page.ev(`${more}.hidden`), true);
     },
 
     'status bar: error while the transcript fails, then back': async ({ page, open, answerPosts }) => {

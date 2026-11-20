@@ -1657,11 +1657,18 @@ import { createServer as netServer } from 'node:net';
         const subscribe = { path: '/api/push/unsubscribe', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token, origin: `https://${rhost}`, 'content-type': 'application/json' }, body: '{"endpoint":"https://fcm.googleapis.com/x"}' };
         assert.equal((await remote(subscribe)).status, 401, 'unpaired');
         assert.equal((await remote({ ...subscribe, headers: { ...subscribe.headers, cookie } })).status, 200);
+        const ua = (await import('node:crypto')).createECDH('prime256v1');
+        ua.generateKeys();
+        const pushSub = { endpoint: 'https://fcm.googleapis.com/fcm/send/phone', keys: { p256dh: ua.getPublicKey().toString('base64url'), auth: Buffer.alloc(16, 7).toString('base64url') } };
+        assert.equal((await remote({ ...subscribe, path: '/api/push/subscribe', headers: { ...subscribe.headers, cookie }, body: JSON.stringify(pushSub) })).status, 200);
+        const subsFile = join(rs.dir, 'subscriptions.json');
+        assert.equal(JSON.parse(readFileSync(subsFile, 'utf8')).length, 1);
         // revoke on the Mac: the device is back to the pair page
         const [dev] = JSON.parse((await call(rs.port, { path: '/api/pair/devices', headers: { 'x-homebase-token': local } })).body);
         assert.equal(dev.name, 'Phone');
         assert.equal((await call(rs.port, { path: `/api/pair/revoke?id=${dev.id}`, method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': local } })).status, 200);
         assert.equal(meta((await remote({ headers: { cookie } })).body), undefined);
+        assert.deepEqual(JSON.parse(readFileSync(subsFile, 'utf8')), [], 'revoke drops the device\'s push subscriptions');
     } finally { rs.stop(); }
     console.log('ok remote access');
 }
@@ -3001,7 +3008,7 @@ import { rulesStale } from './server/rules.mjs';
     console.log('ok rules stale');
 }
 
-import { encrypt, vapidKeys, vapidJwt, pushTo, validSub, readSubs, addSub, removeSub, pushEvents, watchSessions, pageFocused } from './server/push.mjs';
+import { encrypt, vapidKeys, vapidJwt, pushTo, validSub, readSubs, addSub, removeSub, removeDeviceSubs, pushEvents, watchSessions, pageFocused } from './server/push.mjs';
 {
     // RFC 8291 section 5 test vector
     const out = encrypt('When I grow up, I want to be a watermelon', { p256dh: 'BCVxsr7N_eNgVRqvHtD0zTZsEc6-VV-JvLexhqUzORcxaOzi6-AYWXvTBHm4bjyPjs7Vd8pZGH6SRpkNtoIAiw4', auth: 'BTBZMqHH6r4Tts7J_aSIgg' },
@@ -3056,6 +3063,9 @@ import { encrypt, vapidKeys, vapidJwt, pushTo, validSub, readSubs, addSub, remov
     assert.equal(statSync(join(dir, 'subscriptions.json')).mode & 0o777, 0o600);
     await removeSub(dir, other.endpoint);
     assert.deepEqual(await readSubs(dir), [sub]);
+    await addSub(dir, other, 'dev1');
+    await removeDeviceSubs(dir, 'dev1');
+    assert.deepEqual(await readSubs(dir), [sub], 'revoking a device drops its subscriptions');
 
     // the watcher: the first list only sets the baseline; a new transition pushes to every device unless a page was focused
     const s = (id, extra = {}) => ({ id, project: 'alpha', status: 'idle', asking: false, needsYou: false, ...extra });

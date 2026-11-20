@@ -16,11 +16,11 @@ import { createProject, cloneProject, openProject, githubProjects, localProjects
 import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion } from './server/startup.mjs';
 import { send, sendToNew, interrupt, clearChat, compactChat, restartChat, editors, openInEditor } from './server/control.mjs';
 import { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
-import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedRequest, pair, deviceCookie, pairPage, newCode, pairedDevices, revoke } from './server/pairing.mjs';
+import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedRequest, pair, deviceOf, cookieOf, deviceCookie, pairPage, newCode, pairedDevices, revoke } from './server/pairing.mjs';
 import { readConfigFile } from './server/account.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
 import { saveUpload, readUpload } from './server/uploads.mjs';
-import { vapidKeys, validSub, addSub, removeSub, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
+import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 
 export {
     readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, chatFeed, quickReplies, askList, optionLabels, waitingOn, namedChoices,
@@ -157,7 +157,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return json(pairedDevices());
             }
             if (isPost('/api/pair/revoke')) {
-                return revoke(url.searchParams.get('id')) ? res.end('ok') : deny(404, 'no such device');
+                const id = url.searchParams.get('id');
+                if (!revoke(id)) {
+                    return deny(404, 'no such device');
+                }
+                await removeDeviceSubs(DATA_DIR, id); // a revoked phone gets no more notifications either
+                return res.end('ok');
             }
             if (url.pathname === '/api/sessions') {
                 if (url.searchParams.has('focused')) {
@@ -188,7 +193,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 if (!validSub(input)) {
                     return deny(400, 'not a push subscription from a known push service');
                 }
-                await addSub(DATA_DIR, input);
+                await addSub(DATA_DIR, input, remote ? deviceOf(cookieOf(req.headers.cookie))?.id : undefined);
                 return res.end('ok');
             }
             if (isPost('/api/send')) {

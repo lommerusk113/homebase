@@ -127,8 +127,10 @@ function updateSubs(dir, fn) {
 
     return chain;
 }
-export const addSub = (dir, { endpoint, keys: { p256dh, auth } }) => updateSubs(dir, subs => [...subs.filter(s => s.endpoint !== endpoint), { endpoint, keys: { p256dh, auth } }]);
+// device: the paired device's id for a remote subscription, so revoking the device drops it too.
+export const addSub = (dir, { endpoint, keys: { p256dh, auth } }, device) => updateSubs(dir, subs => [...subs.filter(s => s.endpoint !== endpoint), { endpoint, keys: { p256dh, auth }, ...(device ? { device } : {}) }]);
 export const removeSub = (dir, endpoint) => updateSubs(dir, subs => subs.filter(s => s.endpoint !== endpoint));
+export const removeDeviceSubs = (dir, device) => updateSubs(dir, subs => subs.filter(s => s.device !== device));
 
 export const DEBOUNCE_MS = 30_000;
 // Sessions that started waiting on you since the previous check (core.js waitsOnYou, as list.js askingEvents), at most

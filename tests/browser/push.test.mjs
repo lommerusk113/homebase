@@ -18,7 +18,7 @@ export default {
                 return sub;
             };
         })()`);
-        await page.click('#c-menu button[slot="trigger"]');
+        await page.click('#plus-menu button[slot="trigger"]');
         await page.clickOn(`document.getElementById('push-item')`);
         await page.waitFor(`document.getElementById('push-state').textContent === 'On'`, { what: 'the On state' });
         assert.equal(await page.ev('window.subscribedKey'), 65, 'the VAPID public key from /api/push/key');

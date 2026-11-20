@@ -43,7 +43,7 @@ export default {
     'the menu item is enabled when idle and compacts through the same confirm': async ({ page, open, IDS }) => {
         await open({ 'auto-compact': '0' });
         await page.waitFor(`${item} && !${item}.disabled`, { what: 'the enabled menu item' });
-        await page.click('#c-menu button[slot="trigger"]');
+        await page.click('#plus-menu button[slot="trigger"]');
         await page.clickOn(item);
         await page.waitFor(`document.getElementById('compact-dlg').open`, { what: 'the confirm' });
         await page.click('#compact-go');
@@ -94,7 +94,7 @@ export default {
     'the Restart chat menu item asks to confirm first, and Cancel posts nothing': async ({ page, open }) => {
         await open();
         await loaded(page);
-        await page.click('#c-menu button[slot="trigger"]');
+        await page.click('#plus-menu button[slot="trigger"]');
         await page.clickOn(`document.getElementById('restart-item')`);
         await page.waitFor(`document.getElementById('restart-dlg').open`, { what: 'the confirm' });
         await sleep(500);
@@ -107,7 +107,7 @@ export default {
     'confirming Restart chat POSTs /api/restart for the bound session': async ({ page, open, IDS }) => {
         await open();
         await loaded(page);
-        await page.click('#c-menu button[slot="trigger"]');
+        await page.click('#plus-menu button[slot="trigger"]');
         await page.clickOn(`document.getElementById('restart-item')`);
         await page.waitFor(`document.getElementById('restart-dlg').open`, { what: 'the confirm' });
         await page.click('#restart-go');

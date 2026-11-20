@@ -1469,9 +1469,9 @@ export function initChat() {
             $('c-err').textContent = friendly(err.message);
         }
     });
-    $('c-menu').addEventListener('wa-select', e => {
-        if (e.detail.item.value === 'push') {
-            return; // app.js
+    $('plus-menu').addEventListener('wa-select', e => {
+        if (e.detail.item.value === 'push' || e.detail.item.value === 'files') {
+            return; // app.js, and above
         }
         const s = chatSession();
         if (!s) {

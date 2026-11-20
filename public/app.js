@@ -288,7 +288,7 @@ async function togglePush() {
         await renderPush(`Failed: ${e.message}`);
     }
 }
-$('c-menu').addEventListener('wa-select', e => {
+$('plus-menu').addEventListener('wa-select', e => {
     if (e.detail.item.value === 'push') {
         togglePush();
     }

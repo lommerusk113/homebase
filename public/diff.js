@@ -403,7 +403,7 @@ export function syncDiff(s) {
         n.hidden = true;
         b.append(el('span', 'c-diff-icon', '±'), n);
         b.onclick = () => head.sid && !open && openDiff(head.sid);
-        document.getElementById('c-menu').before(b);
+        document.querySelector('#chat .c-head').append(b);
     }
     const sid = s && !s.id.startsWith('cc-new-') ? s.id : null;
     b.hidden = !sid;

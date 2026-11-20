@@ -190,7 +190,7 @@ export default {
             await asPhone(page, async () => {
                 await open(gamma(IDS));
                 await page.waitFor(`document.querySelector('.c-diff-n')?.textContent === '6'`, { what: 'the count' });
-                const head = await page.ev(`(() => { const b = document.getElementById('c-diff').getBoundingClientRect(), m = document.getElementById('c-menu').getBoundingClientRect(); return { h: b.height, right: Math.round(m.right), w: innerWidth }; })()`);
+                const head = await page.ev(`(() => { const b = document.getElementById('c-diff').getBoundingClientRect(), m = document.querySelector('#chat .c-head').getBoundingClientRect(); return { h: b.height, right: Math.round(m.right), w: innerWidth }; })()`);
                 assert.ok(head.h >= 40 && head.right <= head.w, `the button fits the chat header: ${JSON.stringify(head)}`);
                 await page.click('#c-diff');
                 await page.waitFor(`document.querySelectorAll('.dv-file').length === 6`, { what: 'the file list' });

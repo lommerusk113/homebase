@@ -199,7 +199,11 @@ function itemRows(x) {
     if (x.comments?.count) {
         next.prepend(commentBadge(x, fresh), ' ');
     }
-    what.append(el('b', null, x.title), next);
+    const name = el('b', null, x.title);
+    if (x.firstTitle) {
+        name.title = `Started as: ${x.firstTitle}`;
+    }
+    what.append(name, next);
     // with a milestone picked every row is in it, so the tag would only repeat the header pill
     if (x.milestone && !hooks.milestoneId()) {
         what.firstElementChild.prepend(milestoneTag(x));

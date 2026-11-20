@@ -49,6 +49,13 @@ const a = summarizeAgent({ description: 'Implement #1', finished: true }, [
 ], 999_999);
 assert.deepEqual([a.status, a.pr, a.branch], ['done', 'https://gitlab.com/x/y/-/merge_requests/7', 'b1']);
 assert.equal(summarizeAgent({ finished: false }, [], 1_000).status, 'running');
+{
+    // a row goes by the newest SendMessage summary sent to that agent
+    const { sentSummaries } = await import('./server.mjs');
+    const send = (to, summary) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'SendMessage', input: { to, summary, message: 'x' } }] } });
+    assert.deepEqual([...sentSummaries([send('a1', 'Merge it'), send('a2', 'Docs'), send('a1', 'Also rebase'), send('a2'), { ...send('a2', 'Nested'), isSidechain: true }])],
+        [['a1', 'Also rebase'], ['a2', 'Docs']]);
+}
 assert.equal(summarizeAgent({ finished: false }, [], 600_000).status, 'stopped');
 import { agentStatus } from './server.mjs';
 const MIN = 60_000;
@@ -317,6 +324,9 @@ assert.equal(items[1].next, 'Waiting for review by Ann');
 const perks = now => workItems([{ id: 'm', project: 'tracker', prs: [], agents: [agent('perks', 0, { description: 'Build faction perks simulator' })] }], () => null, now);
 assert.deepEqual(perks(3600_000).map(i => [i.key, i.column, i.next]), [['perks', 'finished', 'Finished without an MR']]);
 assert.deepEqual(perks(3 * 3600_000), []);
+// a row renamed by SendMessage keeps its spawn description as the tooltip
+assert.deepEqual(workItems([{ id: 'm', project: 'p', prs: [], agents: [agent('r', 0, { description: 'Also rebase', firstDescription: 'Fix login' })] }], () => null, 0)
+    .map(i => [i.title, i.firstTitle]), [['Also rebase', 'Fix login']]);
 const one = prOf => workItems([{ id: 's', project: 'p', prs: [{ url: mr(5), at: 1 }], agents: [] }], prOf, 0, new Map())[0];
 assert.equal(one(() => open({ ready: true })).stageLabel, 'Approved');
 assert.deepEqual((({ column, stageLabel, next }) => [column, stageLabel, next])(one(() => ({ state: 'closed' }))), ['done', 'Closed', 'Closed without merging']);

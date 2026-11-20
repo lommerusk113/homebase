@@ -462,6 +462,23 @@ async function* recentTranscripts(now) {
     }
 }
 
+// The newest SendMessage summary per agent id: an agent the master continued for other work goes by that.
+// ponytail: only the parsed tail; an older SendMessage is missed and the row keeps its spawn description
+export function sentSummaries(entries) {
+
+    const out = new Map();
+    for (const e of entries) {
+        const blocks = e.type === 'assistant' && !e.isSidechain && Array.isArray(e.message?.content) ? e.message.content : [];
+        for (const b of blocks) {
+            if (b.type === 'tool_use' && b.name === 'SendMessage' && b.input?.to && b.input.summary) {
+                out.set(b.input.to, b.input.summary);
+            }
+        }
+    }
+
+    return out;
+}
+
 // One session from its cached tail, with its subagents; null when the transcript vanished before it was read.
 async function sessionOf({ dir, file, path, st }, now, live) {
 
@@ -478,8 +495,14 @@ async function sessionOf({ dir, file, path, st }, now, live) {
     // subagents run inside their session's process, so they end with it
     const closed = closedSession(entries, now - st.mtimeMs, live);
     const spawns = spawnPrompts(entries);
+    const renamed = sentSummaries(entries);
     const subagents = (await agents(join(ROOT, dir, id, 'subagents'), now))
-        .map(a => ({ ...a, spawnedFor: spawns.get(a.toolUseId) ?? null, ...(closed && a.status === 'running' && { status: 'stopped', stopReason: 'closed' }) }));
+        .map(a => ({
+            ...a,
+            ...(renamed.get(a.id) && renamed.get(a.id) !== a.description && { description: renamed.get(a.id), firstDescription: a.description }),
+            spawnedFor: spawns.get(a.toolUseId) ?? null,
+            ...(closed && a.status === 'running' && { status: 'stopped', stopReason: 'closed' })
+        }));
 
     const ctx = await contextOf(id);
 

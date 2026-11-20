@@ -333,6 +333,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             project: it.project,
             sessionId: agent?.sessionId ?? it.linkSession,
             title,
+            firstTitle: prState?.title ? null : agent?.firstDescription ?? null,
             pr: it.pr,
             prState,
             column: col,

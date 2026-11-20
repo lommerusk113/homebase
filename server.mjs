@@ -23,7 +23,7 @@ export {
     readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, quickReplies, askList, optionLabels,
     pendingAsk, pendingQuestion, askMarker, markerAsk, turnState, turnPrompts, spawnPrompts, latestTopic, queuedPrompts, addUsage, readUsage, formatDuration, formatTokens
 } from './server/transcripts.mjs';
-export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, stepOf, status, lastActivity, summarize, folderFor } from './server/sessions.mjs';
+export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, stepOf, status, lastActivity, summarize, folderFor, sentSummaries } from './server/sessions.mjs';
 export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments, signedIn, me, repoOfUrl, swrEntry, swr, cached, refreshAll, refreshInfo } from './server/forge.mjs';
 export {
     column, gateFor, toGate, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf

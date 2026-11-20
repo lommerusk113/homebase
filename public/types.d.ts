@@ -105,6 +105,7 @@ interface WorkItem {
     project: string;
     sessionId: string;
     title: string;
+    firstTitle?: string | null; // the agent's spawn description, when a later SendMessage renamed the row
     pr: string | null;
     forgeError?: string | null; // why the last MR/PR lookup (or its comments, "comments: …") failed; the last good data is kept
     prState: PrState | null;

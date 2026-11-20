@@ -393,7 +393,6 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .c-diff:focus-visible, .dv-btn:focus-visible, .dv-file:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 .c-diff-icon { font-size:var(--fs-m); line-height:1; }
 .c-diff-n { padding:0 6px; border-radius:var(--r-pill); background:var(--chip); color:var(--fg); font-variant-numeric:tabular-nums; }
-.dv-link { display:block; margin:var(--sp-1) 0; }
 .dv { --dv-add:color-mix(in srgb, var(--c-ready) 13%, var(--bg)); --dv-del:color-mix(in srgb, var(--c-danger) 11%, var(--bg));
   position:fixed; inset:0; z-index:900; display:flex; flex-direction:column; background:var(--bg); color:var(--fg); font-size:var(--fs-m); outline:0;
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }

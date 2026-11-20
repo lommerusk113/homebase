@@ -2,7 +2,7 @@
 import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle, setWorkCount, waitsOnYou } from './core.js';
 import { chatSession, bindChat, focusChat, sendText, isMaster } from './chat.js';
 import { milestoneTag } from './milestone.js';
-import { diffLink } from './diff.js';
+import { diffIcon } from './diff.js';
 
 
 /** @param {Column} key */
@@ -185,6 +185,7 @@ function itemRows(x) {
         br.append(el('span', 'chip mono', x.branch));
     }
     const act = el('td', 'act');
+    act.append(...diffIcon(x, renderBoard));
     if (x.sent || x.requested) {
         act.append(sentPill(x));
     } else if (x.action && x.sessionId) {
@@ -419,7 +420,6 @@ function detail(x) {
         m.append(...prParts(x), ...(x.branch ? [el('span', 'chip mono', x.branch)] : []));
         d.append(m);
     }
-    d.append(...diffLink(x));
     if (x.comments?.count) {
         const fresh = freshComments(x.comments, state.opened?.key === x.key ? state.opened.since : seenAt(x.pr));
         const h = el('h4', null, fresh.length ? `New comments · ${fresh.length}` : `Comments · ${x.comments.count} · none new`), all = el('button', 'show mark-all', 'Mark all seen');

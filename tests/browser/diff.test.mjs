@@ -43,6 +43,29 @@ async function withRepo(homebase, fn) {
         reset(repo);
     }
 }
+// Two running helpers of the gamma chat, each in its own linked worktree of gamma: agent-dirty's has an edit, agent-clean's has none.
+async function withHelpers(homebase, gammaId, fn) {
+    const repo = join(homebase, '..', 'home', 'repos', 'gamma'), wts = join(homebase, '..', 'worktrees');
+    const sub = join(homebase, '..', 'home', '.claude', 'projects', '-fx-gamma', gammaId, 'subagents');
+    mkdirSync(sub, { recursive: true });
+    const at = new Date().toISOString();
+    for (const name of ['dirty', 'clean']) {
+        const wt = join(wts, name);
+        execFileSync('git', ['-C', repo, 'worktree', 'add', '-q', '-b', `worktree-agent-${name}`, wt, 'main']);
+        writeFileSync(join(sub, `agent-${name}.meta.json`), JSON.stringify({ agentType: 'general-purpose', description: `Helper ${name}`, worktreePath: wt, worktreeBranch: `worktree-agent-${name}` }));
+        writeFileSync(join(sub, `agent-${name}.jsonl`), [
+            { type: 'user', isSidechain: true, sessionId: gammaId, cwd: wt, timestamp: at, message: { role: 'user', content: `Helper ${name}` } },
+            { type: 'assistant', isSidechain: true, sessionId: gammaId, cwd: wt, uuid: `h-${name}`, timestamp: at, message: { model: 'claude-opus-5-5', content: [{ type: 'tool_use', id: `b-${name}`, name: 'Bash', input: { command: 'npm test' } }] } }
+        ].map(e => JSON.stringify(e)).join('\n') + '\n');
+    }
+    writeFileSync(join(wts, 'dirty', 'README.md'), '# gamma\n\nEdited by the helper.\n');
+    try {
+        await fn();
+    } finally {
+        rmSync(sub, { recursive: true, force: true });
+        rmSync(wts, { recursive: true, force: true });
+    }
+}
 async function asPhone(page, fn) {
     await page.cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
     try {
@@ -184,6 +207,31 @@ export default {
                 await page.waitFor(`${shown('dv-files')} && !${shown('dv-pane')}`, { what: 'the list again' });
                 await page.click('.dv-close');
                 await page.waitFor(`!document.querySelector('.dv')`, { what: 'closed' });
+            });
+        });
+    },
+
+    'a helper row whose worktree has changes gets a Changes icon that opens that worktree; a clean one and MR rows get none': async ({ page, open, IDS, homebase }) => {
+        await withRepo(homebase, async () => {
+            await withHelpers(homebase, IDS.gamma, async () => {
+                await open(gamma(IDS));
+                const icon = key => `document.querySelector('#masters tr[data-key="${key}"] .act .dv-row')`;
+                await page.waitFor(`document.querySelector('#masters tr[data-key="agent-clean"]') && ${icon('agent-dirty')}`, { what: 'both helper rows, the icon on the dirty one' });
+                assert.equal(await page.ev(`!!${icon('agent-clean')}`), false, 'no icon without changes');
+                assert.deepEqual(await page.ev(`[${icon('agent-dirty')}.getAttribute('aria-label'), ${icon('agent-dirty')}.getAttribute('title'), ${icon('agent-dirty')}.getAttribute('appearance')]`), ['Changes', 'Changes', 'plain']);
+                await shots(page, 'row');
+                await page.clickOn(icon('agent-dirty'), 'the icon');
+                await page.waitFor(`document.querySelector('.dv-l.add')`, { what: "the worktree's diff" });
+                assert.equal(await page.ev(`document.querySelector('.dv-title').textContent`), 'dirty worktree-agent-dirty → origin/main');
+                assert.deepEqual(await page.ev(files), [['uncommitted', 'M', 'README.md', '+1 −1']]);
+                assert.equal(await page.ev(`document.querySelector('#masters tr[data-key="agent-dirty"] + tr.detail')`), null, 'the click opened the panel, not the row');
+                await page.key('Escape', 'Escape');
+                await page.waitFor(`!document.querySelector('.dv')`, { what: 'closed' });
+                // MR rows (no worktree) never get one
+                await open({ project: 'alpha' });
+                await page.waitFor(`document.querySelectorAll('#masters tr[data-key^="https://"]').length >= 3`, { what: 'MR rows' });
+                assert.equal(await page.ev(`document.querySelectorAll('#masters tr[data-key^="https://"] .dv-row').length`), 0);
+                assert.deepEqual(page.posts, [], 'read-only: nothing was posted');
             });
         });
     }

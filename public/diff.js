@@ -1,7 +1,7 @@
 // The Changes view: what a chat or a helper changed in its git folder (GET /api/diff, server/diff.mjs), read-only.
 // A full-screen panel: the changed files left ("Uncommitted", "Committed on this branch"), the picked file's unified
 // diff right; on a phone the list first, then the diff with a back button. Diff text only ever reaches textContent.
-import { api, el, state, PR_HREF } from './core.js';
+import { api, el, waButton, state, PR_HREF } from './core.js';
 
 const LINES = 500; // drawn at a time; "Show more" adds the next ones
 const COUNT_MS = 15_000; // the chat header's count is re-read at most this often, and only when the chat moved
@@ -344,15 +344,33 @@ export function closeDiff() {
     }
 }
 
-// A work row's detail gets "Changes" when its helper has a worktree.
-/** @param {WorkItem} x @returns {HTMLElement[]} */
-export function diffLink(x) {
+// A work row's "Changes" icon, only when its helper's worktree has changes (an MR row without a worktree gets none:
+// the chat's folder would show unrelated changes). Each row's count is read when the row is drawn and at most every
+// COUNT_MS after, never on the poll itself; a count that changes redraws the board.
+const ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 6.5v7M8.5 10h7M8.5 17h7"/></svg>';
+/** @type {Map<string, { at: number, n: number }>} item key -> changed files */
+const rowCounts = new Map();
+/** @param {WorkItem} x @param {() => void} redraw @returns {HTMLElement[]} */
+export function diffIcon(x, redraw) {
     if (!x.worktreePath || !x.sessionId) {
         return [];
     }
-    const b = el('button', 'show dv-link', 'Changes');
-    b.type = 'button';
-    b.title = `What changed in ${x.worktreePath}`;
+    const hit = rowCounts.get(x.key), was = hit?.n ?? 0;
+    if (!document.hidden && (!hit || Date.now() - hit.at >= COUNT_MS)) {
+        rowCounts.set(x.key, { at: Date.now(), n: was }); // one fetch at a time per row
+        getJson(urlOf(x.sessionId, x.key)).then(v => {
+            const n = v.repo ? diffTotals(v).files : 0;
+            rowCounts.set(x.key, { at: Date.now(), n });
+            if (n !== was) {
+                redraw();
+            }
+        }, () => {});
+    }
+    if (!was) {
+        return [];
+    }
+    const b = waButton('', 'act-btn dv-row', { appearance: 'plain', 'aria-label': 'Changes', title: 'Changes' });
+    b.innerHTML = ICON;
     b.onclick = e => {
         e.stopPropagation();
         openDiff(x.sessionId, x.key);

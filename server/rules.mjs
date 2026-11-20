@@ -35,15 +35,21 @@ export async function rulesStale(startedAt, cwd, now = Date.now(), home = homedi
         return undefined;
     }
 
-    const names = new Set();
+    const names = new Set(), project = [];
     let at = 0;
     for (const [name, path] of watched(cwd, home)) {
         const m = await mtimeOf(path, now);
         if (m > startedAt) {
             names.add(name);
             at = Math.max(at, m);
+            if (path.startsWith(join(cwd, '/'))) {
+                project.push(path);
+            }
         }
     }
 
-    return names.size ? { names: [...names], at } : undefined;
+    return names.size ? { names: [...names], at, reload: reloadMessage(project) } : undefined;
 }
+
+// What "Load new rules" types into the chat: re-read the global rules, plus the project's own files that changed.
+export const reloadMessage = (project = []) => `The rules changed. Re-read ${[RULES_FILE, '~/.claude/CLAUDE.md', ...project].join(' and ').replace(/ and (?=.* and )/g, ', ')} now and follow them from here on (they override your earlier instructions where they differ).`;

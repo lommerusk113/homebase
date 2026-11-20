@@ -35,7 +35,7 @@ export default {
         await page.ev(`(() => { window.rulesAt = 100; const f = window.fetch; window.fetch = async (u, o) => { const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const j = await r.json(); for (const s of j) if (s.id === '${IDS.worker}') { s.rulesStale = ['homebase-rules.md', 'CLAUDE.md']; s.rulesAt = window.rulesAt; } return new Response(JSON.stringify(j), { headers: { 'content-type': 'application/json' } }); }; })()`);
         const strip = `document.getElementById('rules')`;
         await page.waitFor(`!${strip}.hidden`, { what: 'the strip' });
-        assert.equal(await page.ev(`document.getElementById('rules-text').textContent`), 'Rules changed since this chat started (homebase-rules.md, CLAUDE.md). Restart chat to load them.');
+        assert.equal(await page.ev(`document.getElementById('rules-text').textContent`), 'Rules changed since this chat started (homebase-rules.md, CLAUDE.md).');
         assert.ok(await page.ev(`[...document.querySelectorAll('.s-row')].some(r => r.textContent.includes('old rules'))`), 'board tag');
         await page.click('#rules-restart');
         await page.waitFor(`document.getElementById('restart-dlg').open`, { what: 'the confirm' });
@@ -45,6 +45,17 @@ export default {
         await page.waitFor(`${strip}.hidden`, { what: 'dismissed' });
         await page.ev(`window.rulesAt = 200`);
         await page.waitFor(`!${strip}.hidden`, { timeout: 15_000, what: 'back after a file changed again' });
+    },
+
+    'old rules: Load new rules types the re-read message into the chat and hides the strip': async ({ page, open, IDS }) => {
+        await open({ chat: IDS.worker });
+        await page.ev(`(() => { const f = window.fetch; window.fetch = async (u, o) => { const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const j = await r.json(); for (const s of j) if (s.id === '${IDS.worker}') { s.rulesStale = ['homebase-rules.md']; s.rulesAt = 100; s.rulesReload = 'The rules changed. Re-read /x/homebase-rules.md and ~/.claude/CLAUDE.md now'; } return new Response(JSON.stringify(j), { headers: { 'content-type': 'application/json' } }); }; })()`);
+        await page.waitFor(`!document.getElementById('rules').hidden`, { what: 'the strip' });
+        assert.equal(await page.ev(`document.getElementById('rules-restart').title`), 'Reloads Claude fully; interrupts running agents');
+        await page.click('#rules-load');
+        await page.waitFor(`document.getElementById('rules').hidden`, { what: 'hidden after loading' });
+        assert.deepEqual(page.posts.filter(p => new URL(p.url).pathname === '/api/send').map(p => [new URL(p.url).searchParams.get('id'), p.body]),
+            [[IDS.worker, 'The rules changed. Re-read /x/homebase-rules.md and ~/.claude/CLAUDE.md now']]);
     },
 
     'status bar: working, with the queued message': async ({ page, open, IDS }) => {

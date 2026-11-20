@@ -27,7 +27,7 @@ The VAPID keys and subscriptions live in `~/.claude/homebase/vapid.json` and `su
 A chat waiting on you (an AskUserQuestion or a tool permission prompt) shows as "<chat> is asking" at the top of Needs you in the Work tab; click it to answer in the chat, where each option of the question on its tmux pane is a button.
 Claude Code writes an AskUserQuestion to the transcript only once it is answered when the same message also started background agents, so Homebase also reads a marker that `hooks/asking.mjs` keeps in `~/.claude/homebase/asking/<session>.json` (`HOMEBASE_DIR` moves it).
 
-Every Claude that Homebase starts or resumes gets `homebase-rules.md` appended to its system prompt (`--append-system-prompt-file`): how replies, subagents and questions fit Homebase. Edit it to change how all Homebase chats behave; chats already running pick it up when restarted.
+Every Claude that Homebase starts or resumes gets `homebase-rules.md` appended to its system prompt (`--append-system-prompt-file`): how replies, subagents and questions fit Homebase. Edit it to change how all Homebase chats behave; chats already running show a strip whose "Load new rules" has Claude re-read it (and `~/.claude/CLAUDE.md`) without a restart; "Restart chat" reloads Claude fully.
 Install it in `~/.claude/settings.json`, with `<homebase-dir>` as the absolute path of this checkout (merge into any `hooks` you already have):
 
 ```json

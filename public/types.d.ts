@@ -60,6 +60,8 @@ interface Session {
     rulesStale?: string[];
     /** newest mtime among them, ms; a dismissed notice stays hidden until this grows */
     rulesAt?: number;
+    /** the message "Load new rules" sends: re-read these files now */
+    rulesReload?: string;
     /** set on the session a /clear started: the id of the one it replaced */
     clearedFrom?: string;
 }

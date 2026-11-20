@@ -592,6 +592,7 @@ async function attachTmux(out, now, live) {
         if (stale) {
             s.rulesStale = stale.names;
             s.rulesAt = stale.at;
+            s.rulesReload = stale.reload;
         }
     }));
 }

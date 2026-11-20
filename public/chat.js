@@ -424,10 +424,17 @@ function showRules(s) {
     const dismissed = s?.rulesStale && Number(store.get(key)) >= (s.rulesAt ?? 0);
     $('rules').hidden = !s?.rulesStale || dismissed;
     if (!$('rules').hidden) {
-        $('rules-text').textContent = `Rules changed since this chat started (${s.rulesStale.join(', ')}). Restart chat to load them.`;
-        $('rules-dismiss').onclick = () => {
+        $('rules-text').textContent = `Rules changed since this chat started (${s.rulesStale.join(', ')}).`;
+        const dismiss = () => {
             store.set(key, String(s.rulesAt ?? 0));
             showRules(s);
+        };
+        $('rules-dismiss').onclick = dismiss;
+        // Claude re-reads the files itself: no restart, so running agents keep going
+        $('rules-load').onclick = async () => {
+            if (await sendText(s.id, s.rulesReload)) {
+                dismiss();
+            }
         };
     }
 }

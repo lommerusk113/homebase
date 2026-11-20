@@ -3222,6 +3222,15 @@ import { RULES_FILE } from './server/tmux.mjs';
     assert.ok(!(await stale(1_500_000, 1e14 + 1000)).names.includes('AGENTS.md'), 'mtimes are cached for 10s');
     assert.ok((await stale(1_500_000, 1e14 + 20_000)).names.includes('AGENTS.md'));
     rmSync(dir, { recursive: true });
+    const { saveSeen, readSeen } = await import('./server.mjs');
+    const sd = join(dir, 'seen');
+    assert.deepEqual(await readSeen(sd), {}, 'nothing seen yet');
+    await saveSeen('{"id":"a","at":5}', sd);
+    await saveSeen('{"id":"a","at":3}', sd);
+    assert.deepEqual(await readSeen(sd), { a: 5 }, 'kept on the server, never goes back');
+    for (const bad of ['nope', '{}', '{"id":"","at":1}', '{"id":"a","at":"x"}']) {
+        await assert.rejects(saveSeen(bad, sd), e => e.status === 400, bad);
+    }
     console.log('ok rules stale');
 }
 

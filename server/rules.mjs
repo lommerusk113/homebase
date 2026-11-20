@@ -1,5 +1,5 @@
 // Claude Code reads its instruction files only when a process starts, so a chat started before they changed runs old rules.
-import { stat } from 'node:fs/promises';
+import { stat, readFile, writeFile, rename, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { RULES_FILE } from './tmux.mjs';
@@ -53,3 +53,33 @@ export async function rulesStale(startedAt, cwd, now = Date.now(), home = homedi
 
 // What "Load new rules" types into the chat: re-read the global rules, plus the project's own files that changed.
 export const reloadMessage = (project = []) => `The rules changed. Re-read ${[RULES_FILE, '~/.claude/CLAUDE.md', ...project].join(' and ').replace(/ and (?=.* and )/g, ', ')} now and follow them from here on (they override your earlier instructions where they differ).`;
+
+// Which rules a chat has been told about (loaded or dismissed) is a fact about the chat, so it lives here (rules-seen.json: id -> newest mtime), not in each browser.
+const SEEN_DIR = () => process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase');
+
+export async function readSeen(dir = SEEN_DIR()) {
+
+    try {
+        return JSON.parse(await readFile(join(dir, 'rules-seen.json'), 'utf8'));
+    } catch {
+        return {};
+    }
+}
+
+// body: JSON { id, at }. Throws 400 for anything else.
+export async function saveSeen(body, dir = SEEN_DIR()) {
+
+    let b;
+    try {
+        b = JSON.parse(body);
+    } catch {}
+    if (typeof b?.id !== 'string' || !b.id || b.id.length > 200 || !Number.isFinite(b.at)) {
+        throw Object.assign(new Error('expected {id, at}'), { status: 400 });
+    }
+
+    const seen = await readSeen(dir), file = join(dir, 'rules-seen.json');
+    seen[b.id] = Math.max(seen[b.id] ?? 0, b.at);
+    await mkdir(dir, { recursive: true });
+    await writeFile(`${file}.tmp`, JSON.stringify(seen), { mode: 0o600 });
+    await rename(`${file}.tmp`, file);
+}

@@ -32,7 +32,7 @@ export default {
     'old rules: the strip names the files, Restart chat opens the confirm, Dismiss hides it until a file changes again': async ({ page, open, IDS }) => {
         await open({ chat: IDS.worker });
         // the fixture has no registry, so mark the bound session stale in the polled list
-        await page.ev(`(() => { window.rulesAt = 100; const f = window.fetch; window.fetch = async (u, o) => { const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const j = await r.json(); for (const s of j) if (s.id === '${IDS.worker}') { s.rulesStale = ['homebase-rules.md', 'CLAUDE.md']; s.rulesAt = window.rulesAt; } return new Response(JSON.stringify(j), { headers: { 'content-type': 'application/json' } }); }; })()`);
+        await page.ev(`(() => { window.rulesAt = 100; const f = window.fetch; window.fetch = async (u, o) => { if (String(u).startsWith('/api/rules/seen')) window.seen = JSON.parse(o.body).at; const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const j = await r.json(); for (const s of j) if (s.id === '${IDS.worker}' && !(window.seen >= window.rulesAt)) { s.rulesStale = ['homebase-rules.md', 'CLAUDE.md']; s.rulesAt = window.rulesAt; } return new Response(JSON.stringify(j), { headers: { 'content-type': 'application/json' } }); }; })()`);
         const strip = `document.getElementById('rules')`;
         await page.waitFor(`!${strip}.hidden`, { what: 'the strip' });
         assert.equal(await page.ev(`${strip}.textContent`), 'New rules since this chat startedLoad new rulesRestart chat×');
@@ -50,7 +50,7 @@ export default {
 
     'old rules: Load new rules types the re-read message into the chat and hides the strip': async ({ page, open, IDS }) => {
         await open({ chat: IDS.worker });
-        await page.ev(`(() => { const f = window.fetch; window.fetch = async (u, o) => { const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const j = await r.json(); for (const s of j) if (s.id === '${IDS.worker}') { s.rulesStale = ['homebase-rules.md']; s.rulesAt = 100; s.rulesReload = 'The rules changed. Re-read /x/homebase-rules.md and ~/.claude/CLAUDE.md now'; } return new Response(JSON.stringify(j), { headers: { 'content-type': 'application/json' } }); }; })()`);
+        await page.ev(`(() => { const f = window.fetch; window.fetch = async (u, o) => { if (String(u).startsWith('/api/rules/seen')) window.seen = JSON.parse(o.body).at; const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const j = await r.json(); for (const s of j) if (s.id === '${IDS.worker}' && !(window.seen >= window.rulesAt)) { s.rulesStale = ['homebase-rules.md']; s.rulesAt = 100; s.rulesReload = 'The rules changed. Re-read /x/homebase-rules.md and ~/.claude/CLAUDE.md now'; } return new Response(JSON.stringify(j), { headers: { 'content-type': 'application/json' } }); }; })()`);
         await page.waitFor(`!document.getElementById('rules').hidden`, { what: 'the strip' });
         assert.equal(await page.ev(`document.getElementById('rules-restart').title`), 'Reloads Claude fully; interrupts running agents');
         await page.click('#rules-load');

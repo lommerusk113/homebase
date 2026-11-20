@@ -12,7 +12,7 @@ import { repoPaths, accountOf } from './account.mjs';
 import { contextOf } from './limits.mjs';
 import { workItems, milestoneOf, sameRepo } from './items.mjs';
 import { plainCommand } from '../public/core.js';
-import { rulesStale } from './rules.mjs';
+import { rulesStale, readSeen } from './rules.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor, linkClears, liveTmux, mapNewProjects, startingProjects } from './tmux.mjs';
 
 const run = promisify(execFile);
@@ -592,10 +592,11 @@ async function attachTmux(out, now, live) {
     }
     linkClears(out, live);
 
+    const seen = await readSeen();
     await Promise.all(out.map(async s => {
         const started = live?.started.get(s.id) ?? tmuxList.find(t => t.name === s.tmux)?.created;
         const stale = await rulesStale(started, s.cwd, now);
-        if (stale) {
+        if (stale && !(seen[s.id] >= stale.at)) {
             s.rulesStale = stale.names;
             s.rulesAt = stale.at;
             s.rulesReload = stale.reload;

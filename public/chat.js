@@ -502,13 +502,13 @@ function showNewer(s) {
 /** @param {Session | null} s */
 function showRules(s) {
 
-    const key = s && `rules-dismissed:${s.id}`;
-    const dismissed = s?.rulesStale && Number(store.get(key)) >= (s.rulesAt ?? 0);
-    $('rules').hidden = !s?.rulesStale || dismissed;
+    $('rules').hidden = !s?.rulesStale;
     if (!$('rules').hidden) {
         $('rules').title = `Changed: ${s.rulesStale.join(', ')}`;
         const dismiss = () => {
-            store.set(key, String(s.rulesAt ?? 0));
+            // on the server, so every device agrees; hidden here at once, the next poll drops it everywhere
+            api('/api/rules/seen', { method: 'POST', body: JSON.stringify({ id: s.id, at: s.rulesAt ?? 0 }) }).catch(() => {});
+            s.rulesStale = undefined;
             showRules(s);
         };
         $('rules-dismiss').onclick = dismiss;

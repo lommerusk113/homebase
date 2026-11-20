@@ -387,6 +387,9 @@ export const hooks = { inMilestone: () => true, milestoneId: () => null, refresh
 export const inView = x => state.tracked.includes(x.project) && (state.project === 'all' || x.project === state.project);
 /** @returns {Session[]} */
 export const visibleSessions = () => state.sessions.filter(inView);
+// Waits on the user: a question or permission prompt, or idle with a reply that asks for a decision.
+/** @param {Session} s */
+export const waitsOnYou = s => !s.sidechain && (s.asking || (s.needsYou && s.status !== 'working'));
 // "Since last checked" per MR: seen:<mrUrl> in localStorage. An MR never seen before counts as seen now, so the first load doesn't flood.
 /** @param {string} pr @returns {number} */
 export const seenAt = pr => {
@@ -412,7 +415,7 @@ export const authorSummary = items => {
 const newCount = x => (x.pr ? freshComments(x.comments, seenAt(x.pr)).length : 0);
 export function updateTitle() {
     // the chat's own poll can see its question before the session list does; max, so it isn't counted twice
-    const asking = Math.max(visibleSessions().filter(s => s.asking && !s.sidechain).length, state.asking ? 1 : 0);
+    const asking = Math.max(visibleSessions().filter(waitsOnYou).length, state.asking ? 1 : 0);
     const n = visibleSessions().flatMap(s => s.items || []).filter(x => x.column === 'needs-you' || x.column === 'ready' || newCount(x)).length + asking;
     document.title = n ? `(${n}) Homebase` : 'Homebase';
 }

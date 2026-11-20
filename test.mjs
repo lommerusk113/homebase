@@ -538,6 +538,15 @@ assert.deepEqual(ev([it('a', 'review')], []), []);
 assert.deepEqual(ev([it('a', 'review')], [it('a', 'review', 'failing')]), [['failing', 'a']]);
 assert.deepEqual(ev([it('a', 'review', 'failing')], [it('a', 'review', 'failing')]), []);
 assert.deepEqual(ev([], [it('n', 'needs-you'), it('m', 'review')]), [['needs-you', 'n']]);
+// sessions that start waiting on the user: asking, or idle with a needs-you reply; working or a sidechain doesn't count
+import { askingEvents } from './public/list.js';
+const ss = (id, o = {}) => ({ id, status: 'idle', asking: false, needsYou: false, sidechain: false, ...o });
+const aev = (prev, next) => askingEvents(prev, next).map(e => [e.kind, e.session.id]);
+assert.deepEqual(aev(undefined, [ss('a', { asking: true })]), []); // first load
+assert.deepEqual(aev([ss('a'), ss('b')], [ss('a', { asking: true }), ss('b', { needsYou: true })]), [['asking', 'a'], ['asking', 'b']]);
+assert.deepEqual(aev([ss('a', { asking: true })], [ss('a', { asking: true })]), []);
+assert.deepEqual(aev([ss('a')], [ss('a', { needsYou: true, status: 'working' }), ss('c', { asking: true, sidechain: true })]), []);
+assert.deepEqual(aev([], [ss('n', { needsYou: true })]), [['asking', 'n']]);
 // comment events: newer than seen and than the previous poll's newest; none before comments were loaded
 const cm = (key, ...ats) => ({ key, pr: `u/${key}`, column: 'review', comments: { latestAt: ats[0] ?? null, count: ats.length, items: ats.map((at, i) => ({ id: i, author: 'Børre Stellander', at })) } });
 const CT = t => `2026-11-13T10:0${t}:00Z`, S = t => Date.parse(CT(t));

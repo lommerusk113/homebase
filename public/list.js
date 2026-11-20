@@ -1,5 +1,5 @@
 // Left column: work items grouped by what they wait on, and attention transitions.
-import { api, $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle, ctxLevel } from './core.js';
+import { api, $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle, ctxLevel, waitsOnYou } from './core.js';
 import { chatSession, bindChat, sendText, isMaster } from './chat.js';
 import { milestoneTag } from './milestone.js';
 
@@ -168,14 +168,14 @@ function starting(s, n) {
     return tr;
 }
 
-// "<chat> is asking" atop Needs you, for a session waiting on an AskUserQuestion or a permission prompt. Click chats with it.
+// "<chat> is asking" (an AskUserQuestion or a permission prompt) or "<chat> needs you" (its idle reply wants a decision) atop Needs you. Click chats with it.
 /** @param {Session} s */
 function askingRow(s) {
     const tr = el('tr', 'asking'), what = el('td', 'what'), b = el('b');
     tr.dataset.key = `asking:${s.id}`;
     tr.setAttribute('role', 'button');
-    b.append(el('span', 'pulse'), ` ${state.project === 'all' ? `${s.project} · ` : ''}${s.title || sessionTopic(s)} is asking`);
-    what.append(b, el('small', 'next', `${s.question || 'Claude asked a question.'} · click to answer in the chat`));
+    b.append(el('span', 'pulse'), ` ${state.project === 'all' ? `${s.project} · ` : ''}${s.title || sessionTopic(s)} ${s.asking ? 'is asking' : 'needs you'}`);
+    what.append(b, el('small', 'next', `${s.asking ? s.question || 'Claude asked a question.' : 'Claude’s last reply wants your decision'} · click to answer in the chat`));
     what.colSpan = 6;
     tr.append(what);
     tr.onclick = () => bindChat(s.id);
@@ -298,7 +298,7 @@ function foldGroup(c, list, isOpen, setOpen, note) {
 function renderItems() {
     const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).map(x => optimistic(x)).sort((a, b) => b.updated - a.updated);
     const placeholders = visibleSessions().filter(isMaster).flatMap(s => startingIssues(s, visibleSessions().filter(o => o.project === s.project).flatMap(o => o.items || [])).map(n => starting(s, n)));
-    const asking = visibleSessions().filter(s => s.asking && !s.sidechain).map(askingRow);
+    const asking = visibleSessions().filter(waitsOnYou).map(askingRow);
     const finishedKey = `fold:finished:${state.project}`, reviewKey = `fold:review:${state.project}`;
     const groups = COLUMNS.map(c => {
         const list = items.filter(x => x.column === c.key), extra = c.key === 'doing' ? placeholders : c.key === 'needs-you' ? asking : [];
@@ -578,4 +578,14 @@ export function attentionEvents(prevItems, nextItems, seen = () => 0) {
     const commented = new Set(comments.map(e => e.item.key));
     // finished agents without an MR drop off the board
     return [...events.filter(e => !(e.kind === 'needs-you' && commented.has(e.item.key))), ...comments, ...prevItems.filter(p => p.column === 'doing' && !nextKeys.has(p.key)).map(item => /** @type {AttentionEvent} */ ({ kind: 'finished', item }))];
+}
+
+// Sessions that started waiting on the user (asking, or needs you) since the previous poll. No previous poll, no events.
+/** @param {Session[] | undefined} prev @param {Session[]} next @returns {AttentionEvent[]} */
+export function askingEvents(prev, next) {
+    if (!prev) {
+        return [];
+    }
+    const was = new Set(prev.filter(waitsOnYou).map(s => s.id));
+    return next.filter(s => waitsOnYou(s) && !was.has(s.id)).map(session => /** @type {AttentionEvent} */ ({ kind: 'asking', session }));
 }

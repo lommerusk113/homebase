@@ -143,7 +143,8 @@ interface WorkItem {
 }
 
 /** A list.js attentionEvents() transition, turned into a desktop notification by app.js. */
-interface AttentionEvent { kind: 'needs-you' | 'ready' | 'finished' | 'failing' | 'comment'; item: WorkItem; comments?: ReviewComment[] }
+// 'asking' is about a session (asking or needs you) and has no item; the rest are about a work item
+interface AttentionEvent { kind: 'needs-you' | 'ready' | 'finished' | 'failing' | 'comment' | 'asking'; item?: WorkItem; session?: Session; comments?: ReviewComment[] }
 
 // ---- /api/transcript ----
 

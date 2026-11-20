@@ -126,7 +126,7 @@ function onKey(e) {
     if (action === 'toggle' && e.target !== document.body && !/** @type {Element} */ (e.target).matches?.(ROWS)) {
         return;
     }
-    const x = itemOf(focusKey), card = /^(issue|session):/.test(focusKey ?? '') ? rowOf(focusKey) : null;
+    const x = itemOf(focusKey), card = /^(issue|session|asking|starting):/.test(focusKey ?? '') ? rowOf(focusKey) : null;
     const run = {
         next: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, 1)),
         prev: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, -1)),

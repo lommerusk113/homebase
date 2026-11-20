@@ -1,6 +1,6 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
 import { api, $, el, state, store, saveTracked, inView, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, setOffline, setFormatWarn, seenAt, authorSummary } from './core.js';
-import { renderBoard, select, attentionEvents } from './list.js';
+import { renderBoard, select, attentionEvents, askingEvents, sessionTopic } from './list.js';
 import { refreshChat, initChat, bindChat, isMaster, chatSession } from './chat.js';
 import { openNewProject, initNewProject } from './newproject.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
@@ -165,9 +165,13 @@ function migrateTracked() {
 
 const notifyOn = () => store.get('notify') === '1' && window.Notification?.permission === 'granted';
 /** @param {AttentionEvent} e @returns {[string, string | undefined]} */
-function eventText({ kind, item: x, comments }) {
+function eventText({ kind, item: x, session: s, comments }) {
+    if (kind === 'asking') {
+        const what = `${s.project} · ${s.title || sessionTopic(s)}`;
+        return s.asking ? [`${what} is asking`, s.question ?? undefined] : [`${what} needs you`, 'Claude’s last reply wants your decision'];
+    }
     const ref = x.pr ? prLabel(x.pr) : x.title;
-    /** @type {Record<AttentionEvent['kind'], [string, string | undefined]>} */
+    /** @type {Record<Exclude<AttentionEvent['kind'], 'asking'>, [string, string | undefined]>} */
     const texts = {
         'needs-you': [`Needs you: ${x.title} — ${x.next}`, undefined],
         ready: [`Ready to merge: ${ref}`, x.title],
@@ -182,13 +186,16 @@ function notify(e) {
     if (!notifyOn() || (document.visibilityState === 'visible' && document.hasFocus())) {
         return;
     }
-    const { kind, item: x } = e, [title, body] = eventText(e);
-    const tag = kind === 'comment' ? `${x.key}:comment` : x.key;
+    const { kind, item: x, session: s } = e, [title, body] = eventText(e);
+    const tag = kind === 'asking' ? `asking:${s.id}` : kind === 'comment' ? `${x.key}:comment` : x.key;
 
     const n = new Notification(title, { body, tag, icon: '/icon.svg' });
     n.onclick = () => {
         window.focus();
         n.close();
+        if (s) {
+            return bindChat(s.id);
+        }
         const it = state.sessions.flatMap(s => s.items || []).find(i => i.key === x.key);
         if (it && state.selected !== it.key) {
             select(it);
@@ -244,6 +251,8 @@ api('/api/refresh').then(r => r.json()).then(/** @param {RefreshState} d */ d =>
 }).catch(() => {});
 
 let lastSessions = '', lastRender = 0, polling = false;
+/** @type {Session[] | undefined} */
+let prevSessions; // the previous poll's, for askingEvents
 async function poll() {
     // a slow /api/sessions must not stack polls whose answers land out of order
     if (polling) {
@@ -300,13 +309,14 @@ async function pollOnce() {
             }
             // diffed over all items, then filtered, so changing the project filter doesn't read as transitions
             const items = state.sessions.flatMap(s => s.items || []);
-            const events = attentionEvents(state.items, items, x => seenAt(x.pr)).filter(e => inView(e.item));
+            const events = [...askingEvents(prevSessions, state.sessions), ...attentionEvents(state.items, items, x => seenAt(x.pr))].filter(e => inView(e.item ?? e.session));
             events.forEach(notify);
             // screen readers hear the same transitions, notifications on or not
             if (events.length) {
                 $('announce').textContent = events.map(e => eventText(e)[0]).join('. ');
             }
             state.items = items;
+            prevSessions = state.sessions;
         }
         setOffline(false);
         setFormatWarn('transcript', state.sessions.some(s => s.known === false));

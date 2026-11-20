@@ -30,6 +30,16 @@ export default {
         assert.equal(await page.ev(`document.activeElement.getAttribute('aria-selected')`), 'true');
     },
 
+    'a chat waiting on you gets a Needs you row, and Enter on it chats with that session': async ({ page, open, IDS }) => {
+        await open({ chat: IDS.worker });
+        const row = `document.querySelector('#masters .g-needs-you tr[data-key="asking:${IDS.master}"]')`;
+        await page.waitFor(`${row}?.textContent.includes('needs you')`, { what: 'the needs-you row' });
+        assert.match(await page.ev(`document.title`), /^\(\d+\) Homebase$/);
+        await page.ev(`${row}.focus()`);
+        await page.key('Enter', 'Enter');
+        await page.waitFor(`localStorage.getItem('chat') === ${JSON.stringify(IDS.master)}`, { what: 'the chat to bind the master' });
+    },
+
     'r refreshes once, even when pressed twice': async ({ page, open }) => {
         await open();
         await page.ev(`document.activeElement?.blur()`);

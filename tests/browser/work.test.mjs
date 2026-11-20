@@ -11,7 +11,7 @@ export default {
         await open();
         await page.waitFor(`${row(MR(102))} && ${row(MR(106))}`, { what: 'the !102 row and the forge-seeded !106' });
         assert.deepEqual(await page.ev(groups), {
-            'needs-you': ['agent-stopped', MR(104)],
+            'needs-you': ['agent-stopped', MR(104), `asking:${IDS.master}`], // the master's last reply asks for a decision
             doing: [MR(101), MR(105), `starting:${IDS.worker}:7`], // placeholders after the item rows
             review: [MR(103), MR(107), MR(106)],
             ready: [MR(102)],
@@ -19,7 +19,7 @@ export default {
             done: [MR(100)]
         });
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters .g-head')].map(h => h.textContent)`),
-            ['Needs you · 2', 'Doing · 3', 'In review (3)', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
+            ['Needs you · 3', 'Doing · 3', 'In review (3)', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.next').textContent`), 'Next: Agent stopped — check the chat');
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.act-btn').textContent`), 'Continue');
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.next').textContent`), "💬 1 Next: Reply to Ann Reviewer's comment");
@@ -71,7 +71,7 @@ export default {
             await page.waitFor(`document.querySelector('#masters .g-needs-you tr[data-key="asking:${IDS.worker}"]')`, { what: 'the asking row in Needs you' });
             assert.equal(await page.ev(`${ask}.querySelector('b').textContent.trim()`), 'Refactor the session store is asking');
             assert.equal(await page.ev(`${ask}.querySelector('.next').textContent`), 'Merge !101 now? · click to answer in the chat');
-            assert.equal(await page.ev(`document.querySelector('#masters .g-needs-you .g-head').textContent`), 'Needs you · 3');
+            assert.equal(await page.ev(`document.querySelector('#masters .g-needs-you .g-head').textContent`), 'Needs you · 4');
             await page.click(`#masters tr[data-key="asking:${IDS.worker}"]`);
             await page.waitFor(`document.getElementById('status-text').textContent.startsWith('Claude is asking')`, { what: 'the chat status to say asking' });
             assert.equal(await page.ev(`localStorage.getItem('chat')`), IDS.worker);

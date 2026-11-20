@@ -36,18 +36,21 @@ async function fetchReviews(repo) {
 
 const warned = new Set();
 
-// The cached rows; never waits, so the first call after start is empty. A failure hides the rows and logs once per host.
+// The cached rows; never waits, so the first call after start is empty. A failed refresh keeps serving the last good
+// rows and logs once per outage per host.
 export function reviewRequests() {
 
     const hosts = new Map([...repoPaths.values()].filter(isGitLab).map(r => [r.host, r]));
 
     return [...hosts].flatMap(([host, repo]) => {
         const hit = swrEntry(`reviews:${host}`, REVIEWS_TTL_MS, () => fetchReviews(repo));
-        if (hit.error && !warned.has(host)) {
+        if (!hit.error) {
+            warned.delete(host);
+        } else if (!warned.has(host)) {
             warned.add(host);
             console.error(`reviews: ${host}: ${hit.error.message.split('\n')[0]}`);
         }
 
-        return hit.error ? [] : hit.value ?? [];
+        return hit.value ?? [];
     });
 }

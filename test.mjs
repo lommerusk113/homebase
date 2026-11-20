@@ -968,6 +968,31 @@ import { reviewRows } from './server.mjs';
     assert.deepEqual(rows.map(r => r.iid), [3, 1]); // mine and non-open dropped, newest first
     assert.deepEqual([rows[0].draft, rows[0].pipeline?.status, rows[0].project, rows[0].author, rows[1].pipeline], [true, 'failed', 'g/p', 'Ann', null]);
 }
+{
+    // a failed refresh keeps serving the last good list, and each outage logs once
+    const { repoPaths } = await import('./server/account.mjs');
+    const { reviewRequests } = await import('./server/reviews.mjs');
+    const { swr } = await import('./server/forge.mjs');
+    repoPaths.set('rv', { host: 'gitlab.rv.test', path: 'g/rv' });
+    const hit = { at: Date.now(), value: [{ url: 'u', iid: 1, title: 'Cached review' }], error: new Error('timed out\nmore') };
+    swr.set('reviews:gitlab.rv.test', hit);
+    const logged = [];
+    const error = console.error;
+    console.error = m => logged.push(m);
+    try {
+        assert.deepEqual(reviewRequests().map(r => r.iid), [1]);
+        reviewRequests();
+        hit.error = null;
+        reviewRequests(); // recovered
+        hit.error = new Error('502');
+        assert.deepEqual(reviewRequests().map(r => r.iid), [1]);
+    } finally {
+        console.error = error;
+        repoPaths.delete('rv');
+        swr.delete('reviews:gitlab.rv.test');
+    }
+    assert.deepEqual(logged, ['reviews: gitlab.rv.test: timed out', 'reviews: gitlab.rv.test: 502']);
+}
 import { inMilestone, toData, isLoading, emptyPill } from './public/milestone.js';
 assert.deepEqual(repoPath('git@gitlab.com:tritt/accounting/pracsys.git\n'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
 assert.deepEqual(repoPath('https://gitlab.com/tritt/accounting/pracsys.git'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });

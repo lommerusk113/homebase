@@ -398,7 +398,7 @@ async function showAsk(s, data) {
             await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&option=${options[n].i}&label=${encodeURIComponent(options[n].label)}`);
         } finally {
             askKey = null;
-            showAsk(s, data); // the pane shows the next question, or none
+            refreshChat(); // fresh transcript: the pane shows the next question or none, and `data` still has the answered one
         }
     });
 }

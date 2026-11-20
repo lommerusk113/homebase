@@ -380,8 +380,14 @@ function rawItems(entries) {
     };
 
     let newTurn = false;
+    const asks = new Set(); // AskUserQuestion tool_use ids
     for (const e of entries) {
         const entry = entryKind(e);
+        const reply = !e.isSidechain && e.type === 'user' && Array.isArray(e.message?.content)
+            && e.message.content.find(b => b.type === 'tool_result' && asks.has(b.tool_use_id));
+        if (reply) {
+            answerAsk(items, e, reply);
+        }
         if (entry?.kind === 'interrupt') {
             const prev = items.findLast(i => i.role === 'assistant');
             if (prev) {
@@ -412,11 +418,25 @@ function rawItems(entries) {
                 newTurn = false;
             }
             uses.push(...entry.uses);
+            entry.uses.filter(u => u.name === 'AskUserQuestion').forEach(u => asks.add(u.id));
         }
     }
     flush();
 
     return items;
+}
+
+// An AskUserQuestion answered in the card or terminal is a reply like a typed one: it becomes the answer tag of the
+// Claude message that asked, so that message stops needing you and offers no chips. Not past a later prompt of yours.
+function answerAsk(items, e, result) {
+
+    const q = items.findLastIndex(i => i.role === 'assistant');
+    if (q < 0 || q < items.findLastIndex(i => i.role === 'user') || items[q].answer) {
+        return;
+    }
+
+    const picked = Object.values(e.toolUseResult?.answers ?? {}).join(' · ');
+    items[q].answer = { text: result.is_error ? 'No answer' : picked || 'Answered', at: e.timestamp };
 }
 
 // Joins a `continues` chunk into the Claude bubble right before it, so two replies of separate turns stay separate.
@@ -430,6 +450,7 @@ function mergeChunks(items) {
             if (item.interrupted) {
                 prev.interrupted = true;
             }
+            prev.answer ??= item.answer;
             continue;
         }
         out.push(item);

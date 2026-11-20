@@ -664,6 +664,13 @@ const ask2 = tu('AskUserQuestion', { id: 'q2', input: { questions: [{ question: 
 assert.deepEqual(pendingAsk([ask2]), [{ question: 'Which DB?', options: ['Postgres', 'SQLite'], descriptions: ['x', ''] }]);
 assert.equal(pendingAsk([ask2, { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'q2' }] } }]), null);
 assert.equal(pendingQuestion([tu('AskUserQuestion', { id: 'q3', input: {} })]), 'Claude asked a question.');
+// an AskUserQuestion answered in the card answers the message that asked: no needs-you and no stale chips afterwards
+const askedDb = [sayAt('**▸ DB · needs you**\n\nTLDR: Which DB?', 't1'), ask2];
+const answeredDb = { type: 'user', timestamp: 't2', message: { content: [{ type: 'tool_result', tool_use_id: 'q2' }] }, toolUseResult: { answers: { 'Which DB?': 'Postgres' } } };
+assert.deepEqual(noTools([...askedDb, answeredDb]).map(i => [i.answer, i.needsYou, i.replies]), [[{ text: 'Postgres', at: 't2' }, false, undefined]]);
+assert.deepEqual(noTools([...askedDb, { ...answeredDb, toolUseResult: 'Error', message: { content: [{ ...answeredDb.message.content[0], is_error: true }] } }])[0].answer.text, 'No answer');
+assert.equal(noTools([...askedDb])[0].needsYou, true);
+console.log('ok ask answers');
 console.log('ok quick replies');
 
 import { addUsage, readUsage, formatDuration, formatTokens, limitsOf } from './server.mjs';

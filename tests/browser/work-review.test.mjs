@@ -28,7 +28,6 @@ export default {
             await page.waitFor(`document.querySelector('#masters tr.detail')`);
             assert.equal(await page.ev(`[...document.querySelectorAll('#masters tr.detail .d-mr :is(a.chip, .ci-pill)')].filter(e => e.checkVisibility()).length >= 2`), true);
             assert.equal(await page.ev(`document.documentElement.scrollWidth <= innerWidth`), true, 'no side scroll');
-            assert.equal(await page.ev(`getComputedStyle(document.querySelector('.s-row')).whiteSpace`), 'normal', 'the strip wraps');
         } finally {
             await page.click('#ptabs [data-pane="chat"]').catch(() => {});
             await phone(page, false);

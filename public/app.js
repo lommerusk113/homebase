@@ -66,7 +66,7 @@ function pickItem(value, name, mine) {
     const chats = mine.filter(s => !s.sidechain);
     const waiting = mine.flatMap(s => s.items || []).filter(x => x.column === 'needs-you').length + mine.filter(waitsOnYou).length; // as projectCounts
     const working = chats.filter(s => s.status === 'working').length;
-    const parts = [waiting && `${waiting} waiting on you`, working && `${working} working`, `${chats.length || 'No'} chat${chats.length === 1 ? '' : 's'}`];
+    const parts = [waiting && `${waiting} waiting on you`, working && `${working} working`, chats.some(s => s.rulesStale) && 'old rules', `${chats.length || 'No'} chat${chats.length === 1 ? '' : 's'}`];
 
     return { value, name, sub: parts.filter(Boolean).join(' · '), state: waiting ? 'needs' : working ? 'working' : 'idle' };
 }

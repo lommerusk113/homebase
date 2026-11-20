@@ -49,7 +49,7 @@ export function cycleProject(list, current, dir) {
 }
 
 let focusKey = null, prev = null, prevAt = 0;
-const ROWS = '#masters tr[data-key], #masters .s-row[data-key], #issues .card[data-key], #log .lg-e[data-key]'; // work rows, session rows, issue cards and log entries; the hidden tab's are skipped below
+const ROWS = '#masters tr[data-key], #issues .card[data-key], #log .lg-e[data-key]'; // work rows, issue cards and log entries; the hidden tab's are skipped below
 /** @returns {HTMLElement[]} */
 const rows = () => [.../** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(ROWS))].filter(r => r.checkVisibility()); // skips the folded Merged group
 const rowOf = key => rows().find(r => r.dataset.key === key);

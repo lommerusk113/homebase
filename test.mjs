@@ -2109,21 +2109,13 @@ import { latestTopic, queuedPrompts } from './server.mjs';
     console.log('ok queuedPrompts');
 }
 
-import { sessionRows, sessionTopic, sessionState, startingIssues, workingLine, workingTitle } from './public/list.js';
+import { sessionTopic, startingIssues, workingLine, workingTitle } from './public/list.js';
 {
     const ses = (id, project, at, extra = {}) => /** @type {any} */ ({ id, project, lastActivity: at, cwd: `/r/${project}`, sidechain: false, ...extra });
-    const list = [ses('a', 'p', 1), ses('b', 'p', 3), ses('c', 'p', 2), ses('d', 'q', 5), ses('w', 'p', 9, { cwd: '/r/p/.claude/worktrees/x' }), ses('s', 'p', 9, { sidechain: true })];
-    assert.deepEqual(sessionRows(list).map(g => [g.project, g.shown.map(s => s.id), g.hidden]), [['q', ['d'], 0], ['p', ['b'], 2]], 'folded: the newest');
-    assert.deepEqual(sessionRows(list, new Set(), 'a').find(g => g.project === 'p').shown.map(s => s.id), ['a'], 'folded: the chat session');
-    assert.deepEqual(sessionRows(list, new Set(['p'])).map(g => [g.project, g.shown.map(s => s.id), g.hidden]), [['q', ['d'], 0], ['p', ['b', 'c', 'a'], 0]]);
     assert.equal(sessionTopic({ topic: 'Perks simulator', lastPrompt: 'x' }), 'Perks simulator');
     assert.equal(sessionTopic({ topic: null, lastPrompt: '**fix** the  build' }), 'fix the build');
     assert.ok(sessionTopic({ topic: null, lastPrompt: 'word '.repeat(40) }).endsWith('…'));
     const now = Date.now();
-    assert.deepEqual(sessionState(ses('x', 'p', now - 12 * 60_000, { status: 'idle' })), { kind: 'idle', text: 'idle' });
-    assert.deepEqual(sessionState(ses('x', 'p', now, { status: 'working', since: now - 5 * 60_000 })), { kind: 'working', text: 'working 5m' });
-    assert.equal(sessionState(ses('x', 'p', now, { status: 'waiting', asking: true })).kind, 'asking');
-
     const m = ses('m', 'p', now, { status: 'working', now: 'Implement #2225', queued: ['then #2230 and #2231', 'Implement #2225'] });
     assert.deepEqual(startingIssues(m, []), ['2225', '2230', '2231']);
     const items = /** @type {any[]} */ ([{ title: 'Implement #2230 foo', branch: null }, { title: 'x', branch: '2231-bar' }, { title: 'y', prState: { issue: '2225' } }]);
@@ -2136,7 +2128,7 @@ import { sessionRows, sessionTopic, sessionState, startingIssues, workingLine, w
     assert.equal(workingLine(ses('x', 'p', now, { step: 'running npm test', stepAt: now - 125_000 })), 'p · Now: running npm test · for 2m');
     assert.equal(workingLine(ses('x', 'p', now, { step: null, since: now - 300_000 })), 'p · Now: thinking · for 5m', 'no tool call yet: the turn start');
     assert.equal(workingLine(ses('x', 'p', now, { step: 'editing a.js', stepAt: now })), 'p · Now: editing a.js', 'under a minute: no time');
-    console.log('ok sessionRows');
+    console.log('ok sessionTopic');
 }
 
 import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server.mjs';

@@ -180,7 +180,7 @@ const ctx = {
             writeFileSync(trackedFile, tracked);
         }
         await page.goto(base);
-        await page.waitFor(`document.querySelector('#masters tr[data-key], #masters .s-row, #masters .welcome') && document.getElementById('status-text').textContent !== 'Connecting…'`, { what: 'the board and the chat status' });
+        await page.waitFor(`document.querySelector('#masters tr[data-key], #masters .welcome') && document.getElementById('status-text').textContent !== 'Connecting…'`, { what: 'the board and the chat status' });
     },
     restartServer: async () => { await stopServer(); await startServer(); },
     touchSession: (project, id, text) => touchSession(home, project, id, text)

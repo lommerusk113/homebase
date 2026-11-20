@@ -18,7 +18,7 @@ const run = promisify(execFile);
 
 const MAX_AGE_MS = Number(process.env.MAX_AGE_DAYS ?? 3) * 864e5;
 const WAITING_MS = 30 * 60_000;
-const FINISHED_MS = 2 * 3600_000; // a finished subagent counts on the Sessions strip this long
+const FINISHED_MS = 2 * 3600_000; // a finished subagent counts as recent this long
 const AGENT_TAIL_BYTES = 128 * 1024;
 // Silence an unfinished subagent may keep before it counts as stopped, by what its transcript ends on.
 const AGENT_TOOL_MS = 30 * 60_000; // a tool call is still pending (long Bash, own background subagent)

@@ -34,7 +34,7 @@ export default {
         await page.ev(`document.getElementById('code').value = ${JSON.stringify(code)}; document.getElementById('name').value = 'Test phone'; document.querySelector('form').requestSubmit()`);
         await page.waitFor(`document.querySelector('meta[name="homebase-token"]')?.content.length === 64`, { what: 'the app with its token after pairing' });
         // the phone's own storage is empty (another origin), yet it shows the Mac's projects and their chats
-        await page.waitFor(`document.querySelector('#masters tr[data-key], #masters .s-row')`, { what: 'the Mac\'s projects on the paired phone' });
+        await page.waitFor(`document.querySelector('#masters tr[data-key]')`, { what: 'the Mac\'s projects on the paired phone' });
         assert.equal(await page.ev(`document.querySelector('#masters .welcome')`), null);
         assert.equal(await page.ev(`document.cookie`), '', 'the device cookie is HttpOnly');
         // opened from another app or the home screen (a cross-site top-level navigation): still paired, no new pair page

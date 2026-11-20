@@ -38,7 +38,7 @@ export default {
         await page.waitFor(`!${strip}.hidden`, { what: 'the strip' });
         assert.equal(await page.ev(`${strip}.textContent`), 'New rules since this chat startedLoad new rulesRestart chat×');
         assert.equal(await page.ev(`${strip}.title`), 'Changed: homebase-rules.md, CLAUDE.md');
-        assert.ok(await page.ev(`[...document.querySelectorAll('.s-row')].some(r => r.textContent.includes('old rules'))`), 'board tag');
+        assert.ok(await page.ev(`document.querySelector('.pp-row[data-value="alpha"] small').textContent.includes('old rules')`), 'picker row tag');
         await page.click('#rules-restart');
         await page.waitFor(`document.getElementById('restart-dlg').open`, { what: 'the confirm' });
         await page.ev(`document.getElementById('restart-dlg').open = false`);

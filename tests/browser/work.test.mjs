@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { MR, IDS } from './fixture.mjs';
 
 const row = key => `document.querySelector('#masters tr[data-key="${key}"]')`;
-const groups = `Object.fromEntries([...document.querySelectorAll('#masters .group:not(.g-sessions)')].map(g => [g.className.match(/g-([\\w-]+)/)[1], [...g.querySelectorAll('tr[data-key]')].map(r => r.dataset.key)]))`;
+const groups = `Object.fromEntries([...document.querySelectorAll('#masters .group')].map(g => [g.className.match(/g-([\\w-]+)/)[1], [...g.querySelectorAll('tr[data-key]')].map(r => r.dataset.key)]))`;
 
 export default {
     'work rows land in the right groups': async ({ page, open }) => {

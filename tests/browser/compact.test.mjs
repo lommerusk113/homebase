@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
 import { sleep } from './cdp.mjs';
 
-const srow = id => `document.querySelector('#masters .s-row[data-key="session:${id}"]')`;
-const ctx = id => `${srow(id)}.querySelector('.s-ctx')`;
 const item = `document.getElementById('compact-item')`;
 const nudge = `document.getElementById('compact-nudge')`;
 const compactPosts = page => page.posts.filter(p => new URL(p.url).pathname === '/api/compact').map(p => new URL(p.url).search);
@@ -14,20 +12,16 @@ const waitForPost = async page => {
 const loaded = (page, expr = nudge) => page.waitFor(`${expr} && !${expr}.hidden`, { what: 'the chat to load' });
 
 export default {
-    'the one-liner shows context %, amber from 60% and red from 85%': async ({ page, open, IDS }) => {
-        await open({ 'sessions-open:alpha': '1' });
-        await page.waitFor(ctx(IDS.worker), { what: 'the ctx gauges' });
-        assert.equal(await page.ev(`${ctx(IDS.master)}.textContent`), 'context 72%');
-        assert.equal(await page.ev(`${ctx(IDS.master)}.className`), 's-ctx warn');
-        assert.equal(await page.ev(`${ctx(IDS.worker)}.className`), 's-ctx', 'muted under 60%');
-        assert.equal(await page.ev(`${ctx(IDS.other)}`), null, 'no dump, no gauge');
-        const colour = id => page.ev(`getComputedStyle(${ctx(id)}).color`);
-        assert.notEqual(await colour(IDS.master), await colour(IDS.worker), 'amber differs from muted');
-
+    'the chat header shows context %, amber from 60% and red from 85%': async ({ page, open, IDS }) => {
+        const gauge = `document.getElementById('status-ctx')`;
+        await open({ chat: IDS.master });
+        await page.waitFor(`${gauge}.textContent === 'context 72%'`, { what: 'the master gauge' });
+        assert.equal(await page.ev(`${gauge}.className`), 'c-ctx warn');
+        await open({ chat: IDS.worker });
+        await page.waitFor(`${gauge}.textContent !== '' && ${gauge}.textContent !== 'context 72%'`, { what: 'the worker gauge' });
+        assert.equal(await page.ev(`${gauge}.className.trim()`), 'c-ctx', 'muted under 60%');
         await open({ project: 'beta', chat: IDS.asker });
-        await page.waitFor(ctx(IDS.asker), { what: 'the asker gauge' });
-        assert.equal(await page.ev(`${ctx(IDS.asker)}.className`), 's-ctx hot');
-        assert.notEqual(await colour(IDS.asker), await page.ev(`getComputedStyle(${srow(IDS.asker)}.querySelector('.s-state')).color`));
+        await page.waitFor(`${gauge}.className === 'c-ctx hot'`, { what: 'the asker gauge' });
     },
 
     'the nudge asks first, then POSTs /api/compact once for the bound session': async ({ page, open, IDS }) => {

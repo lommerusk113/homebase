@@ -1,5 +1,5 @@
 // Left column: work items grouped by what they wait on, and attention transitions.
-import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle, ctxLevel, waitsOnYou } from './core.js';
+import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle, waitsOnYou } from './core.js';
 import { chatSession, bindChat, focusChat, sendText, isMaster } from './chat.js';
 import { milestoneTag } from './milestone.js';
 
@@ -44,24 +44,6 @@ function gateBadge(g) {
     return [b, tooltip(b, tip)];
 }
 
-// Sessions strip: master sessions per project, most recently active first. Folded, a project shows the chat's session
-// (else its newest) and any that work, ask or need you, and hides the rest; open shows them all.
-/** @param {Session[]} visible @param {Set<string>} [open] @param {string | null} [bound] @returns {{ project: string, shown: Session[], hidden: number }[]} */
-export function sessionRows(visible, open = new Set(), bound = null) {
-    /** @type {Map<string, Session[]>} */
-    const by = new Map();
-    for (const s of visible.filter(isMaster).sort((a, b) => (b.lastActivity ?? b.created ?? 0) - (a.lastActivity ?? a.created ?? 0))) {
-        if (!by.has(s.project)) {
-            by.set(s.project, []);
-        }
-        by.get(s.project).push(s);
-    }
-    return [...by].map(([project, list]) => {
-        const first = list.find(s => s.id === bound) ?? list[0];
-        const shown = open.has(project) ? list : list.filter(s => s === first || s.status === 'working' || s.asking || s.needsYou);
-        return { project, shown, hidden: list.length - shown.length };
-    });
-}
 // What the session is on: its newest reply's topic, else the start of its last prompt.
 /** @param {Pick<Session, 'topic' | 'lastPrompt'>} s */
 export function sessionTopic(s) {
@@ -82,83 +64,6 @@ export function startingIssues(s, items) {
     const covered = n => items.some(x => String(x.prState?.issue ?? '') === n || new RegExp(`#${n}(?!\\d)`).test(x.title ?? '') || x.branch?.startsWith(`${n}-`));
     return [...new Set(asked)].filter(n => !covered(n));
 }
-// working (with the time since the turn start), asking, needs you (its newest reply asks for a decision), or idle.
-/** @param {Session} s @returns {{ kind: 'working' | 'asking' | 'needs' | 'idle', text: string }} */
-export function sessionState(s) {
-    if (s.asking) {
-        return { kind: 'asking', text: 'asking' };
-    }
-    if (s.needsYou && s.status !== 'working') {
-        return { kind: 'needs', text: 'needs you' };
-    }
-    const t = ago(s.status === 'working' ? s.since ?? s.lastActivity ?? s.updated : s.lastActivity ?? s.updated);
-    return s.status === 'working' ? { kind: 'working', text: `working${t === 'now' ? '' : ` ${t}`}` } : { kind: 'idle', text: 'idle' };
-}
-const openKey = p => `sessions-open:${p}`;
-// One quiet line per session: dot, state, Now or topic, and a muted suffix only for running subagents or queued prompts.
-// The rest (topic beside Now, idle age, finished subagents, the queued prompts) is in the tooltip.
-function renderSessions() {
-    const visible = visibleSessions(), bound = chatSession()?.id, all = state.project === 'all';
-    const open = new Set(visible.map(s => s.project).filter(p => store.get(openKey(p)) === '1'));
-    const groups = sessionRows(visible, open, bound);
-    if (!groups.length) {
-        return null;
-    }
-    const strip = el('div', 'g-sessions');
-    for (const g of groups) {
-        const rows = el('div', 's-rows'), line = el('div', 's-group');
-        for (const s of g.shown) {
-            const st = sessionState(s), r = el('div', `s-row s-${st.kind}${s.id === bound ? ' bound' : ''}`);
-            r.dataset.key = `session:${s.id}`;
-            r.setAttribute('role', 'button');
-            const n = s.subagents, q = s.queued ?? [];
-            const now = st.kind === 'working' && s.now ? excerpt(s.now, 120) : '';
-            const suffix = [n?.running && `${n.running} agent${n.running === 1 ? '' : 's'} working`, q.length && `${q.length} queued`].filter(Boolean).join(' · ');
-            if (all) {
-                r.append(el('span', 's-proj', g.project));
-            }
-            r.append(el('span', 'pulse'), el('span', 's-state', st.text), el('span', 's-topic', now ? `Now: ${now}` : sessionTopic(s)));
-            if (suffix) {
-                r.append(el('span', 's-counts', suffix));
-            }
-            if (s.context != null) {
-                r.append(el('span', `s-ctx${ctxLevel(s.context) && ` ${ctxLevel(s.context)}`}`, `context ${Math.round(s.context)}%`));
-            }
-            if (s.rulesStale) {
-                r.append(el('span', 's-counts', 'old rules'));
-            }
-            if (s.id === bound) {
-                r.append(el('span', 's-chat', 'chat'));
-            }
-            const agents = [n?.running && `${n.running} running`, n?.finished && `${n.finished} finished`].filter(Boolean).join(', ');
-            const since = ago(s.lastActivity ?? s.updated);
-            const tip = [
-                now && s.topic ? s.topic : null,
-                st.kind === 'idle' && `idle ${since === 'now' ? 'just now' : `for ${since}`}`,
-                st.kind === 'needs' && 'Claude’s last reply wants your decision',
-                s.rulesStale && `Started before ${s.rulesStale.join(', ')} changed`,
-                s.context != null && `Context ${Math.round(s.context)}% full${ctxLevel(s.context) ? ' — compact it soon' : ''}`,
-                agents && `Subagents: ${agents}`,
-                q.length && `Queued: ${q.map(t => excerpt(t, 80)).join(' · ')}`,
-                s.id === bound ? 'The chat is on this session' : 'Click to chat with this session'
-            ].filter(Boolean).join(' — ');
-            r.onclick = () => bindChat(s.id);
-            rows.append(r, tooltip(r, tip));
-        }
-        line.append(rows);
-        if (g.hidden || open.has(g.project)) {
-            const b = el('button', 's-more', g.hidden ? `+${g.hidden} session${g.hidden === 1 ? '' : 's'}` : 'fewer');
-            b.onclick = () => {
-                store.set(openKey(g.project), g.hidden ? '1' : '');
-                renderBoard();
-            };
-            line.append(b);
-        }
-        strip.append(line);
-    }
-    return strip;
-}
-
 // "#2225 · starting…": the master took the issue on, but no subagent or MR shows it yet. Click chats with that session.
 /** @param {Session} s @param {string} n */
 function starting(s, n) {
@@ -397,10 +302,8 @@ function renderItems() {
         groups.splice(groups.findIndex(g => g.classList.contains('g-needs-you')) + 1, 0, sec);
     }
     const hadFocus = $('masters').contains(document.activeElement); // replaceChildren drops it; keys.js puts it back
-    const strip = renderSessions();
-    // nothing open (only the folded Recently finished / Merged, or nothing at all): a calm line under the strip
-    const empty = !groups.some(g => g.localName === 'section' || g.classList.contains('g-review')) && el('div', strip ? 'd-empty' : 'welcome', 'No MRs or subagents right now');
-    $('masters').replaceChildren(...[strip, empty, ...groups].filter(Boolean));
+    const empty = !groups.some(g => g.localName === 'section' || g.classList.contains('g-review')) && el('div', groups.length ? 'd-empty' : 'welcome', 'No MRs or subagents right now');
+    $('masters').replaceChildren(...[empty, ...groups].filter(Boolean));
     hooks.rendered?.(hadFocus);
 }
 

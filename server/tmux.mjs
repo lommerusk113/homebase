@@ -1,6 +1,8 @@
 // tmux plumbing: the socket override, session names, /clear aliases, and the keystroke steps for a message.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const run = promisify(execFile);
 
@@ -8,8 +10,12 @@ const run = promisify(execFile);
 export const tmuxArgs = (args, socket = process.env.HOMEBASE_TMUX_SOCKET) => (socket ? ['-L', socket, ...args] : args);
 export const tmux = args => run('tmux', tmuxArgs(args));
 
+// Homebase's own rules (homebase-rules.md: how replies and questions fit its UI), added to every Claude it starts or resumes
+export const RULES_FILE = fileURLToPath(new URL('../homebase-rules.md', import.meta.url));
+export const claudeLine = (extra = '', rules = RULES_FILE) => `claude${existsSync(rules) ? ` --append-system-prompt-file '${rules.replace(/'/g, `'\\''`)}'` : ''}${extra}`;
+
 // ponytail: login+interactive zsh so PATH matches your terminal; id is validated, cwd is passed as its own arg
-const claudeCmd = id => ['/bin/zsh', '-lic', `claude --resume ${id}`];
+const claudeCmd = id => ['/bin/zsh', '-lic', claudeLine(` --resume ${id}`)];
 
 // tmux keeps Claude running between messages; `tmux attach -t cc-<id8>` reaches it from any terminal.
 export const tmuxName = id => `cc-${id.slice(0, 8)}`;

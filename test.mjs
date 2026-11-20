@@ -1859,7 +1859,7 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
         assert.deepEqual(calls[2].args, ['clone', 'git@github-personal:lommerusk113/my-repo.git', '/base/my-repo']);
         assert.ok(!JSON.stringify(calls[2]).includes(TOKEN) && !JSON.stringify(calls[3]).includes(TOKEN), 'only gh gets the token');
         assert.ok(calls.every(c => c.file === 'tmux' || c.timeout > 0), 'every step has a timeout');
-        assert.deepEqual(calls[3].args, ['new-session', '-d', '-s', 'cc-new-my-repo', '-x', '200', '-y', '50', '-c', '/base/my-repo', 'zsh', '-lic', 'claude']);
+        assert.deepEqual(calls[3].args, ['new-session', '-d', '-s', 'cc-new-my-repo', '-x', '200', '-y', '50', '-c', '/base/my-repo', 'zsh', '-lic', claudeLine()]);
         assert.deepEqual([r.ok, r.sessionId, r.dir, r.steps.map(s => s.state)], [true, '11111111-2222-3333-4444-555555555555', '/base/my-repo', ['done', 'done', 'done']]);
         noToken(r);
     }
@@ -2390,4 +2390,11 @@ import { cancelQuestion, questionOpen } from './server.mjs';
     assert.equal(r.status, 502, 'still open');
     assert.equal((await cancelQuestion('zsh', { tm: async () => ({ stdout: q }) }).catch(e => e)).status, 400);
     console.log('ok cancel question');
+}
+
+import { claudeLine } from './server/tmux.mjs';
+{
+    assert.equal(claudeLine(' --resume x', '/nope/rules.md'), 'claude --resume x', 'no rules file: plain claude');
+    assert.match(claudeLine(' --resume x'), /^claude --append-system-prompt-file '.*\/homebase-rules\.md' --resume x$/);
+    console.log('ok claude line');
 }

@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { ROOT } from './transcripts.mjs';
-import { tmux, sleep } from './tmux.mjs';
+import { tmux, sleep, claudeLine } from './tmux.mjs';
 import { trustNewProject } from './startup.mjs';
 import { DEFAULTS, mergeConfig, loadConfig, readToken, scrub as scrubToken } from './account.mjs';
 
@@ -48,7 +48,7 @@ async function cloneAndStart(c, i, made) {
     // the session id is only known once Claude has written its transcript
     const tmuxName = `cc-new-${name}`;
     try {
-        await tm(['new-session', '-d', '-s', tmuxName, '-x', '200', '-y', '50', '-c', dir, 'zsh', '-lic', 'claude']);
+        await tm(['new-session', '-d', '-s', tmuxName, '-x', '200', '-y', '50', '-c', dir, 'zsh', '-lic', claudeLine()]);
     } catch (e) {
         throw fail(i + 1, e, made ? `${made} and cloned to ${dir}, but starting Claude failed:` : `Cloned to ${dir}, but starting Claude failed:`);
     }

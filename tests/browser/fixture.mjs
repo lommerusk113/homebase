@@ -179,7 +179,7 @@ export function buildFixture(root) {
     agent(alpha, 'agent-gate', { description: 'Gate: code review', toolUseId: 'gate105' }, [
         { type: 'user', timestamp: ago(254), message: { role: 'user', content: 'Review the diff in the worktree.' } },
         tool('Bash', { command: 'git diff main...' }, 10, 'g1')
-    ], 5);
+    ], 6); // older than agent-run, so Doing's newest-first order is not a tie
     agent(alpha, 'agent-ship', { description: 'Ship !102', finished: true }, [
         { type: 'user', timestamp: ago(1200), message: { role: 'user', content: 'Open the MR for the audit log' } },
         tool('SubagentHandback', { message: `Opened ${MR(102)}\n\nTLDR: shipped the audit log` }, 600)

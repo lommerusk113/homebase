@@ -941,6 +941,7 @@ console.log('ok milestones');
 import { excerpt } from './server.mjs';
 import { pillLabel } from './public/milestone.js';
 import { issueCards, buildLanes, closedBy, chatMessage, shortTitle, owners, emptyText } from './public/issues.js';
+import { reviewNote } from './public/list.js';
 assert.equal(excerpt('## Problem\n\nThe **row** only shows after a [reload](http://x).\n\n```js\ncode()\n```\nDone.'), 'The row only shows after a reload. Done.');
 assert.equal(excerpt('word '.repeat(100), 20), 'word word word word…');
 assert.equal(excerpt(null), '');
@@ -2839,3 +2840,6 @@ assert.equal(itemUpdated(null, 0, null), 0);
 }
 
 assert.equal(chatMessage({ iid: 9, st: 'closable', mrs: [{ iid: 30, state: 'merged' }] }), 'Close #9, its MR !30 is merged');
+assert.equal(reviewNote([{ next: 'Waiting for review by Ann' }, { next: 'Waiting for review by Ann' }]), 'all waiting on Ann');
+assert.equal(reviewNote([{ next: 'Waiting for review by Ann' }, { next: 'Needs a reviewer' }]), '');
+assert.equal(reviewNote([]), '');

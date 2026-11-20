@@ -568,3 +568,5 @@ ul.comments a { color:var(--fg); }
 .lg-nested { margin-top:4px; padding-left:10px; border-left:2px solid var(--line-soft); display:flex; flex-direction:column; gap:2px; font-size:12.5px; }
 .lg-unpushed { flex-shrink:0; height:18px; padding:0 6px; border-radius:99px; font-size:11px; font-weight:600; line-height:18px; white-space:nowrap; color:var(--c-warn); background:color-mix(in srgb, var(--c-warn) 15%, transparent); }
 .card .ft wa-button { margin-left:auto; }
+.g-note { color:var(--muted); font-weight:normal; }
+wa-details[open] .g-note { display:none; }

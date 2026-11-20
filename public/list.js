@@ -259,14 +259,26 @@ function itemTable(list) {
     return t;
 }
 
-// Folded groups: Merged stays open for this page load once opened; Recently finished remembers per project, after a toggle.
-/** @param {typeof COLUMNS[number]} c @param {WorkItem[]} list @param {boolean} isOpen @param {(open: boolean) => void} setOpen */
-function foldGroup(c, list, isOpen, setOpen) {
+// "all waiting on Ann" when every row's next step is the same "Waiting for review by Ann", else ''.
+/** @param {WorkItem[]} list */
+export function reviewNote(list) {
+    const m = list[0]?.next?.match(/^Waiting for review by (.+)$/);
+
+    return m && list.every(x => x.next === list[0].next) ? `all waiting on ${m[1]}` : '';
+}
+
+// Folded groups: Merged stays open for this page load once opened; Recently finished and In review remember per project, after a toggle.
+// note: a muted summary beside the count while folded.
+/** @param {typeof COLUMNS[number]} c @param {WorkItem[]} list @param {boolean} isOpen @param {(open: boolean) => void} setOpen @param {string} [note] */
+function foldGroup(c, list, isOpen, setOpen, note) {
     const f = el('wa-details', `group g-${c.key}`), sum = el('span', 'g-head');
     f.setAttribute('appearance', 'plain');
     f.toggleAttribute('open', isOpen);
     sum.slot = 'summary';
     sum.append(dot(c.key), `${c.label} (${list.length})`);
+    if (note) {
+        sum.append(el('span', 'g-note', ` · ${note}`));
+    }
     // tooltips inside also fire wa-show/wa-hide, and those bubble
     f.addEventListener('wa-show', e => {
         if (e.target === f) {
@@ -287,7 +299,7 @@ function renderItems() {
     const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).map(x => optimistic(x)).sort((a, b) => b.updated - a.updated);
     const placeholders = visibleSessions().filter(isMaster).flatMap(s => startingIssues(s, visibleSessions().filter(o => o.project === s.project).flatMap(o => o.items || [])).map(n => starting(s, n)));
     const asking = visibleSessions().filter(s => s.asking && !s.sidechain).map(askingRow);
-    const finishedKey = `fold:finished:${state.project}`;
+    const finishedKey = `fold:finished:${state.project}`, reviewKey = `fold:review:${state.project}`;
     const groups = COLUMNS.map(c => {
         const list = items.filter(x => x.column === c.key), extra = c.key === 'doing' ? placeholders : c.key === 'needs-you' ? asking : [];
         if (!list.length && !extra.length) {
@@ -298,6 +310,10 @@ function renderItems() {
         }
         if (c.key === 'finished') {
             return foldGroup(c, list, store.get(finishedKey) === 'open', v => store.set(finishedKey, v ? 'open' : 'closed'));
+        }
+        if (c.key === 'review') { // open until it grows past a few rows, then folded, unless the user chose
+            const chosen = store.get(reviewKey);
+            return foldGroup(c, list, chosen ? chosen === 'open' : list.length <= 3, v => store.set(reviewKey, v ? 'open' : 'closed'), reviewNote(list));
         }
         const h = el('h2', 'g-head');
         h.append(dot(c.key), `${c.label} · ${list.length + extra.length}`);

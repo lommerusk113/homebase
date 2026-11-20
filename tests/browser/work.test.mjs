@@ -19,7 +19,7 @@ export default {
             done: [MR(100)]
         });
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters .g-head')].map(h => h.textContent)`),
-            ['Needs you · 2', 'Doing · 3', 'In review · 3', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
+            ['Needs you · 2', 'Doing · 3', 'In review (3)', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.next').textContent`), 'Next: Agent stopped — check the chat');
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.act-btn').textContent`), 'Continue');
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.next').textContent`), "💬 1 Next: Reply to Ann Reviewer's comment");
@@ -90,5 +90,15 @@ export default {
         await page.click('.group.g-finished .g-head');
         await page.waitFor(`${row('agent-notes')}.checkVisibility()`, { what: 'the row to show' });
         assert.equal(await page.ev(`localStorage.getItem('fold:finished:alpha')`), 'open');
+    },
+
+    'In review folds per project when chosen, with its count': async ({ page, open }) => {
+        await open({ 'fold:review:alpha': 'closed' });
+        await page.waitFor(`document.querySelector('#masters .group.g-review')`, { what: 'the review group' });
+        assert.equal(await page.ev(`document.querySelector('.group.g-review').hasAttribute('open')`), false);
+        assert.equal(await page.ev(`${row(MR(103))}.checkVisibility()`), false, 'its rows are hidden');
+        await page.click('.group.g-review .g-head');
+        await page.waitFor(`${row(MR(103))}.checkVisibility()`, { what: 'the rows to show' });
+        assert.equal(await page.ev(`localStorage.getItem('fold:review:alpha')`), 'open');
     }
 };

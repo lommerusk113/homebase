@@ -493,10 +493,11 @@ function topicAndTldr(i) {
 
     // no marker: a TLDR that ends in a question still needs the user
     const needs = needsYou || /\?[*_\s]*$/.test(t.tldr ?? '');
-    const options = needs || quickReplies(t.tldr, t.text).length ? askList(t.text) : null;
+    const asks = needs || quickReplies(t.tldr, t.text).length > 0; // needs you, or ends in a question that gets chips
+    const options = asks ? askList(t.text) : null;
 
-    // needs you but no TLDR: its last paragraph (the ask, past the options) is what shows while folded
-    if (needs && !t.tldr) {
+    // asks but no TLDR: its last paragraph (the ask, past the options) is what shows while folded, next to its chips
+    if (asks && !t.tldr) {
         const ask = (options ? t.text.replace(options, '') : t.text).trim().split(/\n\s*\n/).at(-1);
         if (ask) {
             t.tldr = ask;

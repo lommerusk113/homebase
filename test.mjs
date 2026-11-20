@@ -694,6 +694,9 @@ assert.deepEqual(chatItems([say(pick), you('SQLite', 't1')]).map(i => [i.role, i
 // needs you without a TLDR: the closing ask is what shows folded, not the opening sentence
 const noTldr = chatItems([say('**▸ Deploy · needs you**\n\nBuilt it.\n\nThe tests pass.\n\nDeploy to prod now?')]).at(-1);
 assert.deepEqual([noTldr.tldr, noTldr.text], ['Deploy to prod now?', 'Built it.\n\nThe tests pass.']);
+// no needs-you marker but a closing question with chips: the same, so the question shows next to them
+const plainAsk = chatItems([say('Built it.\n\nThe tests pass.\n\nDeploy to prod now?')]).at(-1);
+assert.deepEqual([plainAsk.needsYou, plainAsk.tldr, plainAsk.text, plainAsk.replies], [false, 'Deploy to prod now?', 'Built it.\n\nThe tests pass.', ['Yes', 'No']]);
 console.log('ok ask list');
 console.log('ok quick replies');
 

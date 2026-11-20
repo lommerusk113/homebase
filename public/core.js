@@ -180,6 +180,37 @@ export const link = (cls, text, href) => {
     return a;
 };
 
+// A shell command in plain words for a row's "Now:" line: "running browser tests", "editing app.js", "waiting for browser tests".
+// ponytail: regexes over the whole command text, first match wins; an unknown command falls back to "running <first word>"
+/** @type {[RegExp, string][]} */
+const THINGS = [[/run\.mjs/, 'browser tests'], [/test\.mjs|\b(?:vitest|jest)\b|npm (?:run )?test/, 'unit tests'], [/check-types|\btsc\b/, 'type checks']];
+/** @param {string | undefined} command */
+export function plainCommand(command) {
+    const cmd = String(command ?? '').trim().replace(/^(?:cd\s+\S+\s*(?:&&|;)\s*)+/, '');
+    const thing = THINGS.find(([re]) => re.test(cmd))?.[1];
+    const file = (/** @type {string} */ verb) => {
+        const f = cmd.split(/\s+/).findLast(t => /^[\w@./~-]+\.\w+$/.test(t));
+        return `${verb} ${f ? f.split('/').pop() : 'a file'}`;
+    };
+    const git = cmd.match(/\bgit\s+(rebase|merge|commit|push)\b/)?.[1];
+    if (/^(?:while|until|sleep)\b|\bsleep\b|\bpgrep\b/.test(cmd)) {
+        return thing ? `waiting for ${thing}` : 'waiting';
+    }
+    if (git) {
+        return { rebase: 'rebasing', merge: 'merging', commit: 'committing', push: 'pushing' }[git];
+    }
+    if (thing) {
+        return thing === 'type checks' ? 'type-checking' : `running ${thing}`;
+    }
+    const [first = '', next = ''] = cmd.split(/\s+/), bin = first.split('/').pop()?.replace(/\d+$/, '') ?? '';
+    return /screenshot/i.test(cmd) ? 'taking screenshots'
+        : bin === 'sed' ? file('editing')
+        : /^(?:cat|head|tail|less|bat)$/.test(bin) ? file('reading')
+        : /^(?:grep|rg|ag)$/.test(bin) || /\bgit\s+grep\b/.test(cmd) ? 'searching'
+        : bin === 'glab' ? 'calling GitLab' : bin === 'gh' ? 'calling GitHub' : bin === 'curl' ? 'calling an API'
+        : /^(?:zsh|bash|sh)$/.test(bin) && next ? `running ${next.split('/').pop()}`
+        : `running ${bin}`;
+}
 export const plain = t => (t || '').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim();
 export const ago = ms => {
     const s = (Date.now() - ms) / 1000;

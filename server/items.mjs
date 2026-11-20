@@ -96,7 +96,7 @@ export function nextStep(prState, agent) {
         return 'Closed without merging';
     }
     if (agent?.status === 'running') {
-        return agent.step ? `${agent.description} — ${agent.step}` : `${agent.description} is ${VERB[agent.stage] ?? 'working'}…`;
+        return agent.step ? agent.step : `${agent.description} is ${VERB[agent.stage] ?? 'working'}…`;
     }
     if (agent?.status === 'stopped') {
         return agent.stopReason === 'api-error' ? 'Agent hit an API error — continue it' : 'Agent stopped — check the chat';

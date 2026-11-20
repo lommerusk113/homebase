@@ -11,6 +11,7 @@ import { PR_TTL_MS, openMrUrls, prState, prError, errorText, swrEntry, fetchComm
 import { repoPaths, accountOf } from './account.mjs';
 import { contextOf } from './limits.mjs';
 import { workItems, milestoneOf, sameRepo } from './items.mjs';
+import { plainCommand } from '../public/core.js';
 import { rulesStale } from './rules.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor, linkClears, liveTmux, mapNewProjects, startingProjects } from './tmux.mjs';
 
@@ -174,6 +175,11 @@ export function agentStatus(meta, entries, ageMs) {
         return { status: 'stopped', stopReason: 'api-error' };
     }
 
+    // the hand-back call is the agent's last act and gets no result, so it would read as a pending call for half an hour
+    if (turns.some(e => e.type === 'assistant' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_use' && b.name === 'SubagentHandback'))) {
+        return { status: 'done' };
+    }
+
     const waiting = backgroundTasks(entries).size > 0;
     if (meta.finished) {
         return { status: waiting && ageMs < AGENT_TOOL_MS ? 'running' : 'done' };
@@ -208,7 +214,7 @@ export function stepOf(use) {
 
     const i = use.input ?? {}, file = basename(i.file_path ?? i.notebook_path ?? '');
     const say = {
-        Bash: () => (i.description ? firstLine(i.description).replace(/^./, c => c.toLowerCase()) : `running ${firstLine(i.command, 40)}`),
+        Bash: () => (i.description ? firstLine(i.description).replace(/^./, c => c.toLowerCase()) : plainCommand(i.command)),
         Edit: () => `editing ${file}`, MultiEdit: () => `editing ${file}`, Write: () => `writing ${file}`, NotebookEdit: () => `editing ${file}`,
         Read: () => `reading ${file}`, Grep: () => 'searching the code', Glob: () => 'searching the code',
         Agent: () => `waiting on a helper agent${i.description ? `: ${firstLine(i.description, 40)}` : ''}`, Task: () => 'waiting on a helper agent',
@@ -414,6 +420,8 @@ export function summarize(entries, ageMs, marker = null, live = null) {
     const openPrompts = turnPrompts(entries, ageMs, marker, live);
     const lastItem = chatItems(entries, 1).at(-1); // the chat's newest bubble, so the Work tab and the chat agree on "needs you"
 
+    const needsYou = turn.state === 'idle' && lastItem?.role === 'assistant' && !!lastItem.needsYou && !lastItem.answer && !lastItem.error;
+
     return {
         id: meta.sessionId,
         cwd: meta.cwd,
@@ -426,7 +434,8 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         known: hasTurnMarkers(entries), // false: no turn markers in a recent transcript, so the status is only a guess
         asking: turn.state === 'asking',
         question: turn.state === 'asking' ? pendingQuestion(entries, marker) : null,
-        needsYou: turn.state === 'idle' && lastItem?.role === 'assistant' && !!lastItem.needsYou && !lastItem.answer && !lastItem.error,
+        needsYou,
+        needsText: needsYou ? firstLine(lastItem?.ask?.question ?? lastItem?.waiting ?? lastItem?.tldr, 140) || null : null, // what it asks, for the Needs you row's title
         since: turn.since,
         topic: latestTopic(entries),
         openPrompts,

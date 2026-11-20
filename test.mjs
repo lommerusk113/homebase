@@ -49,6 +49,8 @@ const a = summarizeAgent({ description: 'Implement #1', finished: true }, [
 ], 999_999);
 assert.deepEqual([a.status, a.pr, a.branch], ['done', 'https://gitlab.com/x/y/-/merge_requests/7', 'b1']);
 assert.equal(summarizeAgent({ finished: false }, [], 1_000).status, 'running');
+// an agent whose last act was the hand-back call (no result, meta.finished not flipped yet) is done, not running for half an hour
+assert.equal(summarizeAgent({ finished: false }, [{ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'h', name: 'SubagentHandback', input: { message: 'Done.' } }] } }], 5 * 60_000).status, 'done');
 {
     // a row goes by the newest SendMessage summary sent to that agent
     const { sentSummaries } = await import('./server.mjs');
@@ -304,10 +306,20 @@ import { nextStep, workItems } from './server.mjs';
 const open = extra => ({ state: 'open', reviewers: [], ...extra });
 assert.equal(nextStep({ state: 'merged' }, { status: 'running', stage: 1 }), 'Merged');
 assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebase !7' }), 'Rebase !7 is verifying…');
-assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebase !7', step: 'running npm test' }), 'Rebase !7 — running npm test');
+assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebase !7', step: 'running unit tests' }), 'running unit tests');
 {
     const { stepOf } = await import('./server.mjs');
-    assert.equal(stepOf({ name: 'Bash', input: { command: 'npm test\nmore' } }), 'running npm test');
+    assert.equal(stepOf({ name: 'Bash', input: { command: 'npm test\nmore' } }), 'running unit tests');
+    const { plainCommand } = await import('./public/core.js');
+    assert.deepEqual([
+        'while pgrep -f "run.mjs" >/dev/null; do sleep 5; done', 'node tests/browser/run.mjs', 'node test.mjs', './check-types.sh', 'git rebase main', 'git push origin x',
+        "sed -i '' 's/a/b/' public/app.js", 'cat server/items.mjs', 'rg foo', 'git grep x', 'glab mr list', 'curl -s x', 'until grep -q "passed" /tmp/log; do sleep 2; done',
+        'python3 - <<\'EOF\'', 'zsh /private/tmp/x/run-it.sh', 'cd /r && git commit -m x', 'node shot.mjs --screenshot'
+    ].map(plainCommand), [
+        'waiting for browser tests', 'running browser tests', 'running unit tests', 'type-checking', 'rebasing', 'pushing',
+        'editing app.js', 'reading items.mjs', 'searching', 'searching', 'calling GitLab', 'calling an API', 'waiting',
+        'running python', 'running run-it.sh', 'committing', 'taking screenshots'
+    ]);
     assert.equal(stepOf({ name: 'Bash', input: { command: 'npm test', description: 'Run the unit tests' } }), 'run the unit tests');
     assert.equal(stepOf({ name: 'Edit', input: { file_path: '/x/src/login.js' } }), 'editing login.js');
     assert.equal(stepOf({ name: 'mcp__x__y', input: {} }), 'using mcp__x__y');

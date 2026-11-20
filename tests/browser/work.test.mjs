@@ -22,6 +22,8 @@ export default {
             ['Needs you · 3', 'Doing · 3', 'In review (3)', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.next').textContent`), 'Next: Agent stopped — check the chat');
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.act-btn').textContent`), 'Continue');
+        assert.equal(await page.ev(`${row(`asking:${IDS.master}`)}.querySelector('b').textContent.trim()`), 'Should I tag the release now or wait for QA?', 'the needs-you title is what the reply asks');
+        assert.match(await page.ev(`${row(`asking:${IDS.master}`)}.querySelector('.next').textContent`), /^alpha · Login work · \w+( ago)?$/);
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.next').textContent`), "💬 1 Next: Reply to Ann Reviewer's comment");
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.act-btn').textContent`), 'Fix & reply');
         assert.equal(await page.ev(`${row(MR(102))}.querySelector('.act-btn').textContent`), 'Merge + close issue');
@@ -53,7 +55,7 @@ export default {
     'a gate subagent links through the turn that spawned it, so its approved MR has no Merge button': async ({ page, open }) => {
         await open();
         await page.waitFor(`document.querySelector('#masters .g-doing tr[data-key="${MR(105)}"]')`, { what: 'the !105 row in Doing' });
-        assert.match(await page.ev(`${row(MR(105))}.querySelector('.next').textContent`), /^Now: Gate: code review — running git diff main\.\.\.( · for \dm)?$/, 'what the agent does now');
+        assert.match(await page.ev(`${row(MR(105))}.querySelector('.next').textContent`), /^Now: running git(· for \dm)?$/, 'what the agent does now');
         assert.equal(await page.ev(`${row(MR(105))}.querySelector('.act-btn')`), null, 'no Merge button');
     },
 

@@ -27,6 +27,8 @@ interface Session {
     question: string | null;
     /** idle, and Claude's newest reply asks for the user's decision, answer or action (as the chat's needs-you bubble) */
     needsYou: boolean;
+    /** what that reply asks, one line (its Waiting on you question, else its TLDR); null unless needsYou */
+    needsText?: string | null;
     /** start of the running turn; null when idle or unknown */
     since: number | null;
     /** the human prompt the running turn works on; null when idle */

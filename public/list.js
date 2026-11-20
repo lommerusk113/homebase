@@ -178,8 +178,15 @@ function askingRow(s) {
     const tr = el('tr', 'asking'), what = el('td', 'what'), b = el('b');
     tr.dataset.key = `asking:${s.id}`;
     tr.setAttribute('role', 'button');
-    b.append(el('span', 'pulse'), ` ${state.project === 'all' ? `${s.project} · ` : ''}${s.title || sessionTopic(s)} ${s.asking ? 'is asking' : 'needs you'}`);
-    what.append(b, el('small', 'next', `${s.asking ? s.question || 'Claude asked a question.' : 'Claude’s last reply wants your decision'} · click to answer in the chat`));
+    // an idle chat with a reply for you: the title is what the reply asks, the subtitle where it comes from
+    if (!s.asking && s.needsText) {
+        const since = ago(s.lastActivity ?? s.updated);
+        b.append(el('span', 'pulse'), ` ${excerpt(s.needsText, 140)}`);
+        what.append(b, el('small', 'next', [s.project, s.title || sessionTopic(s), since === 'now' ? 'now' : `${since} ago`].join(' · ')));
+    } else {
+        b.append(el('span', 'pulse'), ` ${state.project === 'all' ? `${s.project} · ` : ''}${s.title || sessionTopic(s)} ${s.asking ? 'is asking' : 'needs you'}`);
+        what.append(b, el('small', 'next', `${s.asking ? s.question || 'Claude asked a question.' : 'Claude’s last reply wants your decision'} · click to answer in the chat`));
+    }
     what.colSpan = 6;
     tr.append(what);
     tr.onclick = () => focusChat(s.id);

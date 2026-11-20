@@ -2,6 +2,7 @@
 // and answer by moving the ❯ selection to the option the user clicked. Homebase never picks an option by itself.
 import { tmux, sleep } from './tmux.mjs';
 import { RISKY } from './transcripts.mjs';
+import { seenHash } from '../public/core.js';
 
 const NAME = /^cc-[A-Za-z0-9._-]{1,120}$/;
 const MAX_OPTIONS = 10;
@@ -72,13 +73,17 @@ export async function startupDialog(name, { tm = tmux, now = Date.now() } = {}) 
 
 // Selects option `index` (whose text must be `label`, so a dialog that changed meanwhile isn't answered blind) and confirms;
 // then re-reads the pane and fails if the same dialog is still up. `parse` reads the dialog: parseDialog or parseQuestion.
-export async function answerStartup(name, index, label, { tm = tmux, nap = sleep, parse = parseDialog } = {}) {
+// `seen` (the card's seenHash) must match the prompt on screen: a command that changed since the card drew is not approved.
+export async function answerStartup(name, index, label, { tm = tmux, nap = sleep, parse = parseDialog, seen = null } = {}) {
 
     check(name);
     cache.delete(name);
     const dialog = parse(await capture(name, tm));
     if (!dialog) {
         throw Object.assign(new Error('No question is showing any more'), { status: 409 });
+    }
+    if (seen !== null && seenHash(dialog) !== seen) {
+        throw Object.assign(new Error('The command changed — check it again'), { status: 409 });
     }
     if (!Number.isInteger(index) || dialog.options[index] === undefined || dialog.options[index] !== label) {
         throw Object.assign(new Error('The question changed, check it and try again'), { status: 409 });
@@ -190,11 +195,11 @@ export async function paneQuestion(name, { tm = tmux } = {}) {
 }
 
 // Picks option `index` (labelled `label`) of the AskUserQuestion on screen, never the "Type something." text box.
-export async function answerQuestion(name, index, label, { tm = tmux, nap = sleep } = {}) {
+export async function answerQuestion(name, index, label, { tm = tmux, nap = sleep, seen = null } = {}) {
     if (FREE_FORM.test(label ?? '')) {
         throw Object.assign(new Error('Answer that one in the terminal'), { status: 400 });
     }
-    await answerStartup(name, index, label, { tm, nap, parse: parseQuestion });
+    await answerStartup(name, index, label, { tm, nap, parse: parseQuestion, seen });
 }
 
 // The folder a workspace trust dialog names: the lines after "Accessing workspace:" up to a blank line, joined (a narrow pane wraps the path)

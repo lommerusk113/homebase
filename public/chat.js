@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, setOffline, ctxLevel, canCompact, autoCompactDue, NEEDS_ANSWER, openDecision } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, seenHash, setOffline, ctxLevel, canCompact, autoCompactDue, NEEDS_ANSWER, openDecision } from './core.js';
 import { renderBoard } from './list.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
@@ -559,7 +559,7 @@ async function showAsk(s, data) {
     }
     fillCard('ask', tmux, known?.question ?? pane.question, options, async n => {
         try {
-            await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&${options[n].i < 0 ? 'dismiss=1' : `option=${options[n].i}&label=${encodeURIComponent(options[n].label)}`}`);
+            await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&${options[n].i < 0 ? 'dismiss=1' : `option=${options[n].i}&label=${encodeURIComponent(options[n].label)}&seen=${seenHash(pane)}`}`);
             answeredAsk = data.asking;
             if (CHAT.test(options[n].label)) {
                 $('msg').focus(); // the user's turn to say what they want instead

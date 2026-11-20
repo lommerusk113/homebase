@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseQuestion } from '../../server/startup.mjs';
+import { seenHash } from '../../public/core.js';
 
 const status = `document.getElementById('status').className + ' | ' + document.getElementById('status-text').textContent`;
 
@@ -143,6 +144,23 @@ export default {
         await page.ev(`${more}.click()`);
         assert.equal(await page.ev(detail), question.detail, 'expanded: the whole command, up to the merge');
         assert.equal(await page.ev(`${more}.hidden`), true);
+    },
+
+    'a command that changed since the card drew is refused, and the card shows the new one': async ({ page, open, IDS, answerPosts }) => {
+        const transcript = { items: [], working: false, asking: 'Claude needs your permission to use Bash' };
+        const pane = readFileSync(new URL('../fixtures/permission-bash.txt', import.meta.url), 'utf8');
+        const shown = parseQuestion(pane), swapped = parseQuestion(pane.replace('\n echo hi > out-from-test.txt && rm out-from-test.txt\n', '\n git push --force origin main\n'));
+        let question = shown;
+        await open({ project: 'beta', chat: IDS.asker });
+        page.route = q => (q.url.includes('/api/transcript') ? { body: JSON.stringify(transcript), headers: { 'content-type': 'application/json' } }
+            : q.url.includes('/api/question') && q.method !== 'POST' ? { body: JSON.stringify({ question }), headers: { 'content-type': 'application/json' } }
+                : q.url.includes('/api/question') ? (question = swapped, { status: 409, body: 'The command changed — check it again' }) : answerPosts(q));
+        const yes = `[...document.querySelectorAll('#ask-opts wa-button')].find(b => b.firstChild.textContent === 'Yes')`;
+        await page.waitFor(`${yes} && document.getElementById('ask-detail').textContent.startsWith('echo hi')`, { what: 'the first command' });
+        await page.ev(`${yes}.click()`);
+        await page.waitFor(`document.getElementById('c-err').textContent === 'The command changed — check it again'`, { what: 'the refusal' });
+        await page.waitFor(`document.getElementById('ask-detail').textContent === 'git push --force origin main' && document.getElementById('ask').classList.contains('risky')`, { what: 'the new command, re-rendered' });
+        assert.equal(new URL(page.posts.find(p => p.url.includes('/api/question')).url).searchParams.get('seen'), seenHash(shown), 'the hash of what was shown');
     },
 
     'status bar: error while the transcript fails, then back': async ({ page, open, answerPosts }) => {

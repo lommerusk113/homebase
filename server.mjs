@@ -157,7 +157,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return res.end('ok');
             }
             if (isPost('/api/question')) {
-                await answerQuestion(url.searchParams.get('tmux'), Number(url.searchParams.get('option')), url.searchParams.get('label'));
+                await answerQuestion(url.searchParams.get('tmux'), Number(url.searchParams.get('option')), url.searchParams.get('label'), { seen: url.searchParams.get('seen') });
                 return res.end('ok');
             }
             if (isPost('/api/clear')) {

@@ -97,6 +97,18 @@ const FRIENDLY = [
     [/Command failed: tmux|no server running|can't find (session|pane)|no current (session|target)/i, "Couldn't reach this chat's terminal. It may have ended; try Restart chat."]
 ];
 /** @param {string} msg */
+// What the ask card showed, as a short FNV-1a hash of the question and the command or diff: sent with an answer, so the
+// server (startup.mjs answerStartup, which imports this) approves only that exact prompt and never one that replaced it.
+/** @param {{ question: string, detail?: string }} q */
+export const seenHash = q => {
+    let h = 0x811c9dc5;
+    for (const c of `${q.question}\n${q.detail ?? ''}`) {
+        h = Math.imul(h ^ c.codePointAt(0), 0x01000193);
+    }
+
+    return (h >>> 0).toString(36);
+};
+
 export const friendly = msg => FRIENDLY.find(([re]) => re.test(msg))?.[1] ?? msg;
 
 /**

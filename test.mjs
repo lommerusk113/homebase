@@ -2444,6 +2444,7 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
 }
 
 import { parseQuestion, answerQuestion } from './server.mjs';
+import { seenHash } from './public/core.js';
 {
     const ask = sel => `❯ Ask me which color
 ────────────────
@@ -2533,8 +2534,23 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     assert.equal(longCmd.detail.split('\n')[6], '  git push --force origin feature &&');
     assert.equal(longCmd.risky, true);
     r = await run([longPane, longPane.replace('glab mr merge 42', 'glab mr merge 43')], 3, 'No');
-    assert.equal(r.err.status, 409, 'a command that changed under the arrows is not answered');
     assert.ok(!r.sent.some(a => a.includes('Enter')));
+    assert.equal(r.err.status, 409, 'a command that changed under the arrows is not answered');
+    // the answer carries a hash of what the card showed: only that exact prompt is approved
+    const swapped = longPane.replace('glab mr merge 42', 'glab mr merge 43');
+    assert.notEqual(seenHash(longCmd), seenHash(parseQuestion(swapped)));
+    assert.equal(seenHash(longCmd), seenHash({ question: longCmd.question, detail: longCmd.detail }), 'stable');
+    const answerSeen = async (pane, seen) => {
+        const sent = [];
+        const tm = async a => (a[0] === 'capture-pane' ? { stdout: pane } : void sent.push(a));
+        const err = await answerQuestion('cc-new-probe', 0, 'Yes', { tm, nap: async () => {}, seen }).then(() => null, e => e);
+
+        return { sent, err };
+    };
+    r = await answerSeen(swapped, seenHash(longCmd));
+    assert.deepEqual([r.err?.status, r.err?.message, r.sent], [409, 'The command changed — check it again', []], 'a replaced command is refused before any key');
+    r = await answerSeen(longPane, seenHash(longCmd));
+    assert.deepEqual(r.sent.map(a => a.slice(3)), [['Enter']], 'the command seen is approved');
     assert.deepEqual(parseQuestion(edit).options, ['Yes', 'Yes, and switch to accept edits (auto-approve file edits and common file commands) for this', 'No']);
     console.log('ok ask question');
 }

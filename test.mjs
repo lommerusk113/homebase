@@ -3172,6 +3172,10 @@ import { cancelQuestion, questionOpen } from './server.mjs';
     assert.deepEqual(await confirm([q]), { ok: false, keys: [] }, 'another dialog is never answered');
     assert.deepEqual(await confirm([sw.replace('Yes, switch to', 'Yes, delete')]), { ok: false, keys: [] }, 'nor one with another first option');
     assert.deepEqual(await confirm(['idle']), { ok: false, keys: [] }, 'no dialog within the wait: nothing pressed');
+    // the same dialog with its "Enter to confirm · Esc to cancel" footer drawn (a real chat got stuck on it)
+    const swFooter = readFileSync(new URL('./tests/fixtures/dialog-switch-model-footer.txt', import.meta.url), 'utf8');
+    assert.deepEqual(parseQuestion(swFooter)?.options, ['Yes, switch to Opus 5.5', 'No, go back']);
+    assert.deepEqual(await confirm(['❯ /model opus', swFooter]), { ok: true, keys: [['send-keys', '-t', '=cc-new-x:', 'Enter']] }, 'with its footer too');
     console.log('ok cancel question');
 }
 

@@ -128,17 +128,18 @@ const OPTION = /^(?: {0,3}|\s*❯\s+)(\d+)\.\s+(.+)$/;
 // "Esc to cancel" instead: its question is the dialog's title and ask sections (╌ rules between) joined by " · ", Tips dropped,
 // and the command or diff between them its whole `detail`, `risky` when it matches RISKY; tests/fixtures/permission-*.txt
 // are real ones. A dialog with no footer at all ("Switch model?" after /model, tests/fixtures/dialog-switch-model.txt) counts
-// when two or more options, nothing else, end the pane with no ─ rule around them (the input box has one). │ box borders are stripped. -> { question, options, descriptions, selected, detail?, risky? } or null
+// when two or more options, nothing else, end the pane with no ─ rule around them (the input box has one); drawn whole it ends in
+// "Enter to confirm · Esc to cancel" (tests/fixtures/dialog-switch-model-footer.txt). │ box borders are stripped. -> { question, options, descriptions, selected, detail?, risky? } or null
 export function parseQuestion(pane) {
 
     // a question taller than the pane is clipped at the top, with a "↑ 5 more lines" scroll marker: not part of any option
     let lines = String(pane ?? '').split('\n').map(l => l.replace(/^\s*│ ?|\s*│\s*$/g, '').replace(/\s+$/, '')).filter(l => !/^\s*[↑↓] \d+ more lines?$/.test(l));
-    const hint = lines.findLastIndex(l => /enter to select/i.test(l));
+    const hint = lines.findLastIndex(l => /enter to (select|confirm)/i.test(l));
     const review = lines.findLastIndex(l => /^\s*Review your answers$/.test(l));
     const esc = lines.findLastIndex(l => /^\s*Esc to cancel/.test(l));
     const footer = esc >= 0 && lines.slice(esc + 1).filter(l => l.trim()).length <= 2; // at the bottom, not quoted in the transcript
     const bare = hint < 0 && review < 0 && !footer;
-    if (bare) { // its options are indented: drop the ❯ line's indent
+    if (bare || /enter to confirm/i.test(lines[hint])) { // its options are indented: drop the ❯ line's indent
         const pad = lines.findLast(l => /^\s*❯\s+\d+\.\s/.test(l))?.match(/^ */)[0] ?? '';
         lines = lines.map(l => (l.startsWith(pad) ? l.slice(pad.length) : l));
     }

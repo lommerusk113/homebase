@@ -4,6 +4,7 @@ import { createECDH, createPrivateKey, createCipheriv, hkdfSync, randomBytes, si
 import { request } from 'node:https';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { waitsOnYou } from '../public/core.js';
 
 const b64u = buf => Buffer.from(buf).toString('base64url');
 const unb64u = s => Buffer.from(s, 'base64url');
@@ -129,15 +130,13 @@ function updateSubs(dir, fn) {
 export const addSub = (dir, { endpoint, keys: { p256dh, auth } }) => updateSubs(dir, subs => [...subs.filter(s => s.endpoint !== endpoint), { endpoint, keys: { p256dh, auth } }]);
 export const removeSub = (dir, endpoint) => updateSubs(dir, subs => subs.filter(s => s.endpoint !== endpoint));
 
-// Same rule as list.js sessionState: asking, or needs you while not working.
-export const attention = s => (s.asking ? 'asking' : s.needsYou && s.status !== 'working' ? 'needs' : null);
 export const DEBOUNCE_MS = 30_000;
-// Sessions that moved into asking or needs-you since the previous check, at most one per session per DEBOUNCE_MS
-// (`sent` holds when each last got one). No previous check, no events. Subagent transcripts never push.
+// Sessions that started waiting on you since the previous check (core.js waitsOnYou, as list.js askingEvents), at most
+// one per session per DEBOUNCE_MS (`sent` holds when each last got one). No previous check, no events.
 export function pushEvents(prev, list, sent, now = Date.now()) {
 
-    const next = new Map(list.filter(s => !s.sidechain).map(s => [s.id, attention(s)]));
-    const events = !prev ? [] : list.filter(s => next.get(s.id) && next.get(s.id) !== prev.get(s.id) && !(now - (sent.get(s.id) ?? -Infinity) < DEBOUNCE_MS));
+    const next = new Set(list.filter(waitsOnYou).map(s => s.id));
+    const events = !prev ? [] : list.filter(s => next.has(s.id) && !prev.has(s.id) && !(now - (sent.get(s.id) ?? -Infinity) < DEBOUNCE_MS));
     for (const s of events) {
         sent.set(s.id, now);
     }

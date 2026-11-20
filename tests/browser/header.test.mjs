@@ -21,7 +21,7 @@ export default {
         await page.waitFor(`localStorage.getItem('project') === 'beta' && !${isOpen}`, { what: 'beta to be picked and the list closed' });
         assert.equal(await page.ev(`${btn}.value + ' ' + ${btn}.textContent + ' ' + (document.activeElement === ${btn})`), 'beta beta true');
         await page.waitFor(`[...document.querySelectorAll('#masters tr[data-key]')].map(r => r.dataset.key).join() === 'asking:${IDS.asker},https://github.com/acme/beta/pull/7'`, { what: 'only the beta asking chat and PR on the board' });
-        await page.waitFor(`${pill}?.textContent.includes('No milestones')`, { what: 'the beta pill' });
+        await page.waitFor(`document.getElementById('milestone-slot').hidden`, { what: 'the beta pill hidden' });
     },
 
     'project picker by keyboard: arrows move, typing filters, Enter picks, Esc closes and returns focus': async ({ page, open }) => {
@@ -104,10 +104,13 @@ export default {
         await page.waitFor(`${pill}.open && ${pill}.querySelector('.ms-menu h5.hot')?.textContent === 'Can be closed (1)'`, { what: 'the menu' });
     },
 
-    'milestone pill says "No milestones" for a project without any': async ({ page, open }) => {
+    'milestone pill is hidden for a project without milestones and shown for one with': async ({ page, open }) => {
         await open({ project: 'beta', chat: null });
-        await page.waitFor(`${pill}?.classList.contains('off') && ${pill}.querySelector('summary').textContent === '⚑No milestones'`, { what: 'No milestones' });
-        assert.equal(await page.ev(`${pill}.classList.contains('err')`), false);
+        await page.waitFor(`${pill}?.classList.contains('off') && document.getElementById('milestone-slot').hidden`, { what: 'the pill hidden' });
+        assert.equal(await page.ev(`document.getElementById('milestone-slot').getBoundingClientRect().width`), 0, 'no gap');
+        await page.click('#project');
+        await page.click('.pp-row[data-value="alpha"]');
+        await page.waitFor(`!document.getElementById('milestone-slot').hidden && ${pill}?.querySelector('summary .t')?.textContent === 'Sprint 12'`, { what: 'the pill shown' });
     },
 
     'milestone pill shows the error state when glab fails': async ({ page, open }) => {

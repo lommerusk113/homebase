@@ -142,6 +142,9 @@ export function milestoneSelector(project, { signal, onChange, onData, onBusy } 
         const ms = data.selected, empty = emptyPill(data);
         pick.classList.toggle('off', !!empty);
         pick.classList.toggle('err', !!empty?.err);
+        if (pick.parentElement) {
+            pick.parentElement.hidden = data.reason === 'none' || data.reason === 'unsupported'; // no milestones: no pill, no gap in the header
+        }
         if (empty) {
             summary.replaceChildren(el('span', null, '⚑'), el('span', null, empty.text));
             summary.title = empty.tip;

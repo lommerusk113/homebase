@@ -5,12 +5,12 @@ import { $, el, api, ago } from './core.js';
 /** @param {string} n @returns {string} the problem, or '' */
 export const nameError = n => (!n ? '' : n.length > 100 ? 'At most 100 characters' : n.startsWith('.') ? "Can't start with a dot" : /^[A-Za-z0-9._-]+$/.test(n) ? '' : 'Use letters, digits, ".", "_" and "-"');
 
-const FALLBACK = { owner: 'lommerusk113', baseDir: '~/IdeaProjects/Privat', private: true };
+const FALLBACK = { owner: '', baseDir: '~/Projects', private: true };
 let clone = (/** @type {string} */ _name) => {}, cfg = FALLBACK, busy = false, repos = null; // repos: the owner's GitHub list once loaded, an Error when it failed
 
 const setNote = () => {
     const n = $('np-name').value.trim() || '<name>';
-    $('np-note').textContent = `Creates github.com/${cfg.owner}/${n}, clones it to ${cfg.baseDir}/${n} and starts a Claude chat there.`;
+    $('np-note').textContent = `Creates github.com/${cfg.owner || '<you>'}/${n}, clones it to ${cfg.baseDir}/${n} and starts a Claude chat there.`;
 };
 function validate() {
     const n = $('np-name').value.trim(), err = nameError(n);

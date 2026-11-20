@@ -9,7 +9,8 @@ import { join } from 'node:path';
 
 const run = promisify(execFile);
 
-export const DEFAULTS = { owner: 'lommerusk113', keychainService: 'gh-personal', sshHost: 'github-personal', baseDir: '~/IdeaProjects/Privat', private: true };
+// owner '' = the login of gh's own account; keychainService '' = no keychain token, gh runs as it is signed in; sshHost github.com = no alias.
+export const DEFAULTS = { owner: '', keychainService: '', sshHost: 'github.com', baseDir: '~/Projects', private: true };
 const CONFIG_FILE = () => join(process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase'), 'config.json');
 const SAFE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/; // owner, service and host end up in argv and an ssh URL
 export const TOKEN_TTL_MS = 600_000;
@@ -27,7 +28,7 @@ export function mergeConfig(file) {
         if (given[k] === undefined) {
             continue;
         }
-        if (typeof given[k] !== typeof DEFAULTS[k] || (k !== 'baseDir' && typeof given[k] === 'string' && !SAFE.test(given[k]))) {
+        if (typeof given[k] !== typeof DEFAULTS[k] || (k !== 'baseDir' && given[k] !== '' && typeof given[k] === 'string' && !SAFE.test(given[k]))) {
             throw Object.assign(new Error(`config.json: newProject.${k} is not valid`), { status: 500 });
         }
         c[k] = given[k];
@@ -70,7 +71,8 @@ function forgeConfig() {
 export function accountOf(repo, cfg = forgeConfig()) {
 
     const owner = repo?.path?.split('/')[0]?.toLowerCase();
-    const personal = cfg && !/gitlab/.test(repo.host) && (repo.host === cfg.sshHost || (owner && owner === cfg.owner.toLowerCase()));
+    const personal = cfg?.keychainService && !/gitlab/.test(repo.host)
+        && ((repo.host === cfg.sshHost && cfg.sshHost !== 'github.com') || (owner && owner === cfg.owner.toLowerCase()));
 
     return personal ? 'personal' : 'work';
 }
@@ -103,6 +105,42 @@ export function readToken(service, exec = run, ttl = TOKEN_TTL_MS) {
     return pending;
 }
 
+// The keychain token for a config, or null when it names no keychain item (gh then runs as it is signed in).
+export const tokenFor = (cfg, exec = run, ttl = 0) => (cfg.keychainService ? readToken(cfg.keychainService, exec, ttl) : Promise.resolve(null));
+
+// process.env, with the token as GH_TOKEN (and no GITHUB_TOKEN) when there is one.
+export function ghEnv(token) {
+
+    if (!token) {
+        return process.env;
+    }
+    const env = { ...process.env, GH_TOKEN: token };
+    delete env.GITHUB_TOKEN;
+
+    return env;
+}
+
+// The GitHub owner: the configured one, else the login gh is signed in as (cached once found).
+let detected = null;
+export async function resolveOwner(cfg, exec = run) {
+
+    if (cfg.owner) {
+        return cfg.owner;
+    }
+    if (!detected) {
+        const token = await tokenFor(cfg, exec).catch(() => null);
+        try {
+            detected = (await exec('gh', ['api', 'user', '--jq', '.login'], { env: ghEnv(token), timeout: KEYCHAIN_TIMEOUT_MS })).stdout.trim();
+        } catch {}
+    }
+    if (!SAFE.test(detected ?? '')) {
+        detected = null;
+        throw Object.assign(new Error('Could not find your GitHub login: run `gh auth login` or set newProject.owner in config.json'), { status: 502 });
+    }
+
+    return detected;
+}
+
 export const scrub = (s, token) => (token ? String(s).split(token).join('[token]') : String(s));
 
 // Runs gh for a repo as its account and returns { stdout }. A personal repo gets GH_TOKEN and no GITHUB_TOKEN; when the
@@ -123,10 +161,8 @@ export async function ghRun(repo, args, opts = {}, exec = run) {
         if (!token) {
             return await exec('gh', args, opts);
         }
-        const env = { ...process.env, GH_TOKEN: token };
-        delete env.GITHUB_TOKEN;
 
-        return await exec('gh', args, { ...opts, env });
+        return await exec('gh', args, { ...opts, env: ghEnv(token) });
     } catch (e) {
         for (const k of ['message', 'stderr', 'stdout', 'cmd']) {
             if (typeof e[k] === 'string') {

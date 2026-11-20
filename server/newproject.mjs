@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { ROOT } from './transcripts.mjs';
 import { tmux, sleep, claudeLine } from './tmux.mjs';
 import { trustNewProject } from './startup.mjs';
-import { DEFAULTS, mergeConfig, loadConfig, readToken, scrub as scrubToken } from './account.mjs';
+import { DEFAULTS, mergeConfig, loadConfig, tokenFor, ghEnv, resolveOwner, scrub as scrubToken } from './account.mjs';
 
 export { DEFAULTS, mergeConfig, loadConfig };
 
@@ -25,7 +25,7 @@ const TIMEOUT = { gh: 60_000, git: 120_000, tmux: 10_000 };
 export const validName = n => typeof n === 'string' && NAME.test(n) && !n.startsWith('.');
 
 // The part of the config the page may know; never the keychain service.
-export const publicConfig = (c = loadConfig()) => ({ owner: c.owner, baseDir: c.baseDir.replace(homedir(), '~'), private: c.private });
+export const publicConfig = async (c = loadConfig(), exec = run) => ({ owner: await resolveOwner(c, exec).catch(() => ''), baseDir: c.baseDir.replace(homedir(), '~'), private: c.private });
 
 const transcriptDir = dir => join(ROOT, dir.replace(/[^A-Za-z0-9]/g, '-'));
 const listTranscripts = dir => readdir(transcriptDir(dir)).then(fs => fs.filter(f => f.endsWith('.jsonl')), () => []);
@@ -81,7 +81,8 @@ export async function createProject(body, deps = {}) {
         throw bad(`Description is longer than ${DESC_MAX} characters`);
     }
 
-    const { owner, sshHost, keychainService } = config;
+    const { sshHost } = config;
+    const owner = await resolveOwner(config, exec);
     const dir = join(config.baseDir, name), repo = `${owner}/${name}`;
     if (exists(dir)) {
         throw bad(`${dir} already exists`);
@@ -107,14 +108,13 @@ export async function createProject(body, deps = {}) {
     try {
         // a. token, in memory only
         try {
-            token = await readToken(keychainService, exec, 0);
+            token = await tokenFor(config, exec);
         } catch (e) {
             throw fail(0, e);
         }
 
         // b. nothing else happens if this fails
-        const env = { ...process.env, GH_TOKEN: token };
-        delete env.GITHUB_TOKEN;
+        const env = ghEnv(token);
         const visibility = (body.private ?? config.private) ? '--private' : '--public';
         const args = ['repo', 'create', repo, visibility, ...(description ? ['--description', description] : []), '--add-readme'];
         try {
@@ -137,24 +137,24 @@ const fresh = new Map(); // owner -> { at, repos }
 export async function listRepos(deps = {}) {
 
     const { config = loadConfig(), exec = run, ttl = LIST_TTL_MS } = deps;
-    const hit = fresh.get(config.owner);
+    const owner = await resolveOwner(config, exec);
+    const hit = fresh.get(owner);
     if (ttl && hit && Date.now() - hit.at < ttl) {
         return hit.repos;
     }
 
     let token = null, repos;
     try {
-        token = await readToken(config.keychainService, exec, 0);
-        const env = { ...process.env, GH_TOKEN: token };
-        delete env.GITHUB_TOKEN;
-        const { stdout } = await exec('gh', ['repo', 'list', config.owner, '--limit', '200', '--json', 'name,description,isPrivate,updatedAt,isArchived'], { env, timeout: TIMEOUT.gh });
+        token = await tokenFor(config, exec);
+        const env = ghEnv(token);
+        const { stdout } = await exec('gh', ['repo', 'list', owner, '--limit', '200', '--json', 'name,description,isPrivate,updatedAt,isArchived'], { env, timeout: TIMEOUT.gh });
         repos = JSON.parse(stdout).filter(r => !r.isArchived && validName(r.name)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
             .map(({ name, description, isPrivate, updatedAt }) => ({ name, description: description ?? '', isPrivate, updatedAt }));
     } catch (e) {
         const detail = scrubToken(e?.stderr?.trim() || (e?.killed ? 'timed out' : e?.message) || 'failed', token);
         throw Object.assign(new Error(`Could not list repos: ${detail}`), { status: 502 });
     }
-    fresh.set(config.owner, { at: Date.now(), repos });
+    fresh.set(owner, { at: Date.now(), repos });
 
     return repos;
 }
@@ -179,8 +179,9 @@ export async function cloneProject(body, deps = {}) {
     if (exists(dir)) {
         throw bad(`${dir} already exists`);
     }
+    const owner = await resolveOwner(config, exec);
     if (!(await listRepos({ ...deps, config })).some(r => r.name === name)) {
-        throw bad(`${config.owner} has no repo named ${name}`, 404);
+        throw bad(`${owner} has no repo named ${name}`, 404);
     }
     if (inFlight.has(name)) {
         throw bad(`${name} is already being created`, 409);
@@ -198,7 +199,7 @@ export async function cloneProject(body, deps = {}) {
     };
 
     try {
-        return await cloneAndStart({ name, dir, repo: `${config.owner}/${name}`, sshHost: config.sshHost, steps, fail, exec, tm, nap, transcripts, waitMs, trustMs }, 0, '');
+        return await cloneAndStart({ name, dir, repo: `${owner}/${name}`, sshHost: config.sshHost, steps, fail, exec, tm, nap, transcripts, waitMs, trustMs }, 0, '');
     } finally {
         inFlight.delete(name);
     }

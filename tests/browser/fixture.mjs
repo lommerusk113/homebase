@@ -74,6 +74,7 @@ export function buildFixture(root) {
 
     // Homebase's own record (items.json): !107 is open but in no transcript and not in the forge's open list
     mkdirSync(join(root, 'homebase'), { recursive: true });
+    writeFileSync(join(root, 'homebase', 'config.json'), JSON.stringify({ newProject: { owner: 'lommerusk113', keychainService: 'gh-personal', sshHost: 'github-personal', baseDir: '~/IdeaProjects/Privat' } }));
     writeFileSync(join(root, 'homebase', 'items.json'), JSON.stringify({ alpha: { [MR(107)]: {
         title: 'Stored-only: scrolled out of every tail', issue: null, branch: 'stored-only', sessionId: IDS.master,
         firstSeen: Date.now() - 86400_000, lastSeen: Date.now() - 3600_000, state: 'open', mergedAt: null,

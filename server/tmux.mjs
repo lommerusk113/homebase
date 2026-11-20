@@ -14,8 +14,8 @@ export const tmux = args => run('tmux', tmuxArgs(args));
 export const RULES_FILE = fileURLToPath(new URL('../homebase-rules.md', import.meta.url));
 export const claudeLine = (extra = '', rules = RULES_FILE) => `claude${existsSync(rules) ? ` --append-system-prompt-file '${rules.replace(/'/g, `'\\''`)}'` : ''}${extra}`;
 
-// ponytail: login+interactive zsh so PATH matches your terminal; id is validated, cwd is passed as its own arg
-const claudeCmd = id => ['/bin/zsh', '-lic', claudeLine(` --resume ${id}`)];
+// ponytail: login+interactive shell (your $SHELL; zsh and bash both take -lic) so PATH matches your terminal; id is validated, cwd is passed as its own arg
+const claudeCmd = id => [process.env.SHELL || '/bin/zsh', '-lic', claudeLine(` --resume ${id}`)];
 
 // tmux keeps Claude running between messages; `tmux attach -t cc-<id8>` reaches it from any terminal.
 export const tmuxName = id => `cc-${id.slice(0, 8)}`;

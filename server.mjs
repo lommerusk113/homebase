@@ -193,7 +193,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return json(await githubProjects());
             }
             if (url.pathname === '/api/projects/config') {
-                return json(publicConfig());
+                return json(await publicConfig());
             }
             // GET: { refreshing, lastRefreshedAt }; POST refreshes first and answers once the refetch is done
             if (url.pathname === '/api/refresh' && (req.method === 'GET' || req.headers['x-codetool'] === '1')) {

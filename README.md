@@ -2,6 +2,12 @@
 
 A local dashboard over your Claude Code sessions.
 
+## Requirements
+
+* macOS (the keychain and `/usr/bin` tools are macOS ones), Node.js.
+* `tmux`, and the `claude` CLI on the PATH of your login shell (`$SHELL -lic`).
+* Optional: `gh` and `glab`, signed in, for GitHub PRs and GitLab MRs.
+
 ```sh
 node server.mjs          # http://localhost:4321 (set PORT to change)
 ```
@@ -18,16 +24,16 @@ A chat waiting on you (an AskUserQuestion or a tool permission prompt) shows as 
 Claude Code writes an AskUserQuestion to the transcript only once it is answered when the same message also started background agents, so Homebase also reads a marker that `hooks/asking.mjs` keeps in `~/.claude/homebase/asking/<session>.json` (`HOMEBASE_DIR` moves it).
 
 Every Claude that Homebase starts or resumes gets `homebase-rules.md` appended to its system prompt (`--append-system-prompt-file`): how replies, subagents and questions fit Homebase. Edit it to change how all Homebase chats behave; chats already running pick it up when restarted.
-Install it in `~/.claude/settings.json` (merge into any `hooks` you already have):
+Install it in `~/.claude/settings.json`, with `<homebase-dir>` as the absolute path of this checkout (merge into any `hooks` you already have):
 
 ```json
 {
   "hooks": {
-    "PreToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "node /Users/bruinen/IdeaProjects/Privat/codetool/hooks/asking.mjs" }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node /Users/bruinen/IdeaProjects/Privat/codetool/hooks/asking.mjs", "async": true }] }],
-    "Notification": [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "node /Users/bruinen/IdeaProjects/Privat/codetool/hooks/asking.mjs" }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node /Users/bruinen/IdeaProjects/Privat/codetool/hooks/asking.mjs" }] }],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "node /Users/bruinen/IdeaProjects/Privat/codetool/hooks/asking.mjs" }] }]
+    "PreToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs" }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs", "async": true }] }],
+    "Notification": [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs" }] }]
   }
 }
 ```
@@ -37,23 +43,23 @@ The hook never blocks or changes anything in Claude Code and prints nothing. Wit
 
 ## New project
 
-The ☰ dialog's "New project…" button asks for a name, creates a GitHub repo for your personal account, clones it, starts a Claude chat in tmux (`cc-new-<name>`) and adds the project to your board.
-It needs a fine-grained token in the macOS keychain (`security add-generic-password -s gh-personal -a "$USER" -w`) that may create repositories.
-The token is read when you press Create, kept in memory, handed only to `gh` as `GH_TOKEN` (with `GITHUB_TOKEN` removed), and scrubbed from any error shown.
+The ☰ dialog's "New project…" button asks for a name, creates a GitHub repo for your account, clones it, starts a Claude chat in tmux (`cc-new-<name>`) and adds the project to your board.
+It runs `gh` as you are signed in (`gh auth login`); to use a separate token instead, put it in the macOS keychain (`security add-generic-password -s <service> -a "$USER" -w`, a fine-grained token that may create repositories) and name the item as `keychainService` below.
+A keychain token is read when you press Create, kept in memory, handed only to `gh` as `GH_TOKEN` (with `GITHUB_TOKEN` removed), and scrubbed from any error shown.
 Claude Code's workspace trust dialog for the new folder is answered "Yes" for you, but only when the dialog names exactly the folder Homebase just cloned; nothing else is ever auto-answered.
 Any other blocking startup dialog in a `cc-*` tmux session shows in the chat with its options as buttons (and the `tmux attach` hint); clicking one selects it in the terminal, and the message box refuses to send while it is up.
 If creating the repo fails nothing else happens; if cloning or starting the chat fails, the error says what already exists.
 
-The defaults can be overridden in `~/.claude/homebase/config.json` (`HOMEBASE_DIR` moves it). The file is optional and Homebase never writes it:
+The defaults can be overridden in `~/.claude/homebase/config.json` (`HOMEBASE_DIR` moves it). The file is optional, lives outside the repo and Homebase never writes it:
 
 ```json
-{ "newProject": { "owner": "lommerusk113", "keychainService": "gh-personal", "sshHost": "github-personal", "baseDir": "~/IdeaProjects/Privat", "private": true } }
+{ "newProject": { "owner": "my-github-login", "keychainService": "gh-personal", "sshHost": "github-personal", "baseDir": "~/code", "private": true } }
 ```
 
-* `owner`: the GitHub account the repo is created under.
-* `keychainService`: the keychain item that holds the token.
-* `sshHost`: the SSH host alias used to clone (`git@<sshHost>:<owner>/<name>.git`).
-* `baseDir`: where the clone goes (`~` is expanded).
+* `owner`: the GitHub account the repo is created under (default: the login from `gh api user`).
+* `keychainService`: the keychain item that holds a token for it (default: none, `gh` uses its own login). Repos of `owner`, or cloned via `sshHost`, then use that token for every `gh` call; all other repos use your normal `gh` login.
+* `sshHost`: the SSH host alias used to clone (`git@<sshHost>:<owner>/<name>.git`; default `github.com`).
+* `baseDir`: where the clone goes (`~` is expanded; default `~/Projects`).
 * `private`: the default of the "Private" switch.
 
 Only the keys you give are overridden.

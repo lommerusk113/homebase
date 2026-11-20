@@ -1845,15 +1845,28 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
     }
 
     // config merging
-    assert.deepEqual(mergeConfig(undefined), { ...NEW_PROJECT_DEFAULTS, baseDir: `${homedir()}/IdeaProjects/Privat` });
+    assert.deepEqual(mergeConfig(undefined), { ...NEW_PROJECT_DEFAULTS, baseDir: `${homedir()}/Projects` });
+    assert.deepEqual([NEW_PROJECT_DEFAULTS.owner, NEW_PROJECT_DEFAULTS.keychainService, NEW_PROJECT_DEFAULTS.sshHost], ['', '', 'github.com']);
     const merged = mergeConfig({ newProject: { owner: 'someone', private: false, baseDir: '/tmp/x' } });
-    assert.deepEqual([merged.owner, merged.private, merged.baseDir, merged.sshHost], ['someone', false, '/tmp/x', 'github-personal']);
+    assert.deepEqual([merged.owner, merged.private, merged.baseDir, merged.sshHost], ['someone', false, '/tmp/x', 'github.com']);
     assert.throws(() => mergeConfig({ newProject: { owner: '-oProxyCommand=x' } }), /newProject.owner/);
     assert.throws(() => mergeConfig({ newProject: { private: 'yes' } }), /newProject.private/);
 
+    // defaults: no keychain, owner detected from gh, nobody is "personal"
+    {
+        const { resolveOwner, tokenFor, accountOf } = await import('./server/account.mjs');
+        const d = mergeConfig(undefined), seen = [];
+        assert.equal(await tokenFor(d), null);
+        assert.equal(await resolveOwner(d, async (f, args) => (seen.push([f, ...args]), { stdout: 'octo\n' })), 'octo');
+        assert.deepEqual(seen, [['gh', 'api', 'user', '--jq', '.login']]);
+        assert.equal(await resolveOwner({ owner: 'me' }, async () => assert.fail('configured owner needs no gh')), 'me');
+        assert.equal(accountOf({ host: 'github.com', path: 'octo/x' }, d), 'work');
+    }
+
     // the step runner, with every command stubbed: no keychain, gh, git or tmux is ever touched
     const TOKEN = 'ghp_SECRET_TOKEN_123';
-    const config = mergeConfig({ newProject: { baseDir: '/base' } });
+    const PERSONAL = { owner: 'lommerusk113', keychainService: 'gh-personal', sshHost: 'github-personal' };
+    const config = mergeConfig({ newProject: { ...PERSONAL, baseDir: '/base' } });
     const fake = ({ pane = '', failOn, leak } = {}) => {
         const calls = [];
         const exec = async (file, args, opts = {}) => {
@@ -1982,10 +1995,15 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
 }
 
 {
-    const { accountOf, readToken, ghRun, signedIn, me, repoOfUrl, sameRepo, workItems, NEW_PROJECT_DEFAULTS: cfg } = await import('./server.mjs');
+    const { accountOf, readToken, ghRun, signedIn, me, repoOfUrl, sameRepo, workItems, mergeConfig } = await import('./server.mjs');
+    const personalCfg = { newProject: { owner: 'lommerusk113', keychainService: 'gh-personal', sshHost: 'github-personal' } };
+    const cfg = mergeConfig(personalCfg);
     const { mkdtempSync, writeFileSync, readFileSync, rmSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     const { join } = await import('node:path');
+    const hbDir = mkdtempSync(join(tmpdir(), 'hb-cfg-'));
+    writeFileSync(join(hbDir, 'config.json'), JSON.stringify(personalCfg));
+    process.env.HOMEBASE_DIR = hbDir; // ghRun reads the config file
     const TOKEN = 'ghp_PERSONAL_SECRET_456';
 
     // token selection: the alias host or the configured owner is personal; everything else, GitLab included, stays work

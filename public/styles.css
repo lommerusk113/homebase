@@ -233,6 +233,7 @@ a.chip:hover { text-decoration:underline; }
 /* Claude's replies are cards: a topic pill and the time, the TLDR as the body, the rest under a dashed line */
 .bubble.assistant { position:relative; align-self:stretch; max-width:none; background:var(--bg); border:1px solid var(--line-soft); border-radius:var(--r-m); padding:10px 14px 8px; }
 .bubble.assistant:hover { border-color:var(--line); }
+.bubble .c-panel { margin:0; white-space:pre; overflow-x:auto; line-height:1.4; }
 .bubble.user { align-self:flex-end; max-width:85%; background:var(--accent-bg); border-radius:var(--r-m) var(--r-m) var(--r-xs) var(--r-m); }
 .bubble.interrupted { border-left:3px solid var(--c-interrupted); background:color-mix(in srgb, var(--c-interrupted) 7%, var(--bg)); }
 .bubble .body.fold { max-height:9.6em; overflow:hidden; -webkit-mask-image:linear-gradient(#000 60%, transparent); mask-image:linear-gradient(#000 60%, transparent); }

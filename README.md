@@ -52,6 +52,7 @@ It runs `gh` as you are signed in (`gh auth login`); to use a separate token ins
 A keychain token is read when you press Create, kept in memory, handed only to `gh` as `GH_TOKEN` (with `GITHUB_TOKEN` removed), and scrubbed from any error shown.
 Claude Code's workspace trust dialog for the new folder is answered "Yes" for you, but only when the dialog names exactly the folder Homebase just cloned; nothing else is ever auto-answered.
 Any other blocking startup dialog in a `cc-*` tmux session shows in the chat with its options as buttons (and the `tmux attach` hint); clicking one selects it in the terminal, and the message box refuses to send while it is up.
+A slash command typed in the chat that opens a Claude Code panel (`/usage`, `/status`, `/config`, `/help`, `/model` with no argument…) has its panel read and closed with Esc, and the panel's text shows under the command; a picker's choice is made in the terminal or by typing the command with its argument. What a command prints (`/context`, `/model opus`) shows the same way. `/exit`, `/quit`, `/login` and `/logout` are refused, and a panel Esc won't close refuses sends until you close it (Stop, or the terminal).
 If creating the repo fails nothing else happens; if cloning or starting the chat fails, the error says what already exists.
 
 To chat in a project that is already on disk, use "Open existing folder…" in the ☰ dialog (or "Open" on an already cloned repo under "From my GitHub").

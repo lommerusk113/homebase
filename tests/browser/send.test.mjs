@@ -241,5 +241,30 @@ export default {
         await page.waitFor(`document.querySelector('#feed .bubble.user:last-of-type')?.textContent.includes('row 11')`, { what: 'the full text in the bubble' });
         const send = page.posts.find(p => p.url.includes(`/api/send?id=${IDS.master}`));
         assert.equal(send.body, 'look: ' + Array.from({ length: 12 }, (_, i) => `row ${i}`).join('\n'));
+    },
+
+    'a slash command\'s panel shows under it as a monospace reply labelled with the command, and a picker says to pick in the terminal': async ({ page, open, answerPosts }) => {
+        await open();
+        await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
+        const panels = {
+            '/usage': { text: 'Session\n\nTotal cost:            $1.00\n  claude-opus-5-5:  1k input', pick: false },
+            '/model': { text: 'Select model\n  1.  Opus\n❯ 2.  Fable ✔', pick: true }
+        };
+        page.route = q => (q.method === 'POST' && q.url.includes('/api/send') ? { body: JSON.stringify({ ...panels[q.postData], warning: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        const panel = cmd => `[...document.querySelectorAll('#feed .bubble.command')].find(b => b.querySelector('.b-topic-name').textContent === ${JSON.stringify(cmd)})`;
+        for (const cmd of Object.keys(panels)) {
+            await page.click('#msg');
+            await page.type(cmd);
+            await page.key('Enter');
+            await page.waitFor(`${panel(cmd)}`, { what: `the ${cmd} panel` });
+        }
+        const usage = await page.ev(`(() => { const b = ${panel('/usage')}, pre = b.querySelector('pre'); return { text: pre.textContent, ws: getComputedStyle(pre).whiteSpace, font: getComputedStyle(pre).fontFamily, note: b.querySelector('.b-note')?.textContent ?? null, after: b.previousElementSibling.textContent.includes('/usage') }; })()`);
+        assert.deepEqual({ ...usage, font: /Mono|monospace/.test(usage.font) }, { text: panels['/usage'].text, ws: 'pre', font: true, note: null, after: true });
+        assert.equal(await page.ev(`${panel('/model')}.querySelector('.b-note').textContent`), 'Pick this in the terminal, or type the command with its argument (e.g. /model opus)');
+        await page.ev(`(() => { const now = Date.now; Date.now = () => now() + 31_000; })()`); // past OUTBOX_TTL_MS
+        await page.click('#msg');
+        await page.type('x');
+        await new Promise(r => setTimeout(r, 1500));
+        assert.ok(!(await page.ev(`document.getElementById('feed').textContent.includes('Not confirmed')`)), 'a command is never "not confirmed": it has no transcript line');
     }
 };

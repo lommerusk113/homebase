@@ -162,7 +162,10 @@ interface AttentionEvent { kind: 'needs-you' | 'ready' | 'finished' | 'failing' 
 interface Answer { text: string; at?: string; queued?: boolean; sending?: boolean; error?: string; unconfirmed?: boolean }
 
 interface ChatItem {
-    role: 'user' | 'assistant' | 'tools' | 'error' | 'compact';
+    role: 'user' | 'assistant' | 'tools' | 'error' | 'compact' | 'command';
+    /** a 'command' item (client-only): the slash command whose panel or output `text` is, and what to do next */
+    cmd?: string;
+    hint?: string;
     text: string;
     at?: string;
     topic?: string | null;
@@ -203,6 +206,8 @@ interface OutboxItem extends ChatItem {
     refused?: boolean;
     /** sent, but the transcript still doesn't show it OUTBOX_TTL_MS later */
     unconfirmed?: boolean;
+    /** a slash command's panel or output (control.mjs settleCommand); pick: a picker closed unanswered; stuck: Esc didn't close it */
+    result?: { text: string; pick?: boolean; stuck?: string; warning?: string | null };
 }
 
 interface Transcript {

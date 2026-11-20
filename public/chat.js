@@ -287,6 +287,17 @@ function bubble(i, sid, prevTopic, look = {}) {
     if (i.role === 'compact') {
         return el('div', 'tools compact', i.text);
     }
+    if (i.role === 'command') { // a slash command's panel or output, as the terminal drew it
+        const b = el('div', 'bubble assistant command');
+        const head = el('div', 'b-topic');
+        head.append(el('span', 'b-topic-name', i.cmd));
+        b.append(head, el('pre', 'c-panel mono', i.text));
+        if (i.hint) {
+            b.append(el('div', 'b-note', i.hint));
+        }
+        b.dataset.key = `${sid}:${i.at}:${i.cmd}`;
+        return b;
+    }
     // only the newest reply can be waiting on the user: an older one reads as a plain card
     const needs = i.role === 'assistant' && i.needsYou && !i.error && !!look.latest;
     const kind = i.role !== 'assistant' || i.error ? '' : needs ? ' needs' : ` fyi${look.latest ? ' latest' : ''}`;
@@ -778,8 +789,9 @@ function feedItems(s, data) {
     const landed = /** @param {OutboxItem} o */ o => data.items.some(i => (i.role === 'user' && sameSend(i.text, i.at, o))
         || (i.answer && sameSend(i.answer.text, i.answer.at, o)));
     state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !landed(o));
+    // a slash command never shows in the transcript as the user's: once sent it stays, with its result
     for (const o of state.outbox) {
-        o.unconfirmed ||= o.sid === s.id && Date.now() - o.okAt > OUTBOX_TTL_MS;
+        o.unconfirmed ||= o.sid === s.id && !o.text.startsWith('/') && Date.now() - o.okAt > OUTBOX_TTL_MS;
     }
 
     // a queued item whose Send now was clicked shows "sending…" until the queue entry resolves
@@ -798,7 +810,9 @@ function feedItems(s, data) {
             continue;
         }
         const i = items.findIndex(x => Date.parse(x.at) > Date.parse(o.at));
-        items.splice(i < 0 ? items.length : i, 0, o);
+        const r = o.result;
+        const hint = r?.stuck ?? (r?.pick ? 'Pick this in the terminal, or type the command with its argument (e.g. /model opus)' : undefined);
+        items.splice(i < 0 ? items.length : i, 0, o, ...(r ? [{ role: /** @type {const} */ ('command'), text: r.text, cmd: o.text, at: o.at, hint }] : []));
     }
 
     // Clear view: items up to the stored cut-off stay hidden in Homebase only
@@ -1314,7 +1328,12 @@ export async function sendText(sid, text, answerTo, note) {
             throw new Error(await r.text());
         }
         out.okAt = Date.now();
-        const said = await r.text();
+        // a slash command's panel or output (control.mjs settleCommand), shown under it as a reply
+        const result = /json/.test(r.headers.get('content-type') ?? '') ? await r.json() : null;
+        if (result) {
+            out.result = result;
+        }
+        const said = result ? result.warning ?? 'ok' : await r.text();
         if ((draftSid ?? startingTarget()) === sid) {
             $('c-err').textContent = said === 'ok' ? '' : said; // sent, with a warning (running twice)
         }

@@ -2964,6 +2964,62 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     await Promise.all([send(sid, 'one', session, slow), send(sid, 'two', session, slow)]);
     assert.deepEqual(f.keys().filter(c => c[0] === 'send-keys'), [...typed('cc-dddddddd', 'one'), ...typed('cc-dddddddd', 'two')]);
     console.log('ok send');
+
+    // Slash commands: a panel (/usage, /status, /config, /help, /model…) is read, closed with Esc and shown; /exit and the like never typed
+    const { panelText, commandOutput, settleCommand } = await import('./server/control.mjs');
+    const pane = c => readFileSync(new URL(`./tests/fixtures/pane-${c}.txt`, import.meta.url), 'utf8');
+    const prompt = '────\n❯ \n────\n  ⏵⏵ auto mode on\n';
+    for (const [c, has] of [['usage', 'Total cost:'], ['status', 'Version:'], ['config', 'Auto-compact'], ['help', 'Shortcuts'], ['model', 'Select model']]) {
+        const t = panelText(pane(c));
+        assert.ok(t?.includes(has), c);
+        assert.ok(!/Esc to|▔|↓$/m.test(t), `${c}: no footer, rule or scroll marker`);
+        assert.ok(!/^\s/.test(t), `${c}: dedented`);
+    }
+    for (const p of [pane('context'), compacting, readFileSync(new URL('./tests/fixtures/dialog-switch-model-footer.txt', import.meta.url), 'utf8'), prompt, '❯ ']) {
+        assert.equal(panelText(p), null, 'no panel: the prompt, a compaction, or a question the card shows');
+    }
+    assert.match(commandOutput(pane('context'), '/context'), /^Context usage\n/);
+    assert.ok(!commandOutput(pane('context'), '/context').includes('Update installed'), 'a right-aligned notice is not output');
+    assert.equal(commandOutput(prompt, '/context'), null);
+
+    const settle = async (panes, cmd) => {
+        f = fake({ panes: () => (panes.length > 1 ? panes.shift() : panes[0]) });
+        const r = await settleCommand('cc-dddddddd', cmd, { tm: f.opts().tm, nap: async () => {} });
+        return { r, esc: f.keys().filter(k => k.at(-1) === 'Escape').length };
+    };
+    let s = await settle([`────\n❯ /usage\n────\n`, pane('usage'), pane('usage'), pane('usage'), prompt], '/usage');
+    assert.match(s.r.text, /^Settings {2}Status/);
+    assert.equal(s.r.pick, false);
+    assert.equal(s.esc, 1, 'one Esc closes it');
+    s = await settle([pane('config'), pane('config'), pane('config'), pane('config'), prompt], '/config');
+    assert.equal(s.esc, 2, 'Esc again while it stays open (the first leaves its search box)');
+    assert.equal(s.r.pick, true, 'a picker: pick in the terminal');
+    s = await settle([pane('help')], '/help');
+    assert.match(s.r.stuck, /Esc didn't close/);
+    assert.equal(s.esc, 3, 'gives up after three');
+    s = await settle([pane('context')], '/context');
+    assert.deepEqual([s.r.text.split('\n')[0], s.esc], ['Context usage', 0], 'printed under the prompt: that output, nothing pressed');
+    s = await settle([`❯ /context\n  · Imagining… (2s)\n${prompt}`, pane('context')], '/context');
+    assert.equal(s.r.text.split('\n')[0], 'Context usage', 'its spinner first: waits for the output');
+    s = await settle([compacting], '/compact');
+    assert.deepEqual(s, { r: null, esc: 0 }, 'busy (compacting): nothing pressed');
+
+    // a panel left open (by an earlier send or in the terminal) is closed before typing; one that won't close refuses the send
+    f = fake({ panes: calls => (calls.some(c => c.at(-1) === 'Escape') ? '❯ ' : pane('usage')) });
+    await send(sid, 'hi', session, f.opts(new Map()));
+    assert.deepEqual(f.keys().slice(1), [['send-keys', '-t', '=cc-dddddddd:', 'Escape'], ...typed('cc-dddddddd', 'hi')]);
+    f = fake({ panes: () => pane('usage') });
+    const stuck = await send(sid, 'hi', session, f.opts(new Map())).catch(e => e);
+    assert.equal(stuck.status, 409);
+    assert.match(stuck.message, /panel.*Stop/);
+    assert.ok(!f.keys().some(k => k.includes('-l')), 'nothing typed into it');
+    for (const text of ['/exit', '/quit', ' /login', '/logout']) {
+        f = fake();
+        const e = await send(sid, text, session, f.opts(new Map())).catch(e => e);
+        assert.equal(e.status, 409, text);
+        assert.equal(f.calls.length, 0, `${text}: nothing touched`);
+    }
+    console.log('ok slash commands');
 }
 
 import { parseQuestion, answerQuestion } from './server.mjs';

@@ -87,6 +87,10 @@ export function sendSteps(name, text) {
     if (!clean) {
         throw new Error('empty message');
     }
+    // these would end or log out the chat's Claude
+    if (/^\/(exit|quit|login|logout)\b/i.test(clean)) {
+        throw Object.assign(new Error(`Homebase doesn't type ${clean.split(/\s/)[0]}: run it in the terminal`), { status: 409 });
+    }
 
     const enter = ['send-keys', '-t', name, 'Enter'];
     if (!clean.includes('\n')) {

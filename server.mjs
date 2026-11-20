@@ -15,7 +15,7 @@ import { log } from './server/log.mjs';
 import { MAX_SEND, withLock } from './server/tmux.mjs';
 import { createProject, cloneProject, openProject, githubProjects, localProjects, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion, confirmModelSwitch } from './server/startup.mjs';
-import { send, runningTwice, keepModelSetting, sendToNew, interrupt, clearChat, compactChat, restartChat } from './server/control.mjs';
+import { send, runningTwice, keepModelSetting, sendToNew, interrupt, clearChat, compactChat, restartChat, settleCommand } from './server/control.mjs';
 import { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
 import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedRequest, pair, deviceOf, cookieOf, deviceCookie, pairPage, newCode, pairedDevices, revoke } from './server/pairing.mjs';
 import { readConfigFile } from './server/account.mjs';
@@ -235,9 +235,24 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 } else {
                     const pick = /^\/model \w+$/.test(body.trim());
                     const restore = pick ? await keepModelSetting().catch(() => null) : null; // a pick is for this chat only
-                    // a pick also confirms Claude's "Switch model?"; a plain send never answers anything
-                    await send(url.searchParams.get('id'), body, null, { after: pick ? async name => { await confirmModelSwitch(name).catch(() => false); await restore?.(); } : null });
-                    return res.end(await runningTwice(url.searchParams.get('id')) ?? 'ok'); // sent; the text is a warning
+                    // a pick also confirms Claude's "Switch model?"; a plain send never answers anything. A slash command's
+                    // panel is read and closed (settleCommand), and comes back as JSON for the chat to show
+                    const slash = body.trim().startsWith('/');
+                    let result = null;
+                    await send(url.searchParams.get('id'), body, null, {
+                        after: pick || slash ? async name => {
+                            if (pick) {
+                                await confirmModelSwitch(name).catch(() => false);
+                                await restore?.();
+                            }
+                            result = await settleCommand(name, body.trim()).catch(() => null);
+                        } : null
+                    });
+                    const warning = await runningTwice(url.searchParams.get('id'));
+                    if (result) {
+                        return json({ ...result, warning });
+                    }
+                    return res.end(warning ?? 'ok'); // sent; the text is a warning
                 }
                 return res.end('ok');
             }

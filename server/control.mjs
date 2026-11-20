@@ -105,6 +105,9 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
         }
 
         await refuseIfTrustDialog(name, { tm });
+        if (!started) {
+            await closePanel(name, { tm, nap }); // typing into a panel left open would go nowhere
+        }
         // a dialog Esc can't decline ("Switch model?"), or asking with no question on screen to cancel: typing would land
         // in whatever dialog is up instead
         const pane = started ? '' : await capture(name, tm);
@@ -243,6 +246,101 @@ export async function clearChat(id) {
         clears.splice(clears.indexOf(c), 1);
         throw e;
     }
+}
+
+// Claude Code's input box: a ❯ or > line right under a ─ rule (a picker's ❯ selection has none). -> its line index, or -1
+const inputLine = lines => lines.findLastIndex((l, i) => i > 0 && /^[│\s]*[❯>]/.test(l) && /^\s*[╭─]─{2,}/.test(lines[i - 1]));
+
+// Lines as a chat bubble shows them: no right-edge ↓ scroll marker, no "Esc to close" footer, dedented. -> text or null
+function tidy(lines) {
+
+    const kept = lines.map(l => l.replace(/\s+[↑↓]$/, '').trimEnd()).filter(l => !/Esc to (close|cancel|go back)/.test(l));
+    const pad = Math.min(...kept.filter(l => l.trim()).map(l => l.match(/^ */)[0].length));
+
+    return kept.map(l => l.slice(pad)).join('\n').replace(/\n{3,}/g, '\n\n').trim() || null;
+}
+
+// A slash command's full-screen panel (/usage, /status, /config, /help, /model, /resume…; tests/fixtures/pane-*.txt): the
+// lines under its ▔ top rule, with no input box below and no question the card can answer ("Switch model?" has a ▔ too). -> text or null
+export function panelText(pane) {
+
+    const lines = String(pane ?? '').split('\n');
+    const top = lines.findLastIndex(l => /^\s*▔{3,}/.test(l));
+    if (top < 0 || inputLine(lines.slice(top)) >= 0 || parseQuestion(pane)) {
+        return null;
+    }
+
+    return tidy(lines.slice(top + 1));
+}
+
+// What a command printed under its echoed "❯ /cmd" (/context, /model opus…) down to the input box; a right-aligned
+// notice just above the box ("✔ Update installed") left out. -> text or null
+export function commandOutput(pane, cmd) {
+
+    const lines = String(pane ?? '').split('\n');
+    const input = inputLine(lines);
+    const echo = lines.slice(0, Math.max(input, 0)).findLastIndex(l => l.trimEnd() === `❯ ${cmd}`);
+    if (input < 0 || echo < 0) {
+        return null;
+    }
+    const out = lines.slice(echo + 1, input - 1).map(l => l.replace(/^(\s*)⎿/, '$1 '));
+    if (/^ {40}/.test(out.at(-1) ?? '')) {
+        out.pop();
+    }
+
+    return tidy(out);
+}
+
+const PANEL_STUCK = "A Claude Code panel is open in this chat and Esc didn't close it: press Stop, or close it in the terminal";
+
+// Presses Esc while a panel is open, up to three times (/config's first Esc only leaves its search box); 409 if it stays.
+async function closePanel(name, { tm = tmux, nap = sleep } = {}) {
+
+    for (let tries = 0; tries < 3; tries++) {
+        if (panelText(await capture(name, tm)) === null) {
+            return;
+        }
+        await tm(['send-keys', '-t', `=${name}:`, 'Escape']);
+        await nap(400);
+    }
+    if (panelText(await capture(name, tm)) !== null) {
+        throw conflict(PANEL_STUCK);
+    }
+}
+
+// After typing a slash command: waits (up to waitMs) for Claude's prompt or a panel. A panel's text is read, then it is
+// closed so the chat stays usable; at the prompt, what the command printed. -> { text, pick, stuck? } or null (nothing to
+// show, or still busy: a running /compact never gets an Esc). pick: a picker (a ❯ selection) whose choice can't be made from here.
+export async function settleCommand(name, cmd, { tm = tmux, nap = sleep, waitMs = 3000 } = {}) {
+
+    for (let t = 0; t < waitMs; t += 250) {
+        await nap(250);
+        const pane = await capture(name, tm);
+        const lines = pane.split('\n');
+        const input = inputLine(lines);
+        if (panelText(pane) !== null) {
+            await nap(500); // a panel that loads (/usage) fills in
+            const text = panelText(await capture(name, tm)) ?? panelText(pane);
+            const result = { text, pick: text.includes('❯') };
+            try {
+                await closePanel(name, { tm, nap });
+            } catch (e) {
+                result.stuck = e.message;
+            }
+
+            return result;
+        }
+        if (input >= 0 && lines[input].replace(/^[│\s]*[❯>]|│\s*$/g, '').trim() !== cmd) { // submitted, not still in the box
+            const text = commandOutput(pane, cmd);
+            if (/^[·✢✳✶✻✽*] \S.*…/m.test(text ?? '')) {
+                continue; // its spinner ("· Imagining…"): /context still counting
+            }
+
+            return text ? { text, pick: false } : null;
+        }
+    }
+
+    return null;
 }
 
 // Claude's input line: a ❯ or > at the start of a (boxed) line, with no startup dialog on screen

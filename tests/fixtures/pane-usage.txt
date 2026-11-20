@@ -1,0 +1,24 @@
+
+✻ Crunched for 5s · done 11:31 PM · 2 shells still running
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+   Settings  Status   Config   Usage   Stats
+
+   Session
+
+   Total cost:            $140.84
+   Total duration (API):  3h 50m 50s
+   Total duration (wall): 7d 23h 32m
+   Total code changes:    11074 lines added, 1232 lines removed
+   Usage by model:
+        claude-opus-5-5:  120.7k input, 898.7k output, 176.0m cache read,
+   6.8m cache write ($95.41)
+       claude-haiku-5-5:  609.6k input, 73.7k output, 97.7k cache read, 44.0k
+   cache write, 3 web search ($0.1343)
+      claude-sonnet-5-5:  582 input, 164.8k output, 22.9m cache read, 1.8m
+   cache write ($8.41)
+       claude-fable-5-2:  39.0k input, 275.5k output, 40.1m cache read, 1.5m
+   cache write ($36.88)
+   Prompt cache (main):   544 requests · 97% of input tokens from cache · 12
+   misses (last 3h 21m 55s ago — likely cause: idle past the 1h TTL, 2.1m
+   tokens re-cached) · 4 expected rebuilds (compaction or tool-result
+   clearing) · warm (1h TTL, last activity 42s ago)                           ↓

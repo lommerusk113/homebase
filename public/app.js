@@ -466,14 +466,15 @@ async function pollReviews() {
     reviewsAt = Date.now();
     try {
         const r = await api('/api/reviews');
-        const list = r.ok ? await r.json() : [];
+        if (!r.ok) {
+            return; // keep showing the last list
+        }
+        const list = await r.json();
         if (JSON.stringify(list) !== JSON.stringify(state.reviews ?? [])) {
             state.reviews = list;
             renderBoard();
         }
-    } catch {
-        state.reviews = [];
-    }
+    } catch {} // keep showing the last list
 }
 
 async function pollOnce() {

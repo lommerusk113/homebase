@@ -1,0 +1,11 @@
+› Message from @general-purpose (ctrl+o to expand)
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+   Switch model?
+   Your next response will be slower and use more tokens
+
+   This conversation is cached for the current model. Switching to Fable 5.2
+   means the full history gets re-read.
+
+   ❯ 1. Yes, switch to Fable 5.2
+     2. No, go back
+

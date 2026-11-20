@@ -42,6 +42,25 @@ export default {
         assert.equal(await page.ev(`document.getElementById('msg').value`), 'my unsent draft');
     },
 
+    'Claude\'s "Switch model?" confirmation after a pick shows as a card, though the transcript asks nothing': async ({ page, open, answerPosts }) => {
+        await open();
+        await page.waitFor(`${btn}?.textContent === 'Opus ▾'`, { what: 'the Opus chip' });
+        let question = null;
+        page.route = q => (q.url.includes('/api/question') && q.method !== 'POST'
+            ? { body: JSON.stringify({ question }), headers: { 'content-type': 'application/json' } }
+            : (q.url.includes('/api/question') && (question = null), answerPosts(q)));
+        await page.click('#c-model-btn');
+        await page.clickOn(`document.querySelector('#c-model wa-dropdown-item[value="sonnet"]')`);
+        question = { question: 'Switching to Sonnet means the full history gets re-read.', options: ['Yes, switch to Sonnet', 'No, go back'], descriptions: ['', ''], selected: 0 };
+        const opts = `[...document.querySelectorAll('#ask-opts wa-button')]`;
+        await page.waitFor(`!document.getElementById('ask').hidden && ${opts}.length === 2`, { what: 'the card with the two options, no Chat about this' });
+        assert.equal(await page.ev(`document.getElementById('ask-q').textContent`), question.question);
+        await page.ev(`${opts}[0].click()`);
+        await page.waitFor(`document.getElementById('ask').hidden`, { what: 'the card gone once answered' });
+        const u = new URL(page.posts.find(p => p.url.includes('/api/question')).url);
+        assert.deepEqual([u.searchParams.get('option'), u.searchParams.get('label')], ['0', 'Yes, switch to Sonnet']);
+    },
+
     'the model chip is disabled while Claude asks, since /model would decline the question': async ({ page, open, IDS }) => {
         await open({ project: 'beta', chat: IDS.asker });
         await page.waitFor(`!document.getElementById('ask').hidden && !document.getElementById('c-model').hidden`, { what: 'the ask card and the chip' });

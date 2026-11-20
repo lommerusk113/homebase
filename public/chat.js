@@ -643,6 +643,10 @@ const CHAT = /^chat about this$/i; // declines the question as "the user wants t
 const GRANT = /^yes, .*(?:don't ask again|auto mode|accept edits)/i; // a permission option that also approves what comes later
 let askKey = null;
 let answeredAsk = null; // data.asking of the question last answered on the pane, until the transcript stops asking it
+// The chat whose pane may show a dialog its transcript doesn't ask (Claude's "Switch model?" after a /model pick): set by
+// a pick and by a send refused for it, so the card shows it; cleared once the pane shows none.
+/** @type {string | null} */
+let paneCheck = null;
 
 // The "Claude is asking" card. The question on the tmux pane gets buttons (the server moves the ❯ there and confirms,
 // one question at a time); descriptions come from the transcript, else the pane. Not in tmux: the transcript's questions, read-only.
@@ -652,12 +656,16 @@ async function showAsk(s, data) {
     state.asking = data.asking;
     $('c-model-btn').toggleAttribute('disabled', !!data.asking); // /model goes through send, whose Esc would decline the question
     updateTitle();
-    if (!data.asking) {
-        setFormatWarn('pane', false);
+    const hide = () => {
         $('ask').hidden = true;
         askKey = null;
+    };
+    if (!data.asking) {
+        setFormatWarn('pane', false);
         answeredAsk = null;
-        return;
+        if (paneCheck !== s.id) {
+            return hide();
+        }
     }
 
     const tmux = s.tmux ?? `cc-${s.id.slice(0, 8)}`;
@@ -667,6 +675,10 @@ async function showAsk(s, data) {
         const r = await api(`/api/question?tmux=${encodeURIComponent(tmux)}`);
         pane = r.ok ? (await r.json()).question : null;
     } catch {}
+    if (!data.asking && !pane) {
+        paneCheck = pickedModel?.sid === s.id ? paneCheck : null; // a pending pick: its dialog may still be drawing
+        return hide();
+    }
     setFormatWarn('pane', !pane && data.asking !== answeredAsk); // the transcript asks but the screen shows no question we can parse
     const key = JSON.stringify([tmux, data.questions, data.asking, pane && [pane.question, pane.detail, pane.options, pane.descriptions]]); // not the moving ❯
     if (key === askKey) {
@@ -686,7 +698,7 @@ async function showAsk(s, data) {
         }
     };
 
-    const questions = data.questions?.length ? data.questions : [{ question: data.asking, options: [] }];
+    const questions = data.questions?.length ? data.questions : data.asking ? [{ question: data.asking, options: [] }] : [];
     if (!pane && data.asking === answeredAsk) {
         $('ask').hidden = true; // answered, the transcript just hasn't caught up: never re-show its options
         return;
@@ -700,7 +712,8 @@ async function showAsk(s, data) {
     const options = pane.options.map((label, i) => ({ i, label, desc: known?.descriptions?.[known.options.indexOf(label)] || pane.descriptions[i], primary: /\(recommended\)/i.test(label), quiet: CHAT.test(label) || GRANT.test(label) }))
         .filter(o => !TEXT_BOX.test(o.label))
         .sort((a, b) => Number(a.quiet) - Number(b.quiet)); // quiet ones last: Yes and No stay the big pair
-    if (data.questions?.length && !options.some(o => CHAT.test(o.label))) {
+    // not on a dialog that isn't the transcript's question ("Switch model?"): Esc there declines nothing
+    if (data.questions?.length && (known || /^Review your answers/.test(pane.question)) && !options.some(o => CHAT.test(o.label))) {
         options.push({ i: -1, label: 'Chat about this', desc: '', primary: false, quiet: true }); // no such entry on the pane: Esc declines instead
     }
     fillCard('ask', tmux, known?.question ?? pane.question, options, async n => {
@@ -1222,6 +1235,10 @@ export async function sendText(sid, text, answerTo, note) {
         setTimeout(refreshChat, 1000);
         return true;
     } catch (err) {
+        if (/typing can't answer/.test(err.message)) { // control.mjs NEEDS_CLICK: the card gets that dialog
+            paneCheck = sid;
+            refreshChat();
+        }
         out.error = friendly(err.message);
         if ((draftSid ?? startingTarget()) === sid) {
             $('c-err').textContent = out.error; // not on another chat switched to meanwhile
@@ -1356,6 +1373,7 @@ export function initChat() {
             return;
         }
         pickedModel = { sid: s.id, name: alias === 'default' ? 'Default' : modelName(alias) ?? alias, at: Date.now() };
+        paneCheck = s.id; // Claude may ask "Switch model?" before it switches
         showModel(s);
         try {
             const r = await api(`/api/send?id=${encodeURIComponent(s.id)}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: `/model ${alias}` });

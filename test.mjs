@@ -3018,6 +3018,15 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     assert.equal(parseQuestion('❯ 1. my typed list\n'), null, 'no hint, no review: not a question');
     assert.equal(parseQuestion(' Accessing workspace:\n\n ❯ No, exit\n   Yes, I trust this folder\n\n Enter to confirm'), null, 'not a question');
 
+    // Claude Code's "Switch model?" confirmation (a real pane, after a /model pick): numbered options and no footer at all
+    const bare = readFileSync(new URL('./tests/fixtures/dialog-switch-model.txt', import.meta.url), 'utf8');
+    assert.deepEqual(parseQuestion(bare), {
+        question: 'This conversation is cached for the current model. Switching to Fable 5.2 means the full history gets re-read.',
+        options: ['Yes, switch to Fable 5.2', 'No, go back'], descriptions: ['', ''], selected: 0
+    }, 'a dialog without a footer, its options at the bottom of the pane');
+    assert.equal(parseQuestion('reply\n────\n❯ 1. my typed list\n  2. second\n────\n  ⏵⏵ auto mode\n'), null, 'a list typed in the input box is not a dialog');
+    assert.equal(parseQuestion('reply\n\n❯ 1. my typed list\n'), null, 'one option is not a dialog');
+
     const run = async (panes, index, label, name = 'cc-new-probe') => {
         const sent = [];
         const tm = async a => (a[0] === 'capture-pane' ? { stdout: panes.length > 1 ? panes.shift() : panes[0] } : void sent.push(a));
@@ -3027,6 +3036,8 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
         return { sent, err };
     };
     assert.equal((await answerQuestion('cc-new-probe', 0, 'Red', { tm: async () => ({ stdout: '' }) }).catch(e => e)).status, 400, 'no seen: refused');
+    const moved = bare.replace('❯ 1.', '  1.').replace('  2. No', '❯ 2. No');
+    assert.deepEqual((await run([bare, moved, 'switched back'], 1, 'No, go back')).sent, [['send-keys', '-t', '=cc-new-probe:', 'Down'], ['send-keys', '-t', '=cc-new-probe:', 'Enter']], 'its options answer by click');
     let r = await run([ask(0), ask(1), 'Red'], 1, 'Red');
     assert.equal(r.err, null);
     assert.deepEqual(r.sent.map(a => a.slice(3)), [['Down'], ['Enter']]);

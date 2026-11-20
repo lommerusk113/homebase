@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { sessions } from './sessions.mjs';
 import { liveSessions } from './transcripts.mjs';
-import { refuseIfTrustDialog, cancelQuestion, parseDialog, questionOpen, capture } from './startup.mjs';
+import { refuseIfTrustDialog, cancelQuestion, parseDialog, parseQuestion, questionOpen, capture } from './startup.mjs';
 import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, ELSEWHERE, sleep, NEW_TMUX, OUR_TMUX, withLock } from './tmux.mjs';
 
 const run = promisify(execFile);
@@ -125,6 +125,7 @@ const targetOf = (id, live) => {
     return name;
 };
 const BOOT_MS = 30_000;
+export const NEEDS_CLICK = 'Claude is showing a question that typing can\'t answer: pick one of its options on the card above';
 
 // Types `text` into the session's tmux, starting one (claude --resume) when none runs. Claude Code's registry (reg) says
 // which tmux a live session is in; without a registry, a dead tmux plus a fresh transcript write means another terminal.
@@ -160,8 +161,13 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
         }
 
         await refuseIfTrustDialog(name, { tm });
-        // asking, but no question on screen to cancel: typing would land in whatever dialog is up instead
-        if (!started && session.asking && !questionOpen(await capture(name, tm))) {
+        // a dialog Esc can't decline ("Switch model?"), or asking with no question on screen to cancel: typing would land
+        // in whatever dialog is up instead
+        const pane = started ? '' : await capture(name, tm);
+        if (!started && !questionOpen(pane) && parseQuestion(pane)) {
+            throw conflict(NEEDS_CLICK);
+        }
+        if (!started && session.asking && !questionOpen(pane)) {
             throw conflict("Claude is asking something Homebase can't see: answer it in the terminal");
         }
         await cancelQuestion(name, { tm, nap });

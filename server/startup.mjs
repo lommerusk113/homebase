@@ -127,17 +127,24 @@ const OPTION = /^(?: {0,3}|\s*❯\s+)(\d+)\.\s+(.+)$/;
 // the bottom and its question is the answers summary. A tool permission prompt ("Do you want to proceed?") ends in
 // "Esc to cancel" instead: its question is the dialog's title and ask sections (╌ rules between) joined by " · ", Tips dropped,
 // and the command or diff between them its whole `detail`, `risky` when it matches RISKY; tests/fixtures/permission-*.txt
-// are real ones. │ box borders are stripped. -> { question, options, descriptions, selected, detail?, risky? } or null
+// are real ones. A dialog with no footer at all ("Switch model?" after /model, tests/fixtures/dialog-switch-model.txt) counts
+// when two or more options, nothing else, end the pane with no ─ rule around them (the input box has one). │ box borders are stripped. -> { question, options, descriptions, selected, detail?, risky? } or null
 export function parseQuestion(pane) {
 
-    const lines = String(pane ?? '').split('\n').map(l => l.replace(/^\s*│ ?|\s*│\s*$/g, '').replace(/\s+$/, ''));
+    let lines = String(pane ?? '').split('\n').map(l => l.replace(/^\s*│ ?|\s*│\s*$/g, '').replace(/\s+$/, ''));
     const hint = lines.findLastIndex(l => /enter to select/i.test(l));
     const review = lines.findLastIndex(l => /^\s*Review your answers$/.test(l));
     const esc = lines.findLastIndex(l => /^\s*Esc to cancel/.test(l));
     const footer = esc >= 0 && lines.slice(esc + 1).filter(l => l.trim()).length <= 2; // at the bottom, not quoted in the transcript
-    const end = hint >= 0 ? hint : review >= 0 ? lines.length : footer ? esc : 0;
+    const bare = hint < 0 && review < 0 && !footer;
+    if (bare) { // its options are indented: drop the ❯ line's indent
+        const pad = lines.findLast(l => /^\s*❯\s+\d+\.\s/.test(l))?.match(/^ */)[0] ?? '';
+        lines = lines.map(l => (l.startsWith(pad) ? l.slice(pad.length) : l));
+    }
+    const end = hint >= 0 ? hint : review >= 0 || bare ? lines.length : esc;
     const first = lines.slice(0, end).findLastIndex(l => OPTION.exec(l)?.[1] === '1');
-    if (first < 0) {
+    const rule = l => /^[\s─]+$/.test(l);
+    if (first < 0 || (bare && (first === 0 || rule(lines[first - 1]) || lines.slice(first).some(rule)))) {
         return null;
     }
 
@@ -156,7 +163,7 @@ export function parseQuestion(pane) {
             descriptions[options.length - 1] = `${descriptions.at(-1)}${cut ? '' : ' '}${l.trim()}`.trim();
         }
     }
-    if (selected < 0 || options.some(o => /^\[.?\]/.test(o))) {
+    if (selected < 0 || options.some(o => /^\[.?\]/.test(o)) || (bare && (options.length < 2 || descriptions.some(Boolean)))) {
         return null;
     }
 

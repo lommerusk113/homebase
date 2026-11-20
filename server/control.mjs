@@ -7,8 +7,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { sessions } from './sessions.mjs';
 import { liveSessions } from './transcripts.mjs';
-import { refuseIfTrustDialog, cancelQuestion, parseDialog, capture } from './startup.mjs';
-import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, sleep, NEW_TMUX, OUR_TMUX } from './tmux.mjs';
+import { refuseIfTrustDialog, cancelQuestion, parseDialog, questionOpen, capture } from './startup.mjs';
+import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, sleep, NEW_TMUX, OUR_TMUX, withLock } from './tmux.mjs';
 
 const run = promisify(execFile);
 
@@ -94,40 +94,54 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
 
     session ??= await resumable(id);
     const live = await reg();
-    if (live?.has(id) && !OUR_TMUX.test(live.get(id) ?? '')) {
-        throw conflict(ELSEWHERE);
-    }
+    const first = tmuxFor(id, aliases, live);
+    sendSteps(first, text); // an empty message is refused before anything is touched
 
-    let name = tmuxFor(id, aliases, live);
-    let steps = sendSteps(name, text);
+    return withLock(first, async () => {
 
-    try {
-        await tm(['has-session', '-t', `=${name}`]);
-    } catch {
-        if (live?.has(id)) {
-            throw conflict(ELSEWHERE); // running in a cc-* tmux this server can't see
+        if (live?.has(id) && !OUR_TMUX.test(live.get(id) ?? '')) {
+            throw conflict(ELSEWHERE);
         }
-        aliases.delete(id); // the aliased tmux session is gone: start one of its own
-        name = tmuxName(id);
-        steps = sendSteps(name, text);
-        if (!live) {
-            refuseIfLiveElsewhere(Date.now() - session.updated);
+
+        let name = first;
+        let started = false;
+        try {
+            await tm(['has-session', '-t', `=${name}`]);
+        } catch {
+            if (live?.has(id)) {
+                throw conflict(ELSEWHERE); // running in a cc-* tmux this server can't see
+            }
+            aliases.delete(id); // the aliased tmux session is gone: start one of its own
+            name = tmuxName(id);
+            if (!live) {
+                refuseIfLiveElsewhere(Date.now() - session.updated);
+            }
+            await tm(['new-session', '-d', ...tmuxSession(id, session.cwd)]);
+            started = true;
+            await waitForPrompt(name, { tm, nap, waitMs });
         }
-        await tm(['new-session', '-d', ...tmuxSession(id, session.cwd)]);
-        await waitForPrompt(name, { tm, nap, waitMs });
-    }
 
-    await refuseIfTrustDialog(name, { tm });
-    await cancelQuestion(name, { tm, nap });
-    await typeSteps(steps, { tm, nap });
+        await refuseIfTrustDialog(name, { tm });
+        // asking, but no question on screen to cancel: typing would land in whatever dialog is up instead
+        if (!started && session.asking && !questionOpen(await capture(name, tm))) {
+            throw conflict("Claude is asking something Homebase can't see: answer it in the terminal");
+        }
+        await cancelQuestion(name, { tm, nap });
+        await typeSteps(name, sendSteps(name, text), { tm, nap });
 
-    return name;
+        return name;
+    });
 }
 
-async function typeSteps(steps, { tm = tmux, nap = sleep } = {}) {
+// Enter goes separately, later, so Claude doesn't treat it as part of the typed/pasted text; and not into a dialog that
+// opened meanwhile (the text stays in the input box).
+async function typeSteps(name, steps, { tm = tmux, nap = sleep } = {}) {
     for (const args of steps) {
         if (args.at(-1) === 'Enter') {
-            await nap(300); // a separate, later Enter so Claude doesn't treat it as part of the typed/pasted text
+            await nap(300);
+            if (questionOpen(await capture(name, tm))) {
+                throw conflict('A question showed up while typing: check it, then send again');
+            }
         }
         await tm(args);
     }
@@ -155,15 +169,17 @@ export async function sendToNew(name, text, { tm = tmux, nap = sleep } = {}) {
     }
 
     const steps = sendSteps(name, text);
-    try {
-        await tm(['has-session', '-t', `=${name}`]);
-    } catch {
-        throw conflict(`${name} isn't running`);
-    }
+    await withLock(name, async () => {
+        try {
+            await tm(['has-session', '-t', `=${name}`]);
+        } catch {
+            throw conflict(`${name} isn't running`);
+        }
 
-    await refuseIfTrustDialog(name, { tm });
-    await cancelQuestion(name, { tm, nap });
-    await typeSteps(steps, { tm, nap });
+        await refuseIfTrustDialog(name, { tm });
+        await cancelQuestion(name, { tm, nap });
+        await typeSteps(name, steps, { tm, nap });
+    });
 }
 
 // Escape interrupts Claude's turn, so queued messages are handled right away. Only in our own tmux session.
@@ -172,13 +188,15 @@ export async function interrupt(id, { tm = tmux, reg = liveSessions } = {}) {
     await resumable(id);
     const name = tmuxFor(id, aliases, await reg());
 
-    try {
-        await tm(['has-session', '-t', `=${name}`]);
-    } catch {
-        throw conflict("Session isn't running in Homebase's tmux");
-    }
+    await withLock(name, async () => {
+        try {
+            await tm(['has-session', '-t', `=${name}`]);
+        } catch {
+            throw conflict("Session isn't running in Homebase's tmux");
+        }
 
-    await tm(['send-keys', '-t', name, 'Escape']);
+        await tm(['send-keys', '-t', name, 'Escape']);
+    });
 }
 
 // /compact needs an idle Claude: mid-turn it would queue behind the work, and while asking it would answer the question.
@@ -222,18 +240,19 @@ export async function restartChat(id, { tm = tmux, nap = sleep, waitMs = 20_000,
     refuseIfBusy(s);
     const old = tmuxFor(id, aliases, await reg());
 
-    try {
-        await tm(['has-session', '-t', `=${old}`]);
-    } catch {
-        throw conflict("Not running in Homebase's tmux");
-    }
+    return withLock(old, async () => {
+        try {
+            await tm(['has-session', '-t', `=${old}`]);
+        } catch {
+            throw conflict("Not running in Homebase's tmux");
+        }
 
-    await tm(['kill-session', '-t', `=${old}`]);
-    aliases.delete(id);
-    const name = tmuxName(id);
-    await tm(['new-session', '-d', ...tmuxSession(id, s.cwd)]);
+        await tm(['kill-session', '-t', `=${old}`]);
+        aliases.delete(id);
+        const name = tmuxName(id);
+        await tm(['new-session', '-d', ...tmuxSession(id, s.cwd)]);
+        await waitForPrompt(name, { tm, nap, waitMs });
 
-    await waitForPrompt(name, { tm, nap, waitMs });
-
-    return name;
+        return name;
+    });
 }

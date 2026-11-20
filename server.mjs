@@ -11,7 +11,7 @@ import { refreshAll, refreshInfo } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
 import { limits } from './server/limits.mjs';
 import { log } from './server/log.mjs';
-import { MAX_SEND } from './server/tmux.mjs';
+import { MAX_SEND, withLock } from './server/tmux.mjs';
 import { createProject, cloneProject, openProject, githubProjects, localProjects, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion } from './server/startup.mjs';
 import { send, sendToNew, interrupt, clearChat, compactChat, restartChat, editors, openInEditor } from './server/control.mjs';
@@ -31,7 +31,7 @@ export {
 export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones, mineView } from './server/milestones.mjs';
 export { limitsOf, peakLimits, contextOf } from './server/limits.mjs';
 export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
-export { tmuxArgs, tmuxFor, findClearedSuccessor, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
+export { tmuxArgs, tmuxFor, withLock, findClearedSuccessor, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
 export { parseDialog, parseQuestion, answerQuestion, cancelQuestion, questionOpen, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
 export { editorsFrom, openInEditor, refuseIfBusy, restartChat, promptUp, send, interrupt } from './server/control.mjs';
 export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, bindOk } from './server/security.mjs';
@@ -146,18 +146,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return json({ dialog: await startupDialog(url.searchParams.get('tmux')) });
             }
             if (isPost('/api/startup')) {
-                await answerStartup(url.searchParams.get('tmux'), Number(url.searchParams.get('option')), url.searchParams.get('label'));
+                const t = url.searchParams.get('tmux');
+                await withLock(t, () => answerStartup(t, Number(url.searchParams.get('option')), url.searchParams.get('label')));
                 return res.end('ok');
             }
             if (url.pathname === '/api/question' && req.method === 'GET') {
                 return json({ question: await paneQuestion(url.searchParams.get('tmux')) });
             }
             if (isPost('/api/question') && url.searchParams.has('dismiss')) {
-                await cancelQuestion(url.searchParams.get('tmux'));
+                const t = url.searchParams.get('tmux');
+                await withLock(t, () => cancelQuestion(t));
                 return res.end('ok');
             }
             if (isPost('/api/question')) {
-                await answerQuestion(url.searchParams.get('tmux'), Number(url.searchParams.get('option')), url.searchParams.get('label'), { seen: url.searchParams.get('seen') });
+                const t = url.searchParams.get('tmux');
+                await withLock(t, () => answerQuestion(t, Number(url.searchParams.get('option')), url.searchParams.get('label'), { seen: url.searchParams.get('seen') }));
                 return res.end('ok');
             }
             if (isPost('/api/clear')) {

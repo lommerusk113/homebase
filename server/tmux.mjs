@@ -34,6 +34,19 @@ export const tmuxFor = (id, map = aliases, reg = null) => {
     return (t && OUR_TMUX.test(t) ? t : null) ?? map.get(id)?.tmux ?? tmuxName(id);
 };
 
+// Keystrokes into one tmux session run one action at a time (send, answer, dismiss, interrupt), so two never interleave.
+// ponytail: keyed by tmux name; a send that starts a new tmux under another name holds the old name's lock
+const locks = new Map();
+export function withLock(name, fn) {
+
+    const run = (locks.get(name) ?? Promise.resolve()).then(fn);
+    const tail = run.catch(() => {});
+    locks.set(name, tail);
+    tail.then(() => locks.get(name) === tail && locks.delete(name));
+
+    return run;
+}
+
 // The newest transcript in the same cwd created after a /clear (within CLEAR_WAIT_MS): the cleared session's successor.
 // ponytail: a session started by hand in the same folder within that minute could be mistaken for it
 export function findClearedSuccessor(sessions, { from, cwd, clearedAt }) {

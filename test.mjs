@@ -2550,8 +2550,9 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
 
 // Send: stubbed tmux and registry, nothing real is touched
 {
-    const { send, tmuxFor } = await import('./server.mjs');
+    const { send, withLock, tmuxFor } = await import('./server.mjs');
     const sid = 'dddddddd-0000-4000-8000-000000000001', session = { id: sid, cwd: '/tmp', updated: 0 };
+    const q = '│ Which one?\n❯ 1. Red\n  2. Blue\nEnter to select · Esc to cancel\n';
     // tmux: live = names has-session finds; panes(calls) = what capture-pane shows
     const fake = ({ live = ['cc-dddddddd'], panes = () => '❯ ' } = {}) => {
         const calls = [];
@@ -2593,6 +2594,33 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     assert.equal((await send(sid, 'hi', session, f.opts(new Map())).catch(e => e)).status, 504);
     assert.ok(!f.calls.some(c => c[0] === 'send-keys'));
 
+    // asking, but no question on screen: fail closed; with the question up it is cancelled, then typed
+    f = fake();
+    assert.equal((await send(sid, 'hi', { ...session, asking: true }, f.opts(new Map())).catch(e => e)).status, 409);
+    assert.deepEqual(f.keys(), [['has-session', '-t', '=cc-dddddddd']]);
+    f = fake({ panes: calls => (calls.some(c => c.includes('Escape')) ? '❯ ' : q) });
+    await send(sid, 'hi', { ...session, asking: true }, f.opts(new Map()));
+    assert.deepEqual(f.keys().slice(1), [['send-keys', '-t', '=cc-dddddddd:', 'Escape'], ...typed('cc-dddddddd', 'hi')]);
+    // a question shows up between typing and Enter: no Enter
+    f = fake({ panes: calls => (calls.some(c => c.includes('-l')) ? q : '❯ ') });
+    assert.equal((await send(sid, 'hi', session, f.opts(new Map())).catch(e => e)).status, 409);
+    assert.ok(!f.calls.some(c => c.at(-1) === 'Enter'));
+
+    // one action per tmux at a time, in arrival order; a failure doesn't block the next
+    const order = [];
+    const tick = () => new Promise(r => setTimeout(r, 5));
+    await Promise.all([
+        withLock('cc-x', async () => { order.push('a1'); await tick(); order.push('a2'); }),
+        withLock('cc-x', async () => { order.push('b'); throw new Error('boom'); }).catch(() => order.push('b failed')),
+        withLock('cc-y', async () => { order.push('other'); }),
+        withLock('cc-x', async () => { order.push('c'); })
+    ]);
+    assert.deepEqual(order, ['a1', 'other', 'a2', 'b', 'b failed', 'c']);
+    // two sends at once: keystrokes never interleave
+    f = fake();
+    const slow = { ...f.opts(new Map()), nap: tick };
+    await Promise.all([send(sid, 'one', session, slow), send(sid, 'two', session, slow)]);
+    assert.deepEqual(f.keys().filter(c => c[0] === 'send-keys'), [...typed('cc-dddddddd', 'one'), ...typed('cc-dddddddd', 'two')]);
     console.log('ok send');
 }
 

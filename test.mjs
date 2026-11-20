@@ -1026,7 +1026,9 @@ assert.equal(worksOn({ title: '#22230 - Other', source_branch: 'x' }, 2223), fal
 const row = (pr, milestone) => ({ pr, milestone });
 assert.equal(inMilestone(row('u', { id: 7, title: 'S' }), { id: 7 }), true);
 assert.equal(inMilestone(row('u', { id: 8, title: 'R' }), { id: 7 }), false);
-assert.equal(inMilestone(row('u', null), { id: 7 }), false);
+assert.equal(inMilestone(row('u', null), { id: 7 }), true); // no milestone: always shown
+assert.equal(inMilestone({ ...row('u', { id: 8, title: 'R' }), column: 'needs-you' }, { id: 7 }), true);
+assert.equal(inMilestone({ ...row('u', { id: 8, title: 'R' }), column: 'ready' }, { id: 7 }), true);
 assert.equal(inMilestone(row(null, null), { id: 7 }), true); // an agent without an MR stays
 assert.equal(inMilestone(row('u', null), null), true); // no milestone selected
 

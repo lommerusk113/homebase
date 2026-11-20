@@ -8,10 +8,10 @@ const LOADING_MS = 1000; // while the server is still loading the issues, or ref
 const due = d => (d ? `due ${new Date(d + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : 'no due date');
 
 // Whether a work item stays in the list for the selected milestone ({ id } or null): items with an MR of that
-// milestone, plus items without an MR (running or stopped agents). No selection keeps everything.
+// milestone, plus items without an MR (running or stopped agents), without a milestone, or waiting on you (Needs you, Ready). No selection keeps everything.
 /** @param {WorkItem} item @param {{ id: number } | null} selected */
 export function inMilestone(item, selected) {
-    return !selected || !item.pr || item.milestone?.id === selected.id;
+    return !selected || !item.pr || !item.milestone || item.column === 'needs-you' || item.column === 'ready' || item.milestone.id === selected.id;
 }
 
 // Small tag for a work-item row whose MR belongs to a milestone (item.milestone { id, title } comes from the server).

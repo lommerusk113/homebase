@@ -31,10 +31,11 @@ Work repos have origin on GitLab; branch, push and MR rules are in CLAUDE.md.
 - One topic per reply. If two things need the user, ask the most urgent one now and the other in a later reply.
 - To a clear yes/no question, start with **Yes** or **No** in bold, then explain.
 - Lead with the result. Use the minimum words needed: no filler, no preamble, no restating the question; if 2 sentences answer it, stop at 2. Max 5 bullets per list, one line each.
-- End with one line: `**TLDR:** <what happened / what's true now>. <what the user must do>`, at most 25 words. It must make sense on its own: plain outcomes, no labels, numbers or names defined only in the body; name the MR/issue refs to act on. **Bold** 1–3 key facts, always including the user's action. For a decision, give the options and your pick. If nothing waits on the user, leave the action out (an unmerged MR or an open question does count as waiting).
+- End with one line: `**TLDR:** <what happened / what's true now>. <what the user must do>`, at most 25 words. It must make sense on its own: plain outcomes, no labels, numbers or names defined only in the body; name the MR/issue refs to act on, each with what it is about in plain words. **Bold** 1–3 key facts, always including the user's action. For a decision, give the options and your pick. If nothing waits on the user, leave the action out (an unmerged MR or an open question does count as waiting).
 - Homebase shows only the TLDR until the user opens the reply. So everything the user must act on goes in the TLDR, never only in the body.
 - Put a `**Heads-up:** <one line>` line before the TLDR for anything unpushed or unmerged, failing or flaky checks, or a needed restart or deploy.
-- While something waits on the user, end the body with `**Waiting on you:** <question> — <each option in full>`, repeated in full in every reply until it is answered. Never write "Still open: A, B or C". An optional one-line `**Running:**` names the subagents still working.
+- While something waits on the user, end the body with `**Waiting on you:** <issue in plain words> — <what led here> — <question> — <each option in full, recommended first>`, repeated in full in every reply until it is answered. Never write "Still open: A, B or C". An optional one-line `**Running:**` names the subagents still working.
+- The user has not followed the work: a reply that reports a result or asks something names the issue in plain words (ref plus what it is about), never only its number.
 - Skip caveats and disclaimers unless safety-relevant. Don't summarize what you just did after a code change (beyond the TLDR).
 - Offer elaboration instead of explaining preemptively. On a follow-up, assume the previous answer was read; don't repeat it.
 
@@ -45,6 +46,8 @@ Work repos have origin on GitLab; branch, push and MR rules are in CLAUDE.md.
 
 ## Questions
 - Ask with AskUserQuestion when the user must choose: Homebase shows each option as a button with its description under it. Prefer single-select, 2–4 options, the recommended one first with "(Recommended)" in its label.
+- Assume the user knows nothing of the issue or the decisions behind it. Every question names the issue (ref plus what it is about in one clause), says in one or two sentences what was done or decided that led here and why it comes up now, then what each option changes in practice, with your pick and why. No internal names, codenames, file or function names or labels the user was not told, unless explained in the same breath.
+- AskUserQuestion's question text carries that context too (the user may see only the dialog); option descriptions state the practical consequence.
 - Never list the choices only in the reply's body: Homebase folds the body away behind the TLDR. Put them in AskUserQuestion, or name them in the TLDR.
 - A message that starts with "Yes" and ends with "(Answering your earlier question from …)" answers that earlier question.
 - Decide non-critical questions yourself with sensible defaults and list those choices briefly in your reply. Ask only about critical ones (irreversible, costly, outward-facing, or a genuine preference), one at a time, with AskUserQuestion.

@@ -225,13 +225,16 @@ export function refuseIfBusy(s) {
     }
 }
 
+// Typed after /compact by auto-compact and the + menu alike: what the summary keeps.
+export const COMPACT_INSTRUCTIONS = "Keep it short (under 400 words): the user's open requests, decisions and preferences stated in this chat, work in progress and running helpers with what each does, open questions waiting on the user, and key file paths and commit ids. Drop finished work details, tool output and anything already in the repo or the commit history.";
+
 // Types /compact (same checks as send). Unlike /clear the session id stays, so nothing is remembered.
 export async function compactChat(id) {
 
     const s = await resumable(id);
     refuseIfBusy(s);
 
-    await send(id, '/compact', s);
+    await send(id, `/compact ${COMPACT_INSTRUCTIONS}`, s);
 }
 
 // Types /clear (same checks as send) and remembers it, so the next session list maps the new transcript to this tmux session.

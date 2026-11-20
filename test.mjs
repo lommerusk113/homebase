@@ -2197,14 +2197,16 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
     assert.deepEqual([canCompact({ status: 'idle' }), canCompact({ status: 'waiting' }), canCompact({ status: 'working' }), canCompact({ status: 'waiting', asking: true })], [true, true, false, false]);
 
     // thresholds are tokens: 150k / 200k of a 1M window, capped at 90% of a small one
-    assert.deepEqual([tokenPercent(150_000, {}), tokenPercent(200_000, {}), tokenPercent(200_000, { contextSize: 400_000 }), tokenPercent(200_000, { contextSize: 200_000 })], [15, 20, 50, 90]);
-    assert.equal(compactNudgeDue({ context: 15 }), true);
-    assert.equal(compactNudgeDue({ context: 14.9 }), false);
-    assert.equal(compactNudgeDue({ context: 37, contextSize: 400_000 }), false);
-    // auto-compact: idle for 2 min, at 200k tokens, not tried within the hour
-    const t = 10 * 3600_000, ready = { status: 'idle', context: 20, lastActivity: t - AUTO_COMPACT.idleMs };
+    assert.deepEqual([Math.round(tokenPercent(70_000, {})), tokenPercent(100_000, {}), tokenPercent(100_000, { contextSize: 200_000 }), tokenPercent(200_000, { contextSize: 200_000 })], [7, 10, 50, 90]);
+    assert.equal(compactNudgeDue({ context: 7.1 }), true);
+    assert.equal(compactNudgeDue({ context: 6.9 }), false);
+    assert.equal(compactNudgeDue({ context: 17, contextSize: 400_000 }), false);
+    // auto-compact: idle for 2 min, at 100k tokens, no helpers running, not tried within the hour
+    const t = 10 * 3600_000, ready = { status: 'idle', context: 10, lastActivity: t - AUTO_COMPACT.idleMs };
     assert.equal(autoCompactDue(ready, t, 0), true);
-    assert.equal(autoCompactDue({ ...ready, context: 19.9 }, t, 0), false, 'under the threshold');
+    assert.equal(autoCompactDue({ ...ready, context: 9.9 }, t, 0), false, 'under the threshold');
+    assert.equal(autoCompactDue({ ...ready, subagents: { running: 1, finished: 0 } }, t, 0), false, 'helpers running');
+    assert.equal(autoCompactDue({ ...ready, subagents: { running: 0, finished: 2 } }, t, 0), true, 'helpers finished');
     assert.equal(autoCompactDue({ ...ready, context: null }, t, 0), false, 'no context reading');
     assert.equal(autoCompactDue({ ...ready, lastActivity: t - AUTO_COMPACT.idleMs + 1 }, t, 0), false, 'idle under 2 min');
     assert.equal(autoCompactDue({ ...ready, lastActivity: null, updated: t - 60_000 }, t, 0), false, 'falls back to updated');

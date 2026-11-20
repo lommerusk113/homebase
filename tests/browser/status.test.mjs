@@ -36,13 +36,41 @@ export default {
             ? { body: JSON.stringify({ question }), headers: { 'content-type': 'application/json' } }
             : (q.url.includes('/api/question') && (question = null), answerPosts(q)));
         const opts = `[...document.querySelectorAll('#ask-opts wa-button')]`;
-        await page.waitFor(`${opts}.length === 2`, { what: 'the option buttons' });
-        assert.deepEqual(await page.ev(`${opts}.map(b => [b.firstChild.textContent, b.querySelector('small')?.textContent, b.getAttribute('variant')])`),
-            [['SQLite (Recommended)', 'file based', 'brand'], ['Postgres', 'from the pane', 'neutral']], 'free-form entries left out; the recommended one is primary');
+        await page.waitFor(`${opts}.length === 3`, { what: 'the option buttons' });
+        assert.deepEqual(await page.ev(`${opts}.map(b => [b.firstChild.textContent, b.querySelector('small')?.textContent, b.getAttribute('variant'), b.getAttribute('appearance')])`),
+            [['SQLite (Recommended)', 'file based', 'brand', 'accent'], ['Postgres', 'from the pane', 'neutral', 'outlined'], ['Chat about this', null, 'neutral', 'plain']],
+            'Type something left out; the recommended one is primary, Chat about this quiet and last');
         await page.ev(`${opts}[1].click()`);
         await page.waitFor(`document.getElementById('ask').hidden`, { what: 'the card gone once the pane has no question, though the transcript still asks it' });
         const u = new URL(page.posts.find(p => p.url.includes('/api/question')).url);
         assert.deepEqual([u.searchParams.get('tmux'), u.searchParams.get('option'), u.searchParams.get('label')], [`cc-${IDS.asker.slice(0, 8)}`, '1', 'Postgres']);
+    },
+
+    '"Chat about this" selects that entry on the pane and focuses the chat input': async ({ page, open, IDS, answerPosts }) => {
+        await open({ project: 'beta', chat: IDS.asker });
+        let question = { question: 'Which database should be the default?', options: ['SQLite', 'Postgres', 'Type something.', 'Chat about this'], descriptions: ['', '', '', ''], selected: 0 };
+        page.route = q => (q.url.includes('/api/question') && q.method !== 'POST'
+            ? { body: JSON.stringify({ question }), headers: { 'content-type': 'application/json' } }
+            : (q.url.includes('/api/question') && (question = null), answerPosts(q)));
+        const chat = `[...document.querySelectorAll('#ask-opts wa-button')].at(-1)`;
+        await page.waitFor(`${chat}?.firstChild.textContent === 'Chat about this'`, { what: 'the Chat about this button' });
+        await page.ev(`${chat}.click()`);
+        await page.waitFor(`document.activeElement === document.getElementById('msg')`, { what: 'the chat input focused' });
+        const u = new URL(page.posts.find(p => p.url.includes('/api/question')).url);
+        assert.deepEqual([u.searchParams.get('option'), u.searchParams.get('label')], ['3', 'Chat about this']);
+    },
+
+    '"Chat about this" declines the question when the pane has no such entry': async ({ page, open, IDS, answerPosts }) => {
+        await open({ project: 'beta', chat: IDS.asker });
+        let question = { question: 'Which database should be the default?', options: ['SQLite', 'Postgres'], descriptions: ['', ''], selected: 0 };
+        page.route = q => (q.url.includes('/api/question') && q.method !== 'POST'
+            ? { body: JSON.stringify({ question }), headers: { 'content-type': 'application/json' } }
+            : (q.url.includes('/api/question') && (question = null), answerPosts(q)));
+        const chat = `[...document.querySelectorAll('#ask-opts wa-button')].at(-1)`;
+        await page.waitFor(`${chat}?.firstChild.textContent === 'Chat about this'`, { what: 'the fallback button' });
+        await page.ev(`${chat}.click()`);
+        await page.waitFor(`document.activeElement === document.getElementById('msg')`, { what: 'the chat input focused' });
+        assert.ok(page.posts.find(p => p.url.includes('/api/question')).url.includes('dismiss=1'), 'Esc, as Decline does');
     },
 
     'the ask card shows the current question\'s options, not a previous one\'s': async ({ page, open, IDS, answerPosts }) => {
@@ -58,7 +86,7 @@ export default {
         transcript = asking('Which port?', ['4478', '8080']);
         await page.waitFor(`document.getElementById('ask-q').textContent === 'Which port?' && JSON.stringify(${opts}) === '["4478","8080"]'`, { what: 'the next question replacing them' });
         question = { question: 'Which port?', options: ['8080', '4478'], descriptions: ['', ''], selected: 0 }; // the pane, as answerable buttons
-        await page.waitFor(`JSON.stringify(${opts}) === '["8080","4478"]' && document.querySelectorAll('#ask-opts wa-button').length === 2`, { what: 'the pane\'s buttons' });
+        await page.waitFor(`JSON.stringify(${opts}) === '["8080","4478","Chat about this"]' && document.querySelectorAll('#ask-opts wa-button').length === 3`, { what: 'the pane\'s buttons' });
     },
 
     'a permission prompt gets its options as buttons, with the command as the question': async ({ page, open, IDS, answerPosts }) => {

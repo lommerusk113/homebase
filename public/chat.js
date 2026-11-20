@@ -368,7 +368,7 @@ function showHead(s) {
 
 // The ask and startup cards: the question, an option per button (its description under it) that `answer` picks, else
 // read-only rows; and the tmux command to answer in the terminal.
-/** @param {string} id @param {string} tmux @param {string} question @param {{ label: string, desc?: string, primary?: boolean }[]} options @param {((i: number) => Promise<void>) | null} answer */
+/** @param {string} id @param {string} tmux @param {string} question @param {{ label: string, desc?: string, primary?: boolean, quiet?: boolean }[]} options @param {((i: number) => Promise<void>) | null} answer */
 function fillCard(id, tmux, question, options, answer) {
 
     $(`${id}-q`).textContent = question;
@@ -386,7 +386,7 @@ function fillCard(id, tmux, question, options, answer) {
         $('announce').textContent = `Claude is asking: ${question}`;
     }
     $(`${id}-opts`).replaceChildren(...options.map((o, i) => {
-        const b = answer ? waButton(o.label, 'c-opt', { variant: o.primary ? 'brand' : 'neutral', appearance: o.primary ? 'accent' : 'outlined' }) : el('div', 'c-opt ro', o.label);
+        const b = answer ? waButton(o.label, 'c-opt', { variant: o.primary ? 'brand' : 'neutral', appearance: o.primary ? 'accent' : o.quiet ? 'plain' : 'outlined' }) : el('div', 'c-opt ro', o.label);
         if (o.desc) {
             b.append(el('small', null, o.desc));
         }
@@ -418,7 +418,8 @@ const postAnswer = async url => {
     }
 };
 
-const FREE_FORM = /^(type something\.?|chat about this)$/i; // Claude's own entries under a question: left to the terminal
+const TEXT_BOX = /^type something\.?$/i; // Claude's own text-box entry under a question: the chat input below covers it
+const CHAT = /^chat about this$/i; // declines the question as "the user wants to clarify"; Claude then asks what about
 let askKey = null;
 let answeredAsk = null; // data.asking of the question last answered on the pane, until the transcript stops asking it
 
@@ -472,12 +473,18 @@ async function showAsk(s, data) {
     }
     const flat = t => t.replace(/\s+/g, ' ').trim();
     const known = questions.find(q => flat(q.question) === pane.question);
-    const options = pane.options.map((label, i) => ({ i, label, desc: known?.descriptions?.[known.options.indexOf(label)] || pane.descriptions[i], primary: /\(recommended\)/i.test(label) }))
-        .filter(o => !FREE_FORM.test(o.label));
+    const options = pane.options.map((label, i) => ({ i, label, desc: known?.descriptions?.[known.options.indexOf(label)] || pane.descriptions[i], primary: /\(recommended\)/i.test(label), quiet: CHAT.test(label) }))
+        .filter(o => !TEXT_BOX.test(o.label));
+    if (data.questions?.length && !options.some(o => o.quiet)) {
+        options.push({ i: -1, label: 'Chat about this', desc: '', primary: false, quiet: true }); // no such entry on the pane: Esc declines instead
+    }
     fillCard('ask', tmux, known?.question ?? pane.question, options, async n => {
         try {
-            await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&option=${options[n].i}&label=${encodeURIComponent(options[n].label)}`);
+            await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&${options[n].i < 0 ? 'dismiss=1' : `option=${options[n].i}&label=${encodeURIComponent(options[n].label)}`}`);
             answeredAsk = data.asking;
+            if (options[n].quiet) {
+                $('msg').focus(); // the user's turn to say what they want instead
+            }
         } finally {
             askKey = null;
             refreshChat(); // fresh transcript: the pane shows the next question or none, and `data` still has the answered one

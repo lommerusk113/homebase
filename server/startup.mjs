@@ -110,8 +110,9 @@ export async function answerStartup(name, index, label, { tm = tmux, nap = sleep
     }
 }
 
-// Claude's own entries under an AskUserQuestion, never offered as buttons: one opens a text box, the other a chat
-const FREE_FORM = /^(type something\.?|chat about this)$/i;
+// Claude's own text-box entry under an AskUserQuestion, never answered from here (the chat input declines and types instead).
+// "Chat about this" is answerable: it declines the question as "the user wants to clarify" and Claude asks what to talk about.
+const FREE_FORM = /^type something\.?$/i;
 const OPTION = /^(?: {0,3}|\s*❯\s+)(\d+)\.\s+(.+)$/;
 
 // An AskUserQuestion on screen: the question above "1." and the numbered options down to "Enter to select", each
@@ -182,7 +183,7 @@ export async function paneQuestion(name, { tm = tmux } = {}) {
     return parseQuestion(await capture(name, tm));
 }
 
-// Picks option `index` (labelled `label`) of the AskUserQuestion on screen, never the free-form entries.
+// Picks option `index` (labelled `label`) of the AskUserQuestion on screen, never the "Type something." text box.
 export async function answerQuestion(name, index, label, { tm = tmux, nap = sleep } = {}) {
     if (FREE_FORM.test(label ?? '')) {
         throw Object.assign(new Error('Answer that one in the terminal'), { status: 400 });

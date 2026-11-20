@@ -2406,7 +2406,10 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     r = await run([ask(0)], 1, 'Blue');
     assert.equal(r.err.status, 409, 'label mismatch');
     assert.deepEqual(r.sent, []);
-    assert.equal((await run([ask(0)], 3, 'Type something.')).err.status, 400, 'free-form entries are not answered');
+    assert.equal((await run([ask(0)], 3, 'Type something.')).err.status, 400, 'the text box entry is not answered');
+    r = await run([ask(0), ask(0).replace('❯ 1.', '  1.').replace('  5. Chat', '❯ 5. Chat'), 'declined'], 4, 'Chat about this');
+    assert.equal(r.err, null, 'Chat about this is selected like an option');
+    assert.deepEqual(r.sent.map(a => a.slice(3)), [['Down', 'Down', 'Down', 'Down'], ['Enter']]);
     assert.equal((await run([ask(0)], 1, 'Red', 'zsh')).err.status, 400, 'not a cc-* session');
     r = await run([ask(0), ask(1), ask(1).replace('Which color\ndo you want?', 'Which size?')], 1, 'Red');
     assert.equal(r.err, null, 'the next question of a multi-question dialog counts as answered');

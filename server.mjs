@@ -12,7 +12,7 @@ import { milestones, warmMilestones } from './server/milestones.mjs';
 import { limits } from './server/limits.mjs';
 import { log } from './server/log.mjs';
 import { MAX_SEND } from './server/tmux.mjs';
-import { createProject, cloneProject, githubProjects, publicConfig } from './server/newproject.mjs';
+import { createProject, cloneProject, openProject, githubProjects, localProjects, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion } from './server/startup.mjs';
 import { send, sendToNew, interrupt, clearChat, compactChat, restartChat, editors, openInEditor } from './server/control.mjs';
 import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, bindOk } from './server/security.mjs';
@@ -35,7 +35,7 @@ export { tmuxArgs, tmuxFor, findClearedSuccessor, NEW_TMUX, mapNewProjects, star
 export { parseDialog, parseQuestion, answerQuestion, cancelQuestion, questionOpen, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
 export { editorsFrom, openInEditor, refuseIfBusy, restartChat, promptUp } from './server/control.mjs';
 export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, bindOk } from './server/security.mjs';
-export { validName, mergeConfig, loadConfig, createProject, cloneProject, githubProjects, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
+export { validName, mergeConfig, loadConfig, createProject, cloneProject, openProject, allowedDir, githubProjects, localProjects, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
 export { vendorPath } from './server/static.mjs';
 export { accountOf, readToken, ghRun, scrub } from './server/account.mjs';
 export { saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME } from './server/uploads.mjs';
@@ -180,17 +180,20 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 await openInEditor(url.searchParams.get('item'), url.searchParams.get('editor'));
                 return res.end('ok');
             }
-            if (isPost('/api/projects/new') || isPost('/api/projects/clone')) {
+            if (isPost('/api/projects/new') || isPost('/api/projects/clone') || isPost('/api/projects/open')) {
                 let input;
                 try {
                     input = JSON.parse(await readBody(req, 4096));
                 } catch {
                     return deny(400, 'expected a JSON body');
                 }
-                return json(await (url.pathname.endsWith('/clone') ? cloneProject : createProject)(input));
+                return json(await ({ '/api/projects/new': createProject, '/api/projects/clone': cloneProject, '/api/projects/open': openProject })[url.pathname](input));
             }
             if (url.pathname === '/api/projects/github') {
                 return json(await githubProjects());
+            }
+            if (url.pathname === '/api/projects/local') {
+                return json(await localProjects());
             }
             if (url.pathname === '/api/projects/config') {
                 return json(await publicConfig());

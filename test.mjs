@@ -1177,6 +1177,12 @@ import { NEW_TMUX, mapNewProjects, startingProjects } from './server.mjs';
     mapNewProjects(ss, [...live, { name: 'cc-bbbbbbbb', path: '/p/league' }], own);
     assert.deepEqual([...own], [['cccccccc-2', { tmux: 'cc-new-league' }]], 'a session with its own tmux is skipped');
     assert.deepEqual(startingProjects(ss, live), [{ tmux: 'cc-new-other', name: 'other', dir: '/p/other' }], 'only a cc-new tmux with no transcript in its folder is starting');
+    // Open in an existing folder: its sessions from before the tmux started are not the new chat
+    const opened = [{ name: 'cc-new-league', path: '/p/league', created: 7 }];
+    const fresh = new Map();
+    mapNewProjects(ss, opened, fresh);
+    assert.deepEqual([...fresh], [['cccccccc-2', { tmux: 'cc-new-league' }]]);
+    assert.deepEqual(startingProjects(ss, [{ ...opened[0], created: 10 }]).map(p => p.tmux), ['cc-new-league'], 'still starting while only older sessions are there');
 }
 console.log('ok new project tmux');
 
@@ -2088,6 +2094,78 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
         assert.deepEqual(t.body.steps.map(s => s.state), ['done', 'failed']);
     }
     console.log('ok new project');
+}
+
+{
+    // Open: the folder check, then only the start-chat step; real folders in a temp dir, tmux and transcripts stubbed
+    const { allowedDir, openProject, localProjects, githubProjects, mergeConfig } = await import('./server.mjs');
+    const { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, utimesSync, realpathSync, rmSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'hb-open-')));
+    const base = join(root, 'base'), outside = join(root, 'outside'), cwd = join(root, 'elsewhere', 'proj');
+    for (const d of [join(base, 'app', '.git'), join(base, 'old', '.git'), join(base, 'busy', '.git'), join(base, 'plain'), outside, cwd]) {
+        mkdirSync(d, { recursive: true });
+    }
+    writeFileSync(join(base, 'file.txt'), '');
+    symlinkSync(outside, join(base, 'escape'));
+    symlinkSync(join(base, 'app'), join(root, 'link-in'));
+    const ok = { baseDir: base, cwds: [cwd] };
+    const refused = async (dir, status, re, o = ok) => {
+        const e = await allowedDir(dir, o).then(() => null, e => e);
+        assert.ok(e, `${dir} must be refused`);
+        assert.deepEqual([e.status, re.test(e.message)], [status, true], `${dir}: ${e.message}`);
+    };
+    assert.equal(await allowedDir(join(base, 'app'), ok), join(base, 'app'));
+    assert.equal(await allowedDir(join(base, 'plain'), ok), join(base, 'plain'), 'a plain folder is enough');
+    assert.equal(await allowedDir(join(base, 'app', '..', 'old'), ok), join(base, 'old'), '".." that stays inside');
+    assert.equal(await allowedDir(join(root, 'link-in'), ok), join(base, 'app'), 'a symlink into baseDir is its target');
+    assert.equal(await allowedDir(cwd, ok), cwd, 'a known session cwd outside baseDir');
+    await refused(join(base, '..', 'outside'), 403, /is not in/);
+    await refused(join(base, 'app', '..', '..', 'outside'), 403, /is not in/);
+    await refused(join(base, 'escape'), 403, /is not in/, ok); // a symlink in baseDir that points out
+    await refused(outside, 403, /is not in/);
+    await refused(base, 403, /is not in/, ok); // baseDir itself
+    await refused(`${base}-evil`, 400, /is not a folder/);
+    mkdirSync(`${base}x`);
+    await refused(`${base}x`, 403, /is not in/); // a sibling sharing baseDir's prefix
+    await refused(join(cwd, '..'), 403, /is not in/, ok); // a known cwd's parent
+    await refused(join(base, 'nope'), 400, /is not a folder/);
+    await refused(join(base, 'file.txt'), 400, /is not a folder/);
+    for (const d of ['app', '../base/app', '', undefined, 42, `${base}/app\n`]) {
+        await refused(d, 400, /absolute folder path|is not a folder/);
+    }
+
+    const config = mergeConfig({ newProject: { baseDir: base } });
+    const calls = [];
+    const deps = {
+        config, cwds: async () => [cwd], project: async d => (d.endsWith('proj') ? 'my repo' : 'app'),
+        tmux: async args => { calls.push(args); if (args[0] === 'capture-pane') { return { stdout: '' }; } },
+        transcripts: (() => { let n = 0; return async () => (n++ ? ['old.jsonl', 'new.jsonl'] : ['old.jsonl']); })(),
+        nap: async () => {}, waitMs: 1000, trustMs: 0
+    };
+    const r = await openProject({ dir: join(base, 'app') }, deps);
+    assert.deepEqual(calls[0], ['new-session', '-d', '-s', 'cc-new-app', '-x', '200', '-y', '50', '-c', join(base, 'app'), 'zsh', '-lic', claudeLine()]);
+    assert.deepEqual([r.ok, r.name, r.dir, r.tmux, r.sessionId, r.steps.map(s => [s.id, s.state])], [true, 'app', join(base, 'app'), 'cc-new-app', 'new', [['chat', 'done']]], 'an older transcript is not this chat');
+    assert.equal((await openProject({ dir: cwd }, { ...deps, transcripts: async () => [] })).tmux, 'cc-new-my-repo', 'the tmux name is made safe');
+    calls.length = 0;
+    const e = await openProject({ dir: outside }, deps).catch(e => e);
+    assert.deepEqual([e.status, calls], [403, []], 'nothing started outside');
+    const t = await openProject({ dir: join(base, 'app') }, { ...deps, tmux: async () => { throw new Error('duplicate session: cc-new-app'); } }).catch(e => e);
+    assert.deepEqual([t.status, t.message, t.body.steps.map(s => s.state)], [502, `Starting Claude in ${join(base, 'app')} failed: duplicate session: cc-new-app`, ['failed']]);
+
+    // the list: git repos under baseDir, newest .git first, busy ones out
+    const at = s => new Date(Date.now() - s * 1000);
+    utimesSync(join(base, 'app', '.git'), at(10), at(10));
+    utimesSync(join(base, 'old', '.git'), at(5000), at(5000));
+    const l = await localProjects({ config, busy: async () => [join(base, 'busy', '.claude', 'worktrees', 'x')] });
+    assert.deepEqual(l.map(p => [p.name, p.dir]), [['app', join(base, 'app')], ['old', join(base, 'old')]]);
+
+    // From my GitHub tells the page each repo's folder, so a cloned one can be opened
+    const gh = await githubProjects({ config, ttl: 0, exists: d => d === join(base, 'app'), exec: async (f) => ({ stdout: f === 'gh' ? JSON.stringify([{ name: 'app', description: '', isPrivate: true, updatedAt: '2026-01-01T00:00:00Z', isArchived: false }]) : 'me\n' }) });
+    assert.deepEqual(gh.map(r => [r.name, r.local, r.dir]), [['app', true, join(base, 'app')]]);
+    rmSync(root, { recursive: true, force: true });
+    console.log('ok open project');
 }
 
 {

@@ -5,6 +5,12 @@ import { sleep } from './cdp.mjs';
 const geometry = `(() => { const f = document.getElementById('feed'); return { scrollTop: f.scrollTop, clientHeight: f.clientHeight, scrollHeight: f.scrollHeight, bottom: f.getBoundingClientRect().bottom, dock: document.getElementById('send').offsetHeight }; })()`;
 
 export default {
+    'the upload and send buttons sit inside the field box, and the composer has no border': async ({ page, open }) => {
+        await open();
+        const r = await page.ev(`(() => { const box = document.querySelector('.c-row').getBoundingClientRect(), inside = id => { const b = document.getElementById(id).getBoundingClientRect(); return b.left >= box.left && b.right <= box.right && b.top >= box.top && b.bottom <= box.bottom; }; return { attach: inside('attach-btn'), send: inside('send-btn'), row: getComputedStyle(document.querySelector('.c-row')).borderTopWidth, composer: getComputedStyle(document.querySelector('.composer')).borderTopWidth }; })()`);
+        assert.deepEqual(r, { attach: true, send: true, row: '1px', composer: '0px' });
+    },
+
     'sending: the POST is intercepted, the outbox bubble shows and the input clears': async ({ page, open, IDS }) => {
         await open();
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });

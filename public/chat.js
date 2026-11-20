@@ -1,6 +1,7 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
 import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou } from './core.js';
 import { renderBoard, sessionTopic } from './list.js';
+import { syncDiff } from './diff.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
 /** @param {Session} s */
@@ -538,6 +539,7 @@ function showHead(s) {
     un.hidden = !(s?.unpushed > 0);
     un.textContent = `${s?.unpushed} unpushed`;
     showModel(s);
+    syncDiff(s);
     $('msg').setAttribute('placeholder', s ? `Message Claude in ${s.project}…` : 'Message Claude…');
 }
 

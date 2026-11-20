@@ -22,6 +22,7 @@ export const STATIC = {
     '/log.js': ['log.js', JS],
     '/newproject.js': ['newproject.js', JS],
     '/picker.js': ['picker.js', JS],
+    '/diff.js': ['diff.js', JS],
     '/icon.svg': ['icon.svg', 'image/svg+xml'],
     '/sw.js': ['sw.js', JS],
     // PWA: rendered once from icon.svg; the iOS one full-bleed, since iOS rounds it itself

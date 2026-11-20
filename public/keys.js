@@ -7,6 +7,7 @@ import { showTab, activeTab, collapseIssue } from './issues.js';
 import { openLog } from './log.js';
 
 const SHORTCUTS = [
+    ['d', 'Changes (diff) of the open chat; j / k move between its files'],
     ['j / ↓', 'Next item'], ['k / ↑', 'Previous item'], ['Enter / Space', 'Expand or collapse, chat with its session'],
     ['o', 'Open the MR in a new tab'], ['a', "Run the row's action (asks first)"], ['/ or c', 'Focus the chat input'],
     ['Esc', 'Leave the input, or collapse the row'], ['n', 'First chat waiting on you'], ['1 / 2', 'Work / Issues'], ['t', 'Swap Work and Issues'], ['l', 'Activity log'],
@@ -49,6 +50,7 @@ export function cycleProject(list, current, dir) {
     return list[i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length];
 }
 
+KEYS.d = 'diff';
 let focusKey = null, prev = null, prevAt = 0;
 const ROWS = '#masters tr[data-key], #issues .card[data-key]'; // work rows and issue cards; the hidden view's are skipped below
 /** @returns {HTMLElement[]} */
@@ -169,6 +171,7 @@ function onKey(e) {
         swap: () => showTab(activeTab() === 'work' ? 'issues' : 'work'),
         log: openLog,
         help,
+        diff: () => $('c-diff')?.click(),
         project: () => {
             hooks.openProjects();
         },

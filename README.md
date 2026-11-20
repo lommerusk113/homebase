@@ -72,6 +72,15 @@ The defaults can be overridden in `~/.claude/homebase/config.json` (`HOMEBASE_DI
 
 Only the keys you give are overridden.
 
+## Changes view
+
+"Changes" in the chat header (shortcut `d`) shows what changed in the chat's git folder without opening an editor; a work row whose helper runs in its own worktree has the same link in its expanded detail.
+The panel lists the files under "Uncommitted" (staged, unstaged and untracked) and "Committed on this branch" (since the merge-base with the default branch: `origin/HEAD`, else `origin/main`, `origin/master`, `main`, `master`), each with its status letter and added/removed line counts, and shows the picked file's unified diff with line numbers.
+`j`/`k` or the arrows move between files, `r` refreshes, Esc closes; "Copy path" copies the file's path in the repo and "Open MR" opens the MR of that branch when Homebase knows one.
+On a phone the file list comes first and a tap opens the diff with a back button.
+It is read-only: `GET /api/diff?session=<id>[&item=<key>][&group=…&file=<path>]` only ever runs git's read commands (no shell, no external diff or textconv driver, no index writes) in the folder of a session Homebase lists or in the worktree of one of its work items, and shows a file only when git itself listed that exact path.
+A file's diff is cut off at 200 KB ("Diff too large"), a list at 300 files per group, and a binary file shows as "Binary file"; a rename shows as a removed and an added file.
+
 ## Checks
 
 Every merge must pass these:
@@ -139,6 +148,7 @@ How it stays safe:
 * ☰ → Pair a device… also lists the paired devices; Revoke logs one out at once. Pairing is managed from the Mac only.
 * `Tailscale-User-Login` is set by `tailscale serve` itself, which drops any value the client sent; it is trusted only on the remote port, which only `serve` reaches.
 * A paired device gets the same per-start token as the Mac, so the Host, Origin and token checks above all apply too.
+* A paired device can read what a chat already shows it, and the Changes view (`GET /api/diff`): the diffs in the folders of listed sessions, never in a folder or of a file that only the request names.
 
 Until Claude writes its first transcript (on the first prompt) the chat sends to `cc-new-<name>` by tmux name (`/api/send?tmux=`, only that name pattern and only while the session runs), and `/api/starting` lets a reloaded page find it again.
 When Homebase's own code changes on disk the header says "Homebase was updated — Reload server": `POST /api/server/reload` (local requests only, never the remote port) starts a fresh detached `node server.mjs` with the same arguments and environment, logging to `server.log` in the Homebase dir, closes its listeners and exits once the new one answers; the page then reloads itself. If only `public/*.js` or `.css` changed it offers "Page updated — Refresh" instead.

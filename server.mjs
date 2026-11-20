@@ -25,6 +25,7 @@ import { saveSeen } from './server/rules.mjs';
 import { readTracked, saveTracked } from './server/tracked.mjs';
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
+import { diff } from './server/diff.mjs';
 
 export {
     readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, chatFeed, quickReplies, askList, optionLabels, waitingOn, waitingAsk, namedChoices,
@@ -51,6 +52,7 @@ export { saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME } from './server/upload
 export { saveSeen, readSeen } from './server/rules.mjs';
 export { readTracked, saveTracked, validTracked } from './server/tracked.mjs';
 export { isStale, serverMtime, pageHash } from './server/reload.mjs';
+export { parseNumstat, parseNameStatus, parseStatus, changes, fileBody, diffFolder, diff, MAX_DIFF_BYTES } from './server/diff.mjs';
 
 const PORT = Number(process.env.PORT ?? 4321);
 
@@ -328,6 +330,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
             if (url.pathname === '/api/limits') {
                 return json(await limits());
+            }
+            // Read-only, for whoever may read a chat (paired devices too). The folder is the session's own, never the request's.
+            if (url.pathname === '/api/diff' && req.method === 'GET') {
+                const q = url.searchParams;
+                return json(await diff(q.get('session'), q.get('item'), q.get('group'), q.get('file')));
             }
             if (url.pathname === '/api/transcript') {
                 return json(await transcript(url.searchParams.get('dir'), url.searchParams.get('id'), url.searchParams.get('max')));

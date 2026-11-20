@@ -327,6 +327,16 @@ type LogEntry = LogAgent
     | { kind: 'mr'; at: number; url: string; state: string; title: string | null };
 interface LogResponse { project: string; repo: string | null; defaultBranch: string | null; error: string | null; days: { label: string; entries: LogEntry[] }[] }
 
+// ---- /api/diff (server/diff.mjs) ----
+
+interface DiffFile { path: string; status: string; add: number | null; del: number | null; binary: boolean }
+/** repo is null when the folder is gone or not in a git repo; the other fields are then missing */
+interface DiffView { repo: string | null; branch?: string; base?: { ref: string; sha: string } | null; uncommitted?: DiffFile[]; committed?: DiffFile[]; truncated?: boolean }
+/** one file: its unified diff, an untracked file's text, or why there is none */
+interface DiffBody { diff?: string; text?: string; binary?: boolean; tooLarge?: boolean }
+/** a drawn diff line: hunk header, added, removed, context or a note; o/n are the old and new line numbers */
+interface DiffRow { t: 'h' | '+' | '-' | ' ' | 'm'; o?: number; n?: number; text: string }
+
 /** Elements in index.html that $() callers use beyond HTMLElement. */
 interface PageIds {
     project: HTMLButtonElement;

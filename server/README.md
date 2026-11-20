@@ -22,6 +22,7 @@
 | `security.mjs` | Host/Origin/token checks, the local host list |
 | `pairing.mjs` | Remote access through `tailscale serve`: the `remote` config, the remote port test, one-time codes and their rate limit, device cookies (hashes in `devices.json`), revoke, the pair page, `isPairedRequest(req)` for other features |
 | `tracked.mjs` | The board's projects, GET/POST `/api/tracked` (`tracked.json`), shared by the Mac and its paired devices |
+| `diff.mjs` | Changes view: GET `/api/diff`, the folder of a session or of an item's worktree, the changed-file lists (git status and diff parsing) and one file's diff, read-only with size caps |
 | `reload.mjs` | Update without restarts: `/api/version` (server code newer than at start, browser-file mtime hash), POST `/api/server/reload` replacing the process, bind retry |
 | `static.mjs` | App file map, build hash, CSP, `public/vendor` serving, revalidation |
 
@@ -33,6 +34,7 @@ Imports only go one way, with no cycles:
 `reviews` → forge, account.
 `log` → transcripts, forge, sessions.
 `control` → sessions, tmux.
+`diff` → sessions.
 `newproject` → transcripts, tmux, startup, sessions.
 `startup` → tmux.
 

@@ -112,18 +112,22 @@ export async function answerStartup(name, index, label, { tm = tmux, nap = sleep
 
 // Claude's own entries under an AskUserQuestion, never offered as buttons: one opens a text box, the other a chat
 const FREE_FORM = /^(type something\.?|chat about this)$/i;
-const OPTION = /^(?: {0,2}|\s*❯\s+)(\d+)\.\s+(.+)$/;
+const OPTION = /^(?: {0,3}|\s*❯\s+)(\d+)\.\s+(.+)$/;
 
 // An AskUserQuestion on screen: the question above "1." and the numbered options down to "Enter to select", each
 // option's indented lines its description. One question at a time (a ☐ tab bar above is ignored); a multi-select
 // ([ ] boxes) isn't parsed. The last step of several questions, "Review your answers", has no hint: its options run to
-// the bottom and its question is the answers summary. -> { question, options, descriptions, selected } or null
+// the bottom and its question is the answers summary. A tool permission prompt ("Do you want to proceed?") ends in
+// "Esc to cancel" instead: its question is the dialog from its top rule, ╌ sections (the command) joined by " · ", Tips
+// dropped; tests/fixtures/permission-bash.txt is a real one. │ box borders are stripped. -> { question, options, descriptions, selected } or null
 export function parseQuestion(pane) {
 
-    const lines = String(pane ?? '').split('\n').map(l => l.replace(/\s+$/, ''));
+    const lines = String(pane ?? '').split('\n').map(l => l.replace(/^\s*│ ?|\s*│\s*$/g, '').replace(/\s+$/, ''));
     const hint = lines.findLastIndex(l => /enter to select/i.test(l));
     const review = lines.findLastIndex(l => /^\s*Review your answers$/.test(l));
-    const end = hint >= 0 ? hint : review >= 0 ? lines.length : 0;
+    const esc = lines.findLastIndex(l => /^\s*Esc to cancel/.test(l));
+    const footer = esc >= 0 && lines.slice(esc + 1).filter(l => l.trim()).length <= 2; // at the bottom, not quoted in the transcript
+    const end = hint >= 0 ? hint : review >= 0 ? lines.length : footer ? esc : 0;
     const first = lines.slice(0, end).findLastIndex(l => OPTION.exec(l)?.[1] === '1');
     if (first < 0) {
         return null;
@@ -149,11 +153,12 @@ export function parseQuestion(pane) {
     while (from > 0 && !lines[from - 1].trim()) {
         from--;
     }
-    let top = hint < 0 && review < from ? review : from;
-    while (top > 0 && lines[top - 1].trim()) {
+    let top = hint < 0 && review >= 0 && review < from ? review : from;
+    while (top > 0 && lines[top - 1].trim() && !/^[\s─]+$/.test(lines[top - 1])) {
         top--;
     }
-    const question = lines.slice(top, from).map(l => l.trim()).filter(Boolean).join(' ').replace(/\s*●\s*/g, ' · ');
+    const question = lines.slice(top, from).map(l => (/^[\s╌]+$/.test(l) ? '●' : l.trim())).filter(l => l && !/^Tip:/.test(l))
+        .join(' ').replace(/\s*●\s*/g, ' · ');
 
     return question && !/^[☐☒✔←]/.test(question) ? { question, options, descriptions, selected } : null;
 }

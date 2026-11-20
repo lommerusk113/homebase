@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { parseQuestion } from '../../server/startup.mjs';
 
 const status = `document.getElementById('status').className + ' | ' + document.getElementById('status-text').textContent`;
 
@@ -57,6 +59,22 @@ export default {
         await page.waitFor(`document.getElementById('ask-q').textContent === 'Which port?' && JSON.stringify(${opts}) === '["4478","8080"]'`, { what: 'the next question replacing them' });
         question = { question: 'Which port?', options: ['8080', '4478'], descriptions: ['', ''], selected: 0 }; // the pane, as answerable buttons
         await page.waitFor(`JSON.stringify(${opts}) === '["8080","4478"]' && document.querySelectorAll('#ask-opts wa-button').length === 2`, { what: 'the pane\'s buttons' });
+    },
+
+    'a permission prompt gets its options as buttons, with the command as the question': async ({ page, open, IDS, answerPosts }) => {
+        const transcript = { items: [], working: false, asking: 'Claude needs your permission to use Bash' }; // the hook's text, no options
+        let question = parseQuestion(readFileSync(new URL('../fixtures/permission-bash.txt', import.meta.url), 'utf8'));
+        await open({ project: 'beta', chat: IDS.asker });
+        page.route = q => (q.url.includes('/api/transcript') ? { body: JSON.stringify(transcript), headers: { 'content-type': 'application/json' } }
+            : q.url.includes('/api/question') && q.method !== 'POST' ? { body: JSON.stringify({ question }), headers: { 'content-type': 'application/json' } }
+                : (q.url.includes('/api/question') && (question = null), answerPosts(q)));
+        const opts = `[...document.querySelectorAll('#ask-opts wa-button')]`;
+        await page.waitFor(`${opts}.length === 4`, { what: 'the four permission options' });
+        assert.match(await page.ev(`document.getElementById('ask-q').textContent`), /echo hi > out-from-test\.txt .* Do you want to proceed\?$/);
+        await page.ev(`${opts}[3].click()`);
+        await page.waitFor(`document.getElementById('ask').hidden`, { what: 'the card gone once answered' });
+        const u = new URL(page.posts.find(p => p.url.includes('/api/question')).url);
+        assert.deepEqual([u.searchParams.get('option'), u.searchParams.get('label')], ['3', 'No']);
     },
 
     'status bar: error while the transcript fails, then back': async ({ page, open, answerPosts }) => {

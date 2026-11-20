@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, setOffline, ctxLevel, canCompact, autoCompactDue, NEEDS_ANSWER } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, setOffline, ctxLevel, canCompact, autoCompactDue, NEEDS_ANSWER, openDecision } from './core.js';
 import { renderBoard } from './list.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
@@ -382,10 +382,12 @@ function setStatus(data) {
     $('status-ctx').textContent = s?.context != null ? `context ${Math.round(s.context)}%` : '';
 }
 
-// Scrolls to and focuses what needs the user: the ask card when it shows, else the newest needs-you bubble.
+// Scrolls to and focuses what needs the user: the ask card when it shows, else the reply the pinned strip is about,
+// else the newest needs-you bubble.
 function jumpToNeeds() {
 
-    const t = /** @type {HTMLElement | undefined} */ ($('ask').hidden ? [...$('feed').querySelectorAll('.bubble.needs')].at(-1) : $('ask'));
+    const waiting = !$('wait').hidden && $('feed').querySelector(`[data-key="${CSS.escape($('wait').dataset.key ?? '')}"]`);
+    const t = /** @type {HTMLElement | undefined} */ (!$('ask').hidden ? $('ask') : waiting || [...$('feed').querySelectorAll('.bubble.needs')].at(-1));
     if (!t) {
         return;
     }
@@ -633,6 +635,36 @@ function questionExcerpt(i) {
     return flat.length > EXCERPT_CHARS ? `${flat.slice(0, EXCERPT_CHARS - 1)}…` : flat;
 }
 
+// What a chip on items[n] sends after its label: nothing for the newest item, else a note naming the question it answers.
+/** @param {ChatItem[]} items @param {number} n */
+const answerNote = (items, n) => (n === items.length - 1 ? undefined : `(Answering your earlier question from ${items[n].at}: "${questionExcerpt(items[n])}")`);
+
+// The amber strip pinned above the composer while Claude's newest reply says something waits on the user, also after
+// the user said something else: that text (a click jumps to the reply) and its chips. The ask card takes its place.
+let waitKey = null;
+/** @param {Session | null} s @param {Transcript | null} data @param {ChatItem[]} items */
+function showWait(s, data, items) {
+
+    const w = s && data && !data.asking ? openDecision({ items }) : null, key = w && JSON.stringify([s.id, w.at, w.waiting, w.replies]);
+    $('wait').hidden = !w;
+    if (!w || key === waitKey) {
+        waitKey = key;
+        return;
+    }
+
+    waitKey = key;
+    $('wait').dataset.key = `${s.id}:${w.at}`;
+    $('wait-q').replaceChildren(rich(w.waiting, true));
+    $('wait-q').onclick = jumpToNeeds;
+    const n = items.indexOf(w);
+    $('wait-opts').replaceChildren(...(w.replies ?? []).map((t, k) => {
+        const b = optButton(t, k);
+        b.onclick = () => sendText(s.id, t, w.at, answerNote(items, n));
+
+        return b;
+    }));
+}
+
 // Quick replies under a Claude message that ends with a question and has no answer yet. The newest one waits for Claude
 // to finish; an older one stays (the send just queues) and its chips carry a note naming the question; a message
 // the user sent after it hides them.
@@ -644,7 +676,7 @@ function quickReplyRow(s, data, items, n) {
         return null;
     }
 
-    const note = newest ? undefined : `(Answering your earlier question from ${q.at}: "${questionExcerpt(q)}")`;
+    const note = answerNote(items, n);
     const row = el('div', 'replies');
     row.append(...q.replies.map((t, i) => {
         const b = optButton(t, i);
@@ -680,6 +712,7 @@ export async function refreshChat() {
         $('compact-nudge').hidden = true;
         chatKey = null;
         state.asking = null;
+        showWait(null, null, []);
         updateTitle();
         setStatus(state.offline ? { error: true } : null);
         // a message sent to a starting project (by tmux name) shows until its session binds
@@ -711,6 +744,7 @@ export async function refreshChat() {
     compactUi(s, data);
 
     const { items, hidden, cut } = feedItems(s, data);
+    showWait(s, data, items);
     const fresh = cut.fresh || !!s.clearedFrom; // a New conversation, before or after the successor is bound
     const lastSeen = Number(store.get(`last-seen:${s.id}`)) || Infinity;
     const key = s.id + JSON.stringify([items, data.asking, data.working, hidden, data.earlier, lastSeen]);

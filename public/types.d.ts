@@ -159,6 +159,8 @@ interface ChatItem {
     replies?: string[];
     /** the choices in a message that asks something (an exact substring of text), shown outside the fold */
     options?: string;
+    /** what the reply says still waits on the user (its "Waiting on you: …"), kept after the user says something else */
+    waiting?: string;
     answer?: Answer;
     // client-only (chat.js outbox and decorations)
     sending?: boolean;

@@ -716,6 +716,22 @@ assert.deepEqual(optionLabels('**Option A**: x\n**Option B**: y'), ['Option A', 
     assert.deepEqual(r.replies, ['Redis', 'In-memory', 'Skip it']);
     assert.ok(r.options.startsWith('**Options**') && r.text.includes(r.options) && !r.options.includes('In flight'));
 }
+import { waitingOn } from './server.mjs';
+assert.equal(waitingOn('**In flight**\n- Nothing running\n- Waiting on you: which cache'), 'which cache');
+assert.equal(waitingOn('**Waiting on you:** merge **!12**'), 'merge **!12**');
+assert.equal(waitingOn('**Waiting on you: pick a port**'), 'pick a port');
+assert.equal(waitingOn('- Waiting on you — nothing'), null);
+assert.equal(waitingOn('- Waiting on you: none, all done'), null);
+assert.equal(waitingOn('Waiting on your review is not a line'), null);
+{ // an open decision outlives a later message: the newest reply's Waiting on you, with the chips of its list
+    const ask = '**▸ Cache layer**\n\n**Options**\n1. **Redis** — shared\n2. **In-memory** — simplest\n\n**In flight**\n- Waiting on you: which cache\n\n**TLDR:** Which cache?';
+    const items = chatItems([say(ask), { type: 'user', message: { content: 'also fix the typo in the README' } }, say('Fixed the typo.\n\n**In flight**\n- Nothing running\n- Waiting on you: which cache (Redis or in-memory)\n\n**TLDR:** Typo fixed.')]);
+    assert.equal(items.at(-1).waiting, 'which cache (Redis or in-memory)');
+    assert.equal(items.at(-1).needsYou, true);
+    assert.equal(items[0].needsYou, false, 'the older question itself is replied to');
+    const done = chatItems([say(ask), say('Built Redis.\n\n**In flight**\n- Waiting on you: nothing\n\n**TLDR:** Redis cache is in.')]).at(-1);
+    assert.equal(done.waiting, undefined);
+}
 assert.deepEqual(optionLabels('- only one'), []);
 assert.deepEqual(optionLabels(Array.from({ length: 7 }, (_, n) => `- item ${n}`).join('\n')), []); // too many to be choices
 assert.equal(optionLabels(`- ${'x'.repeat(80)}\n- y`)[0].length, 60);
@@ -930,7 +946,8 @@ console.log('ok issues');
 
 import { chatStatus } from './public/core.js';
 assert.equal(chatStatus(null).kind, 'idle');
-assert.equal(chatStatus({}).text, 'Claude is done — your turn');
+assert.equal(chatStatus({}).text, 'Claude is done'); // nothing pending: no "your turn"
+assert.equal(chatStatus({ items: [{ role: 'assistant', text: '', waiting: 'which cache' }, { role: 'user', text: 'also fix the typo' }] }).text, 'Claude needs your answer', 'an open decision outlives a later message');
 assert.deepEqual(chatStatus({ stuck: true }), { kind: 'stuck', text: 'No activity for 30 min — Claude may be stuck' });
 assert.equal(chatStatus({}, 0, { needsYou: true, subagents: { running: 2, finished: 0 } }).text, 'Claude needs your answer · 2 agents still working');
 assert.equal(chatStatus({}, 0, { needsYou: false, subagents: { running: 1, finished: 0 } }).text, 'Claude is done · 1 agent still working');

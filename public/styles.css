@@ -235,6 +235,10 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); box-shadow:none; tran
 /* The ask and startup cards sit between the feed and the dock and take their own room, so they never cover a card in the feed */
 .c-cards { flex-shrink:0; background:var(--canvas); }
 .c-cards > .c-ask { margin:8px 12px 0; }
+.c-wait { position:relative; overflow:hidden; flex-direction:column; align-items:stretch; gap:6px; margin:8px 12px 0; padding:8px 12px 8px 16px; background:var(--needs-bg); border:1px solid var(--needs-line); }
+.c-wait::before { content:''; position:absolute; inset:0 auto 0 0; width:4px; background:var(--c-needs); }
+.c-wait-q { appearance:none; border:0; background:none; padding:0; font:inherit; font-weight:600; text-align:left; color:var(--fg); cursor:pointer; overflow-wrap:anywhere; }
+.c-wait-q::before { content:'Waiting on you: '; color:var(--c-needs); }
 /* Input dock: a fixed height (the composer's one-row height) that never changes, so the feed's height never does while
    typing or when the status changes. Its column is bottom-aligned, so anything taller (a growing textarea, the error)
    overflows upward over the feed. */

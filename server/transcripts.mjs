@@ -298,7 +298,9 @@ export function chatFeed(entries, max = 60) {
             i.needsYou = false;
         }
     }
-    const out = all.filter((i, n) => n >= all.length - max || i.needsYou);
+    // the newest reply's open decision stays pinned too, however far back it is
+    const pinned = all.findLast(i => i.role === 'assistant');
+    const out = all.filter((i, n) => n >= all.length - max || i.needsYou || (i === pinned && i.waiting && !i.answer));
 
     // chips stay on every question still waiting, also after Claude said more; a later user message clears needsYou
     for (const i of out) {
@@ -310,6 +312,12 @@ export function chatFeed(entries, max = 60) {
     const last = out.at(-1);
     if (last?.role === 'assistant' && !last.answer) {
         last.replies = replyChips(last);
+    }
+
+    // the newest reply's open decision stays pinned (the page's strip) after the user says something else: give it its chips
+    const open = out.findLast(i => i.role === 'assistant');
+    if (open?.waiting && !open.answer) {
+        open.replies ??= replyChips(open);
     }
 
     return { items: out, earlier: all.length - out.length };
@@ -509,7 +517,8 @@ function topicAndTldr(i) {
     const { topic, needsYou, text } = splitTopic(i.text), t = splitTldr(text);
 
     // no marker: a TLDR that asks a question ("Merge now? Yes or later.") still needs the user
-    const needs = needsYou || /\?(?=[\s*_]|$)/.test(t.tldr ?? '');
+    const waiting = waitingOn(text);
+    const needs = needsYou || !!waiting || /\?(?=[\s*_]|$)/.test(t.tldr ?? '');
     const body = withoutInFlight(t.text); // the closing In flight list is status, not choices
     const asks = needs || quickReplies(t.tldr, body).length > 0; // needs you, or ends in a question that gets chips
     const options = asks ? optionsBlock(body) ?? askList(body) : null;
@@ -523,7 +532,20 @@ function topicAndTldr(i) {
         }
     }
 
-    return { ...i, topic, needsYou: needs, ...t, ...(options && { options }) };
+    return { ...i, topic, needsYou: needs, ...t, ...(options && { options }), ...(waiting && { waiting }) };
+}
+
+// What a reply says waits on the user ("- Waiting on you: <question>" in its In flight list, or a "**Waiting on you:**"
+// line), else null; "nothing" / "none" count as nothing.
+const WAITING = /^[ \t]*(?:[-*+][ \t]+)?\**Waiting on you\b[*:]*[ \t—–-]*(.*)$/gim;
+export function waitingOn(text) {
+
+    let said = [...(text ?? '').matchAll(WAITING)].at(-1)?.[1].trim();
+    if ((said?.match(/\*\*/g)?.length ?? 0) % 2) {
+        said = said.replace(/\*\*$/, '').trim(); // "**Waiting on you: x**" leaves a dangling **
+    }
+
+    return said && !/^(?:nothing|none|n\/a)\b/i.test(said) ? said : null;
 }
 
 // The reply's closing "**In flight**" list (homebase-rules.md), cut off so its rows never read as options or the ask.

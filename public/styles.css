@@ -243,6 +243,8 @@ wa-button.c-opt::part(label) { display:flex; flex-direction:column; align-items:
 .files { list-style:none; margin:0; padding:0; }
 .files li { font-family:var(--wa-font-family-code); font-size:12px; padding:3px 0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
 .files li b { color:var(--fg); font-weight:500; }
+.c-info { color:var(--muted); font-size:12px; margin-top:6px; }
+.c-info:empty { display:none; }
 .error { color:var(--c-needs); font-size:12px; margin-top:6px; }
 .body { font-size:13.5px; line-height:1.6; overflow-wrap:anywhere; }
 .body strong { font-weight:700; color:var(--strong); }

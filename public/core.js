@@ -87,6 +87,18 @@ export async function api(path, opts = {}) {
     return token && token !== used ? send(token) : r;
 }
 
+// Plain sentences for the raw server and tmux errors the chat can show; anything else passes through.
+/** @type {[RegExp, string][]} */
+const FRIENDLY = [
+    [/^busy$/, "Claude is busy; try again when it's idle"],
+    [/^unknown session/, 'That session is gone. Pick another one from the list.'],
+    [/^bad tmux name/, "This chat's terminal name isn't valid. Reload the page and try again."],
+    [/ENOENT/, "tmux isn't installed"],
+    [/Command failed: tmux|no server running|can't find (session|pane)|no current (session|target)/i, "Couldn't reach this chat's terminal. It may have ended; try Restart chat."]
+];
+/** @param {string} msg */
+export const friendly = msg => FRIENDLY.find(([re]) => re.test(msg))?.[1] ?? msg;
+
 /**
  * getElementById, typed for the index.html elements listed in types.d.ts's PageIds.
  * @template {string} K
@@ -302,6 +314,7 @@ export function foldable(tldr, rest, key) {
             top.hidden = open;
         }
         btn.textContent = open ? 'Show less' : 'Show more';
+        btn.setAttribute('aria-expanded', String(open));
     };
     set(state.unfold.has(key));
     btn.onclick = e => {

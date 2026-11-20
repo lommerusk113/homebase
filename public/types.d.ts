@@ -311,6 +311,7 @@ interface PageIds {
     'np-form': HTMLFormElement;
     'np-go': WaButton;
     'compact-dlg': WaDialog;
+    'restart-dlg': WaDialog;
     msg: WaTextarea;
     'needs-only': WaDropdownItem;
     'auto-compact': WaDropdownItem;

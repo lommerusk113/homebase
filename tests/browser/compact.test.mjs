@@ -97,16 +97,32 @@ export default {
         assert.deepEqual(compactPosts(page), []);
     },
 
-    'the Restart chat menu item POSTs /api/restart for the bound session without a confirm': async ({ page, open, IDS }) => {
+    'the Restart chat menu item asks to confirm first, and Cancel posts nothing': async ({ page, open }) => {
         await open();
         await loaded(page);
         await page.click('#c-menu button[slot="trigger"]');
         await page.clickOn(`document.getElementById('restart-item')`);
+        await page.waitFor(`document.getElementById('restart-dlg').open`, { what: 'the confirm' });
+        await sleep(500);
+        assert.deepEqual(page.posts.filter(p => new URL(p.url).pathname === '/api/restart'), []);
+        await page.ev(`document.getElementById('restart-dlg').open = false`);
+        await sleep(300);
+        assert.deepEqual(page.posts.filter(p => new URL(p.url).pathname === '/api/restart'), []);
+    },
+
+    'confirming Restart chat POSTs /api/restart for the bound session': async ({ page, open, IDS }) => {
+        await open();
+        await loaded(page);
+        await page.click('#c-menu button[slot="trigger"]');
+        await page.clickOn(`document.getElementById('restart-item')`);
+        await page.waitFor(`document.getElementById('restart-dlg').open`, { what: 'the confirm' });
+        await page.click('#restart-go');
         for (let i = 0; i < 100 && !page.posts.some(p => new URL(p.url).pathname === '/api/restart'); i++) {
             await sleep(100);
         }
         const posts = page.posts.filter(p => new URL(p.url).pathname === '/api/restart').map(p => new URL(p.url).search);
         assert.deepEqual(posts, [`?id=${IDS.master}`]);
-        await page.waitFor(`document.getElementById('c-err').textContent !== ''`, { what: 'the server refusing (no tmux in the fixture)' });
+        await page.waitFor(`document.getElementById('c-info').textContent === ''`, { what: 'the neutral Restarting line to clear' });
+        assert.equal(await page.ev(`document.getElementById('c-err').getAttribute('role')`), 'alert');
     }
 };

@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, setOffline, ctxLevel, canCompact, autoCompactDue, NEEDS_ANSWER } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, friendly, setOffline, ctxLevel, canCompact, autoCompactDue, NEEDS_ANSWER } from './core.js';
 import { renderBoard } from './list.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
@@ -200,7 +200,10 @@ function bubble(i, sid, prevTopic, look = {}) {
                 pill.prepend(el('span', 'unread'));
             }
             row.append(pill);
-            b.addEventListener('click', () => markRead(sid, key, b));
+            b.tabIndex = 0;
+            for (const ev of ['click', 'focusin']) { // focus: reading by keyboard counts, Show more included
+                b.addEventListener(ev, () => markRead(sid, key, b));
+            }
         }
         b.append(row);
     }
@@ -295,6 +298,7 @@ function addShowMore(feed) {
             continue;
         }
         const btn = el('button', 'show', 'Show more');
+        btn.setAttribute('aria-expanded', 'false');
         btn.onclick = () => {
             const key = body.parentElement.dataset.key, folded = body.classList.toggle('fold');
             if (folded) {
@@ -303,6 +307,8 @@ function addShowMore(feed) {
                 state.unfold.add(key);
             }
             btn.textContent = folded ? 'Show more' : 'Show less';
+            btn.setAttribute('aria-expanded', String(!folded));
+            body.parentElement.dispatchEvent(new Event('click')); // marks a needs-you bubble read
         };
         body.after(btn);
     }
@@ -367,6 +373,18 @@ function fillCard(id, tmux, question, options, answer) {
 
     $(`${id}-q`).textContent = question;
     $(`${id}-cmd`).textContent = `tmux attach -t ${tmux}`;
+    if (id === 'ask') {
+        // the terminal command is only the way out when there are no buttons; otherwise behind a toggle
+        const toggle = $('ask-term-toggle'), term = $('ask-term');
+        toggle.hidden = !answer;
+        term.hidden = !!answer;
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.onclick = () => {
+            term.hidden = !term.hidden;
+            toggle.setAttribute('aria-expanded', String(!term.hidden));
+        };
+        $('announce').textContent = `Claude is asking: ${question}`;
+    }
     $(`${id}-opts`).replaceChildren(...options.map((o, i) => {
         const b = answer ? waButton(o.label, 'c-opt', { variant: o.primary ? 'brand' : 'neutral', appearance: o.primary ? 'accent' : 'outlined' }) : el('div', 'c-opt ro', o.label);
         if (o.desc) {
@@ -379,13 +397,17 @@ function fillCard(id, tmux, question, options, answer) {
                     x.setAttribute('disabled', '');
                 }
                 b.setAttribute('loading', '');
-                await answer(i).catch(err => { $('c-err').textContent = err.message; });
+                await answer(i).catch(err => { showErr(err.message); });
             };
         }
 
         return b;
     }));
 }
+
+// The red error line, with raw server and tmux errors turned into plain sentences.
+/** @param {string} msg */
+const showErr = msg => { $('c-err').textContent = friendly(msg); };
 
 // POSTs an answer; a refusal's text is the error.
 /** @param {string} url */
@@ -433,7 +455,7 @@ async function showAsk(s, data) {
             await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&dismiss=1`);
         } catch (err) {
             $('ask').hidden = false;
-            $('c-err').textContent = err.message;
+            showErr(err.message);
         } finally {
             askKey = null;
         }
@@ -597,7 +619,7 @@ export async function refreshChat() {
         setStatus(state.offline ? { error: true } : null);
         // a message sent to a starting project (by tmux name) shows until its session binds
         const sent = state.outbox.filter(o => o.sid === startingTarget());
-        return feed.replaceChildren(...(sent.length ? sent.map(o => bubble(o, o.sid, null)) : [el('div', 'welcome', state.starting ? 'Chat starting…' : 'No session to chat with yet.')]));
+        return feed.replaceChildren(...(sent.length ? sent.map(o => bubble(o, o.sid, null)) : [el('div', 'welcome', state.starting ? 'Chat starting…' : 'No session to chat with yet. Run claude in a terminal in one of your projects, or use ☰ → New project.')]));
     }
 
     /** @type {Transcript} */
@@ -664,7 +686,7 @@ export async function refreshChat() {
         line.append(btn);
         feed.prepend(line);
     } else if (!items.length) {
-        feed.append(el('div', 'welcome', fresh ? 'New conversation — say something to Claude' : 'No messages yet.'));
+        feed.append(el('div', 'welcome', fresh ? 'New conversation — say something to Claude' : 'No messages yet. Send one below, or run `claude` in a terminal in this project.'));
     }
 
     addShowMore(feed);
@@ -684,7 +706,7 @@ async function sendNow(sid, key) {
         }
     } catch (err) {
         state.nudged.delete(key);
-        $('c-err').textContent = err.message;
+        showErr(err.message);
         refreshChat();
     }
 }
@@ -715,22 +737,23 @@ async function compact(sid) {
         }
         setTimeout(refreshChat, 1000);
     } catch (err) {
-        $('c-err').textContent = err.message;
+        showErr(err.message);
     }
 }
 
 /** @param {string} sid */
 async function restart(sid) {
-    $('c-err').textContent = 'Restarting Claude…';
+    $('c-err').textContent = '';
+    $('c-info').textContent = 'Restarting Claude…';
     try {
         const r = await api(`/api/restart?id=${encodeURIComponent(sid)}`, { method: 'POST' });
         if (!r.ok) {
             throw new Error(await r.text());
         }
-        $('c-err').textContent = '';
     } catch (err) {
-        $('c-err').textContent = err.message;
+        showErr(err.message);
     }
+    $('c-info').textContent = '';
     refreshChat();
 }
 
@@ -877,7 +900,7 @@ export function initChat() {
             try {
                 text = [text, ...await upload(files)].filter(Boolean).join('\n');
             } catch (err) {
-                $('c-err').textContent = err.message; // text and images stay for another try
+                showErr(err.message); // text and images stay for another try
                 return;
             } finally {
                 uploading = false;
@@ -954,7 +977,7 @@ export function initChat() {
             return setAutoCompact(store.get('auto-compact') !== '1');
         }
         if (e.detail.item.value === 'restart') {
-            return void restart(s.id);
+            return void ($('restart-dlg').open = true);
         }
         if (e.detail.item.value === 'compact') {
             return void ($('compact-dlg').open = true);
@@ -966,6 +989,13 @@ export function initChat() {
             $('clear-dlg').open = true;
         }
     });
+    $('restart-go').onclick = () => {
+        $('restart-dlg').open = false;
+        const s = chatSession();
+        if (s) {
+            restart(s.id);
+        }
+    };
     $('compact-nudge').onclick = () => { $('compact-dlg').open = true; };
     $('compact-go').onclick = () => {
         $('compact-dlg').open = false;
@@ -989,7 +1019,7 @@ export function initChat() {
             store.set(`cleared:${s.id}`, JSON.stringify({ at: Date.now(), mode: 'new' }));
             refreshChat();
         } catch (err) {
-            $('c-err').textContent = err.message;
+            showErr(err.message);
         }
     };
     for (const b of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.c-copy'))) {

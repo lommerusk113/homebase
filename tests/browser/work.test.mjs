@@ -55,7 +55,7 @@ export default {
     'a gate subagent links through the turn that spawned it, so its approved MR has no Merge button': async ({ page, open }) => {
         await open();
         await page.waitFor(`document.querySelector('#masters .g-doing tr[data-key="${MR(105)}"]')`, { what: 'the !105 row in Doing' });
-        assert.match(await page.ev(`${row(MR(105))}.querySelector('.next').textContent`), /^Now: running git(· for \dm)?$/, 'what the agent does now');
+        assert.match(await page.ev(`${row(MR(105))}.querySelector('.next').textContent`), /^Now: running git( · for \d+m)?$/, 'what the agent does now');
         assert.equal(await page.ev(`${row(MR(105))}.querySelector('.act-btn')`), null, 'no Merge button');
     },
 

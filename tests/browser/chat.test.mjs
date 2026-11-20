@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import { appendFileSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { deflateSync, crc32 } from 'node:zlib';
 import { sleep } from './cdp.mjs';
 import { chatItems, chatFeed } from '../../server.mjs';
 
@@ -17,6 +18,55 @@ async function restored(path, fn) {
         writeFileSync(path, body);
         utimesSync(path, atime, mtime);
     }
+}
+
+// A grey w x h PNG.
+function png(w, h) {
+
+    const chunk = (type, data) => {
+        const body = Buffer.concat([Buffer.from(type), data]), len = Buffer.alloc(4), sum = Buffer.alloc(4);
+        len.writeUInt32BE(data.length);
+        sum.writeUInt32BE(crc32(body));
+        return Buffer.concat([len, body, sum]);
+    };
+    const head = Buffer.alloc(13);
+    head.writeUInt32BE(w, 0);
+    head.writeUInt32BE(h, 4);
+    head[8] = 8;
+
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', head), chunk('IDAT', deflateSync(Buffer.alloc((w + 1) * h, 128))), chunk('IEND', Buffer.alloc(0))]);
+}
+
+// Opens gamma's chat grown to 25 questions and replies, questions 5 and 23 with a pasted image, and runs
+// fn(add, fromBottom): add(n, more) appends question and reply n (more: further text for the reply), fromBottom is the page expression for the feed's distance to its end.
+async function withImageChat({ page, open, IDS, homebase }, fn) {
+
+    const home = join(dirname(homebase), 'home'), file = join(home, '.claude', 'projects', '-fx-gamma', `${IDS.gamma}.jsonl`);
+    const base = { isSidechain: false, cwd: join(home, 'repos', 'gamma'), sessionId: IDS.gamma, version: '2.1.322', gitBranch: 'main' };
+    const at = s => new Date(Date.now() - s * 1000).toISOString();
+    const turn = (k, s, image = '', more = '') => [
+        { ...base, type: 'user', uuid: `iu${k}`, timestamp: at(s), origin: { kind: 'human' }, promptSource: 'typed', message: { role: 'user', content: `question ${k}${image}` } },
+        { ...base, type: 'assistant', uuid: `ia${k}`, timestamp: at(s - 5), message: { model: 'claude-opus-5-5', content: [{ type: 'text', text: `reply ${k}\n\nline two of reply ${k}${more}` }] } },
+        { ...base, type: 'system', subtype: 'turn_duration', durationMs: 1000, timestamp: at(s - 6) }
+    ];
+    const put = lines => appendFileSync(file, lines.map(l => JSON.stringify(l)).join('\n') + '\n');
+    mkdirSync(join(homebase, 'uploads'), { recursive: true });
+    const image = n => {
+        const path = join(homebase, 'uploads', `00000000-0000-4000-8000-00000000000${n}.png`);
+        writeFileSync(path, png(400, 300));
+        return `\n[Image: ${path}]`;
+    };
+    await restored(file, async () => {
+        put(Array.from({ length: 25 }, (_, k) => turn(k, 900 - k * 10, k === 5 ? image(1) : k === 23 ? image(2) : '')).flat());
+        await open({ project: 'gamma', chat: IDS.gamma });
+        await page.waitFor(`${feedHas('reply 24')} && [...document.querySelectorAll('#feed img')].every(i => i.offsetHeight > 50)`, { what: 'the long chat and its thumbnails' });
+        await sleep(300);
+        await fn(async (n, more) => {
+            put(turn(n, 5, '', more));
+            await page.waitFor(feedHas(`reply ${n}`), { what: `reply ${n}`, timeout: 8000 });
+            await sleep(400); // a redrawn thumbnail has loaded again
+        }, `(() => { const f = document.getElementById('feed'); return Math.round(f.scrollHeight - f.scrollTop - f.clientHeight); })()`);
+    });
 }
 
 const ready = page => page.waitFor(`${bubble('tag the release')}`, { what: 'the newest master bubble' });
@@ -327,5 +377,47 @@ export default {
             const after = await page.ev(probe);
             assert.deepEqual(after, before, 'the item the user was reading moved');
         });
-    }
+    },
+
+    'at the bottom: a thumbnail loading, a new reply and a shorter feed all keep the newest in view': async ctx => withImageChat(ctx, async (add, fromBottom) => {
+        const { page } = ctx;
+        assert.ok(await page.ev(fromBottom) < 40, `the thumbnail that loaded after the chat opened pushed the newest out of view: ${await page.ev(fromBottom)}px from the end`);
+        for (const n of [30, 31]) {
+            await add(n);
+            assert.ok(await page.ev(fromBottom) < 40, `reply ${n} left the feed ${await page.ev(fromBottom)}px from the end`);
+        }
+        await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 600, deviceScaleFactor: 1, mobile: false });
+        try {
+            await sleep(300);
+            assert.ok(await page.ev(fromBottom) < 40, `a shorter feed left it ${await page.ev(fromBottom)}px from the end`);
+        } finally {
+            await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+        }
+    }),
+
+    'reading scrolled up below a pasted image: a new reply does not shift what you read': async ctx => withImageChat(ctx, async add => {
+        const { page } = ctx;
+        // the image's lower half at the top of the feed, so its bubble is the first visible one
+        await page.ev(`(() => { const f = document.getElementById('feed'); f.scrollTop += f.querySelector('img').getBoundingClientRect().top - f.getBoundingClientRect().top + 150; })()`);
+        await sleep(300);
+        const y = `Math.round(${bubble('reply 6')}.getBoundingClientRect().top)`;
+        const before = await page.ev(y);
+        await page.ev(`window.__thumb = document.querySelector('#feed img')`);
+        for (const n of [30, 31]) {
+            await add(n);
+            assert.ok(await page.ev(`document.querySelector('#feed img') === window.__thumb`), 'a redrawn thumbnail is a new element, with no height until it loads again');
+            assert.equal(await page.ev(y), before, `reply ${n} moved what the user was reading`);
+        }
+    }),
+
+    'at the bottom: a reply opened with Show more stays where it is when the next reply lands': async ctx => withImageChat(ctx, async add => {
+        const { page } = ctx;
+        await add(30, Array.from({ length: 12 }, (_, n) => `\n\nparagraph ${n}`).join(''));
+        await page.clickOn(`${bubble('reply 30')}.querySelector('button.show')`);
+        await sleep(300);
+        const y = `Math.round(${bubble('reply 30')}.getBoundingClientRect().top)`;
+        const before = await page.ev(y);
+        await add(31);
+        assert.equal(await page.ev(y), before, 'the opened reply moved');
+    })
 };

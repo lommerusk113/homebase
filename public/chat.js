@@ -47,8 +47,6 @@ const FEED_STEP = 60; // items per load; "Show earlier" adds this many
 let feedMax = { sid: '', max: FEED_STEP };
 /** @type {number | null} */
 let keepFromBottom = null; // set by "Show earlier": the next render keeps the view where it was
-/** @type {number | null} */
-let ownScroll = null; // where the last render scrolled the feed, so its scroll event isn't taken for the user's
 let away = false; // the window lost focus or was hidden; back on focus
 
 // cleared:<id> holds a timestamp (Clear view) or {"at","mode":"new"} (New conversation: the same cut, but not a "hidden" one)
@@ -359,7 +357,7 @@ function bubble(i, sid, prevTopic, look = {}) {
         const names = imageNames(i.text);
         if (names.length) {
             const row = el('div', 'b-images');
-            row.append(...names.map(n => zoomable(thumb(imageUrl(n), n))));
+            row.append(...names.map(bubbleImage));
             b.append(row);
         }
     }
@@ -901,6 +899,47 @@ async function sendChip(b, sid, text, answerTo, note) {
 }
 
 const NEAR_BOTTOM_PX = 40; // this close to the bottom counts as reading the newest: a re-render keeps it in view
+/** @param {HTMLElement} feed */
+const nearBottom = feed => feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX;
+/** @param {HTMLElement} feed @returns {HTMLElement[]} */
+const keyed = feed => /** @type {HTMLElement[]} */ ([...feed.querySelectorAll('[data-key]')]);
+
+// Where the reader is: at the newest (end), or with the first visible bubble (key) y px below the feed's top. Taken
+// only when the feed's offset (top) or content height differs from the one last taken or set, i.e. when the user
+// scrolled or opened a Show more: content that changes height by itself (a re-render, a thumbnail loading, the
+// composer resizing the feed) is not the reader moving, and restorePlace puts them back.
+/** @type {{ end: boolean, top: number, height: number, key?: string, y: number }} */
+let place = { end: true, top: 0, height: 0, y: 0 };
+/** @param {HTMLElement} feed */
+function notePlace(feed) {
+    const feedTop = feed.getBoundingClientRect().top;
+    // the window drops old items off the top, so the bubble is the anchor, not the scroll offset
+    const b = keyed(feed).find(b => b.getBoundingClientRect().bottom > feedTop + 5);
+    place = { end: nearBottom(feed), top: feed.scrollTop, height: feed.scrollHeight, key: b?.dataset.key, y: b ? b.getBoundingClientRect().top - feedTop : 0 };
+}
+// True when the user moved since the place was taken; takes the new one. late: the content just changed height by itself.
+/** @param {HTMLElement} feed @param {boolean} [late] */
+function syncPlace(feed, late) {
+    const moved = feed.scrollTop !== place.top || (!late && feed.scrollHeight !== place.height);
+    if (moved) {
+        notePlace(feed);
+    }
+    return moved;
+}
+/** @param {HTMLElement} feed */
+function restorePlace(feed) {
+    if (place.end) {
+        feed.scrollTop = feed.scrollHeight;
+    } else {
+        feed.scrollTop = place.top;
+        const b = place.key && keyed(feed).find(b => b.dataset.key === place.key);
+        if (b) {
+            feed.scrollTop += b.getBoundingClientRect().top - feed.getBoundingClientRect().top - place.y;
+        }
+    }
+    place.top = feed.scrollTop;
+    place.height = feed.scrollHeight;
+}
 
 let refreshSeq = 0; // a refresh that finishes after a newer one started is stale: it must not render over it
 
@@ -910,8 +949,6 @@ export async function refreshChat() {
     followFocus();
     const s = chatSession(), feed = $('feed');
     swapComposer(s?.id ?? null);
-    // before the ask card can show and shorten the feed
-    const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX;
     // persist the binding, or a successor it moved to
     if (s && !state.focus && store.get(bindKey()) !== s.id) {
         store.set(bindKey(), s.id);
@@ -971,11 +1008,7 @@ export async function refreshChat() {
     }
 
     const first = !chatKey?.startsWith(s.id);
-    const top = feed.scrollTop;
-    // reading scrolled up: the window drops old items off the top, so pin the first visible bubble instead of the scroll offset
-    const feedTop = feed.getBoundingClientRect().top;
-    const anchor = [...feed.querySelectorAll('[data-key]')].find(b => b.getBoundingClientRect().bottom > feedTop + 5);
-    const anchorKey = /** @type {HTMLElement | undefined} */ (anchor)?.dataset.key, anchorY = anchor ? anchor.getBoundingClientRect().top - feedTop : 0;
+    syncPlace(feed);
     chatKey = key;
 
     let seen = seenStore(s.id);
@@ -989,7 +1022,7 @@ export async function refreshChat() {
         && !seen.keys.includes(`${s.id}:${i.at}`)
         && !items.slice(n + 1).some(x => x.role === 'user');
     const latest = items.findLastIndex(i => i.role === 'assistant');
-    const before = new Set([...feed.querySelectorAll('[data-key]')].map(b => /** @type {HTMLElement} */ (b).dataset.key));
+    const before = new Set(keyed(feed).map(b => b.dataset.key));
     const firstNew = items.findIndex(i => Date.parse(i.at) > lastSeen);
     let topic = null;
     feed.replaceChildren(...items.flatMap((i, n) => {
@@ -1029,15 +1062,13 @@ export async function refreshChat() {
     }
 
     addShowMore(feed);
-    const was = feed.scrollTop;
-    feed.scrollTop = keepFromBottom !== null ? feed.scrollHeight - keepFromBottom : first || atBottom || stick ? feed.scrollHeight : top;
-    if (keepFromBottom === null && !first && !atBottom && !stick && anchorKey) {
-        const same = [...feed.querySelectorAll('[data-key]')].find(b => /** @type {HTMLElement} */ (b).dataset.key === anchorKey);
-        if (same) {
-            feed.scrollTop += same.getBoundingClientRect().top - feedTop - anchorY;
-        }
+    if (keepFromBottom !== null) {
+        feed.scrollTop = feed.scrollHeight - keepFromBottom;
+        notePlace(feed);
+    } else {
+        place.end ||= first || stick;
+        restorePlace(feed);
     }
-    ownScroll = feed.scrollTop !== was ? feed.scrollTop : null;
     stick = false;
     keepFromBottom = null;
 }
@@ -1047,15 +1078,14 @@ export async function refreshChat() {
 function initNewMarker() {
 
     const feed = $('feed');
-    // a strip appearing above the composer shrinks the feed: keep the newest in view if it was
-    let atEnd = true;
-    feed.addEventListener('scroll', () => { atEnd = feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX; });
-    new ResizeObserver(() => {
-        if (atEnd) {
-            feed.scrollTop = feed.scrollHeight;
-        }
-    }).observe(feed);
-    const bottom = () => feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX;
+    // a strip appearing above the composer resizes the feed, and a thumbnail grows when it loads: the reader stays put
+    const keep = () => {
+        syncPlace(feed, true);
+        restorePlace(feed);
+    };
+    new ResizeObserver(keep).observe(feed);
+    feed.addEventListener('load', keep, true);
+    const bottom = () => nearBottom(feed);
     const leave = () => {
         const s = chatSession();
         if (s && (!store.get(`last-seen:${s.id}`) || bottom())) {
@@ -1068,9 +1098,8 @@ function initNewMarker() {
     window.addEventListener('focus', () => { away = false; });
     document.addEventListener('visibilitychange', () => (document.hidden ? leave() : (away = false)));
     feed.addEventListener('scroll', () => {
-        const own = feed.scrollTop === ownScroll, s = chatSession();
-        ownScroll = null;
-        if (!own && !away && s && store.get(`last-seen:${s.id}`) && bottom()) {
+        const s = chatSession();
+        if (syncPlace(feed) && !away && s && store.get(`last-seen:${s.id}`) && bottom()) {
             store.set(`last-seen:${s.id}`, '');
             refreshChat();
         }
@@ -1178,6 +1207,17 @@ function thumb(url, alt) {
     const img = el('img');
     img.alt = alt;
     url.then(u => { if (u) { img.src = u; } else { img.remove(); } });
+    return img;
+}
+// A bubble's thumbnail: once loaded, the same element on every redraw of the feed, as a new <img> has no height until
+// it has decoded and everything below it would jump on each redraw.
+// ponytail: one element per upload, so a second bubble naming the same image would take it from the first
+/** @type {Map<string, HTMLImageElement>} */
+const shown = new Map();
+/** @param {string} name */
+function bubbleImage(name) {
+    const img = shown.get(name) ?? zoomable(thumb(imageUrl(name), name));
+    img.onload = () => shown.set(name, img);
     return img;
 }
 // Click a bubble thumbnail: the full image over the page; click or Escape closes it.

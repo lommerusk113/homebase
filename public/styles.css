@@ -618,8 +618,8 @@ wa-details[open] .g-note { display:none; }
 .ptabs { display:none; }
 @media (max-width: 700px) {
   body { height:100dvh; }
-  header.top { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; gap:8px; padding:max(8px, env(safe-area-inset-top)) 12px 8px; }
-  header.top > * { flex-shrink:0; }
+  header.top { gap:8px; padding:max(8px, env(safe-area-inset-top)) 12px 8px; }
+  header.top > * { min-width:0; }
   .brand { font-size:0; } /* the logo only */
   #project { width:170px; }
   .ms-menu { position:fixed; top:calc(max(8px, env(safe-area-inset-top)) + 44px); left:8px; right:8px; width:auto; }

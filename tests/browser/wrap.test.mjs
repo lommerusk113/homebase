@@ -16,7 +16,7 @@ const content = `(() => {
     const branch = document.querySelector('.c-branch');
     if (branch) { branch.hidden = false; branch.textContent = '12-${LONG}'; }
 })()`;
-const wide = `[document.documentElement, document.body, ...document.querySelectorAll('.main, #chat, #feed, #feed .bubble, #feed .tools, #feed .body *, .c-cards, #masters, #masters *')]
+const wide = `[document.documentElement, document.body, ...document.querySelectorAll('header.top, header.top *, .main, #chat, #feed, #feed .bubble, #feed .tools, #feed .body *, .c-cards, #masters, #masters *')]
     .filter(e => e.offsetParent !== null || e === document.body || e === document.documentElement)
     // ellipsis truncation (header chips, board cells) is by design, as long as nothing pushes past the viewport
     .filter(e => (e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).textOverflow !== 'ellipsis' && !e.closest('#masters')) || e.getBoundingClientRect().right > innerWidth + 1)

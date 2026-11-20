@@ -36,11 +36,11 @@ export default {
         });
     },
 
-    'nothing scrolls sideways at 390px except the header strip': async ({ page, open, IDS }) => {
+    'nothing scrolls sideways at 390px': async ({ page, open, IDS }) => {
         await asPhone(page, async () => {
             await open({ project: 'beta', chat: IDS.asker });
             await page.waitFor(`!document.getElementById('ask').hidden`, { what: 'the ask card' });
-            const wide = `[document.documentElement, document.body, ...document.querySelectorAll('.main, #chat, #feed, .c-cards, #send, #masters, #issues, #log, #ptabs')]
+            const wide = `[document.documentElement, document.body, ...document.querySelectorAll('header.top, .main, #chat, #feed, .c-cards, #send, #masters, #issues, #log, #ptabs')]
                 .filter(e => e.offsetParent !== null || e === document.body || e === document.documentElement)
                 .filter(e => e.scrollWidth > e.clientWidth + 1 || e.getBoundingClientRect().right > innerWidth + 1).map(e => e.id || e.className || e.tagName)`;
             assert.deepEqual(await page.ev(wide), [], 'chat');

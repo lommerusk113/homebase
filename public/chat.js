@@ -259,6 +259,11 @@ function bubble(i, sid, prevTopic, look = {}) {
             opts.classList.add('b-options');
             parts.splice(1, 0, opts);
         }
+        if (i.headsUp) {
+            const heads = el('div', 'b-heads');
+            heads.append(el('b', null, 'Heads-up: '), ...rich(i.headsUp, true).childNodes);
+            parts.splice(1, 0, heads);
+        }
         b.append(...parts);
     } else {
         const body = rich(i.text);
@@ -654,7 +659,7 @@ function showWait(s, data, items) {
 
     waitKey = key;
     $('wait').dataset.key = `${s.id}:${w.at}`;
-    $('wait-q').replaceChildren(rich(w.waiting, true));
+    $('wait-q').replaceChildren(...rich(w.waiting, true).childNodes);
     $('wait-q').onclick = jumpToNeeds;
     const n = items.indexOf(w);
     $('wait-opts').replaceChildren(...(w.replies ?? []).map((t, k) => {

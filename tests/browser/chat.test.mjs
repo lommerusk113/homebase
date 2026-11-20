@@ -204,13 +204,14 @@ export default {
         const items = chatItems([
             say('**▸ Cache layer**\n\n**Options**\n1. **Redis** — shared\n2. **In-memory** — simplest\n\n**In flight**\n- Waiting on you: which cache\n\n**TLDR:** Which cache should I build?', '2026-11-14T10:00:00.000Z'),
             { type: 'user', timestamp: '2026-11-14T10:01:00.000Z', message: { content: 'also fix the README typo' } },
-            say('**▸ Cache layer**\n\nFixed the typo.\n\n**Options**\n1. **Redis** — shared\n2. **In-memory** — simplest\n\n**In flight**\n- Nothing running\n- Waiting on you: which cache, Redis or in-memory\n\n**TLDR:** Typo fixed.', '2026-11-14T10:02:00.000Z')
+            say('**▸ Cache layer**\n\nFixed the typo.\n\n**Options**\n1. **Redis** — shared\n2. **In-memory** — simplest\n\n**In flight**\n- Nothing running\n- Waiting on you: which cache, Redis or in-memory\n\n**Heads-up:** Redis needs a server\n\n**TLDR:** Typo fixed.', '2026-11-14T10:02:00.000Z')
         ]);
         await open();
         await ready(page);
         page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: false, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
         await page.waitFor(`!document.getElementById('wait').hidden`, { what: 'the pinned strip' });
         assert.equal(await page.ev(`document.getElementById('wait-q').textContent`), 'which cache, Redis or in-memory');
+        assert.equal(await page.ev(`${bubble('Typo fixed')}.querySelector('.b-heads').textContent`), 'Heads-up: Redis needs a server', 'the Heads-up line outside the fold');
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#wait-opts wa-button')].map(b => b.firstChild.textContent)`), ['Redis', 'In-memory']);
         await page.waitFor(`document.getElementById('status-text').textContent.startsWith('Claude needs your answer')`, { what: 'the status from the open decision' });
         await page.ev(`document.getElementById('feed').scrollTop = 0`);

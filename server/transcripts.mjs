@@ -515,6 +515,10 @@ function dedupePrompts(items) {
 function topicAndTldr(i) {
 
     const { topic, needsYou, text } = splitTopic(i.text), t = splitTldr(text);
+    const heads = t.text.match(HEADS_UP); // shown outside the fold, next to the TLDR
+    if (heads) {
+        t.text = t.text.replace(heads[0], '').trim();
+    }
 
     // no marker: a TLDR that asks a question ("Merge now? Yes or later.") still needs the user
     const waiting = waitingOn(text);
@@ -532,7 +536,7 @@ function topicAndTldr(i) {
         }
     }
 
-    return { ...i, topic, needsYou: needs, ...t, ...(options && { options }), ...(waiting && { waiting }) };
+    return { ...i, topic, needsYou: needs, ...t, ...(options && { options }), ...(waiting && { waiting }), ...(heads && { headsUp: heads[1].trim() }) };
 }
 
 // What a reply says waits on the user ("- Waiting on you: <question>" in its In flight list, or a "**Waiting on you:**"
@@ -547,6 +551,8 @@ export function waitingOn(text) {
 
     return said && !/^(?:nothing|none|n\/a)\b/i.test(said) ? said : null;
 }
+
+const HEADS_UP = /^[ \t]*\*\*Heads-up:?\*\*:?[ \t]*(\S.*)$\n?/im;
 
 // The reply's closing "**In flight**" list (homebase-rules.md), cut off so its rows never read as options or the ask.
 const IN_FLIGHT = /(?:^|\n)[ \t]*(?:#+[ \t]*|\*\*)In flight\b[\s\S]*$/i;

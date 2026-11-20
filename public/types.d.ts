@@ -161,6 +161,8 @@ interface ChatItem {
     options?: string;
     /** what the reply says still waits on the user (its "Waiting on you: …"), kept after the user says something else */
     waiting?: string;
+    /** the reply's "**Heads-up:** …" line, shown outside the fold in the warn colour */
+    headsUp?: string;
     answer?: Answer;
     // client-only (chat.js outbox and decorations)
     sending?: boolean;

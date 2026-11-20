@@ -727,6 +727,11 @@ assert.deepEqual(namedChoices('Shipped the fix. Nothing else to do.'), []);
     assert.deepEqual(b.replies, ['Go']);
     assert.deepEqual(chatItems([say('Built it.\n\n**TLDR:** Build is green, say go to deploy when you like')])[0].replies, [], 'not a needs-you reply');
 }
+{ // a Heads-up line leaves the body for its own field, shown next to the TLDR
+    const [h] = chatItems([say('Done.\n\n**Heads-up:** the migration locks the table for a minute.\n\n**TLDR:** Migration is ready.')]);
+    assert.equal(h.headsUp, 'the migration locks the table for a minute.');
+    assert.equal(h.text, 'Done.');
+}
 import { waitingOn } from './server.mjs';
 assert.equal(waitingOn('**In flight**\n- Nothing running\n- Waiting on you: which cache'), 'which cache');
 assert.equal(waitingOn('**Waiting on you:** merge **!12**'), 'merge **!12**');

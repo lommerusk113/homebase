@@ -105,6 +105,11 @@ const env = {
     HOMEBASE_STUB_LOG: join(tmp, 'forge.log')
 };
 delete env.HOMEBASE_LAN;
+// The remote (tailscale serve) port, reached in the tests as http://localhost:<port> instead of the tailnet name.
+const remotePort = await freePort();
+const remoteBase = `http://localhost:${remotePort}/`;
+const configFile = join(env.HOMEBASE_DIR, 'config.json'); // the fixture wrote newProject; add remote
+writeFileSync(configFile, JSON.stringify({ ...JSON.parse(readFileSync(configFile, 'utf8')), remote: { host: `localhost:${remotePort}`, port: remotePort } }));
 
 let server, serverLog = '';
 async function startServer() {
@@ -151,7 +156,7 @@ const answerPosts = q => {
 
 const DEFAULTS = { tracked: '["alpha","beta","gamma"]', project: 'alpha', tab: 'work', chat: IDS.master, 'auto-compact': '0' }; // auto-compact is on by default; a test that wants it says so (null = unset)
 const ctx = {
-    page, base, IDS, answerPosts, homebase: env.HOMEBASE_DIR,
+    page, base, remoteBase, IDS, answerPosts, homebase: env.HOMEBASE_DIR,
     // Fresh page: storage reset to DEFAULTS plus overrides (null removes a key), then loaded and the board drawn.
     async open(storage = {}) {
         page.route = answerPosts;

@@ -99,6 +99,15 @@
 <wa-dialog id="dlg" label="Projects on your board" light-dismiss>
   <div class="d-body" id="dlg-body"></div>
 </wa-dialog>
+<wa-dialog id="pair-dlg" label="Pair a device" light-dismiss>
+  <p>On the phone, open Homebase's Tailscale address and type this code. It works once, for 5 minutes.</p>
+  <p class="pair-code mono" id="pair-code" aria-live="polite"></p>
+  <div class="error" id="pair-err" role="alert"></div>
+  <h4>Paired devices</h4>
+  <div id="pair-list"></div>
+  <wa-button slot="footer" size="s" appearance="outlined" data-dialog="close">Close</wa-button>
+  <wa-button slot="footer" size="s" variant="brand" id="pair-new">New code</wa-button>
+</wa-dialog>
 <wa-dialog id="new-dlg" label="New project">
   <form class="np" id="np-form" autocomplete="off">
     <div class="np-tabs">

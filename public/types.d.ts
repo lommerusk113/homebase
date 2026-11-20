@@ -329,6 +329,7 @@ interface PageIds {
     dlg: WaDialog;
     'clear-dlg': WaDialog;
     'new-dlg': WaDialog;
+    'pair-dlg': WaDialog;
     'np-name': WaInput;
     'np-desc': WaTextarea;
     'np-private': WaSwitch;

@@ -57,6 +57,9 @@ export function refreshToken() {
         .then(r => (r.ok ? r.text() : ''))
         .then(html => {
             const token = metaOf(html, 'homebase-token'), build = metaOf(html, 'homebase-build');
+            if (metaOf(html, 'homebase-pair')) { // this remote device was revoked: show the pair page
+                globalThis.location?.assign('/');
+            }
             if (token) {
                 page.token = token;
             }

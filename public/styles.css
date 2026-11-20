@@ -101,6 +101,10 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .p-row .rm::part(base) { color:var(--c-needs); }
 .d-new { padding:4px 16px 8px; display:flex; flex-wrap:wrap; gap:8px; }
 #new-dlg { --width:min(440px, calc(100vw - 32px)); }
+#pair-dlg { --width:min(400px, calc(100vw - 32px)); }
+#pair-dlg h4 { margin:12px 0 4px; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; }
+#pair-dlg .p-row { padding:6px 0; }
+.pair-code { font-size:32px; letter-spacing:.2em; text-align:center; margin:8px 0; }
 #new-dlg::part(dialog) { border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); }
 #new-dlg::part(header) { border-bottom:1px solid var(--line); }
 #new-dlg::part(title) { font-size:14px; font-weight:600; padding-block:14px; }

@@ -142,8 +142,13 @@ function renderDialog() {
         $('dlg').open = false;
         openNewProject('open');
     };
+    const pairBtn = waButton('Pair a device…', 'd-pair-btn', { variant: 'brand', appearance: 'outlined' });
+    pairBtn.onclick = () => {
+        $('dlg').open = false;
+        openPairing();
+    };
     const top = el('div', 'd-new');
-    top.append(add, existing);
+    top.append(add, existing, pairBtn);
     body.replaceChildren(
         top,
         el('h4', null, 'On board'),
@@ -152,6 +157,40 @@ function renderDialog() {
         ...(others.length ? others.map(p => row(p, 'add')) : [el('div', 'd-empty', 'Nothing else found.')])
     );
 }
+// "Pair a device…": a fresh one-time code for a phone on the tailnet, and the paired devices with Revoke.
+async function renderDevices() {
+    const r = await api('/api/pair/devices');
+    if (!r.ok) {
+        $('pair-err').textContent = await r.text();
+        return;
+    }
+    /** @type {{ id: string, name: string, created: number, lastSeen: number }[]} */
+    const list = await r.json();
+    $('pair-list').replaceChildren(...(list.length ? list.map(d => {
+        const row = el('div', 'p-row'), b = waButton('Revoke', 'rm');
+        row.append(el('span', null, d.name), el('small', null, ago(d.lastSeen) === 'now' ? 'seen now' : `seen ${ago(d.lastSeen)} ago`), b);
+        b.onclick = async () => {
+            const res = await api(`/api/pair/revoke?id=${encodeURIComponent(d.id)}`, { method: 'POST' });
+            $('pair-err').textContent = res.ok ? '' : await res.text();
+            renderDevices();
+        };
+        return row;
+    }) : [el('div', 'd-empty', 'None yet.')]));
+}
+async function newPairCode() {
+    const r = await api('/api/pair/code', { method: 'POST' });
+    $('pair-err').textContent = r.ok ? '' : await r.text();
+    $('pair-code').textContent = r.ok ? (await r.json()).code : '';
+}
+function openPairing() {
+    $('pair-dlg').open = true;
+    newPairCode();
+    renderDevices();
+}
+$('pair-new').onclick = () => {
+    newPairCode();
+    renderDevices();
+};
 $('manage').onclick = () => {
     renderDialog();
     $('dlg').open = true;

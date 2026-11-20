@@ -63,7 +63,7 @@
     <div class="limits" id="limits" hidden></div>
   </div>
   <aside id="chat">
-    <div class="c-head"><span class="c-title" id="c-title"></span><span class="c-branch" id="c-branch" hidden></span><span class="c-unpushed" id="c-unpushed" hidden></span><span class="c-newer" id="newer" role="status" hidden><span id="newer-text"></span><button class="show" id="newer-go">Switch</button></span><wa-dropdown class="c-menu" id="c-menu" placement="bottom-end">
+    <div class="c-head"><button class="c-back" id="c-back" type="button" hidden>← Main chat</button><span class="c-title" id="c-title"></span><span class="c-branch" id="c-branch" hidden></span><span class="c-unpushed" id="c-unpushed" hidden></span><span class="c-newer" id="newer" role="status" hidden><span id="newer-text"></span><button class="show" id="newer-go">Switch</button></span><wa-dropdown class="c-menu" id="c-menu" placement="bottom-end">
       <button class="quiet" slot="trigger" title="Chat options" aria-label="Chat options">⋯</button>
       <wa-dropdown-item value="view">Hide earlier messages<span slot="details">Claude still remembers them</span></wa-dropdown-item>
       <wa-dropdown-item value="new">Start a fresh conversation</wa-dropdown-item>
@@ -73,6 +73,7 @@
       <wa-dropdown-item value="needs-only" type="checkbox" id="needs-only">Show only messages that need me</wa-dropdown-item>
       <wa-dropdown-item value="push" id="push-item"><span id="push-label">Enable notifications on this device</span><span slot="details" id="push-state"></span></wa-dropdown-item>
     </wa-dropdown></div>
+    <div class="c-focus" id="c-focus" hidden></div>
     <div class="c-feed" id="feed"></div>
     <div class="c-cards">
       <div class="c-note c-wait" id="wait" hidden><button class="c-wait-q" id="wait-q" type="button" title="Show the reply this is about"></button><div class="c-opts" id="wait-opts"></div></div>

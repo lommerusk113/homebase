@@ -1,7 +1,7 @@
 // Entry point: header (project select, bell, projects dialog), polling, notifications, limits strip.
-import { api, $, el, state, store, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary } from './core.js';
+import { api, $, el, state, store, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary, waitsOnYou } from './core.js';
 import { renderBoard, select, attentionEvents, askingEvents, sessionTopic } from './list.js';
-import { refreshChat, initChat, bindChat, isMaster, chatSession } from './chat.js';
+import { refreshChat, initChat, bindChat, focusChat, isMaster, chatSession } from './chat.js';
 import { openNewProject, initNewProject } from './newproject.js';
 import { milestoneSelector, inMilestone } from './milestone.js';
 import { initKeys } from './keys.js';
@@ -94,7 +94,13 @@ function renderChips() {
         b.append(el('small', 'warn', `⚠${waiting}`));
         b.setAttribute('aria-pressed', String(p === state.project));
         b.setAttribute('aria-label', `${p}: ${waiting} waiting on you`);
-        b.onclick = () => setProject(p);
+        b.onclick = () => {
+            setProject(p);
+            const asking = waiting && state.sessions.find(s => s.project === p && waitsOnYou(s));
+            if (asking) {
+                focusChat(asking.id); // a chip with something waiting opens that question
+            }
+        };
         return b;
     }));
 }
@@ -104,6 +110,7 @@ function setProject(name) {
         return;
     }
     state.project = name;
+    state.focus = null;
     store.set('project', name);
     renderProjects();
     renderBoard();
@@ -330,7 +337,7 @@ function notify(e) {
         window.focus();
         n.close();
         if (s) {
-            return bindChat(s.id);
+            return focusChat(s.id);
         }
         const it = state.sessions.flatMap(s => s.items || []).find(i => i.key === x.key);
         if (it && state.selected !== it.key) {

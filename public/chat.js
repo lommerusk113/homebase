@@ -38,7 +38,7 @@ export function newerSession(visible, s) {
 const bindKey = () => `chat:${state.project}`;
 // only sessions in the selected project(s)
 /** @returns {Session | null} */
-export const chatSession = () => pickChat(visibleSessions(), store.get(bindKey()), state.chat);
+export const chatSession = () => (state.focus && visibleSessions().find(s => s.id === state.focus)) || pickChat(visibleSessions(), store.get(bindKey()), state.chat);
 // The tmux session of the selected project's chat while it is still starting (no transcript yet), else null.
 const startingTarget = () => (state.startingTmux === `cc-new-${state.project}` ? state.startingTmux : null);
 let chatKey = null;
@@ -134,11 +134,29 @@ const draftStorage = () => {
 
 /** @param {string} id */
 export function bindChat(id) {
+    state.focus = null;
     state.chat = id;
     store.set('chat', id);
     store.set(bindKey(), id);
     renderBoard();
     refreshChat();
+}
+
+// Shows another chat's question in the pane (the "Needs you" rows, n, a chip) without rebinding the main chat;
+// "← Main chat" (or Esc) goes back. The main chat itself just shows.
+/** @param {string} id */
+export function focusChat(id) {
+    const main = pickChat(visibleSessions(), store.get(bindKey()), state.chat);
+    state.focus = id === main?.id ? null : id;
+    renderBoard();
+    refreshChat();
+}
+export function unfocusChat() {
+    if (state.focus) {
+        state.focus = null;
+        renderBoard();
+        refreshChat();
+    }
 }
 
 // Stable colour per topic: one of TOPIC_HUES --t<n> tokens in styles.css, so bubbles on one task share a colour.
@@ -447,6 +465,7 @@ function showRules(s) {
 /** @param {Session | null} s */
 function showHead(s) {
 
+    $('c-back').hidden = !(s && s.id === state.focus);
     const title = s ? [s.project, s.topic].filter(Boolean).join(' · ') : '';
     $('c-title').textContent = title;
     $('c-title').title = title;
@@ -477,6 +496,22 @@ function showModel(s) {
     $('c-model').hidden = !s || s.id.startsWith('cc-new-') || !(name || pickedModel);
     btn.textContent = pickedModel ? `${pickedModel.name}…` : `${name ?? ''} ▾`;
     btn.classList.toggle('pending', !!pickedModel);
+}
+
+// Above a focused (not main) chat's question: what it is about, its title and linked MR, then its last reply's TLDR.
+/** @param {Session} s @param {ChatItem[]} items */
+function showFocus(s, items) {
+
+    const box = $('c-focus'), on = s.id === state.focus;
+    box.hidden = !on;
+    if (!on) {
+        return;
+    }
+
+    const x = state.sessions.flatMap(o => o.items || []).find(i => i.sessionId === s.id && i.pr);
+    const last = items.findLast(i => i.role === 'assistant' && !i.error);
+    const say = last && (last.tldr || last.text.split('\n').find(l => l.trim()) || '').trim().slice(0, 220);
+    box.replaceChildren(el('b', null, [s.title || s.topic, x && `${x.title} (${x.pr.split('/').pop()})`].filter(Boolean).join(' · ') || s.project), ...(say ? [el('div', null, say)] : []));
 }
 
 const DETAIL_LINES = 6;
@@ -766,11 +801,11 @@ export async function refreshChat() {
     // before the ask card can show and shorten the feed
     const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX;
     // persist the binding, or a successor it moved to
-    if (s && store.get(bindKey()) !== s.id) {
+    if (s && !state.focus && store.get(bindKey()) !== s.id) {
         store.set(bindKey(), s.id);
         renderBoard();
     }
-    showNewer(s);
+    showNewer(state.focus ? null : s);
     showHead(s);
     showRules(s);
     await showBoot(s ? null : state.startingTmux); // only a chat still starting: a running one's ❯ prompts and questions aren't startup dialogs
@@ -816,6 +851,7 @@ export async function refreshChat() {
 
     const { items, hidden, cut } = feedItems(s, data);
     showWait(s, data, items);
+    showFocus(s, items);
     const fresh = cut.fresh || !!s.clearedFrom; // a New conversation, before or after the successor is bound
     const lastSeen = Number(store.get(`last-seen:${s.id}`)) || Infinity;
     const key = s.id + JSON.stringify([items, data.asking, data.working, hidden, data.earlier, lastSeen]);
@@ -1099,6 +1135,8 @@ export function initChat() {
     setNeedsOnly(store.get('needs-only') === '1');
     setAutoCompact(store.get('auto-compact') !== '0');
     initNewMarker();
+    $('c-back').onclick = unfocusChat;
+    document.addEventListener('keydown', e => e.key === 'Escape' && state.focus && !e.composedPath().some(n => /^(INPUT|WA-TEXTAREA|TEXTAREA|WA-DIALOG|WA-DROPDOWN)$/.test(/** @type {Element} */ (n).nodeName || '')) && unfocusChat());
     $('msg').addEventListener('input', () => {
         syncSend();
         saveDraft(draftStorage(), chatSession()?.id, $('msg'));

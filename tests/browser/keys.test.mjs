@@ -37,7 +37,8 @@ export default {
         assert.match(await page.ev(`document.title`), /^\(\d+\) Homebase$/);
         await page.ev(`${row}.focus()`);
         await page.key('Enter', 'Enter');
-        await page.waitFor(`localStorage.getItem('chat') === ${JSON.stringify(IDS.master)}`, { what: 'the chat to bind the master' });
+        await page.waitFor(`!document.getElementById('c-back').hidden && !document.getElementById('c-focus').hidden`, { what: 'the chat pane to show the master with a way back' });
+        assert.equal(await page.ev(`localStorage.getItem('chat')`), IDS.worker, 'the main chat stays bound');
     },
 
     'n jumps to the first chat waiting on you, from any tab': async ({ page, open, IDS }) => {

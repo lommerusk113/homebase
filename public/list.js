@@ -1,6 +1,6 @@
 // Left column: work items grouped by what they wait on, and attention transitions.
 import { api, $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle, ctxLevel, waitsOnYou } from './core.js';
-import { chatSession, bindChat, sendText, isMaster } from './chat.js';
+import { chatSession, bindChat, focusChat, sendText, isMaster } from './chat.js';
 import { milestoneTag } from './milestone.js';
 
 
@@ -182,7 +182,7 @@ function askingRow(s) {
     what.append(b, el('small', 'next', `${s.asking ? s.question || 'Claude asked a question.' : 'Claude’s last reply wants your decision'} · click to answer in the chat`));
     what.colSpan = 6;
     tr.append(what);
-    tr.onclick = () => bindChat(s.id);
+    tr.onclick = () => focusChat(s.id);
     return tr;
 }
 
@@ -470,7 +470,7 @@ export function select(x) {
         updateTitle();
     }
     if (x.sessionId && x.sessionId !== chatSession()?.id) {
-        bindChat(x.sessionId);
+        (x.column === 'needs-you' ? focusChat : bindChat)(x.sessionId);
     } else {
         renderBoard();
     }

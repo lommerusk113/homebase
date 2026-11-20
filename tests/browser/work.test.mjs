@@ -83,7 +83,7 @@ export default {
             assert.equal(await page.ev(`document.querySelector('#masters .g-needs-you .g-head').textContent`), 'Needs you · 4');
             await page.click(`#masters tr[data-key="asking:${IDS.worker}"]`);
             await page.waitFor(`document.getElementById('status-text').textContent.startsWith('Claude is asking')`, { what: 'the chat status to say asking' });
-            assert.equal(await page.ev(`localStorage.getItem('chat')`), IDS.worker);
+            assert.equal(await page.ev(`document.getElementById('c-back').hidden`), false);
             await page.waitFor(`/Merge !101 now\\?/.test(document.getElementById('ask-q').textContent)`, { what: 'the question in the card' });
             assert.match(await page.ev('document.title'), /^\(\d+\) Homebase$/);
         } finally {

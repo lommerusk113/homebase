@@ -38,19 +38,21 @@ export function mergeConfig(file) {
     return c;
 }
 
-export function loadConfig(path = CONFIG_FILE()) {
+// The parsed config.json, or undefined when there is none.
+export function readConfigFile(path = CONFIG_FILE()) {
 
-    let file;
     try {
-        file = JSON.parse(readFileSync(path, 'utf8'));
+        return JSON.parse(readFileSync(path, 'utf8'));
     } catch (e) {
         if (e.code !== 'ENOENT') {
             throw Object.assign(new Error('config.json is not valid JSON'), { status: 500 });
         }
     }
 
-    return mergeConfig(file);
+    return undefined;
 }
+
+export const loadConfig = (path = CONFIG_FILE()) => mergeConfig(readConfigFile(path));
 
 // The config for forge calls, re-read every 30 s; null when it is invalid, which leaves every repo on the work account.
 let config = { at: 0, value: null };

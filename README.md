@@ -90,8 +90,8 @@ The fixtures are in `tests/browser/fixture.mjs` (transcripts) and `tests/browser
 
 Homebase can type into Claude Code sessions, which run shell commands, so it only answers its own page:
 
-- It listens on 127.0.0.1 only, unless LAN mode is on. Other machines can't reach it.
-- Every request must carry `Host: localhost:<port>` (or `127.0.0.1`, `[::1]`); a request with a foreign `Origin` is refused. This blocks DNS rebinding and other websites.
+- It listens on 127.0.0.1 only. Other machines can't reach it, except through `tailscale serve` on the remote port (below), where every device must be paired.
+- Every request must carry `Host: localhost:<port>` (or `127.0.0.1`, `[::1]`), or on the remote port exactly `remote.host`; a request with a foreign `Origin` is refused. This blocks DNS rebinding and other websites.
 - Every `/api/*` call needs the `x-homebase-token` header. The token is random per server start and is handed out inside the served page, which cross-origin pages can't read. After a restart the page fetches the new token on its next API call, without reloading.
 
 The token stops other websites, not local programs.
@@ -99,17 +99,41 @@ Any process on the Mac, run by any OS user, can fetch the page, read the token a
 That's fine on a single-user Mac, where such a process can already read `~/.claude` and type into tmux.
 Don't run Homebase on a Mac shared with other users.
 
-LAN mode has no login: every device on the network can open Homebase and type into your sessions.
-Use it only on a home network where you trust every device.
+The old `HOMEBASE_LAN=1` mode, which handed the token to any device on the network, is gone; the server refuses to start with it set.
 
-## Access from another computer
+## Use from your phone (Tailscale)
 
-```sh
-HOMEBASE_LAN=1 node server.mjs
-```
+[Tailscale](https://tailscale.com) is a private WireGuard network between your own devices; `tailscale serve` gives the Mac an HTTPS address with a real certificate that only devices on your tailnet can reach.
 
-Open `http://<mac>.local:4321` (or the Mac's LAN IP) on the other device; there is no login.
-LAN mode is plain HTTP and has no authentication, so use it only on a network where you trust every device.
+1. Install Tailscale on the Mac and the phone and sign both in to the same account. Turn on MagicDNS and HTTPS certificates in the admin console (DNS page).
+2. Tell Homebase the Mac's tailnet name in `~/.claude/homebase/config.json` and restart it:
+
+   ```json
+   { "remote": { "host": "mymac.tail1234.ts.net", "login": "me@example.com" } }
+   ```
+
+   * `host`: the Mac's full MagicDNS name, as the admin console's Machines page shows it. Exactly this name is allowed, no wildcard.
+   * `port`: the second loopback port Homebase opens for remote requests (default `PORT + 1`, 4322).
+   * `login` (optional): your Tailscale login; requests whose `Tailscale-User-Login` header differs are refused.
+3. Expose that port on the tailnet:
+
+   ```sh
+   tailscale serve --bg http://127.0.0.1:4322
+   ```
+
+   (`tailscale serve status` shows it; `tailscale serve --https=443 http://127.0.0.1:4322 off` stops it.)
+4. On the phone open `https://mymac.tail1234.ts.net`. It shows "Pair this device".
+   On the Mac, open Homebase, ☰ → Pair a device…, and type the 6-digit code it shows on the phone.
+
+How it stays safe:
+
+* Homebase still listens on 127.0.0.1 only. Everything arriving on the remote port counts as remote, whatever its `Host` header says (`tailscale serve` routes by TLS name and passes the `Host` through, so a tailnet peer could otherwise claim to be `localhost`).
+* A remote device without a valid device cookie gets only the pair page; no token, no app files, no API.
+* A code is valid for 5 minutes and works once; a new code replaces the old one. After 5 wrong codes in a minute, all tries are refused until the minute is over.
+* Pairing sets a random 256-bit cookie (HttpOnly, Secure, SameSite=Strict, kept 400 days). Homebase stores only its SHA-256 in `~/.claude/homebase/devices.json`, with the device name and when it was last seen.
+* ☰ → Pair a device… also lists the paired devices; Revoke logs one out at once. Pairing is managed from the Mac only.
+* `Tailscale-User-Login` is set by `tailscale serve` itself, which drops any value the client sent; it is trusted only on the remote port, which only `serve` reaches.
+* A paired device gets the same per-start token as the Mac, so the Host, Origin and token checks above all apply too.
 
 Until Claude writes its first transcript (on the first prompt) the chat sends to `cc-new-<name>` by tmux name (`/api/send?tmux=`, only that name pattern and only while the session runs), and `/api/starting` lets a reloaded page find it again.
 The chat menu's "Restart chat" (`POST /api/restart?id=`) kills the chat's Homebase tmux session and resumes it so Claude reloads (e.g. an edited `homebase-rules.md`); refused while Claude is working or asking, or when the chat doesn't run in Homebase's tmux.

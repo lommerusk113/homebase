@@ -1351,7 +1351,7 @@ for (const f of readdirSync(new URL('./public', import.meta.url)).filter(f => f.
 }
 console.log('ok api wrapper');
 
-import { localHosts, lanHosts, isPrivateIp, allowedHost, allowedOrigin, tokenOk, bindOk } from './server.mjs';
+import { localHosts, allowedHost, allowedOrigin, tokenOk } from './server.mjs';
 {
     const local = localHosts(4321);
     assert.ok(allowedHost('localhost:4321', local));
@@ -1372,18 +1372,86 @@ import { localHosts, lanHosts, isPrivateIp, allowedHost, allowedOrigin, tokenOk,
     assert.ok(!tokenOk('ab', 'abc'));
     assert.ok(!tokenOk(undefined, 'abc'));
     assert.ok(!tokenOk('abc', undefined));
-    assert.ok(bindOk('127.0.0.1', false) && !bindOk('0.0.0.0', false) && bindOk('0.0.0.0', true) && !bindOk('192.168.1.5', true));
-    for (const ip of ['10.0.0.1', '172.16.0.1', '172.31.255.255', '192.168.1.5']) {
-        assert.ok(isPrivateIp(ip), ip);
-    }
-    for (const ip of ['172.15.0.1', '172.32.0.1', '8.8.8.8', '127.0.0.1', 'fe80::1', undefined]) {
-        assert.ok(!isPrivateIp(ip), ip);
-    }
-    const ifaces = { lo0: [{ address: '127.0.0.1' }], en0: [{ address: 'fe80::1' }, { address: '192.168.1.5' }], utun: [{ address: '100.64.0.1' }] };
-    assert.deepEqual(lanHosts(4321, 'Mac', ifaces), [...local, 'mac.local:4321', '192.168.1.5:4321']);
-    assert.deepEqual(lanHosts(4321, 'Mac.local', {}), [...local, 'mac.local:4321']);
+    // the remote host: exact name only, https (or http) origin, never another ts.net name
+    const ts = ['mac.tail1.ts.net'];
+    assert.ok(allowedHost('mac.tail1.ts.net', ts));
+    assert.ok(!allowedHost('other.tail1.ts.net', ts) && !allowedHost('localhost:4321', ts) && !allowedHost('mac.tail1.ts.net', local));
+    assert.ok(allowedOrigin('https://mac.tail1.ts.net', ts, ['https', 'http']));
+    assert.ok(!allowedOrigin('https://mac.tail1.ts.net', ts)); // http only by default
+    assert.ok(!allowedOrigin('https://evil.ts.net', ts, ['https', 'http']));
 }
 console.log('ok access checks');
+
+import { remoteFrom, setupPairing, newCode, pair, deviceOf, cookieOf, deviceCookie, pairedDevices, revoke, isRemote, loginOk, isPairedRequest, CODE_TTL_MS, MAX_FAILS, FAIL_WINDOW_MS } from './server.mjs';
+{
+    // config: exact host, port defaults to PORT + 1, no wildcard or junk
+    assert.equal(remoteFrom({}, 4321), null);
+    assert.deepEqual(remoteFrom({ remote: { host: 'Mac.Tail1.ts.net' } }, 4321), { host: 'mac.tail1.ts.net', port: 4322, login: '' });
+    assert.deepEqual(remoteFrom({ remote: { host: 'mac.tail1.ts.net', port: 5000, login: 'me@x.com' } }, 4321), { host: 'mac.tail1.ts.net', port: 5000, login: 'me@x.com' });
+    for (const bad of [{ host: '*.ts.net' }, { host: '' }, {}, { host: 'a b' }, { host: 'mac.ts.net', port: 4321 }, { host: 'mac.ts.net', port: '1' }, { host: 'mac.ts.net', login: 1 }, null]) {
+        assert.throws(() => remoteFrom({ remote: bad }, 4321), /remote must be/, JSON.stringify(bad));
+    }
+
+    const dir = mkdtempSync(join(tmpdir(), 'homebase-pair-')), file = join(dir, 'devices.json');
+    setupPairing(file, { host: 'mac.tail1.ts.net', port: 4322, login: '' });
+    const t = 1_000_000;
+    // no code yet, then a wrong one: 401
+    assert.throws(() => pair('123456', 'x', t), e => e.status === 401);
+    const { code, expiresAt } = newCode(t);
+    assert.match(code, /^\d{6}$/);
+    assert.equal(expiresAt, t + CODE_TTL_MS);
+    // expired
+    assert.throws(() => pair(code, 'Phone', t + CODE_TTL_MS), e => e.status === 401);
+    // rate limit: MAX_FAILS wrong tries in a window, then even the right code is refused until the window passes
+    setupPairing(file, { host: 'mac.tail1.ts.net', port: 4322, login: '' });
+    const c2 = newCode(t).code, wrong = c2 === '000000' ? '000001' : '000000';
+    for (let i = 0; i < MAX_FAILS; i++) {
+        assert.throws(() => pair(wrong, 'x', t + i), e => e.status === 401);
+    }
+    assert.throws(() => pair(c2, 'x', t + MAX_FAILS), e => e.status === 429);
+    const later = t + MAX_FAILS + FAIL_WINDOW_MS;
+    const secret = pair(` ${c2} `, ' My\u0007 phone ', later);
+    assert.match(secret, /^[0-9a-f]{64}$/);
+    // single use
+    assert.throws(() => pair(c2, 'again', later), e => e.status === 401);
+    // only the hash is stored
+    const stored = readFileSync(file, 'utf8');
+    assert.ok(!stored.includes(secret));
+    assert.equal(statSync(file).mode & 0o777, 0o600);
+    const [dev] = pairedDevices();
+    assert.deepEqual(Object.keys(dev).sort(), ['created', 'id', 'lastSeen', 'name']);
+    assert.equal(dev.name, 'My phone');
+    // cookie: parse, flags, lookup, lastSeen
+    const cookie = deviceCookie(secret);
+    assert.match(cookie, /^homebase_device=[0-9a-f]{64}; Path=\/; Max-Age=\d+; HttpOnly; Secure; SameSite=Strict$/);
+    assert.equal(cookieOf(`a=1; homebase_device=${secret}; b=2`), secret);
+    assert.equal(cookieOf('a=1'), null);
+    assert.equal(deviceOf(secret, later).id, dev.id);
+    assert.equal(deviceOf('f'.repeat(64), later), null);
+    assert.equal(deviceOf('nothex', later), null);
+    assert.equal(deviceOf(secret, later + 120_000).lastSeen, later + 120_000);
+    // survives a restart (re-read from disk)
+    setupPairing(file, { host: 'mac.tail1.ts.net', port: 4322, login: 'me@x.com' });
+    assert.equal(pairedDevices()[0].lastSeen, later + 120_000);
+    // requests: local ones always pass; remote ones need the login (when set) and a paired cookie
+    const req = (localPort, headers = {}) => ({ socket: { localPort }, headers });
+    assert.ok(!isRemote(req(4321)) && isRemote(req(4322)));
+    assert.ok(isPairedRequest(req(4321)));
+    assert.ok(!isPairedRequest(req(4322)));
+    assert.ok(!isPairedRequest(req(4322, { cookie: `homebase_device=${secret}` })), 'login missing');
+    assert.ok(!loginOk(req(4322, { 'tailscale-user-login': 'evil@x.com' })));
+    assert.ok(isPairedRequest(req(4322, { cookie: `homebase_device=${secret}`, 'tailscale-user-login': 'me@x.com' })));
+    // revoke
+    assert.equal(revoke('nope'), false);
+    assert.equal(revoke(dev.id), true);
+    assert.deepEqual(pairedDevices(), []);
+    assert.ok(!isPairedRequest(req(4322, { cookie: `homebase_device=${secret}`, 'tailscale-user-login': 'me@x.com' })));
+    // no remote config: nothing is remote
+    setupPairing(file, null);
+    assert.ok(!isRemote(req(4322)) && loginOk(req(4322)));
+    rmSync(dir, { recursive: true, force: true });
+}
+console.log('ok pairing');
 
 import { refetch, refreshDue } from './server.mjs';
 {
@@ -1467,8 +1535,11 @@ import { createServer as netServer } from 'node:net';
         r.on('error', fail);
         r.end(body);
     });
-    async function start(env) {
+    async function start(env, config) {
         const port = await freePort(), dir = mkdtempSync(join(tmpdir(), 'homebase-test-'));
+        if (config) {
+            writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
+        }
         const child = spawn(process.execPath, ['server.mjs'], { cwd: new URL('.', import.meta.url).pathname, env: { ...process.env, HOME: dir, PORT: String(port), HOMEBASE_DIR: dir, HOMEBASE_STATUSLINE_DIR: dir, HOMEBASE_TMUX_SOCKET: 'homebase-test-none', ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
         let out = '';
         await new Promise((ok, fail) => { child.stdout.on('data', c => { out += c; if (out.includes('Homebase on')) ok(); }); child.on('exit', fail); });
@@ -1538,27 +1609,54 @@ import { createServer as netServer } from 'node:net';
     } finally { s.stop(); }
     console.log('ok server access');
 
-    // LAN mode: a non-loopback client must reach us on a private address of this machine; skip without one.
-    const lanIp = lanHosts(0).map(h => h.replace(/:0$/, '')).find(isPrivateIp);
-    if (!lanIp) {
-        console.log('skip LAN mode test: no private IPv4 address');
-    } else {
-        const l = await start({ HOMEBASE_LAN: '1' });
-        try {
-            const host = `${lanIp}:${l.port}`, lan = { addr: lanIp, host };
-            assert.match(l.out, /LAN mode: open http:\/\//);
-            assert.equal((await call(l.port, { ...lan, host: 'evil.com' })).status, 403);
-            const app = await call(l.port, lan);
-            assert.equal(app.status, 200);
-            const token = meta(app.body);
-            assert.ok(token, 'a LAN device gets the page and its token without pairing');
-            assert.equal((await call(l.port, { ...lan, path: '/api/limits', headers: { 'x-homebase-token': token } })).status, 200);
-            assert.equal((await call(l.port, { ...lan, path: '/api/limits' })).status, 401); // the token is still required
-            assert.equal((await call(l.port, { ...lan, path: '/api/limits', headers: { 'x-homebase-token': token, origin: 'http://evil.com' } })).status, 403);
-            assert.equal((await call(l.port, { ...lan, path: '/pair', method: 'POST', body: 'code=x' })).status, 404);
-        } finally { l.stop(); }
-        console.log('ok LAN mode');
-    }
+    // Remote access: a second loopback port for tailscale serve; unpaired devices get only the pair page.
+    const rport = await freePort(), rhost = 'mac.tail1.ts.net';
+    const rs = await start({}, { remote: { host: rhost, port: rport, login: 'me@x.com' } });
+    try {
+        const remote = (o = {}) => call(rport, { host: rhost, ...o, headers: { 'tailscale-user-login': 'me@x.com', ...o.headers } });
+        assert.match(rs.out, new RegExp(`tailscale serve --bg http://127.0.0.1:${rport}`));
+        // a forged local Host on the remote port, the remote Host on the local port, a wrong or missing login: refused
+        assert.equal((await remote({ host: `localhost:${rport}` })).status, 403);
+        assert.equal((await call(rs.port, { host: rhost })).status, 403);
+        assert.equal((await remote({ headers: { 'tailscale-user-login': 'evil@x.com' } })).status, 403);
+        assert.equal((await call(rport, { host: rhost })).status, 403);
+        // unpaired: the pair page, without the token; everything else 401
+        const pairHtml = await remote();
+        assert.equal(pairHtml.status, 200);
+        assert.match(pairHtml.body, /Pair this device/);
+        assert.equal(meta(pairHtml.body), undefined);
+        assert.equal(pairHtml.headers['cache-control'], 'no-store');
+        for (const path of ['/app.js', '/api/limits', '/api/pair/devices']) {
+            assert.equal((await remote({ path })).status, 401, path);
+        }
+        // the Mac makes a code; a remote device can't
+        const local = meta((await call(rs.port)).body);
+        const { code } = JSON.parse((await call(rs.port, { path: '/api/pair/code', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': local } })).body);
+        const form = c => ({ path: '/pair', method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', origin: `https://${rhost}` }, body: `code=${c}&name=Phone` });
+        assert.equal((await remote({ ...form(code), headers: { ...form(code).headers, origin: 'https://evil.com' } })).status, 403);
+        const bad = await remote(form(code === '000000' ? '000001' : '000000'));
+        assert.equal(bad.status, 401);
+        assert.match(bad.body, /wrong or has expired/);
+        const ok = await remote(form(code));
+        assert.equal(ok.status, 303);
+        const cookie = ok.headers['set-cookie'][0].split(';')[0];
+        assert.match(ok.headers['set-cookie'][0], /HttpOnly; Secure; SameSite=Strict/);
+        assert.equal((await remote(form(code))).status, 401, 'single use');
+        // paired: the app with its token; the API needs the token too; pairing stays Mac-only
+        const app = await remote({ headers: { cookie } });
+        const token = meta(app.body);
+        assert.ok(token);
+        assert.equal(token, local);
+        assert.equal((await remote({ path: '/api/limits', headers: { cookie } })).status, 401);
+        assert.equal((await remote({ path: '/api/limits', headers: { cookie, 'x-homebase-token': token } })).status, 200);
+        assert.equal((await remote({ path: '/api/pair/devices', headers: { cookie, 'x-homebase-token': token } })).status, 403);
+        // revoke on the Mac: the device is back to the pair page
+        const [dev] = JSON.parse((await call(rs.port, { path: '/api/pair/devices', headers: { 'x-homebase-token': local } })).body);
+        assert.equal(dev.name, 'Phone');
+        assert.equal((await call(rs.port, { path: `/api/pair/revoke?id=${dev.id}`, method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': local } })).status, 200);
+        assert.equal(meta((await remote({ headers: { cookie } })).body), undefined);
+    } finally { rs.stop(); }
+    console.log('ok remote access');
 }
 
 import { limiter, dedupe } from './server.mjs';

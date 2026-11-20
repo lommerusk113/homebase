@@ -15,7 +15,9 @@ import { MAX_SEND, withLock } from './server/tmux.mjs';
 import { createProject, cloneProject, openProject, githubProjects, localProjects, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion } from './server/startup.mjs';
 import { send, sendToNew, interrupt, clearChat, compactChat, restartChat, editors, openInEditor } from './server/control.mjs';
-import { localHosts, lanHosts, allowedHost, allowedOrigin, tokenOk, bindOk } from './server/security.mjs';
+import { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
+import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedRequest, pair, deviceCookie, pairPage, newCode, pairedDevices, revoke } from './server/pairing.mjs';
+import { readConfigFile } from './server/account.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
 import { saveUpload, readUpload } from './server/uploads.mjs';
 
@@ -34,7 +36,8 @@ export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
 export { tmuxArgs, tmuxFor, withLock, findClearedSuccessor, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
 export { parseDialog, parseQuestion, answerQuestion, cancelQuestion, questionOpen, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
 export { editorsFrom, openInEditor, refuseIfBusy, restartChat, promptUp, send, interrupt } from './server/control.mjs';
-export { localHosts, isPrivateIp, lanHosts, allowedHost, allowedOrigin, tokenOk, bindOk } from './server/security.mjs';
+export { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
+export { remoteFrom, setupPairing, newCode, pair, deviceOf, cookieOf, deviceCookie, pairedDevices, revoke, isRemote, loginOk, isPairedRequest, pairPage, CODE_TTL_MS, MAX_FAILS, FAIL_WINDOW_MS } from './server/pairing.mjs';
 export { validName, mergeConfig, loadConfig, createProject, cloneProject, openProject, allowedDir, githubProjects, localProjects, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
 export { vendorPath } from './server/static.mjs';
 export { accountOf, readToken, ghRun, scrub } from './server/account.mjs';
@@ -56,22 +59,19 @@ async function readBody(req, max) {
     return data;
 }
 
-const LAN = process.env.HOMEBASE_LAN === '1';
-const BIND = LAN ? '0.0.0.0' : '127.0.0.1';
 const DATA_DIR = process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase');
 const UPLOAD_DIR = join(DATA_DIR, 'uploads');
 const TOKEN = randomBytes(32).toString('hex');
 const SECURITY_HEADERS = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY' };
 if (import.meta.url === `file://${process.argv[1]}`) {
-    if (!bindOk(BIND, LAN)) {
-        throw new Error(`refusing to listen on ${BIND}: Homebase binds to 127.0.0.1 unless HOMEBASE_LAN=1`);
+    if (process.env.HOMEBASE_LAN) {
+        throw new Error('HOMEBASE_LAN is gone: use Homebase from another device through Tailscale and pairing (README, "Use from your phone")');
     }
-    if (LAN) {
-        console.log(`LAN mode: open ${lanHosts(PORT).filter(h => !localHosts(PORT).includes(h)).map(h => `http://${h}`).join(' or ')} from any device on this network`);
-    }
+    const REMOTE = remoteFrom(readConfigFile(), PORT);
+    setupPairing(join(DATA_DIR, 'devices.json'), REMOTE);
     editors();
     warmMilestones();
-    createServer(async (req, res) => {
+    const handler = async (req, res) => {
         const url = new URL(req.url, 'http://x');
         for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
             res.setHeader(k, v);
@@ -86,13 +86,44 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         };
         // POST + custom header: a cross-origin page can't send this without a preflight we never answer
         const isPost = path => url.pathname === path && req.method === 'POST' && req.headers['x-codetool'] === '1';
-        const hosts = LAN ? lanHosts(PORT) : localHosts(PORT);
-        if (!allowedHost(req.headers.host, hosts) || !allowedOrigin(req.headers.origin, hosts)) {
+        // Both listeners are on 127.0.0.1; the remote one is reached only through tailscale serve (server/pairing.mjs).
+        const remote = isRemote(req);
+        const hosts = remote ? remoteHosts() : localHosts(PORT);
+        if (!allowedHost(req.headers.host, hosts) || !allowedOrigin(req.headers.origin, hosts, remote ? ['https', 'http'] : ['http'])) {
             return deny(403, 'forbidden');
         }
         const site = req.headers['sec-fetch-site'];
         if (req.method === 'POST' && site !== undefined && site !== 'same-origin') {
             return deny(403, 'forbidden');
+        }
+        if (remote && !loginOk(req)) {
+            return deny(403, 'forbidden');
+        }
+        // An unpaired remote device gets the pair page and the pair form's POST, nothing else.
+        if (!isPairedRequest(req)) {
+            const pairHtml = (code, message) => {
+                res.statusCode = code;
+                res.setHeader('content-type', 'text/html; charset=utf-8');
+                res.setHeader('content-security-policy', CSP);
+                res.setHeader('cache-control', 'no-store');
+                res.setHeader('referrer-policy', 'same-origin'); // under no-referrer the form's POST would carry Origin: null
+                return res.end(pairPage(message));
+            };
+            if (url.pathname === '/pair' && req.method === 'POST') {
+                try {
+                    const form = new URLSearchParams(await readBody(req, 1024));
+                    res.setHeader('set-cookie', deviceCookie(pair(form.get('code'), form.get('name'))));
+                    res.statusCode = 303;
+                    res.setHeader('location', '/');
+                    return res.end();
+                } catch (e) {
+                    return pairHtml(e.status ?? 400, e.message);
+                }
+            }
+            if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
+                return pairHtml(200);
+            }
+            return deny(401, 'pair this device first');
         }
         if (url.pathname.startsWith('/api/') && !tokenOk(req.headers['x-homebase-token'], TOKEN)) {
             return deny(401, 'unauthorized');
@@ -113,6 +144,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             const vendored = vendorPath(url.pathname);
             if (vendored && await serveVendor(vendored, req, res)) {
                 return;
+            }
+            // Pairing is managed on the Mac only, never by a remote device.
+            if (url.pathname.startsWith('/api/pair/') && remote) {
+                return deny(403, 'pair devices from the Mac');
+            }
+            if (isPost('/api/pair/code')) {
+                return json(newCode());
+            }
+            if (url.pathname === '/api/pair/devices') {
+                return json(pairedDevices());
+            }
+            if (isPost('/api/pair/revoke')) {
+                return revoke(url.searchParams.get('id')) ? res.end('ok') : deny(404, 'no such device');
             }
             if (url.pathname === '/api/sessions') {
                 return json(await sessions());
@@ -232,5 +276,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
             res.end(String(e.message));
         }
-    }).listen(PORT, BIND, () => console.log(`Homebase on http://localhost:${PORT}`));
+    };
+    const listenLocal = () => createServer(handler).listen(PORT, '127.0.0.1', () => console.log(`Homebase on http://localhost:${PORT}`));
+    if (REMOTE) { // the remote port first, so "Homebase on" means both listen
+        createServer(handler).listen(REMOTE.port, '127.0.0.1', () => {
+            console.log(`Remote access for https://${REMOTE.host} on 127.0.0.1:${REMOTE.port}; expose it with \`tailscale serve --bg http://127.0.0.1:${REMOTE.port}\``);
+            listenLocal();
+        });
+    } else {
+        listenLocal();
+    }
 }

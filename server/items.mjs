@@ -12,8 +12,8 @@ export function column(status, prState, hasPr) {
     if (prState?.state === 'merged' || prState?.state === 'closed') {
         return 'done';
     }
-    // review comments, a failing pipeline or a needed rebase wait on you (they get a Fix/Rebase button), not on a reviewer
-    if (prState?.changes || prState?.ci === 'failing' || prState?.blocked === 'conflict' || prState?.blocked === 'rebase') {
+    // review comments, a failing pipeline, a needed rebase or a draft (not reviewable yet) wait on you (they get a Fix/Rebase button), not on a reviewer
+    if (prState?.changes || prState?.ci === 'failing' || prState?.blocked === 'conflict' || prState?.blocked === 'rebase' || prState?.draft) {
         return 'needs-you';
     }
     if (prState?.ready) {

@@ -640,6 +640,7 @@ assert.equal(withThreads(waiting, null), waiting); // no comments data yet
 assert.equal(itemColumn(open({ ready: true }), { status: 'stopped' }, true), 'needs-you');
 assert.equal(itemColumn(null, { status: 'stopped' }, false), 'needs-you');
 assert.equal(itemColumn(null, { status: 'done' }, false), 'finished');
+assert.equal(itemColumn(open({ draft: true }), null, true), 'needs-you'); // a draft can't be reviewed: marking it ready is on you
 assert.equal(withThreads({ state: 'merged' }, thr(2)).changes, undefined);
 // the comment that moves an item into needs-you notifies once
 const nc = { ...cm('a', CT(2)), column: 'needs-you' };

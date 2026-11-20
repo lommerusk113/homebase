@@ -72,7 +72,7 @@ export function emptyPill(d) {
     return { text: 'Milestones unavailable', tip: `${d.error ?? d.reason}\nRefresh (r) to retry`, err: true };
 }
 
-// The header pill for one project: "⚑ Supplier automation · 11 open" with a mini bar; its menu switches milestones.
+// The header pill for one project: "⚑ Supplier automation · 11 open · 1 Dec" with a mini bar; its menu switches milestones.
 // The element polls /api/milestones itself until signal aborts (or it leaves the page), which also cancels an
 // in-flight fetch; an answer for another project or after the abort never reaches render or the callbacks.
 // onChange({ id, title } | null) runs when the selected milestone is known or changes. The choice is kept per project.
@@ -159,6 +159,11 @@ export function milestoneSelector(project, { signal, onChange, onData, onBusy } 
         if (ms) {
             const { text, tip } = pillLabel(ms);
             summary.append(el('span', 'n', `· ${text}`));
+            // the due date, short ("1 Dec"); amber once it has passed
+            if (ms.due && !ms.mine) {
+                const at = new Date(ms.due + 'T23:59:59');
+                summary.append(el('span', at.getTime() < Date.now() ? 'd late' : 'd', `· ${at.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`));
+            }
             // the progress bar once the issue groups are in
             if (ms.groups) {
                 const bar = el('span', 'ms-bar'), fill = el('b');

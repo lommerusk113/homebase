@@ -6,6 +6,8 @@
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
   /* radii: inline code, controls, cards, pills */
   --r-xs:4px; --r-s:6px; --r-m:10px; --r-pill:999px;
+  /* header pills (project, milestone): one height; hover is a step darker than --chip in either theme, the picked one a softened --fg */
+  --pill-h:26px; --chip-hover:color-mix(in srgb, var(--fg) 13%, var(--bg)); --pill-on:color-mix(in srgb, var(--fg) 88%, var(--bg));
   /* surfaces and lines: cards are flat (a hairline, no shadow); only things that float get --shadow */
   --bg:#ffffff; --canvas:#f6f7f9; --fg:#1f2328; --muted:#59636e; --line:#dce1e6; --line-soft:#e9edf1;
   --hover:#f2f4f7; --chip:#eef1f4; --strong:#000;
@@ -101,14 +103,23 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .pp-foot button { appearance:none; border:0; background:none; color:var(--muted); font:inherit; font-size:var(--fs-m); text-align:left; padding:6px var(--sp-2); border-radius:var(--r-s); cursor:pointer; }
 .pp-foot button:hover, .pp-foot button:focus-visible { background:var(--hover); color:var(--fg); outline:0; }
 @media (prefers-reduced-motion: reduce) { .pp-pop, .pp-panel { animation:none !important; } .pp-btn, .pp-chev { transition:none; } }
-.proj-chips { display:flex; flex-wrap:wrap; gap:6px; }
+/* Header pills: one family for the project pills and the milestone pill. A soft fill, no outline; the picked one is solid. */
+.proj-chip, .ms-pick > summary { box-sizing:border-box; display:inline-flex; align-items:center; gap:6px; height:var(--pill-h); padding:0 10px; border:0; border-radius:var(--r-pill); background:var(--chip); color:var(--fg); font:inherit; font-size:var(--fs-s); font-weight:500; line-height:1; white-space:nowrap; cursor:pointer; transition:background-color .12s, color .12s; }
+.proj-chip:hover, .ms-pick > summary:hover, .ms-pick[open] > summary { background:var(--chip-hover); }
+.proj-chip:focus-visible, .ms-pick > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+/* many projects: one row that scrolls sideways, fading out at the edges. The padding (taken back by the margin) is where
+   the fade and the focus ring live, so a row that fits looks untouched. */
+.proj-chips { --fade:var(--sp-3); display:flex; gap:6px; min-width:0; max-width:min(100%, 44vw); padding:4px var(--fade); margin:-4px calc(-1 * var(--fade)); overflow-x:auto; scroll-padding-inline:var(--fade); scrollbar-width:none; overscroll-behavior-x:contain;
+  -webkit-mask-image:linear-gradient(90deg, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); mask-image:linear-gradient(90deg, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); }
+.proj-chips::-webkit-scrollbar { display:none; }
 .proj-chips:empty { display:none; }
-.proj-chip { appearance:none; border:1px solid var(--line); background:var(--bg); color:var(--muted); font:inherit; font-size:var(--fs-s); line-height:18px; padding:2px 9px; border-radius:var(--r-pill); cursor:pointer; display:inline-flex; gap:5px; align-items:baseline; }
-.proj-chip:hover { color:var(--fg); background:var(--hover); }
-.proj-chip.on { color:var(--fg); background:var(--chip); border-color:transparent; font-weight:600; }
-.proj-chip:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
-.proj-chip small { font-size:var(--fs-s); font-weight:500; }
-.proj-chip small.warn { color:var(--c-warn); }
+.proj-chip { appearance:none; position:relative; flex-shrink:0; padding-right:4px; }
+.pc-name { max-width:150px; overflow:hidden; text-overflow:ellipsis; line-height:var(--pill-h); }
+.pc-n { box-sizing:border-box; min-width:18px; height:18px; padding:0 5px; border-radius:var(--r-pill); font-size:var(--fs-xs); font-weight:600; line-height:18px; text-align:center; font-variant-numeric:tabular-nums; color:var(--c-needs); background:color-mix(in srgb, var(--c-needs) 14%, transparent); }
+.proj-chip.on { background:var(--pill-on); color:var(--bg); font-weight:600; }
+.proj-chip.on:hover { background:color-mix(in srgb, var(--fg) 76%, var(--bg)); }
+.proj-chip.on .pc-n { background:var(--bg); }
+@media (prefers-reduced-motion: reduce) { .proj-chip, .ms-pick > summary, .ms-pick > summary::after, .ms-menu button { transition:none; } .ms-menu { animation:none !important; } }
 .quiet { appearance:none; border:0; background:none; color:var(--muted); font:inherit; font-size:16px; line-height:1; padding:2px 6px; border-radius:var(--r-s); cursor:pointer; }
 .quiet:hover { color:var(--fg); background:var(--hover); }
 .quiet:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
@@ -591,35 +602,42 @@ ul.comments a { color:var(--fg); }
 .is-note { font-size:var(--fs-s); color:var(--muted); flex-shrink:0; }
 @container (max-width: 640px) { .lane { grid-template-columns:1fr; } .who { border-right:0; border-bottom:1px solid var(--line-soft); } .is-head { grid-template-columns:1fr; } .is-due { text-align:left; } }
 
-/* Milestone pill (milestone.js) */
-.ms-pick { position:relative; font-size:var(--fs-m); }
-.ms-pick > summary { list-style:none; cursor:pointer; display:inline-flex; align-items:center; gap:6px; padding:2px 10px; border:1px solid var(--line); border-radius:var(--r-pill); white-space:nowrap; color:var(--fg); }
+/* Milestone pill (milestone.js): a header pill with a caret, and a menu that matches the project picker's list */
+.ms-pick { position:relative; min-width:0; max-width:100%; font-size:var(--fs-m); }
+.ms-pick > summary { list-style:none; max-width:100%; }
 .ms-pick > summary::-webkit-details-marker { display:none; }
-.ms-pick > summary:hover { background:var(--hover); }
-.ms-pick > summary .t { font-weight:600; max-width:220px; overflow:hidden; text-overflow:ellipsis; }
-.ms-pick > summary .n { color:var(--muted); }
-.ms-bar { width:40px; height:4px; border-radius:2px; background:var(--line-soft); overflow:hidden; }
-.ms-bar b { display:block; height:100%; background:var(--c-ready); }
-.ms-menu { position:absolute; z-index:20; top:calc(100% + 4px); left:0; width:320px; max-height:70vh; overflow:auto; background:var(--bg); border:1px solid var(--line); border-radius:var(--r-s); box-shadow:var(--shadow); padding:6px 0; }
-.ms-menu h5 { margin:6px 12px 4px; font-size:var(--fs-xs); color:var(--muted); font-weight:600; }
-.ms-menu .info { padding:0 12px 6px; color:var(--muted); display:flex; flex-wrap:wrap; gap:4px 10px; }
+.ms-pick > summary::after { content:''; flex-shrink:0; width:6px; height:6px; margin:-3px 2px 0; border:solid var(--muted); border-width:0 1.5px 1.5px 0; transform:rotate(45deg); transition:transform .15s var(--ease), margin .15s var(--ease); }
+.ms-pick[open] > summary::after { transform:rotate(225deg); margin-top:3px; }
+.ms-pick > summary > :first-child { color:var(--muted); }
+.ms-pick > summary .t { font-weight:600; max-width:220px; min-width:0; overflow:hidden; text-overflow:ellipsis; line-height:var(--pill-h); }
+.ms-pick > summary :is(.n, .d, .ld) { color:var(--muted); font-weight:400; font-variant-numeric:tabular-nums; }
+.ms-pick > summary .d.late { color:var(--c-warn); }
+.ms-bar { flex-shrink:0; width:36px; height:4px; border-radius:2px; background:color-mix(in srgb, var(--fg) 14%, transparent); overflow:hidden; }
+.ms-bar b { display:block; height:100%; border-radius:2px; background:var(--c-ready); }
+.ms-menu { position:absolute; z-index:20; top:calc(100% + 6px); left:0; width:320px; max-height:70vh; overflow:auto; background:var(--bg); border:1px solid var(--line); border-radius:var(--r-m); box-shadow:var(--shadow); padding:var(--sp-1); transform-origin:top left; animation:pp-in .14s var(--ease); }
+.ms-menu h5 { margin:6px var(--sp-2) 4px; font-size:var(--fs-xs); color:var(--muted); font-weight:600; }
+.ms-menu .info { padding:6px var(--sp-2); color:var(--muted); font-size:var(--fs-s); display:flex; flex-wrap:wrap; gap:2px 10px; }
 .ms-menu .info a { color:var(--accent); text-decoration:none; }
+.ms-menu .info a:hover { text-decoration:underline; }
 .ms-menu .hot { color:var(--c-needs); }
-.ms-menu .chips { display:flex; flex-wrap:wrap; gap:4px; padding:0 12px 6px; }
-.ms-menu .chips a.chip { max-width:100%; background:color-mix(in srgb, var(--c-needs) 16%, var(--bg)); color:var(--c-needs); }
-.ms-menu hr { border:0; border-top:1px solid var(--line-soft); margin:4px 0; }
-.ms-menu button { display:flex; gap:8px; width:100%; text-align:left; appearance:none; border:0; background:none; font:inherit; color:var(--fg); padding:4px 12px; cursor:pointer; }
-.ms-menu button:hover { background:var(--hover); }
+.ms-menu .chips { display:flex; flex-wrap:wrap; gap:4px; padding:0 var(--sp-2) 6px; }
+.ms-menu .chips a.chip { max-width:100%; background:color-mix(in srgb, var(--c-needs) 14%, transparent); color:var(--c-needs); }
+.ms-menu hr { border:0; border-top:1px solid var(--line-soft); margin:var(--sp-1) calc(-1 * var(--sp-1)); }
+.ms-menu button { display:flex; align-items:center; gap:var(--sp-2); width:100%; text-align:left; appearance:none; border:0; border-radius:var(--r-s); background:none; font:inherit; font-weight:500; color:var(--fg); padding:6px var(--sp-2); cursor:pointer; transition:background-color .12s; }
+.ms-menu button:hover, .ms-menu button:focus-visible { background:var(--hover); outline:0; }
 .ms-menu button.on { font-weight:600; }
-.ms-menu button span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.ms-menu button small { color:var(--muted); font-weight:400; }
-.ms-pick wa-spinner { font-size:var(--fs-xs); --track-width:2px; }
-.ms-pick > summary .ld { color:var(--muted); }
+.ms-menu button span { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ms-menu button small { flex-shrink:0; font-size:var(--fs-s); color:var(--muted); font-weight:400; font-variant-numeric:tabular-nums; }
+/* the picked entry's check, as in the project picker */
+.ms-menu button::after { content:''; flex-shrink:0; width:11px; height:6px; margin:-3px 4px 0; border:solid var(--accent); border-width:0 0 2px 2px; transform:rotate(-45deg); visibility:hidden; }
+.ms-menu button.on::after { visibility:visible; }
+.ms-pick wa-spinner { flex-shrink:0; font-size:var(--fs-xs); --track-width:2px; }
 .ms-pick.busy > summary > :not(wa-spinner), .ms-pick.busy .ms-menu > :not(button) { opacity:.5; }
-.ms-menu button wa-spinner { align-self:center; }
-.ms-pick.off > summary { color:var(--muted); border-style:dashed; }
-.ms-pick.off.err > summary { color:var(--c-needs); }
-.ms-tag { margin-right:6px; font-size:var(--fs-xs); font-weight:500; vertical-align:1px; }
+.ms-pick.off > summary { color:var(--muted); background:none; box-shadow:inset 0 0 0 1px var(--line); }
+.ms-pick.off > summary:hover, .ms-pick.off[open] > summary { background:var(--hover); }
+.ms-pick.off.err > summary, .ms-pick.off.err > summary > :first-child { color:var(--c-needs); }
+/* a row's milestone: the same pill, small and quiet */
+.ms-tag { margin-right:6px; padding:0 7px; font-size:var(--fs-xs); font-weight:500; color:var(--muted); vertical-align:1px; }
 
 /* Log tab (log.js) */
 .lg-list { list-style:none; margin:0; padding:0; border-top:1px solid var(--line-soft); }
@@ -666,7 +684,17 @@ wa-details[open] .g-note { display:none; }
   .pp-row, .pp-foot button { min-height:44px; padding-inline:var(--sp-2); }
   .pp-row .pp-name, .pp-foot button { font-size:var(--fs-xl); }
   .pp-row small { font-size:var(--fs-m); }
-  .ms-menu { position:fixed; top:calc(max(8px, env(safe-area-inset-top)) + 44px); left:8px; right:8px; width:auto; }
+  /* pills: 32px to look at, 44px to tap (the ::before); the project row may take the full width and scroll */
+  :root { --pill-h:32px; }
+  .proj-chip, .ms-pick > summary { position:relative; font-size:var(--fs-m); }
+  .proj-chip { padding-inline:12px 6px; }
+  .ms-pick.off > summary::after { display:none; } /* a status more than a menu: without the caret it fits beside the header's buttons */
+  .proj-chip::before, .ms-pick > summary::before { content:''; position:absolute; inset:-6px 0; height:44px; }
+  .proj-chips { max-width:100%; padding-block:6px; margin-block:-6px; }
+  .pc-n { min-width:20px; height:20px; line-height:20px; }
+  .ms-pick > summary .d { display:none; }
+  .ms-menu { position:fixed; top:auto; left:8px; right:8px; width:auto; margin-top:6px; transform-origin:top center; } /* top:auto: right under the pill, whichever header row it is on */
+  .ms-menu button { min-height:44px; font-size:var(--fs-l); }
   .main { flex-direction:row; overflow:hidden; }
   .left { flex:1; min-height:0; }
   #chat { flex:1; width:auto; height:auto; border:0; }

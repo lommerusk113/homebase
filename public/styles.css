@@ -159,13 +159,13 @@ a.chip:hover { text-decoration:underline; }
 .left { flex:1; min-width:0; display:flex; flex-direction:column; container-type:inline-size; }
 #chat { position:relative; width:33%; min-width:420px; max-width:720px; flex-shrink:0; background:var(--bg); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
 /* slim header row for the chat menu (wa-dropdown is display:contents, so the trigger is the flex item) */
-.c-head { flex-shrink:0; height:var(--bar-h); display:flex; align-items:center; justify-content:flex-end; padding:0 8px; border-bottom:1px solid var(--line); }
+.c-head { flex-shrink:0; height:var(--bar-h); display:flex; align-items:center; justify-content:safe flex-end; padding:0 8px; border-bottom:1px solid var(--line); }
 .c-back { flex-shrink:0; margin-right:8px; padding:3px 10px; border:1px solid var(--c-needs); border-radius:6px; background:none; color:var(--c-needs); font:inherit; font-size:12px; font-weight:600; cursor:pointer; white-space:nowrap; }
 .c-focus { flex-shrink:0; padding:6px 12px; border-bottom:1px solid var(--line); font-size:12px; line-height:1.4; color:var(--muted); display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
 .c-focus[hidden] { display:none; }
 .c-focus b { color:var(--fg); }
 .c-back[hidden] { display:none; }
-.c-next { margin:0 0 0 8px; max-width:50%; overflow:hidden; text-overflow:ellipsis; }
+.c-next { flex-shrink:1; min-width:0; margin:0 0 0 8px; max-width:50%; overflow:hidden; text-overflow:ellipsis; }
 .c-branch, .c-unpushed { flex-shrink:1; min-width:0; max-width:35%; margin-left:6px; padding:1px 7px; border:1px solid var(--line); border-radius:9px; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); }
 .c-branch.warn { color:var(--c-warn); border-color:var(--c-warn); }
 .c-branch[hidden], .c-unpushed[hidden] { display:none; }

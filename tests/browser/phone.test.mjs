@@ -36,6 +36,18 @@ export default {
         });
     },
 
+    'focus view at 390px: the back button stays on screen with the Next link showing': async ({ page, open, IDS }) => {
+        await asPhone(page, async () => {
+            await open({ project: 'all', chat: IDS.worker });
+            await page.waitFor(`document.querySelector('#feed .bubble')`, { what: 'the chat' });
+            await page.ev(`import('/chat.js').then(m => { m.focusChat(${JSON.stringify(IDS.asker)}); })`);
+            await page.waitFor(`!document.getElementById('c-back').hidden`, { what: 'focus' });
+            await page.ev(`(() => { const n = document.getElementById('c-next'); n.hidden = false; n.textContent = 'Next: Refactor the session store and update docs →'; })()`);
+            const r = await page.ev(`(() => { const b = document.getElementById('c-back').getBoundingClientRect(); return { left: Math.round(b.left), right: Math.round(b.right), w: innerWidth }; })()`);
+            assert.ok(r.left >= 0 && r.right <= r.w, `← Main chat spans ${r.left}..${r.right} of ${r.w}`);
+        });
+    },
+
     'nothing scrolls sideways at 390px': async ({ page, open, IDS }) => {
         await asPhone(page, async () => {
             await open({ project: 'beta', chat: IDS.asker });

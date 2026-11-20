@@ -1625,7 +1625,7 @@ import { createServer as netServer } from 'node:net';
         assert.match(pairHtml.body, /Pair this device/);
         assert.equal(meta(pairHtml.body), undefined);
         assert.equal(pairHtml.headers['cache-control'], 'no-store');
-        for (const path of ['/app.js', '/sw.js', '/icon.svg', '/api/limits', '/api/pair/devices', '/api/push/key']) {
+        for (const path of ['/app.js', '/sw.js', '/icon.svg', '/manifest.webmanifest', '/api/limits', '/api/pair/devices', '/api/push/key']) {
             assert.equal((await remote({ path })).status, 401, path);
         }
         // the Mac makes a code; a remote device can't
@@ -1652,7 +1652,9 @@ import { createServer as netServer } from 'node:net';
         // what a paired phone needs for push: the service worker, the icon, and the subscribe route
         const sw = await remote({ path: '/sw.js', headers: { cookie } });
         assert.deepEqual([sw.status, sw.headers['content-type']], [200, 'text/javascript; charset=utf-8']);
-        assert.equal((await remote({ path: '/icon.svg', headers: { cookie } })).status, 200);
+        for (const path of ['/icon.svg', '/manifest.webmanifest', '/apple-touch-icon.png', '/icon-192.png']) {
+            assert.equal((await remote({ path, headers: { cookie } })).status, 200, path);
+        }
         const subscribe = { path: '/api/push/unsubscribe', method: 'POST', headers: { 'x-codetool': '1', 'x-homebase-token': token, origin: `https://${rhost}`, 'content-type': 'application/json' }, body: '{"endpoint":"https://fcm.googleapis.com/x"}' };
         assert.equal((await remote(subscribe)).status, 401, 'unpaired');
         assert.equal((await remote({ ...subscribe, headers: { ...subscribe.headers, cookie } })).status, 200);

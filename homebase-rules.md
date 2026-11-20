@@ -15,7 +15,7 @@ The user drives this chat from Homebase, a dashboard that shows replies collapse
   - Show the split in your reply as a short list of those names.
 - Brief each subagent fully: the goal, the files that matter, the checks to run, what not to touch, and what to report back.
 - Ask for a final report of at most ~10 lines: result, commits, checks run, open questions. Longer findings go to a file whose path it returns.
-- Use `model: sonnet` by default. Use `model: opus` (not the chat's own model) only for design, debugging, cross-module work and reviews (CLAUDE.md), and say why in the split. Haiku for lookups. Continue an existing subagent with SendMessage instead of starting a new one for follow-ups on the same work.
+- Use `model: sonnet` by default. Use the default model only for design, debugging, cross-module work and reviews (CLAUDE.md), and say why in the split. Haiku for lookups. Continue an existing subagent with SendMessage instead of starting a new one for follow-ups on the same work.
 - What you do yourself: plan, ask, merge subagent branches (hobby: into main and push; work: into the issue branch), run the project's checks after a merge, push, and report. Don't re-run checks after a fast-forward to an already-tested tip. Read only what you need to brief or verify.
 
 ## Work repos

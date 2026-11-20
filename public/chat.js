@@ -354,10 +354,10 @@ function addShowMore(feed) {
     }
 }
 
-// Fixed-height line above the input (in the fixed-height dock): changing it never resizes the feed, so the scroll position stays put.
+// Fixed-height line at the top of the composer, with the context window use on the right.
 /** @param {Parameters<typeof chatStatus>[0]} data */
 function setStatus(data) {
-    const { kind, text } = chatStatus(data, Date.now(), chatSession());
+    const s = chatSession(), { kind, text } = chatStatus(data, Date.now(), s);
     $('status').className = `c-status ${kind}`;
     if (kind === 'idle' && text.startsWith(NEEDS_ANSWER)) {
         const go = el('button', 'show', NEEDS_ANSWER);
@@ -367,6 +367,8 @@ function setStatus(data) {
     } else {
         $('status-text').textContent = text;
     }
+    $('status-ctx').className = `c-ctx ${ctxLevel(s?.context ?? 0)}`;
+    $('status-ctx').textContent = s?.context != null ? `context ${Math.round(s.context)}%` : '';
 }
 
 // Scrolls to and focuses what needs the user: the ask card when it shows, else the newest needs-you bubble.
@@ -642,6 +644,8 @@ const NEAR_BOTTOM_PX = 40; // this close to the bottom counts as reading the new
 export async function refreshChat() {
 
     const s = chatSession(), feed = $('feed');
+    // before the ask card can show and shorten the feed
+    const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX;
     // persist the binding, or a successor it moved to
     if (s && store.get(bindKey()) !== s.id) {
         store.set(bindKey(), s.id);
@@ -694,7 +698,6 @@ export async function refreshChat() {
     }
 
     const first = !chatKey?.startsWith(s.id);
-    const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX;
     const top = feed.scrollTop;
     chatKey = key;
 

@@ -62,14 +62,18 @@
       <wa-dropdown-item value="needs-only" type="checkbox" id="needs-only">Show only messages that need me</wa-dropdown-item>
     </wa-dropdown></div>
     <div class="c-feed" id="feed"></div>
-    <form class="c-input" id="send">
-      <div class="c-note c-ask" id="ask" hidden><div class="c-ask-label">Claude is asking</div><div class="c-ask-q" id="ask-q" role="heading" aria-level="3"></div><div class="c-opts" id="ask-opts"></div><div class="c-term">Or type your answer below.<wa-button size="s" appearance="outlined" id="ask-dismiss" title="Sends Esc: Claude moves on without an answer">Decline question</wa-button><wa-button size="s" appearance="plain" id="ask-term-toggle" aria-expanded="false" aria-controls="ask-term" hidden>Answer in a terminal</wa-button></div><div class="c-term" id="ask-term">In a terminal, run <code class="mono" id="ask-cmd"></code><wa-button size="s" appearance="plain" class="c-copy" data-copy="ask-cmd">Copy</wa-button></div></div>
+    <div class="c-cards">
+      <div class="c-note c-ask" id="ask" hidden><div class="c-ask-label">Claude is asking</div><div class="c-ask-q" id="ask-q" role="heading" aria-level="3"></div><div class="c-opts" id="ask-opts"></div><div class="c-term">Or type your answer below.<wa-button size="s" appearance="plain" id="ask-dismiss" title="Sends Esc: Claude moves on without an answer">Decline question</wa-button><wa-button size="s" appearance="plain" id="ask-term-toggle" aria-expanded="false" aria-controls="ask-term" hidden>Answer in a terminal</wa-button></div><div class="c-term" id="ask-term">In a terminal, run <code class="mono" id="ask-cmd"></code><wa-button size="s" appearance="plain" class="c-copy" data-copy="ask-cmd">Copy</wa-button></div></div>
       <div class="c-note c-ask" id="boot" hidden><div class="c-ask-label">Claude is waiting on a startup question</div><div class="c-ask-q" id="boot-q" role="heading" aria-level="3"></div><div class="c-opts" id="boot-opts"></div><div class="c-term">Or answer in the terminal: <code class="mono" id="boot-cmd"></code><wa-button size="s" appearance="plain" class="c-copy" data-copy="boot-cmd">Copy</wa-button></div></div>
+    </div>
+    <form class="c-input" id="send">
       <div class="error" id="c-err" role="alert"></div>
       <div class="c-info" id="c-info" role="status"></div>
-      <div class="c-status idle" id="status" role="status"><span class="pulse"></span><span id="status-text">Connecting…</span><button class="c-compact" id="compact-nudge" type="button" hidden>Compact?</button></div>
+      <div class="composer">
+      <div class="c-status idle" id="status" role="status"><span class="pulse"></span><span id="status-text">Connecting…</span><span class="c-ctx" id="status-ctx"></span><button class="c-compact" id="compact-nudge" type="button" hidden>Compact?</button></div>
       <div class="c-attached" id="attached" hidden></div>
       <div class="c-row"><button class="c-attach" id="attach-btn" type="button" aria-label="Attach images" title="Attach images"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l9.2-9.2a3.7 3.7 0 0 1 5.2 5.2l-9.2 9.2a1.8 1.8 0 0 1-2.6-2.6l8.5-8.5"/></svg></button><input type="file" id="attach-input" accept="image/*" multiple hidden><wa-textarea id="msg" rows="1" resize="auto" placeholder="Message Claude…" title="Enter sends, Shift+Enter adds a new line"></wa-textarea><button class="c-send" id="send-btn" type="submit" aria-label="Send" title="Send" disabled><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div>
+      </div>
     </form>
   </aside>
 </div>

@@ -115,6 +115,15 @@ export async function keepModelSetting(path = SETTINGS(), { waitMs = 5000, nap =
 }
 
 const conflict = msg => Object.assign(new Error(msg), { status: 409 });
+// The tmux a chat types into. Refused when the registry shows another chat in it: a /clear made that tmux the other chat's,
+// and keys meant for this one would land there. ponytail: never redirected; the page already follows clearedFrom to the successor
+const targetOf = (id, live) => {
+    const name = tmuxFor(id, aliases, live);
+    if (live && [...live].some(([other, t]) => other !== id && t === name)) {
+        throw conflict('This chat was cleared and continues as another chat — open that one');
+    }
+    return name;
+};
 const BOOT_MS = 30_000;
 
 // Types `text` into the session's tmux, starting one (claude --resume) when none runs. Claude Code's registry (reg) says
@@ -123,7 +132,7 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
 
     session ??= await resumable(id);
     const live = await reg();
-    const first = tmuxFor(id, aliases, live);
+    const first = targetOf(id, live);
     sendSteps(first, text); // an empty message is refused before anything is touched
 
     return withLock(first, async () => {
@@ -225,7 +234,7 @@ export async function sendToNew(name, text, { tm = tmux, nap = sleep } = {}) {
 export async function interrupt(id, { tm = tmux, reg = liveSessions } = {}) {
 
     await resumable(id);
-    const name = tmuxFor(id, aliases, await reg());
+    const name = targetOf(id, await reg());
 
     await withLock(name, async () => {
         try {
@@ -258,7 +267,7 @@ export async function compactChat(id) {
 export async function clearChat(id) {
 
     const s = await resumable(id);
-    const c = { from: id, tmux: tmuxFor(id, aliases, await liveSessions()), cwd: s.cwd, clearedAt: Date.now() };
+    const c = { from: id, tmux: targetOf(id, await liveSessions()), cwd: s.cwd, clearedAt: Date.now() };
     clears.push(c);
     try {
         c.tmux = await send(id, '/clear', s); // send may have replaced a dead aliased tmux session
@@ -277,7 +286,7 @@ export async function restartChat(id, { tm = tmux, nap = sleep, waitMs = 20_000,
 
     const s = session ?? await resumable(id);
     refuseIfBusy(s);
-    const old = tmuxFor(id, aliases, await reg());
+    const old = targetOf(id, await reg());
 
     return withLock(old, async () => {
         try {

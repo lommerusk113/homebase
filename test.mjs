@@ -2799,7 +2799,7 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
 
 // Send: stubbed tmux and registry, nothing real is touched
 {
-    const { send, withLock, tmuxFor, runningTwice } = await import('./server.mjs');
+    const { send, withLock, tmuxFor, runningTwice, restartChat } = await import('./server.mjs');
     const sid = 'dddddddd-0000-4000-8000-000000000001', session = { id: sid, cwd: '/tmp', updated: 0 };
     const q = '│ Which one?\n❯ 1. Red\n  2. Blue\nEnter to select · Esc to cancel\n';
     // tmux: live = names has-session finds; panes(calls) = what capture-pane shows
@@ -2844,6 +2844,15 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     assert.equal(await send(sid, 'hi', fresh, f.opts(new Map())), 'cc-dddddddd');
     assert.deepEqual(f.calls.map(c => c[0]).slice(0, 5), ['has-session', 'new-session', 'capture-pane', 'capture-pane', 'capture-pane']);
     assert.deepEqual(f.keys().slice(-2), typed('cc-dddddddd', 'hi'));
+    // /clear'd after a server restart: its cc-<id8> tmux now runs another chat, which must never get its keys (nor be restarted)
+    const cleared = new Map([['eeeeeeee-0000-4000-8000-000000000002', 'cc-dddddddd']]);
+    f = fake();
+    const refused = await send(sid, 'hi', session, f.opts(cleared)).catch(e => e);
+    assert.deepEqual([refused.status, refused.message], [409, 'This chat was cleared and continues as another chat — open that one']);
+    assert.ok(!f.calls.some(c => c[0] === 'send-keys'));
+    f = fake();
+    assert.equal((await restartChat(sid, { ...f.opts(cleared), session }).catch(e => e)).status, 409);
+    assert.ok(!f.calls.some(c => c[0] === 'kill-session'));
     // no registry: the old mtime check still refuses
     f = fake({ live: [] });
     assert.equal((await send(sid, 'hi', fresh, f.opts(null)).catch(e => e)).status, 409);

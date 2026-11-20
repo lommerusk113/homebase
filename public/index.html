@@ -101,6 +101,7 @@
     <div class="np-tabs">
       <wa-button id="np-tab-new" size="s" variant="brand">New repo</wa-button>
       <wa-button id="np-tab-gh" size="s" variant="brand" appearance="outlined">From my GitHub</wa-button>
+      <wa-button id="np-tab-open" size="s" variant="brand" appearance="outlined">Open folder</wa-button>
     </div>
     <div class="np" id="np-new">
       <wa-input id="np-name" label="Name" size="s" spellcheck="false" autocapitalize="off"></wa-input>
@@ -111,6 +112,9 @@
     <div class="np" id="np-gh" hidden>
       <wa-input id="np-filter" placeholder="Filter repos" size="s" spellcheck="false" autocapitalize="off"></wa-input>
       <div class="np-repos" id="np-repos"></div>
+    </div>
+    <div class="np" id="np-open" hidden>
+      <div class="np-repos" id="np-dirs"></div>
     </div>
     <ol class="np-steps" id="np-steps" hidden></ol>
     <div class="error" id="np-err" role="alert"></div>

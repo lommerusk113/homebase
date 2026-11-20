@@ -90,7 +90,7 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .p-row small { color:var(--muted); }
 .p-row .add::part(base) { color:var(--c-ready); }
 .p-row .rm::part(base) { color:var(--c-needs); }
-.d-new { padding:4px 16px 8px; }
+.d-new { padding:4px 16px 8px; display:flex; flex-wrap:wrap; gap:8px; }
 #new-dlg { --width:min(440px, calc(100vw - 32px)); }
 #new-dlg::part(dialog) { border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); }
 #new-dlg::part(header) { border-bottom:1px solid var(--line); }
@@ -103,7 +103,8 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .np-repo:last-child { border-bottom:0; }
 .np-repo:hover:not(:disabled) { background:var(--accent-bg); }
 .np-repo:disabled { cursor:default; opacity:.55; }
-.np-repo b { font-weight:600; }
+.np-repo b { font-weight:600; display:flex; align-items:center; gap:8px; }
+.np-open { margin-left:auto; font-style:normal; font-size:12px; font-weight:600; color:var(--accent); border:1px solid currentColor; border-radius:999px; padding:0 8px; }
 .np-repo span, .np-repos .d-empty { color:var(--muted); font-size:12px; }
 .np-note { margin:0; color:var(--muted); font-size:12.5px; overflow-wrap:anywhere; }
 #np-name[data-invalid]::part(hint) { color:var(--c-needs); }

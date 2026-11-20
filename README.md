@@ -50,6 +50,10 @@ Claude Code's workspace trust dialog for the new folder is answered "Yes" for yo
 Any other blocking startup dialog in a `cc-*` tmux session shows in the chat with its options as buttons (and the `tmux attach` hint); clicking one selects it in the terminal, and the message box refuses to send while it is up.
 If creating the repo fails nothing else happens; if cloning or starting the chat fails, the error says what already exists.
 
+To chat in a project that is already on disk, use "Open existing folder…" in the ☰ dialog (or "Open" on an already cloned repo under "From my GitHub").
+It lists the git repos directly under `baseDir`, most recently used first, leaving out any that already have a running Claude or tmux session, and starts a Claude chat there the same way (`POST /api/projects/open` with `{ "dir": ... }`).
+The server only starts it in an existing folder whose real path (symlinks and `..` resolved) is inside `baseDir`, or is the folder of a session it already shows; the trust dialog is answered for that folder too.
+
 The defaults can be overridden in `~/.claude/homebase/config.json` (`HOMEBASE_DIR` moves it). The file is optional, lives outside the repo and Homebase never writes it:
 
 ```json
@@ -59,7 +63,7 @@ The defaults can be overridden in `~/.claude/homebase/config.json` (`HOMEBASE_DI
 * `owner`: the GitHub account the repo is created under (default: the login from `gh api user`).
 * `keychainService`: the keychain item that holds a token for it (default: none, `gh` uses its own login). Repos of `owner`, or cloned via `sshHost`, then use that token for every `gh` call; all other repos use your normal `gh` login.
 * `sshHost`: the SSH host alias used to clone (`git@<sshHost>:<owner>/<name>.git`; default `github.com`).
-* `baseDir`: where the clone goes (`~` is expanded; default `~/Projects`).
+* `baseDir`: where the clone goes, and where "Open existing folder…" looks (`~` is expanded; default `~/Projects`).
 * `private`: the default of the "Private" switch.
 
 Only the keys you give are overridden.

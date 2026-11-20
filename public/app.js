@@ -107,8 +107,13 @@ function renderDialog() {
         $('dlg').open = false;
         openNewProject();
     };
+    const existing = waButton('Open existing folder…', 'd-open-btn', { variant: 'brand', appearance: 'outlined' });
+    existing.onclick = () => {
+        $('dlg').open = false;
+        openNewProject('open');
+    };
     const top = el('div', 'd-new');
-    top.append(add);
+    top.append(add, existing);
     body.replaceChildren(
         top,
         el('h4', null, 'On board'),
@@ -122,7 +127,7 @@ $('manage').onclick = () => {
     $('dlg').open = true;
 };
 
-// A project made by "New project…": tracked, selected, and its chat bound as soon as its session is known.
+// A project made or opened from "New project…": tracked, selected, and its chat bound as soon as its session is known.
 initNewProject(({ name, dir, sessionId, tmux }) => {
     if (!state.tracked.includes(name)) {
         state.tracked = [...state.tracked, name];
@@ -281,7 +286,8 @@ async function pollOnce() {
             try {
                 sessionStorage.setItem('sessions', text);
             } catch {}
-            const started = state.starting && state.sessions.find(s => s.cwd === state.starting && isMaster(s));
+            // by its tmux too: an opened folder's older sessions are not this chat
+            const started = state.starting && state.sessions.find(s => s.cwd === state.starting && s.tmux === state.startingTmux && isMaster(s));
             if (started) {
                 state.starting = null;
                 state.startingTmux = null;

@@ -738,7 +738,7 @@ export async function refreshChat() {
         setStatus(state.offline ? { error: true } : null);
         // a message sent to a starting project (by tmux name) shows until its session binds
         const sent = state.outbox.filter(o => o.sid === startingTarget());
-        return feed.replaceChildren(...(sent.length ? sent.map(o => bubble(o, o.sid, null)) : [el('div', 'welcome', state.starting ? 'Chat starting…' : 'No session to chat with yet. Run claude in a terminal in one of your projects, or use ☰ → New project.')]));
+        return feed.replaceChildren(...(sent.length ? sent.map(o => bubble(o, o.sid, null)) : [el('div', 'welcome', state.starting ? 'Chat starting…' : 'No session to chat with yet. Use ☰ → Open existing folder… to start one in a project, or ☰ → New project.')]));
     }
 
     /** @type {Transcript} */

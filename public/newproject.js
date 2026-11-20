@@ -1,4 +1,5 @@
 // "New project…" dialog: name (validated live), description, private switch; Create posts to /api/projects/new and shows the steps.
+// Its other tabs clone one of your GitHub repos, or start a chat in a folder that is already there (/api/projects/open).
 import { $, el, api, ago } from './core.js';
 
 // Mirrors the server's rule (server/newproject.mjs); the server checks again.
@@ -6,7 +7,8 @@ import { $, el, api, ago } from './core.js';
 export const nameError = n => (!n ? '' : n.length > 100 ? 'At most 100 characters' : n.startsWith('.') ? "Can't start with a dot" : /^[A-Za-z0-9._-]+$/.test(n) ? '' : 'Use letters, digits, ".", "_" and "-"');
 
 const FALLBACK = { owner: '', baseDir: '~/Projects', private: true };
-let clone = (/** @type {string} */ _name) => {}, cfg = FALLBACK, busy = false, repos = null; // repos: the owner's GitHub list once loaded, an Error when it failed
+let clone = (/** @type {string} */ _name) => {}, openDir = (/** @type {string} */ _dir) => {}, cfg = FALLBACK, busy = false;
+let repos = null, local = null; // the owner's GitHub list and the folders under baseDir once loaded, an Error when one failed
 
 const setNote = () => {
     const n = $('np-name').value.trim() || '<name>';
@@ -35,6 +37,7 @@ const setBusy = b => {
     }
     validate();
     renderRepos();
+    renderLocal();
 };
 
 const updated = iso => { const a = ago(Date.parse(iso)); return a === 'now' ? 'updated just now' : `updated ${a} ago`; };
@@ -45,35 +48,64 @@ function renderRepos() {
         const b = el('button', 'np-repo');
         b.type = 'button';
         b.dataset.repo = r.name;
-        b.disabled = busy || r.local;
-        b.append(el('b', null, `${r.name}${r.isPrivate ? ' · private' : ''}`), el('span', null, r.local ? 'already cloned' : [r.description, updated(r.updatedAt)].filter(Boolean).join(' · ')));
-        b.onclick = () => clone(r.name);
+        b.disabled = busy;
+        const name = el('b', null, `${r.name}${r.isPrivate ? ' · private' : ''}`);
+        if (r.local) {
+            name.append(el('i', 'np-open', 'Open'));
+        }
+        b.append(name, el('span', null, r.local ? 'already cloned' : [r.description, updated(r.updatedAt)].filter(Boolean).join(' · ')));
+        b.onclick = () => (r.local ? openDir(r.dir) : clone(r.name));
         return b;
     })));
 }
+const used = ms => { const a = ago(ms); return a === 'now' ? 'used just now' : `used ${a} ago`; };
+function renderLocal() {
+    $('np-dirs').replaceChildren(...(!local ? [el('div', 'd-empty', 'Loading…')] : !Array.isArray(local) ? [el('div', 'd-empty', local.message)] : !local.length ? [el('div', 'd-empty', `No git repos without a running chat in ${cfg.baseDir}.`)] : local.map(r => {
+        const b = el('button', 'np-repo');
+        b.type = 'button';
+        b.dataset.dir = r.dir;
+        b.disabled = busy;
+        b.append(el('b', null, r.name), el('span', null, used(r.updated)));
+        b.onclick = () => openDir(r.dir);
+        return b;
+    })));
+}
+/** @param {string} path @returns {Promise<any>} */
+const getJson = async path => {
+    try {
+        const r = await api(path);
+        if (!r.ok) {
+            throw new Error(await r.text());
+        }
+        return await r.json();
+    } catch (e) {
+        return e;
+    }
+};
+/** @param {'new' | 'gh' | 'open'} m */
 async function setMode(m) {
-    $('np-new').hidden = m !== 'new';
-    $('np-gh').hidden = m !== 'gh';
+    for (const t of ['new', 'gh', 'open']) {
+        $(`np-${t}`).hidden = m !== t;
+        $(`np-tab-${t}`).setAttribute('appearance', m === t ? 'accent' : 'outlined');
+    }
     $('np-go').hidden = m !== 'new';
-    $('np-tab-new').setAttribute('appearance', m === 'new' ? 'accent' : 'outlined');
-    $('np-tab-gh').setAttribute('appearance', m === 'gh' ? 'accent' : 'outlined');
+    $('new-dlg').setAttribute('label', m === 'open' ? 'Open a project' : 'New project');
     if (m === 'gh' && !Array.isArray(repos)) {
         repos = null;
         renderRepos();
-        try {
-            const r = await api('/api/projects/github');
-            if (!r.ok) {
-                throw new Error(await r.text());
-            }
-            repos = await r.json();
-        } catch (e) {
-            repos = e;
-        }
+        repos = await getJson('/api/projects/github');
         renderRepos();
+    }
+    if (m === 'open' && !Array.isArray(local)) {
+        local = null;
+        renderLocal();
+        local = await getJson('/api/projects/local');
+        renderLocal();
     }
 }
 
-export async function openNewProject() {
+/** @param {'new' | 'open'} [mode] */
+export async function openNewProject(mode = 'new') {
     $('np-name').value = '';
     $('np-desc').value = '';
     $('np-steps').hidden = true;
@@ -81,8 +113,9 @@ export async function openNewProject() {
     setBusy(false);
     cfg = FALLBACK;
     repos = null;
+    local = null;
     /** @type {any} */ ($('np-filter')).value = '';
-    setMode('new');
+    setMode(mode);
     $('np-private').checked = cfg.private;
     validate();
     $('new-dlg').open = true;
@@ -91,6 +124,7 @@ export async function openNewProject() {
         cfg = c;
         $('np-private').checked = c.private;
         setNote();
+        renderLocal();
     } catch {}
 }
 
@@ -107,16 +141,19 @@ export function initNewProject(onCreated) {
     $('np-go').onclick = () => create();
     $('np-tab-new').onclick = () => setMode('new');
     $('np-tab-gh').onclick = () => setMode('gh');
+    $('np-tab-open').onclick = () => setMode('open');
     $('np-filter').addEventListener('input', renderRepos);
 
-    const create = () => submit('/api/projects/new', { name: $('np-name').value.trim(), description: $('np-desc').value.trim(), private: $('np-private').checked }, true);
-    clone = (/** @type {string} */ name) => submit('/api/projects/clone', { name }, false);
+    const CHAT = ['chat', 'Starting chat'], CLONE = [['clone', 'Cloning'], CHAT];
+    const create = () => submit('/api/projects/new', { name: $('np-name').value.trim(), description: $('np-desc').value.trim(), private: $('np-private').checked }, [['repo', 'Creating repo'], ...CLONE]);
+    clone = (/** @type {string} */ name) => submit('/api/projects/clone', { name }, CLONE);
+    openDir = (/** @type {string} */ dir) => submit('/api/projects/open', { dir }, [CHAT]);
 
     // ponytail: one request, so the steps show "running" on the first and fill in when the server answers; stream them if it ever feels slow
-    async function submit(path, payload, withRepo) {
+    async function submit(path, payload, steps) {
         setBusy(true);
         $('np-err').textContent = '';
-        renderSteps([...(withRepo ? [{ id: 'repo', label: 'Creating repo', state: 'pending' }] : []), { id: 'clone', label: 'Cloning', state: 'pending' }, { id: 'chat', label: 'Starting chat', state: 'pending' }].map((s, i) => i ? s : { ...s, state: 'running' }));
+        renderSteps(steps.map(([id, label], i) => ({ id, label, state: i ? 'pending' : 'running' })));
         try {
             const r = await api(path, {
                 method: 'POST',

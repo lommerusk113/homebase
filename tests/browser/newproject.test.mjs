@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, utimesSync } from 'node:fs';
+import { join } from 'node:path';
 
 const NEW_ID = 'bbbbbbbb-0000-4000-8000-000000000001';
 const byId = id => `document.getElementById('${id}')`;
@@ -102,12 +104,12 @@ export default {
         assert.equal(await page.ev(`localStorage.getItem('project')`), 'alpha');
     },
 
-    'From my GitHub lists repos, filters, disables local ones, and picking one clones it like a new project': async ({ page, open }) => {
+    'From my GitHub lists repos, filters, offers Open on local ones, and picking one clones it like a new project': async ({ page, open }) => {
         await open();
         await openDialog(page);
         const repos = [
             { name: 'fresh', description: 'A fresh one', isPrivate: true, updatedAt: new Date(Date.now() - 3 * 86400_000).toISOString(), local: false },
-            { name: 'have', description: '', isPrivate: false, updatedAt: new Date().toISOString(), local: true }
+            { name: 'have', description: '', isPrivate: false, updatedAt: new Date().toISOString(), local: true, dir: '/base/have' }
         ];
         await page.ev(`(() => {
             const real = window.fetch;
@@ -116,8 +118,8 @@ export default {
                 if (String(u).includes('/api/projects/github')) {
                     return Promise.resolve(new Response(${JSON.stringify(JSON.stringify(repos))}));
                 }
-                if (String(u).includes('/api/projects/clone')) {
-                    window.__posts.push(JSON.parse(o.body));
+                if (String(u).includes('/api/projects/clone') || String(u).includes('/api/projects/open')) {
+                    window.__posts.push({ path: new URL(u, location.href).pathname, ...JSON.parse(o.body) });
                     return Promise.resolve(new Response(${JSON.stringify(JSON.stringify({ ...ok(NEW_ID), name: 'fresh', repo: 'lommerusk113/fresh', steps: ok(NEW_ID).steps.slice(1) }))}));
                 }
                 return real(u, o);
@@ -126,17 +128,50 @@ export default {
         await page.click('#np-tab-gh');
         await page.waitFor(`document.querySelectorAll('.np-repo').length === 2`, { what: 'the repo list' });
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('.np-repo')].map(b => b.dataset.repo + '|' + b.disabled + '|' + b.textContent)`),
-            ['fresh|false|fresh · privateA fresh one · updated 3d ago', 'have|true|havealready cloned']);
+            ['fresh|false|fresh · privateA fresh one · updated 3d ago', 'have|false|haveOpenalready cloned']);
         assert.equal(await page.ev(`${byId('np-go')}.hidden`), true, 'picking is the action');
         await page.ev(`${byId('np-filter')}.value = 'FRE'; ${byId('np-filter')}.dispatchEvent(new Event('input'))`);
         assert.equal(await page.ev(`document.querySelectorAll('.np-repo').length`), 1, 'filtered');
-        await page.ev(`document.querySelector('.np-repo[data-repo=have]')?.click()`);
-        assert.equal(await page.ev(`window.__posts.length`), 0, 'a local repo is not clickable');
         await page.click('.np-repo[data-repo=fresh]');
         await page.waitFor(`!${byId('new-dlg')}.open`, { what: 'the dialog to close' });
-        assert.deepEqual(await page.ev(`window.__posts`), [{ name: 'fresh' }]);
+        assert.deepEqual(await page.ev(`window.__posts`), [{ path: '/api/projects/clone', name: 'fresh' }]);
         assert.deepEqual(await page.ev(`JSON.parse(localStorage.getItem('tracked'))`), ['alpha', 'beta', 'gamma', 'fresh']);
         assert.equal(await page.ev(`localStorage.getItem('project')`), 'fresh');
         assert.equal(await page.ev(`localStorage.getItem('chat:fresh')`), NEW_ID);
+
+        await openDialog(page);
+        await page.click('#np-tab-gh');
+        await page.waitFor(`document.querySelector('.np-repo[data-repo=have] .np-open')`, { what: 'the Open button' });
+        await page.click('.np-repo[data-repo=have]');
+        await page.waitFor(`!${byId('new-dlg')}.open`, { what: 'the dialog to close' });
+        assert.deepEqual(await page.ev(`window.__posts.at(-1)`), { path: '/api/projects/open', dir: '/base/have' }, 'a cloned repo opens in its folder');
+    },
+
+    'Open existing folder lists the git repos under baseDir, newest first, and opening one starts its chat': async ({ page, open, homebase, answerPosts }) => {
+        // real folders in the fixture HOME's baseDir (~/IdeaProjects/Privat), listed by the real server; the POST is answered here
+        const base = join(homebase, '..', 'home', 'IdeaProjects', 'Privat');
+        for (const [name, s] of [['older', 7200], ['newer', 60]]) {
+            mkdirSync(join(base, name, '.git'), { recursive: true });
+            utimesSync(join(base, name, '.git'), new Date(Date.now() - s * 1000), new Date(Date.now() - s * 1000));
+        }
+        mkdirSync(join(base, 'notgit'), { recursive: true });
+        await open();
+        const dir = join(base, 'newer');
+        page.route = q => (q.url.includes('/api/projects/open')
+            ? { status: 200, headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ok: true, name: 'newer', repo: null, dir, tmux: 'cc-new-newer', sessionId: null, steps: [{ id: 'chat', label: 'Starting chat', state: 'done' }] }) }
+            : answerPosts(q));
+        await page.click('#manage');
+        await page.waitFor(`${byId('dlg')}.open && document.querySelector('.d-open-btn')`, { what: 'the Open existing folder entry' });
+        await page.click('.d-open-btn');
+        await page.waitFor(`${byId('new-dlg')}.open && document.querySelectorAll('#np-dirs .np-repo').length === 2`, { what: 'the folder list' });
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#np-dirs .np-repo')].map(b => b.textContent)`), ['newerused 1m ago', 'olderused 2h ago']);
+        assert.equal(await page.ev(`${byId('new-dlg')}.getAttribute('label')`), 'Open a project');
+        assert.equal(await page.ev(`${byId('np-go')}.hidden`), true, 'picking is the action');
+        await page.click(`#np-dirs .np-repo[data-dir="${dir}"]`);
+        await page.waitFor(`!${byId('new-dlg')}.open`, { what: 'the dialog to close' });
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/projects/open')).map(p => JSON.parse(p.body)), [{ dir }]);
+        assert.ok((await page.ev(`JSON.parse(localStorage.getItem('tracked'))`)).includes('newer'));
+        assert.equal(await page.ev(`localStorage.getItem('project')`), 'newer');
+        await page.waitFor(`document.querySelector('#feed .welcome')?.textContent === 'Chat starting…'`, { what: 'the starting note' });
     }
 };

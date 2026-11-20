@@ -29,6 +29,15 @@ export default {
         assert.equal(await page.ev(`${row(MR(101))}.querySelector('a.chip').textContent`), '!101', 'an open MR shows no "open"');
     },
 
+    'in All my projects each row names its project': async ({ page, open }) => {
+        await open({ project: 'all' });
+        await page.waitFor(`${row(MR(101))} && ${row('https://github.com/acme/beta/pull/7')}`, { what: 'alpha and beta rows' });
+        assert.equal(await page.ev(`${row(MR(101))}.querySelector('b .s-proj').textContent`), 'alpha');
+        assert.equal(await page.ev(`${row('https://github.com/acme/beta/pull/7')}.querySelector('b .s-proj').textContent`), 'beta');
+        await open();
+        assert.equal(await page.ev(`${row(MR(101))}.querySelector('.s-proj')`), null, 'not with one project picked');
+    },
+
     'an open MR only the forge lists (never in a transcript) is a row bound to the project\'s newest session': async ({ page, open }) => {
         await open();
         await page.waitFor(`${row(MR(106))}`, { what: 'the forge-only !106 row' });

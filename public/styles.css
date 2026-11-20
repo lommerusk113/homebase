@@ -364,6 +364,7 @@ wa-details.group::part(icon) { color:var(--muted); font-size:12px; }
 .s-row.s-working .pulse { background:var(--c-doing); animation:pulse 1.2s ease-in-out infinite; }
 .s-row.s-asking .pulse, .s-row.s-needs .pulse { background:var(--c-needs); }
 .s-proj { flex-shrink:0; font-weight:500; }
+.rows .s-proj { color:var(--muted); }
 .s-state { flex-shrink:0; }
 .s-asking .s-state, .s-needs .s-state { color:var(--c-needs); }
 .s-topic { min-width:0; overflow:hidden; text-overflow:ellipsis; }

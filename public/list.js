@@ -208,6 +208,9 @@ function itemRows(x) {
     if (x.milestone && !hooks.milestoneId()) {
         what.firstElementChild.prepend(milestoneTag(x));
     }
+    if (state.project === 'all') {
+        what.firstElementChild.prepend(el('span', 's-proj', x.project), ' ');
+    }
     const prog = el('td', 'prog');
     prog.append(stageBar(x));
     if (x.tokens || x.time) {

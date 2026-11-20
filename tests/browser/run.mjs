@@ -1,8 +1,9 @@
-// Headless browser tests: `node tests/browser/run.mjs [name-filter...]`. No dependencies, only Node and a local Chrome
+// Headless browser tests: `node tests/browser/run.mjs [-v] [name-filter...]`. No dependencies, only Node and a local Chrome
 // (CHROME=/path/to/chrome to override). Starts its own server on a free port over a fixture HOME with stub glab/gh, so
 // it never sees real sessions, tmux, GitLab or the :4321 server. Exits non-zero when a test fails.
+// Prints only failures and the summary (full log in last-run.log; -v prints it all). One run at a time per machine: a lock file waits out parallel runs.
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, readdirSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readdirSync, readFileSync, existsSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,6 +23,50 @@ const freePort = () => new Promise((ok, fail) => {
     });
 });
 
+const verbose = process.argv.includes('-v');
+const LOG = join(HERE, 'last-run.log');
+const logLines = [];
+// Everything goes to the log; only failures (quiet = false) and -v reach the terminal.
+const out = (text, show = verbose) => {
+    logLines.push(text);
+    if (show) {
+        console.log(text);
+    }
+};
+
+// ponytail: lock = file with the holder's pid, created exclusively; stale when that pid is gone. No fairness, polling every 1s.
+const LOCK = join(tmpdir(), 'homebase-browser-suite.lock');
+const alive = pid => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (e) {
+        return e.code === 'EPERM';
+    }
+};
+let locked = false;
+for (let warned = false; !locked;) {
+    try {
+        closeSync(openSync(LOCK, 'wx'));
+        writeFileSync(LOCK, String(process.pid));
+        locked = true;
+    } catch (e) {
+        if (e.code !== 'EEXIST') {
+            throw e;
+        }
+        const pid = Number(readFileSync(LOCK, 'utf8'));
+        if (pid && !alive(pid)) { // stale; an empty file is a holder between create and write, so wait for it
+            rmSync(LOCK, { force: true });
+            continue;
+        }
+        if (!warned) {
+            console.log(`waiting for another suite run (pid ${pid || '?'})…`);
+            warned = true;
+        }
+        await sleep(1000);
+    }
+}
+
 const tmp = mkdtempSync(join(tmpdir(), 'homebase-browser-'));
 const procs = new Set(); // our own children only; each runs in its own process group
 const kill = p => {
@@ -37,6 +82,9 @@ function cleanup() {
     cleaned = true;
     procs.forEach(kill);
     rmSync(tmp, { recursive: true, force: true });
+    if (locked) {
+        rmSync(LOCK, { force: true });
+    }
 }
 process.on('exit', cleanup);
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
@@ -101,7 +149,7 @@ const answerPosts = q => {
     return { body: 'ok' };
 };
 
-const DEFAULTS = { tracked: '["alpha","beta","gamma"]', project: 'alpha', tab: 'work', chat: IDS.master };
+const DEFAULTS = { tracked: '["alpha","beta","gamma"]', project: 'alpha', tab: 'work', chat: IDS.master, 'auto-compact': '0' }; // auto-compact is on by default; a test that wants it says so (null = unset)
 const ctx = {
     page, base, IDS, answerPosts, homebase: env.HOMEBASE_DIR,
     // Fresh page: storage reset to DEFAULTS plus overrides (null removes a key), then loaded and the board drawn.
@@ -121,7 +169,7 @@ const ctx = {
     touchSession: (project, id, text) => touchSession(home, project, id, text)
 };
 
-const filters = process.argv.slice(2);
+const filters = process.argv.slice(2).filter(a => a !== '-v');
 const files = readdirSync(HERE).filter(f => f.endsWith('.test.mjs')).sort();
 const results = [];
 const started = Date.now();
@@ -144,30 +192,32 @@ try {
             }
             const ms = Date.now() - t0;
             results.push({ full, error, ms });
-            console.log(`${error ? 'FAIL' : 'ok  '} ${full} (${(ms / 1000).toFixed(1)}s)`);
+            out(`${error ? 'FAIL' : 'ok  '} ${full} (${(ms / 1000).toFixed(1)}s)`, !!error || verbose);
             if (error) {
-                console.log(`     ${String(error.stack ?? error).split('\n').slice(0, 6).join('\n     ')}`);
+                out(`     ${String(error.stack ?? error).split('\n').slice(0, 6).join('\n     ')}`, true);
                 if (page.errors.length) {
-                    console.log(`     page errors: ${JSON.stringify(page.errors.slice(-5))}`);
+                    out(`     page errors: ${JSON.stringify(page.errors.slice(-5))}`, true);
                 }
             }
         }
     }
 } catch (e) {
     results.push({ full: 'runner', error: e, ms: 0 });
-    console.log(`FAIL runner: ${e.stack ?? e}`);
+    out(`FAIL runner: ${e.stack ?? e}`, true);
 } finally {
     page.close();
     const failed = results.filter(r => r.error);
     // gamma's forge calls fail on purpose (see fixture.mjs); any other FAIL is a missing fixture
     const unknown = existsSync(env.HOMEBASE_STUB_LOG) ? readFileSync(env.HOMEBASE_STUB_LOG, 'utf8').split('\n').filter(l => l.startsWith('FAIL') && !l.includes('gamma')) : [];
     if (unknown.length) {
-        console.log(`\nforge calls without a fixture (add them to forge-stub.mjs):\n  ${[...new Set(unknown)].join('\n  ')}`);
+        out(`\nforge calls without a fixture (add them to forge-stub.mjs):\n  ${[...new Set(unknown)].join('\n  ')}`, true);
     }
     if (failed.length && serverLog.trim()) {
-        console.log(`\nserver output:\n${serverLog.trim().split('\n').slice(-20).join('\n')}`);
+        out(`\nserver output:\n${serverLog.trim().split('\n').slice(-20).join('\n')}`, true);
     }
-    console.log(`\n${results.length - failed.length} passed, ${failed.length} failed in ${((Date.now() - started) / 1000).toFixed(1)}s`);
+    out(`\n${results.length - failed.length} passed, ${failed.length} failed in ${((Date.now() - started) / 1000).toFixed(1)}s`, true);
+    writeFileSync(LOG, logLines.join('\n') + '\n');
+    console.log(`full log: ${LOG}`);
     cleanup();
     process.exit(failed.length || !results.length ? 1 : 0);
 }

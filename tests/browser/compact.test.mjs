@@ -83,7 +83,7 @@ export default {
         assert.deepEqual(compactPosts(page), [], 'explicit off');
         assert.equal(await page.ev(`document.getElementById('auto-compact').checked`), false);
 
-        await open();
+        await open({ 'auto-compact': null });
         await waitForPost(page);
         await sleep(3500); // more polls: the hourly limit holds
         assert.deepEqual(compactPosts(page), [`?id=${IDS.master}`]);

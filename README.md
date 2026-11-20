@@ -82,6 +82,8 @@ The browser tests need only Node and a local Chrome (set `CHROME=/path/to/chrome
 They start their own server on a free port over a throwaway HOME with fixture transcripts, and put stub `glab`/`gh` executables first on PATH, so they never touch your sessions, tmux, GitLab, GitHub or a running Homebase.
 POSTs from the page are answered by the test, so nothing is ever typed into a session.
 Pass words to run only the matching tests, e.g. `node tests/browser/run.mjs chat`.
+By default only failing tests and the summary line are printed; the full log is written to `tests/browser/last-run.log` (gitignored) and `-v` prints it all.
+Runs are serialised across processes and worktrees by a lock file in the system temp dir (`homebase-browser-suite.lock`, holding the pid); a second run prints "waiting for another suite run…" until the first is done, and a lock left by a dead process is ignored.
 The fixtures are in `tests/browser/fixture.mjs` (transcripts) and `tests/browser/forge-stub.mjs` (canned GitLab/GitHub answers); a forge call the stub doesn't know is listed after the run.
 
 ## Security

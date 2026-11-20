@@ -91,6 +91,13 @@
     </form>
   </aside>
 </div>
+<!-- phones only (styles.css ≤ 700px): one pane at a time, the chat or the board's tabs -->
+<nav class="ptabs" id="ptabs" aria-label="Views">
+  <button type="button" data-pane="chat" aria-pressed="true">Chat<span class="pt-dot"></span></button>
+  <button type="button" data-pane="work" aria-pressed="false">Work<span class="count hot" id="pt-work-n" hidden></span></button>
+  <button type="button" data-pane="issues" aria-pressed="false">Issues</button>
+  <button type="button" data-pane="log" aria-pressed="false">Log</button>
+</nav>
 <wa-dialog id="clear-dlg" label="Start a fresh conversation?">
   Claude forgets this chat's context.
   <wa-button slot="footer" size="s" appearance="outlined" data-dialog="close">Cancel</wa-button>

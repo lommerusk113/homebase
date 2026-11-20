@@ -461,8 +461,8 @@ ul.comments a { color:var(--fg); }
 .tabs button:hover { color:var(--fg); }
 .tabs button[aria-selected="true"] { color:var(--fg); font-weight:600; border-bottom-color:var(--accent); }
 .tabs button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
-.tabs .count { font-size:11px; padding:0 6px; border-radius:99px; background:var(--chip); color:var(--muted); font-weight:500; }
-.tabs .count.hot { background:color-mix(in srgb, var(--c-needs) 16%, var(--bg)); color:var(--c-needs); }
+.tabs .count, .ptabs .count { font-size:11px; padding:0 6px; border-radius:99px; background:var(--chip); color:var(--muted); font-weight:500; }
+.tabs .count.hot, .ptabs .count.hot { background:color-mix(in srgb, var(--c-needs) 16%, var(--bg)); color:var(--c-needs); }
 .issues { gap:14px; }
 .is-head { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:14px 16px 12px; display:grid; grid-template-columns:auto 1fr auto; gap:6px 20px; align-items:end; flex-shrink:0; }
 .is-title { grid-column:1 / -1; display:flex; gap:10px; align-items:center; font-size:12px; margin-bottom:4px; }
@@ -589,3 +589,64 @@ wa-details[open] .g-note { display:none; }
 .lg-chip { font:inherit; font-size:11.5px; line-height:18px; padding:1px 10px; border-radius:99px; border:1px solid var(--line); background:transparent; color:var(--muted); cursor:pointer; }
 .lg-chip[aria-pressed="true"] { background:var(--accent-bg); color:var(--accent); border-color:transparent; }
 #log.hide-agent .lg-agent, #log.hide-commit :is(.lg-commit, .lg-mr), #log.hide-chat .lg-topic { display:none; }
+
+/* Phones: one pane at a time behind a bottom tab bar (app.js showPane), touch-sized controls, no sideways scroll */
+.ptabs { display:none; }
+@media (max-width: 700px) {
+  body { height:100dvh; }
+  header.top { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; gap:8px; padding:max(8px, env(safe-area-inset-top)) 12px 8px; }
+  header.top > * { flex-shrink:0; }
+  .brand { font-size:0; } /* the logo only */
+  #project { width:170px; }
+  .ms-menu { position:fixed; top:calc(max(8px, env(safe-area-inset-top)) + 44px); left:8px; right:8px; width:auto; }
+  .main { flex-direction:row; overflow:hidden; }
+  .left { flex:1; min-height:0; }
+  #chat { flex:1; width:auto; height:auto; border:0; }
+  body[data-pane="chat"] .left, body[data-pane="board"] #chat, #tabs { display:none; }
+  .masters { padding:12px 12px 24px; }
+  .card { padding:12px 14px; gap:8px; }
+  /* board rows: the title on its own line, then progress, action and age; MR and branch live in the expanded detail */
+  .rows, .rows tbody { display:block; }
+  .rows tr { display:grid; grid-template-columns:1fr auto auto; align-items:center; border-top:1px solid var(--line-soft); }
+  .rows tr:first-child { border-top:0; }
+  .rows td { border-top:0; padding:4px 8px 10px; }
+  .rows .what, .rows td[colspan] { grid-column:1 / -1; }
+  .rows .what { padding:10px 14px 2px; }
+  .rows .prog { width:auto; padding-left:14px; }
+  .rows .pr, .rows .br { display:none; }
+  .rows .act, .rows .when { width:auto; }
+  .rows .act wa-button[size="s"] { --wa-form-control-height:40px; font-size:13px; }
+
+  .ptabs { display:flex; flex-shrink:0; background:var(--bg); border-top:1px solid var(--line); padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .ptabs button { flex:1; min-height:52px; appearance:none; border:0; border-top:2px solid transparent; background:none; font:inherit; font-size:13px; font-weight:500; color:var(--muted); display:flex; align-items:center; justify-content:center; gap:6px; cursor:pointer; }
+  .ptabs button[aria-pressed="true"] { color:var(--accent); border-top-color:var(--accent); font-weight:600; }
+  .ptabs button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+  .pt-dot { display:none; width:8px; height:8px; border-radius:50%; background:var(--c-needs); }
+  body:has(#wait:not([hidden]), #ask:not([hidden]), #boot:not([hidden])) .pt-dot { display:inline-block; }
+  /* typing: the keyboard is up, so the composer gets the bottom edge */
+  body:has(#msg:focus-within) .ptabs { display:none; }
+
+  /* chat header: the title keeps some room; with a newer session the chips make way and Switch never truncates */
+  .c-title { min-width:30%; }
+  .c-head { height:44px; }
+  header.top .quiet, .c-head .quiet { min-width:40px; min-height:40px; }
+  .c-head:has(.c-newer:not([hidden])) :is(.c-branch, .c-unpushed) { display:none; }
+  .c-newer { display:flex; align-items:center; gap:4px; min-width:0; margin-left:8px; }
+  #newer-text { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .c-newer .show { flex-shrink:0; min-height:44px; }
+  .c-feed { padding:12px 8px; }
+  .c-cards { max-height:55dvh; overflow-y:auto; }
+  .c-cards > .c-ask, .c-wait { margin:8px 8px 0; }
+  wa-button.c-opt { font-size:15px; }
+  wa-button.c-opt.quiet { width:100%; }
+  wa-button.c-opt.quiet::part(base) { min-height:44px; }
+  .c-opt.ro { min-height:44px; }
+  .c-wait-q { min-height:44px; }
+  .c-term { flex-wrap:wrap; white-space:normal; }
+  .c-term wa-button { --wa-form-control-height:44px; }
+  .c-input { height:auto; padding-bottom:8px; }
+  .composer { margin:0 8px; }
+  #msg { font-size:16px; } /* under 16px iOS zooms in on focus */
+  .c-send, .c-attach { width:44px; height:44px; border-radius:12px; }
+  .c-send svg, .c-attach svg { width:20px; height:20px; }
+}

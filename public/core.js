@@ -433,4 +433,8 @@ export function updateTitle() {
     const asking = Math.max(tracked.filter(waitsOnYou).length, state.asking ? 1 : 0);
     const n = tracked.flatMap(s => s.items || []).filter(x => x.column === 'needs-you' || x.column === 'ready' || newCount(x)).length + asking;
     document.title = n ? `(${n}) Homebase` : 'Homebase';
+    // the phone's Work tab badge (index.html #ptabs)
+    const badge = $('pt-work-n');
+    badge.textContent = String(n);
+    badge.hidden = !n;
 }

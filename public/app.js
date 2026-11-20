@@ -536,6 +536,31 @@ for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySele
     b.onclick = () => showTab(b.dataset.tab);
 }
 showTab(store.get('tab'));
+
+// Phones (≤ 700px, styles.css): the bottom bar shows the chat or one board tab. body[data-pane] does nothing wider.
+/** @param {string} pane chat, work, issues or log */
+function showPane(pane) {
+    document.body.dataset.pane = pane === 'chat' ? 'chat' : 'board';
+    if (pane !== 'chat') {
+        showTab(pane);
+    }
+    for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#ptabs button'))) {
+        b.setAttribute('aria-pressed', String(b.dataset.pane === pane));
+    }
+}
+for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#ptabs button'))) {
+    b.onclick = () => showPane(b.dataset.pane);
+}
+showPane('chat');
+// A tap on the board that picks a chat, or on an "is asking" row, opens the chat pane; capture runs before the row's handler.
+let chatBefore = null;
+const board = document.querySelector('.left');
+board.addEventListener('click', () => { chatBefore = state.chat; }, true);
+board.addEventListener('click', e => {
+    if (document.body.dataset.pane === 'board' && (state.chat !== chatBefore || /** @type {Element} */ (e.target).closest?.('tr.asking'))) {
+        showPane('chat');
+    }
+});
 initKeys(); // includes Esc collapsing the expanded row
 initChat();
 api('/api/editors').then(r => r.json()).then(e => {

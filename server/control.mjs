@@ -1,5 +1,5 @@
 // The POST actions on a session: type into its tmux session, interrupt, /clear, /compact, and open its folder in an editor.
-import { readdir, stat, access } from 'node:fs/promises';
+import { readdir, stat, access, readFile, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, basename } from 'node:path';
@@ -84,13 +84,43 @@ async function resumable(id) {
     return s;
 }
 
+// `/model <alias>` makes Claude Code save the model as the global default; a pick from the chat is for that chat only.
+// Returns restore(): waits (up to waitMs) for the top-level "model" in settings.json to change, then puts the old value back (or removes the key).
+// ponytail: a /model typed by hand in the same few seconds gets reverted too; the rest of the file is kept, but reformatted as 2-space JSON
+export const SETTINGS = () => join(homedir(), '.claude', 'settings.json');
+export async function keepModelSetting(path = SETTINGS(), { waitMs = 5000, nap = sleep } = {}) {
+
+    const read = async () => JSON.parse(await readFile(path, 'utf8'));
+    const old = await read();
+    const had = 'model' in old;
+
+    return async () => {
+        for (let waited = 0; waited <= waitMs; waited += 250) {
+            const now = await read();
+            if (now.model !== old.model || 'model' in now !== had) {
+                if (had) {
+                    now.model = old.model;
+                } else {
+                    delete now.model;
+                }
+                await writeFile(path, JSON.stringify(now, null, 2) + '\n');
+
+                return true;
+            }
+            await nap(250);
+        }
+
+        return false;
+    };
+}
+
 const conflict = msg => Object.assign(new Error(msg), { status: 409 });
 const ELSEWHERE = 'This session is open in another terminal. Close it there first.';
 const BOOT_MS = 30_000;
 
 // Types `text` into the session's tmux, starting one (claude --resume) when none runs. Claude Code's registry (reg) says
 // which tmux a live session is in; without a registry, a dead tmux plus a fresh transcript write means another terminal.
-export async function send(id, text, session = null, { tm = tmux, nap = sleep, reg = liveSessions, waitMs = BOOT_MS } = {}) {
+export async function send(id, text, session = null, { tm = tmux, nap = sleep, reg = liveSessions, waitMs = BOOT_MS, after = null } = {}) {
 
     session ??= await resumable(id);
     const live = await reg();
@@ -128,6 +158,7 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
         }
         await cancelQuestion(name, { tm, nap });
         await typeSteps(name, sendSteps(name, text), { tm, nap });
+        await after?.(); // still under the lock
 
         return name;
     });

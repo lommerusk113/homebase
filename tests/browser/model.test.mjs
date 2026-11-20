@@ -15,5 +15,11 @@ export default {
         assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [[`/api/send?id=${IDS.master}`, '/model sonnet']]);
         const shot = await page.cmd('Page.captureScreenshot', { format: 'png' });
         writeFileSync('/private/tmp/claude-501/-Users-bruinen-IdeaProjects-Privat-codetool/a0da2e79-0e88-4132-aa8a-4f82c6fe07ad/scratchpad/model-chip.png', Buffer.from(shot.data, 'base64'));
+        assert.ok(await page.ev(`document.getElementById('c-title').getBoundingClientRect().width >= 40`), 'the title keeps room');
+        await page.cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
+        await page.waitFor(`getComputedStyle(document.getElementById('c-model')).display === 'none'`, { what: 'the chip hidden at phone width' });
+        const phone = await page.cmd('Page.captureScreenshot', { format: 'png' });
+        writeFileSync('/private/tmp/claude-501/-Users-bruinen-IdeaProjects-Privat-codetool/a0da2e79-0e88-4132-aa8a-4f82c6fe07ad/scratchpad/model-chip-390.png', Buffer.from(phone.data, 'base64'));
+        await page.cmd('Emulation.clearDeviceMetricsOverride');
     }
 };

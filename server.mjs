@@ -14,7 +14,7 @@ import { log } from './server/log.mjs';
 import { MAX_SEND, withLock } from './server/tmux.mjs';
 import { createProject, cloneProject, openProject, githubProjects, localProjects, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion } from './server/startup.mjs';
-import { send, sendToNew, interrupt, clearChat, compactChat, restartChat, editors, openInEditor } from './server/control.mjs';
+import { send, keepModelSetting, sendToNew, interrupt, clearChat, compactChat, restartChat, editors, openInEditor } from './server/control.mjs';
 import { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
 import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedRequest, pair, deviceOf, cookieOf, deviceCookie, pairPage, newCode, pairedDevices, revoke } from './server/pairing.mjs';
 import { readConfigFile } from './server/account.mjs';
@@ -214,7 +214,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 if (url.searchParams.has('tmux')) {
                     await sendToNew(url.searchParams.get('tmux'), body); // a new project's chat that has no transcript yet
                 } else {
-                    await send(url.searchParams.get('id'), body);
+                    const restore = /^\/model \w+$/.test(body.trim()) ? await keepModelSetting().catch(() => null) : null; // a pick is for this chat only
+                    await send(url.searchParams.get('id'), body, null, { after: restore });
                 }
                 return res.end('ok');
             }

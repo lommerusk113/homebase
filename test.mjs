@@ -863,6 +863,24 @@ assert.deepEqual(peakLimits(peaks, [dump(5, 1738443600)], 1738425600_000 + 1).fi
 assert.equal([...peaks.keys()].some(k => k.includes('1738425600000')), false); // expired window dropped
 assert.equal(peakLimits(new Map(), [{}], now), null);
 import { limitLeft, runOutIn, modelName } from './public/core.js';
+import { keepModelSetting } from './server/control.mjs';
+{
+    const dir = mkdtempSync(join(tmpdir(), 'hb-settings-')), f = join(dir, 'settings.json');
+    const nap = async () => {};
+    for (const [start, written, expected] of [
+        [{ a: 1, model: 'x' }, { a: 1, model: 'fable' }, { a: 1, model: 'x' }],
+        [{ a: 1 }, { a: 1, model: 'fable' }, { a: 1 }]
+    ]) {
+        writeFileSync(f, JSON.stringify(start));
+        const restore = await keepModelSetting(f, { nap });
+        writeFileSync(f, JSON.stringify({ ...written, b: 2 })); // Claude Code saved the pick (and something else changed)
+        assert.equal(await restore(), true);
+        assert.deepEqual(JSON.parse(readFileSync(f, 'utf8')), { ...expected, b: 2 });
+    }
+    writeFileSync(f, '{"model":"x"}');
+    assert.equal(await (await keepModelSetting(f, { waitMs: 500, nap }))(), false); // never changed: left alone
+    rmSync(dir, { recursive: true });
+}
 assert.deepEqual(['claude-opus-5-5', 'claude-sonnet-4-6', 'claude-haiku-5-5', 'claude-fable-5-2', '<synthetic>', null].map(modelName), ['Opus', 'Sonnet', 'Haiku', 'Fable', null, null]);
 assert.deepEqual(limitLeft({ used: 30, resetsAt: now + 80 * 60_000 }, now), { left: 70, until: '1h20m' });
 assert.deepEqual(limitLeft({ used: 37, resetsAt: now + (4 * 1440 + 22 * 60 + 30) * 60_000 }, now), { left: 63, until: '4d22h' });

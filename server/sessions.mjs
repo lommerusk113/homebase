@@ -47,14 +47,16 @@ export function repoPath(url) {
     return m ? { host: m[1], path: m[2] } : null;
 }
 
-export async function projectOf(cwd) {
+// A git failure or timeout gives the folder name for now but is not cached, so the next call asks git again.
+export async function projectOf(cwd, exec = run) {
 
     if (!cwd) {
         return '—';
     }
     if (!projects.has(cwd)) {
         // repo name from origin (so a folder named differently still shows the real repo), else the main checkout's folder
-        projects.set(cwd, run('git', ['-C', cwd, 'remote', 'get-url', 'origin'])
+        const opts = { timeout: 5000 };
+        projects.set(cwd, exec('git', ['-C', cwd, 'remote', 'get-url', 'origin'], opts)
             .then(({ stdout }) => {
                 const name = repoName(stdout);
                 const repo = repoPath(stdout);
@@ -64,9 +66,13 @@ export async function projectOf(cwd) {
 
                 return name;
             })
-            .catch(() => run('git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'])
+            .catch(() => exec('git', ['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir'], opts)
                 .then(({ stdout }) => basename(dirname(stdout.trim()))))
-            .catch(() => basename(cwd.replace(/\/\.(claude\/)?worktrees\/.*$/, ''))));
+            .catch(() => {
+                projects.delete(cwd);
+
+                return basename(cwd.replace(/\/\.(claude\/)?worktrees\/.*$/, ''));
+            }));
     }
 
     return projects.get(cwd);

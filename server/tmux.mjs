@@ -8,7 +8,7 @@ const run = promisify(execFile);
 
 // HOMEBASE_TMUX_SOCKET points every tmux call at a separate server (tmux -L), so tests never touch real sessions.
 export const tmuxArgs = (args, socket = process.env.HOMEBASE_TMUX_SOCKET) => (socket ? ['-L', socket, ...args] : args);
-export const tmux = args => run('tmux', tmuxArgs(args));
+export const tmux = args => run('tmux', tmuxArgs(args), { timeout: 5000 }); // a hung tmux fails instead of freezing the board
 
 // Homebase's own rules (homebase-rules.md: how replies and questions fit its UI), added to every Claude it starts or resumes
 export const RULES_FILE = fileURLToPath(new URL('../homebase-rules.md', import.meta.url));

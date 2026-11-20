@@ -2703,3 +2703,20 @@ import { claudeLine } from './server/tmux.mjs';
     assert.match(claudeLine(' --resume x'), /^claude --append-system-prompt-file '.*\/homebase-rules\.md' --resume x$/);
     console.log('ok claude line');
 }
+
+import { projectOf } from './server/sessions.mjs';
+{
+    // a failed git lookup gives the folder name but is not cached; a good one is, and every call gets a timeout
+    let calls = 0, opts;
+    const bad = async () => { calls++; throw new Error('timed out'); };
+    assert.equal(await projectOf('/x/y/proj-a', bad), 'proj-a');
+    await projectOf('/x/y/proj-a', bad);
+    assert.equal(calls, 4, 'asked git again (2 commands per call)');
+    const good = async (_c, _a, o) => { opts = o; calls++; return { stdout: 'git@h:g/repo-b.git\n' }; };
+    calls = 0;
+    assert.equal(await projectOf('/x/y/proj-b', good), 'repo-b');
+    await projectOf('/x/y/proj-b', bad);
+    assert.equal(calls, 1);
+    assert.equal(opts.timeout, 5000);
+    console.log('ok projectOf no cache on failure');
+}

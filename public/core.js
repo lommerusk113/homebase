@@ -78,7 +78,7 @@ export function refreshToken() {
  */
 export async function api(path, opts = {}) {
     page.token ??= ownMeta('homebase-token');
-    const send = token => fetch(path, { ...opts, headers: { ...opts.headers, 'x-homebase-token': token, ...(opts.method === 'POST' && { 'x-codetool': '1' }) } });
+    const send = token => fetch(path, { signal: AbortSignal.timeout(15_000), ...opts, headers: { ...opts.headers, 'x-homebase-token': token, ...(opts.method === 'POST' && { 'x-codetool': '1' }) } });
     const used = page.token, r = await send(used);
     if (r.status !== 401) {
         return r;

@@ -17,7 +17,10 @@ export default {
         writeFileSync('/private/tmp/claude-501/-Users-bruinen-IdeaProjects-Privat-codetool/a0da2e79-0e88-4132-aa8a-4f82c6fe07ad/scratchpad/model-chip.png', Buffer.from(shot.data, 'base64'));
         await page.cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
         await page.waitFor(`${btn}.getBoundingClientRect().width > 0`, { what: 'the chip at phone width' });
-        await page.click('#c-model-btn');
+        for (let i = 0; i < 10 && !(await page.ev(`document.getElementById('c-model').open`)); i++) { // a click while the pick's close animation runs is dropped
+            await page.click('#c-model-btn');
+            await new Promise(r => setTimeout(r, 200));
+        }
         await page.waitFor(`document.getElementById('c-model').open`, { what: 'the picker open' });
         const fits = `(() => { const r = document.querySelector('#c-model wa-dropdown-item[value="default"]').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= document.getElementById('status').getBoundingClientRect().top + 4; })()`;
         await page.waitFor(fits, { what: 'the picker on screen, above the chip' });

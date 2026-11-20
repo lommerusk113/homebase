@@ -1,0 +1,24 @@
+│ be picked, and a colour that may already be taken or is a possible clash
+│ no longer arrives pre-picked. The third is still open: the swatch only
+│ appears in the theme carousel. If the theme is applied another way
+│ (opened in the settings panel, as a draft, or imported directly), the colour
+│ is applied silently, can't be undone, and takes its shade from stale
+│ stored data. How should those other routes behave?
+
+❯ 1. Only the carousel applies it (Recommended)
+     The colour is applied only when it's picked in the carousel, with the shade
+     taken from the saved theme. The panel and drafts never apply it
+     silently. Bulk import keeps using the stored pick behind its confirm
+     dialog. Small change, about 50 lines plus tests.
+  2. Show the swatch everywhere
+     The same swatch is added to the settings panel and drafts, so users can
+     pick or unpick it on every route. About three times the work (150 lines
+     plus component tests).
+  3. Unpick when the panel opens
+     Opening the theme outside the carousel quietly clears the stored pick. Small
+     change, but it alters saved state behind the user's back.
+  4. Type something.
+────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+ ↑ 5 more lines
+Enter to select · ↑/↓ to navigate · Esc to cancel

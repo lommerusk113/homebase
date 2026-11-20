@@ -3033,6 +3033,15 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     r = await run([ask(0), ask(1), ask(1).replace('Which color\ndo you want?', 'Which size?')], 1, 'Red');
     assert.equal(r.err, null, 'the next question of a multi-question dialog counts as answered');
 
+    // A question taller than the 80x24 pane (captured from a real Claude Code, text replaced): its top is clipped and a
+    // "↑ 5 more lines" scroll marker sits under the options. The marker is no option's description; typing still cancels it.
+    const clipped = readFileSync(new URL('./tests/fixtures/question-clipped.txt', import.meta.url), 'utf8');
+    const c = parseQuestion(clipped);
+    assert.deepEqual(c.options, ['Only the carousel applies it (Recommended)', 'Show the swatch everywhere', 'Unpick when the panel opens', 'Type something.', 'Chat about this']);
+    assert.deepEqual(c.descriptions.slice(3), ['', ''], 'no scroll marker as a description');
+    assert.match(c.question, /^be picked, .* How should those other routes behave\?$/);
+    assert.ok(questionOpen(clipped), 'a typed message cancels it (Esc) rather than being refused');
+
     // A tool permission prompt, captured from a real Claude Code: an "Esc to cancel" footer, the command as the question
     const perm = readFileSync(new URL('./tests/fixtures/permission-bash.txt', import.meta.url), 'utf8');
     const p = parseQuestion(perm);

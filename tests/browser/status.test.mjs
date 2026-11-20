@@ -126,6 +126,16 @@ export default {
         assert.deepEqual([u.searchParams.get('tmux'), u.searchParams.get('option'), u.searchParams.get('label')], [`cc-${IDS.asker.slice(0, 8)}`, '1', 'Postgres']);
     },
 
+    'a question clipped at the top of a small pane shows the transcript\'s whole question': async ({ page, open, IDS, answerPosts }) => {
+        await open({ project: 'beta', chat: IDS.asker });
+        const question = { question: 'should be the default?', options: ['Postgres', 'SQLite', 'Type something.', 'Chat about this'], descriptions: ['', '', '', ''], selected: 0 };
+        page.route = q => (q.url.includes('/api/question') && q.method !== 'POST'
+            ? { body: JSON.stringify({ question }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        const opts = `[...document.querySelectorAll('#ask-opts wa-button')].map(b => b.firstChild.textContent)`;
+        await page.waitFor(`JSON.stringify(${opts}) === '["Postgres","SQLite","Chat about this"]'`, { what: "the pane's buttons" });
+        assert.equal(await page.ev(`document.getElementById('ask-q').textContent`), 'Which database should be the default?');
+    },
+
     '"Chat about this" selects that entry on the pane and focuses the chat input': async ({ page, open, IDS, answerPosts }) => {
         await open({ project: 'beta', chat: IDS.asker });
         let question = { question: 'Which database should be the default?', options: ['SQLite', 'Postgres', 'Type something.', 'Chat about this'], descriptions: ['', '', '', ''], selected: 0 };

@@ -199,6 +199,8 @@ interface OutboxItem extends ChatItem {
     /** sent after the text but not shown, kept for Retry */
     note?: string;
     okAt?: number;
+    /** the server refused it (409): its error says why, and there is no Retry */
+    refused?: boolean;
     /** sent, but the transcript still doesn't show it OUTBOX_TTL_MS later */
     unconfirmed?: boolean;
 }

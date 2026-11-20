@@ -124,6 +124,21 @@ export default {
         assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')).map(p => p.body), ['retry me', 'second try', 'second try']);
     },
 
+    'a refused send (409) says why on the bubble and offers Dismiss, not a Retry that would only be refused again': async ({ page, open, answerPosts }) => {
+        await open();
+        await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
+        const why = "Claude is asking something Homebase can't see: answer it in the terminal";
+        page.route = q => (q.url.includes('/api/send') ? { status: 409, body: why } : answerPosts(q));
+        await page.click('#msg');
+        await page.type('refused one');
+        await page.key('Enter');
+        const failed = `document.querySelector('#feed .bubble.user.failed')`;
+        await page.waitFor(`${failed}?.querySelector('wa-button.dismiss')`, { what: 'the refused bubble' });
+        assert.equal(await page.ev(`${failed}.querySelector('.b-note').firstChild.textContent`), `Not sent: ${why}`);
+        assert.equal(await page.ev(`!!${failed}.querySelector('wa-button.retry')`), false);
+        assert.equal(await page.ev(`document.getElementById('msg').value`), 'refused one', 'the text is back to send once the reason is dealt with');
+    },
+
     'an attached image is uploaded and sent as an [Image: path] line, with a thumbnail': async ({ page, open, answerPosts, homebase }) => {
         await open();
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });

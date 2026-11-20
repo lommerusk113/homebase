@@ -385,7 +385,7 @@ function bubble(i, sid, prevTopic, look = {}) {
 function noteRow(i, sid, key) {
 
     const lost = ('unconfirmed' in i && i.unconfirmed) || (i.error && state.outbox.includes(/** @type {OutboxItem} */ (i))) ? /** @type {OutboxItem} */ (i) : null;
-    const note = i.error ? 'Not sent' : lost ? 'Not confirmed — Claude may not have received this' : i.sending ? 'sending…' : i.pending ? 'queued' : null;
+    const note = i.error ? `Not sent${'refused' in i && i.refused ? `: ${i.error}` : ''}` : lost ? 'Not confirmed — Claude may not have received this' : i.sending ? 'sending…' : i.pending ? 'queued' : null;
     if (!note) {
         return null;
     }
@@ -402,7 +402,7 @@ function noteRow(i, sid, key) {
             drop();
             refreshChat();
         };
-        n.append(' ', retry, dismiss);
+        n.append(' ', ...(lost.refused ? [] : [retry]), dismiss); // a refusal (409) would only be refused again: its reason says what to do
     }
     if (i.pending && !i.sending) {
         const btn = waButton('Send now', 'send-now', { pill: true });
@@ -717,7 +717,7 @@ async function showAsk(s, data) {
         return;
     }
     const flat = t => t.replace(/\s+/g, ' ').trim();
-    const known = questions.find(q => flat(q.question) === pane.question);
+    const known = questions.find(q => flat(q.question).endsWith(pane.question)); // a question taller than the pane shows only its end
     const options = pane.options.map((label, i) => ({ i, label, desc: known?.descriptions?.[known.options.indexOf(label)] || pane.descriptions[i], primary: /\(recommended\)/i.test(label), quiet: CHAT.test(label) || GRANT.test(label) }))
         .filter(o => !TEXT_BOX.test(o.label))
         .sort((a, b) => Number(a.quiet) - Number(b.quiet)); // quiet ones last: Yes and No stay the big pair
@@ -1315,8 +1315,9 @@ export async function sendText(sid, text, answerTo, note) {
     stick = true;
     refreshChat();
     try {
-        const r = await api(`/api/send?${sid.startsWith('cc-new-') ? 'tmux' : 'id'}=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: note ? `${text}\n\n${note}` : text });
+        const r = await api(`/api/send?${sid.startsWith('cc-new-') ? 'tmux' : 'id'}=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: note ? `${text}\n\n${note}` : text, signal: AbortSignal.timeout(45_000) }); // past control.mjs BOOT_MS: a chat that has to start first isn't "Not sent" while it still goes through
         if (!r.ok) {
+            out.refused = r.status === 409;
             throw new Error(await r.text());
         }
         out.okAt = Date.now();

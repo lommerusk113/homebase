@@ -131,7 +131,8 @@ const OPTION = /^(?: {0,3}|\s*❯\s+)(\d+)\.\s+(.+)$/;
 // when two or more options, nothing else, end the pane with no ─ rule around them (the input box has one). │ box borders are stripped. -> { question, options, descriptions, selected, detail?, risky? } or null
 export function parseQuestion(pane) {
 
-    let lines = String(pane ?? '').split('\n').map(l => l.replace(/^\s*│ ?|\s*│\s*$/g, '').replace(/\s+$/, ''));
+    // a question taller than the pane is clipped at the top, with a "↑ 5 more lines" scroll marker: not part of any option
+    let lines = String(pane ?? '').split('\n').map(l => l.replace(/^\s*│ ?|\s*│\s*$/g, '').replace(/\s+$/, '')).filter(l => !/^\s*[↑↓] \d+ more lines?$/.test(l));
     const hint = lines.findLastIndex(l => /enter to select/i.test(l));
     const review = lines.findLastIndex(l => /^\s*Review your answers$/.test(l));
     const esc = lines.findLastIndex(l => /^\s*Esc to cancel/.test(l));

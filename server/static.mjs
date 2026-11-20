@@ -21,7 +21,8 @@ export const STATIC = {
     '/keys.js': ['keys.js', JS],
     '/log.js': ['log.js', JS],
     '/newproject.js': ['newproject.js', JS],
-    '/icon.svg': ['icon.svg', 'image/svg+xml']
+    '/icon.svg': ['icon.svg', 'image/svg+xml'],
+    '/sw.js': ['sw.js', JS]
 };
 // Hash of the app files as of this start, in index.html's homebase-build meta: a page whose build differs from a
 // freshly served index.html runs old code and says "reload when convenient". A restart without code changes keeps it.

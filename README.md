@@ -18,6 +18,10 @@ Homebase remembers the MRs/PRs it has seen in `~/.claude/homebase/items.json` (`
 
 Images attached in the chat (paste, drop or the paperclip) are stored in `~/.claude/homebase/uploads/` (`HOMEBASE_DIR` moves it) and sent as `[Image: <path>]` lines, which Claude opens with its Read tool; the folder is never cleaned up, so delete old files when you like.
 
+Push notifications: "Enable notifications on this device" in the chat's ⋯ menu makes the server send a Web Push when a chat starts asking or needs you, at most one per chat per 30s, and none while a Homebase page was focused in the last minute.
+They arrive with the page closed. On an iPhone (iOS 16.4+), open Homebase over HTTPS, add it to the Home Screen, open it from there and enable it in the menu.
+The VAPID keys and subscriptions live in `~/.claude/homebase/vapid.json` and `subscriptions.json` (`HOMEBASE_DIR` moves them); until pairing exists, only a browser on this computer may subscribe.
+
 ## Asking hook
 
 A chat waiting on you (an AskUserQuestion or a tool permission prompt) shows as "<chat> is asking" at the top of Needs you in the Work tab; click it to answer in the chat, where each option of the question on its tmux pane is a button.

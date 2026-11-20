@@ -1154,6 +1154,9 @@ export function initChat() {
         }
     };
     $('c-menu').addEventListener('wa-select', e => {
+        if (e.detail.item.value === 'push') {
+            return; // app.js
+        }
         const s = chatSession();
         if (!s) {
             return;

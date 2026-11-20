@@ -232,6 +232,78 @@ function migrateTracked() {
     }
 }
 
+// /?chat=<id>, a push notification's link: once that session is in the list, show its project and bind its chat.
+let linkedChat = new URLSearchParams(location.search).get('chat');
+if (linkedChat) {
+    history.replaceState(null, '', '/');
+}
+function openLinkedChat() {
+    const s = linkedChat && state.sessions.find(x => x.id === linkedChat);
+    if (!s) {
+        return;
+    }
+    linkedChat = null;
+    state.project = state.tracked.includes(s.project) ? s.project : 'all';
+    store.set('project', state.project);
+    bindChat(s.id);
+}
+
+// Push notifications on this device (the ⋯ menu): sw.js shows them even with the page closed. iOS only allows it for a
+// Home Screen web app. pushNow is the state shown, kept in sync so a click asks for permission before any await (iOS needs that).
+const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = matchMedia('(display-mode: standalone)').matches || /** @type {any} */ (navigator).standalone === true;
+const pushSupported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+/** @type {'on' | 'off' | 'home' | 'unsupported' | 'blocked'} */
+let pushNow = 'off';
+async function renderPush(error = '') {
+    const reg = pushSupported && await navigator.serviceWorker.getRegistration().catch(() => null);
+    pushNow = ios && !standalone ? 'home' : !pushSupported ? 'unsupported' : Notification.permission === 'denied' ? 'blocked'
+        : (await reg?.pushManager.getSubscription().catch(() => null)) ? 'on' : 'off';
+    $('push-label').textContent = `${pushNow === 'on' ? 'Turn off' : 'Enable'} notifications on this device`;
+    $('push-state').textContent = error || {
+        on: 'On', off: 'Off', home: 'Add Homebase to your Home Screen first', unsupported: 'Not supported in this browser', blocked: 'Blocked in browser settings'
+    }[pushNow];
+}
+/** @param {string} b64 */
+const keyBytes = b64 => Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function togglePush() {
+    if (pushNow !== 'on' && pushNow !== 'off') {
+        return renderPush();
+    }
+    try {
+        if (pushNow === 'off' && await Notification.requestPermission() !== 'granted') {
+            return renderPush();
+        }
+        const reg = await navigator.serviceWorker.register('/sw.js');
+        const old = await reg.pushManager.getSubscription();
+        if (old) {
+            await api('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint: old.endpoint }) });
+            await old.unsubscribe();
+        } else {
+            const { key } = await api('/api/push/key').then(r => r.json());
+            const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
+            const r = await api('/api/push/subscribe', { method: 'POST', body: JSON.stringify(sub) });
+            if (!r.ok) {
+                await sub.unsubscribe();
+                throw new Error(await r.text());
+            }
+        }
+        await renderPush();
+    } catch (e) {
+        await renderPush(`Failed: ${e.message}`);
+    }
+}
+$('c-menu').addEventListener('wa-select', e => {
+    if (e.detail.item.value === 'push') {
+        togglePush();
+    }
+});
+if (pushSupported) {
+    navigator.serviceWorker.register('/sw.js').catch(() => {}).finally(renderPush);
+} else {
+    renderPush();
+}
+
 const notifyOn = () => store.get('notify') === '1' && window.Notification?.permission === 'granted';
 /** @param {AttentionEvent} e @returns {[string, string | undefined]} */
 function eventText({ kind, item: x, session: s, comments }) {
@@ -350,7 +422,7 @@ async function findStarting() {
 }
 async function pollOnce() {
     try {
-        const r = await api('/api/sessions');
+        const r = await api(`/api/sessions${document.hasFocus() ? '?focused=1' : ''}`); // a focused page holds back phone pushes
         if (!r.ok) {
             throw new Error(String(r.status));
         }
@@ -359,6 +431,7 @@ async function pollOnce() {
         if (text !== lastSessions || Date.now() - lastRender > 60_000) {
             state.sessions = /** @type {Session[]} */ (JSON.parse(text));
             migrateTracked();
+            openLinkedChat();
             lastSessions = text;
             lastRender = Date.now();
             try {

@@ -175,7 +175,7 @@ function bubble(i, sid, prevTopic, look = {}) {
     }
     const needs = i.role === 'assistant' && i.needsYou && !i.error;
     const kind = i.role !== 'assistant' || i.error ? '' : needs ? ' needs' : ` fyi${look.latest ? ' latest' : ''}`;
-    const b = el('div', `bubble ${i.role}${kind}${i.error ? ' failed' : ''}${i.interrupted ? ' interrupted' : ''}`);
+    const b = el('div', `bubble ${i.role}${kind}${i.error || /** @type {OutboxItem} */ (i).unconfirmed ? ' failed' : ''}${i.interrupted ? ' interrupted' : ''}`);
     const key = `${sid}:${i.at}`;
     // the interrupted mark gets its own tooltip instead of the timestamp
     if (i.at && !i.interrupted) {
@@ -241,16 +241,30 @@ function bubble(i, sid, prevTopic, look = {}) {
     return b;
 }
 
-// Under a user bubble: "Not sent", "sending…" or "queued" (with Send now), else null.
-/** @param {ChatItem} i @param {string} sid @param {string} key */
+// Under a user bubble: "Not sent", "Not confirmed" (with Retry and Dismiss), "sending…" or "queued" (with Send now), else null.
+/** @param {ChatItem | OutboxItem} i @param {string} sid @param {string} key */
 function noteRow(i, sid, key) {
 
-    const note = i.error ? 'Not sent' : i.sending ? 'sending…' : i.pending ? 'queued' : null;
+    const lost = 'unconfirmed' in i && i.unconfirmed ? i : null;
+    const note = i.error ? 'Not sent' : lost ? 'Not confirmed — Claude may not have received this' : i.sending ? 'sending…' : i.pending ? 'queued' : null;
     if (!note) {
         return null;
     }
 
     const n = el('div', 'b-note', note);
+    if (lost) {
+        const drop = () => { state.outbox = state.outbox.filter(o => o !== lost); };
+        const retry = waButton('Retry', 'retry', { pill: true }), dismiss = waButton('Dismiss', 'dismiss', { pill: true, appearance: 'plain' });
+        retry.onclick = () => {
+            drop();
+            sendText(lost.sid, lost.text, lost.answerTo, lost.note);
+        };
+        dismiss.onclick = () => {
+            drop();
+            refreshChat();
+        };
+        n.append(' ', retry, dismiss);
+    }
     if (i.pending && !i.sending) {
         const btn = waButton('Send now', 'send-now', { pill: true });
         btn.onclick = () => sendNow(sid, key);
@@ -266,7 +280,7 @@ function answerTag(a) {
     const yes = !/^(no|nope)\b/i.test(a.text);
     const t = el('div', `answer${yes ? ' yes' : ''}${a.error ? ' failed' : ''}`);
     t.append(el('span', 'mark', a.error ? '!' : yes ? '✓' : '✕'), ` You: ${a.text}`);
-    const note = a.error ? `Not sent: ${a.error}` : a.sending ? 'sending…' : a.queued ? 'queued' : null;
+    const note = a.error ? `Not sent: ${a.error}` : a.unconfirmed ? 'not confirmed — Claude may not have received this' : a.sending ? 'sending…' : a.queued ? 'queued' : null;
     if (note) {
         t.append(` · ${note}`);
     }
@@ -467,7 +481,7 @@ async function showBoot(tmux) {
 }
 
 const LANDED_SLACK_MS = 10_000; // a transcript item may predate the send it matches by this much
-const OUTBOX_TTL_MS = 30_000; // after a successful send, the bubble goes even if nothing matched it
+const OUTBOX_TTL_MS = 30_000; // after a successful send, a bubble nothing matched by then is marked not confirmed
 
 // The transcript's items merged with this session's outbox, minus what Clear view hides; prunes state.outbox and
 // state.nudged on the way. hidden: how many items the cut-off removed from the front.
@@ -475,11 +489,15 @@ const OUTBOX_TTL_MS = 30_000; // after a successful send, the bubble goes even i
 function feedItems(s, data) {
 
     // Optimistic bubbles go once any user/queued/pending item (or answer) has the same text, sent no earlier than
-    // LANDED_SLACK_MS before, or OUTBOX_TTL_MS after the send succeeded: the transcript is the source of truth.
+    // LANDED_SLACK_MS before: the transcript is the source of truth. OUTBOX_TTL_MS after the send succeeded with no
+    // match, it stays marked not confirmed (Retry / Dismiss) rather than vanishing.
     const sameSend = (text, at, o) => norm(text) === norm(o.text) && !(Date.parse(at) < Date.parse(o.at) - LANDED_SLACK_MS);
     const landed = /** @param {OutboxItem} o */ o => data.items.some(i => (i.role === 'user' && sameSend(i.text, i.at, o))
         || (i.answer && sameSend(i.answer.text, i.answer.at, o)));
-    state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !(landed(o) || Date.now() - o.okAt > OUTBOX_TTL_MS));
+    state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !landed(o));
+    for (const o of state.outbox) {
+        o.unconfirmed ||= o.sid === s.id && Date.now() - o.okAt > OUTBOX_TTL_MS;
+    }
 
     // a queued item whose Send now was clicked shows "sending…" until the queue entry resolves
     state.nudged = new Set(data.items.filter(i => i.pending).map(i => `${s.id}:${i.at}`).filter(k => state.nudged.has(k)));
@@ -492,7 +510,7 @@ function feedItems(s, data) {
         const q = o.answerTo && items.findIndex(x => x.role === 'assistant' && x.at === o.answerTo);
         if (q >= 0) {
             if (!items[q].answer) {
-                items[q] = { ...items[q], answer: { text: o.text, sending: !o.error, error: o.error } };
+                items[q] = { ...items[q], answer: { text: o.text, sending: !o.error && !o.unconfirmed, error: o.error, unconfirmed: o.unconfirmed } };
             }
             continue;
         }
@@ -527,7 +545,7 @@ function questionExcerpt(i) {
 function quickReplyRow(s, data, items, n) {
 
     const q = items[n], newest = n === items.length - 1;
-    if (!(q.replies?.length && (!q.answer || q.answer.error) && !data.asking && (newest || !items.slice(n + 1).some(x => x.role === 'user')) && !(newest && data.working))) {
+    if (!(q.replies?.length && (!q.answer || q.answer.error || q.answer.unconfirmed) && !data.asking && (newest || !items.slice(n + 1).some(x => x.role === 'user')) && !(newest && data.working))) {
         return null;
     }
 
@@ -785,8 +803,8 @@ async function upload(files) {
 export async function sendText(sid, text, answerTo, note) {
     $('c-err').textContent = '';
     /** @type {OutboxItem} */
-    const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo };
-    state.outbox = [...state.outbox.filter(o => !o.error), out];
+    const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo, note };
+    state.outbox = [...state.outbox.filter(o => !o.error && !(answerTo && o.answerTo === answerTo)), out];
     stick = true;
     refreshChat();
     try {

@@ -137,7 +137,7 @@ interface AttentionEvent { kind: 'needs-you' | 'ready' | 'finished' | 'failing' 
 
 // ---- /api/transcript ----
 
-interface Answer { text: string; at?: string; queued?: boolean; sending?: boolean; error?: string }
+interface Answer { text: string; at?: string; queued?: boolean; sending?: boolean; error?: string; unconfirmed?: boolean }
 
 interface ChatItem {
     role: 'user' | 'assistant' | 'tools' | 'error' | 'compact';
@@ -166,7 +166,11 @@ interface OutboxItem extends ChatItem {
     sid: string;
     at: string;
     answerTo?: string;
+    /** sent after the text but not shown, kept for Retry */
+    note?: string;
     okAt?: number;
+    /** sent, but the transcript still doesn't show it OUTBOX_TTL_MS later */
+    unconfirmed?: boolean;
 }
 
 interface Transcript {

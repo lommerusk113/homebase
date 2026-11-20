@@ -20,6 +20,26 @@ export default {
         assert.equal(await page.ev(`(() => { const f = document.getElementById('feed'); return f.scrollHeight - f.scrollTop - f.clientHeight < 40; })()`), true, 'scrolled to the new bubble');
     },
 
+    'a send the transcript never shows stays as not confirmed, with Retry and Dismiss': async ({ page, open, IDS }) => {
+        await open();
+        await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
+        await page.click('#msg');
+        await page.type('never lands');
+        await page.key('Enter');
+        const mine = `[...document.querySelectorAll('#feed .bubble.user')].find(b => b.textContent.includes('never lands'))`;
+        await page.waitFor(`${mine}?.querySelector('.b-note').textContent === 'sending…'`, { what: 'the outbox bubble' });
+        await page.ev(`(() => { const now = Date.now; Date.now = () => now() + 31_000; })()`); // past OUTBOX_TTL_MS
+        await page.waitFor(`${mine}?.querySelector('.b-note').textContent.startsWith('Not confirmed — Claude may not have received this')`, { what: 'the not confirmed note' });
+        await page.clickOn(`${mine}.querySelector('wa-button.retry')`);
+        await page.waitFor(`${mine}?.querySelector('.b-note').textContent === 'sending…'`, { what: 'the retried bubble' });
+        assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [[`/api/send?id=${IDS.master}`, 'never lands'], [`/api/send?id=${IDS.master}`, 'never lands']]);
+        await page.ev(`(() => { const now = Date.now; Date.now = () => now() + 31_000; })()`);
+        await page.waitFor(`${mine}?.querySelector('wa-button.dismiss')`, { what: 'not confirmed again' });
+        await page.clickOn(`${mine}.querySelector('wa-button.dismiss')`);
+        await page.waitFor(`!${mine}`, { what: 'the dismissed bubble to go' });
+        assert.equal(page.posts.length, 2, 'dismiss sends nothing');
+    },
+
     'a failed send marks the bubble, shows the error and gives the text back': async ({ page, open, answerPosts }) => {
         await open();
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });

@@ -56,6 +56,14 @@ export default {
         assert.equal(page.posts.length, 2, 'dismiss sends nothing');
     },
 
+    'a double tap on a quick-reply chip sends once': async ({ page, open }) => {
+        await open();
+        await page.waitFor(`document.querySelectorAll('#feed .replies wa-button').length`, { what: 'the quick-reply chips' });
+        await page.ev(`(() => { const b = document.querySelector('#feed .replies wa-button'); b.click(); setTimeout(() => b.click(), 60); })()`);
+        await sleep(1500);
+        assert.equal(page.posts.filter(p => p.url.includes('/api/send')).length, 1);
+    },
+
     'a failed send marks the bubble, shows the error and gives the text back': async ({ page, open, answerPosts }) => {
         await open();
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });

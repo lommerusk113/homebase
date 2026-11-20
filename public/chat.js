@@ -813,7 +813,7 @@ function showWait(s, data, items) {
     const opts = w.ask?.options ?? (w.replies ?? []).map(label => ({ label, desc: '' }));
     $('wait-opts').replaceChildren(...opts.map(({ label, desc }, k) => {
         const b = optButton(label, k, { desc });
-        b.onclick = () => sendText(s.id, label, w.at, answerNote(items, n));
+        b.onclick = () => sendChip(b, s.id, label, w.at, answerNote(items, n));
 
         return b;
     }));
@@ -837,12 +837,30 @@ function quickReplyRow(s, data, items, n) {
     const row = el('div', 'replies');
     row.append(...q.replies.map((t, i) => {
         const b = optButton(t, i);
-        b.onclick = () => sendText(s.id, t, q.at, note);
+        b.onclick = () => sendChip(b, s.id, t, q.at, note);
 
         return b;
     }));
 
     return row;
+}
+
+// A chip tap sends its answer; the row's chips stay disabled (as the ask card's do) so a double tap sends once. Sent, the
+// row is replaced once the answer shows; a failed send enables them again.
+/** @param {HTMLElement} b @param {string} sid @param {string} text @param {string} answerTo @param {string} note */
+async function sendChip(b, sid, text, answerTo, note) {
+
+    if (b.hasAttribute('disabled')) {
+        return;
+    }
+    const row = [...b.parentElement.children];
+    row.forEach(x => x.setAttribute('disabled', ''));
+    b.setAttribute('loading', '');
+
+    if (!await sendText(sid, text, answerTo, note)) {
+        row.forEach(x => x.removeAttribute('disabled'));
+        b.removeAttribute('loading');
+    }
 }
 
 const NEAR_BOTTOM_PX = 40; // this close to the bottom counts as reading the newest: a re-render keeps it in view

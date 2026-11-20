@@ -680,6 +680,20 @@ assert.equal(askList('Long intro.\nOptions:\nprose after'), null);
 const opts = chatItems([say('**▸ DB · needs you**\n\nChanged things.\n\nWhich DB?\n- Postgres\n- SQLite\n\n**TLDR:** pick one, **Postgres** recommended')]).at(-1);
 assert.equal(opts.options, 'Which DB?\n- Postgres\n- SQLite');
 assert.equal(chatItems([say('Did:\n- a\n- b\n\nTLDR: done')]).at(-1).options, undefined); // not a question
+import { optionLabels } from './server.mjs';
+assert.deepEqual(optionLabels('Which?\n\n1. **Postgres** (Recommended) — fast\n   more detail\n2. **SQLite**: simple'), ['Postgres (Recommended)', 'SQLite']);
+assert.deepEqual(optionLabels('- Keep it — less work\n- Drop it: cleaner\n  - a sub-point'), ['Keep it', 'Drop it']);
+assert.deepEqual(optionLabels('**Option A**: x\n**Option B**: y'), ['Option A', 'Option B']);
+assert.deepEqual(optionLabels('- only one'), []);
+assert.deepEqual(optionLabels(Array.from({ length: 7 }, (_, n) => `- item ${n}`).join('\n')), []); // too many to be choices
+assert.equal(optionLabels(`- ${'x'.repeat(80)}\n- y`)[0].length, 60);
+// a listed choice: one chip per option instead of Yes / No, and clicking one pairs as the answer
+const pick = '**▸ DB · needs you**\n\nWhich DB?\n- **Postgres** (Recommended)\n- **SQLite**\n\n**TLDR:** pick one?';
+assert.deepEqual(chatItems([say(pick)]).at(-1).replies, ['Postgres (Recommended)', 'SQLite']);
+assert.deepEqual(chatItems([say(pick), you('SQLite', 't1')]).map(i => [i.role, i.answer?.text, i.replies]), [['assistant', 'SQLite', undefined]]);
+// needs you without a TLDR: the closing ask is what shows folded, not the opening sentence
+const noTldr = chatItems([say('**▸ Deploy · needs you**\n\nBuilt it.\n\nThe tests pass.\n\nDeploy to prod now?')]).at(-1);
+assert.deepEqual([noTldr.tldr, noTldr.text], ['Deploy to prod now?', 'Built it.\n\nThe tests pass.']);
 console.log('ok ask list');
 console.log('ok quick replies');
 

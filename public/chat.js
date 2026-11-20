@@ -503,7 +503,7 @@ function quickReplyRow(s, data, items, n) {
     const note = newest ? undefined : `(Answering your earlier question from ${q.at}: "${questionExcerpt(q)}")`;
     const row = el('div', 'replies');
     row.append(...q.replies.map(t => {
-        const b = waButton(t, null, { variant: 'brand', appearance: 'filled-outlined', pill: true });
+        const b = waButton(t, null, { variant: 'brand', appearance: /\(recommended\)/i.test(t) ? 'accent' : 'filled-outlined', pill: true });
         b.onclick = () => sendText(s.id, t, q.at, note);
 
         return b;

@@ -299,13 +299,13 @@ export function chatItems(entries, max = 60) {
     // chips stay on every question still waiting, also after Claude said more; a later user message clears needsYou
     for (const i of out) {
         if (i.role === 'assistant' && i.needsYou && !i.answer) {
-            i.replies = quickReplies(i.tldr, i.text);
+            i.replies = replyChips(i);
         }
     }
 
     const last = out.at(-1);
     if (last?.role === 'assistant' && !last.answer) {
-        last.replies = quickReplies(last.tldr, last.text);
+        last.replies = replyChips(last);
     }
 
     return out;
@@ -495,8 +495,42 @@ function topicAndTldr(i) {
     const needs = needsYou || /\?[*_\s]*$/.test(t.tldr ?? '');
     const options = needs || quickReplies(t.tldr, t.text).length ? askList(t.text) : null;
 
+    // needs you but no TLDR: its last paragraph (the ask, past the options) is what shows while folded
+    if (needs && !t.tldr) {
+        const ask = (options ? t.text.replace(options, '') : t.text).trim().split(/\n\s*\n/).at(-1);
+        if (ask) {
+            t.tldr = ask;
+            t.text = t.text.replace(ask, '').trim();
+        }
+    }
+
     return { ...i, topic, needsYou: needs, ...t, ...(options && { options }) };
 }
+
+const MAX_CHIPS = 6;
+const LABEL_CHARS = 60;
+
+// One chip label per top-level item of an askList: its bold lead, else the text before " — " or ": ", keeping a
+// "(Recommended)" after it. [] when it doesn't look like a set of choices (fewer than 2, more than MAX_CHIPS).
+export function optionLabels(options) {
+
+    const labels = (options ?? '').split('\n').filter(l => /^\S/.test(l) && LIST_ITEM.test(l)).map(l => {
+        const s = l.replace(/^(?:[-*+]|\d+[.)]|[A-Da-d][.)])\s+/, '').trim();
+        const bold = s.match(/^\*\*(.+?)\*\*:?(\s*\(recommended\))?/i);
+        const label = (bold ? bold[1] + (bold[2] ?? '') : s.split(/\s+[—–-]\s+|:\s/)[0])
+            .replace(/[*_`]/g, '').replace(/[:.]$/, '').trim();
+
+        return label.length > LABEL_CHARS ? `${label.slice(0, LABEL_CHARS - 1).trim()}…` : label;
+    }).filter(Boolean);
+
+    return labels.length >= 2 && labels.length <= MAX_CHIPS ? [...new Set(labels)] : [];
+}
+
+// A question's chips: one per option it lists, else Yes / No (/ Do both).
+const replyChips = i => {
+    const labels = optionLabels(i.options);
+    return labels.length ? labels : quickReplies(i.tldr, i.text);
+};
 
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)]|[A-Da-d][.)]|\**Option\b)\s/;
 
@@ -551,7 +585,7 @@ function pairAnswers(items) {
         }
         const prev = out.at(-1);
         const text = i.role === 'user' ? i.text.trim() : '';
-        const asked = prev?.role === 'assistant' && !prev.answer && quickReplies(prev.tldr, prev.text);
+        const asked = prev?.role === 'assistant' && !prev.answer && replyChips(prev);
         if (asked?.length && (asked.includes(text) || SHORT_ANSWER.test(text))) {
             out[out.length - 1] = { ...prev, answer: { text, at: i.at, ...(i.pending && { queued: true }) } };
             continue;

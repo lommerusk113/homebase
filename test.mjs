@@ -2411,15 +2411,21 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     // A tool permission prompt, captured from a real Claude Code: an "Esc to cancel" footer, the command as the question
     const perm = readFileSync(new URL('./tests/fixtures/permission-bash.txt', import.meta.url), 'utf8');
     const p = parseQuestion(perm);
-    assert.equal(p.question, 'Bash command Write and remove a test file · echo hi > out-from-test.txt && rm out-from-test.txt · Do you want to proceed?');
+    assert.equal(p.question, 'Bash command · Write and remove a test file · echo hi > out-from-test.txt && rm out-from-test.txt · Do you want to proceed?');
     assert.deepEqual(p.options, ['Yes', "Yes, and don't ask again for echo hi and rm out-from-test.txt commands in", 'Yes, and switch to auto mode · auto mode handles these prompts for you', 'No']);
     assert.equal(p.selected, 0);
-    const boxed = perm.split('\n').map(l => `│${l.padEnd(100)}│`).join('\n');
+    assert.match(p.descriptions[1], /-to-wrap-it-x\/0123456789abcdef-4f82c6fe07ad\/scratchpad\/perm$/, 'a path cut at the pane edge is joined back');
+    const boxed = perm.split('\n').map(l => `│ ${l.padEnd(100)} │`).join('\n');
     assert.deepEqual(parseQuestion(boxed), p, '│ box borders are stripped');
     assert.equal(parseQuestion(perm.replace('Esc to cancel · Tab to amend', 'Esc to cancel · Tab to amend\n\n❯ next prompt\n\nmore\nand more')), null, 'the footer must be at the bottom');
     r = await run([perm, perm.replace(' ❯ 1. Yes', '   1. Yes').replace('   4. No', ' ❯ 4. No'), 'Denied'], 3, 'No');
     assert.equal(r.err, null);
     assert.deepEqual(r.sent.map(a => a.slice(3)), [['Down', 'Down', 'Down'], ['Enter']], 'answered by the same ❯ path');
+    const edit = readFileSync(new URL('./tests/fixtures/permission-edit.txt', import.meta.url), 'utf8');
+    assert.equal(parseQuestion(edit).question, 'Edit file · foo.js · 1  const a = 1; 2 -const b = 2; 2 +const b = 3; 3  console.log(a + b); · Do you want to make this edit to foo.js?', 'a short diff is shown');
+    const long = edit.replace(' 3  console.log(a + b);', ' 3  console.log(a + b);\n 4 +console.log(b);');
+    assert.equal(parseQuestion(long).question, 'Edit file · foo.js · Do you want to make this edit to foo.js?', 'a longer diff is left out');
+    assert.deepEqual(parseQuestion(edit).options, ['Yes', 'Yes, and switch to accept edits (auto-approve file edits and common file commands) for this', 'No']);
     console.log('ok ask question');
 }
 

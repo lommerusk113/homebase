@@ -118,8 +118,8 @@ const OPTION = /^(?: {0,3}|\s*❯\s+)(\d+)\.\s+(.+)$/;
 // option's indented lines its description. One question at a time (a ☐ tab bar above is ignored); a multi-select
 // ([ ] boxes) isn't parsed. The last step of several questions, "Review your answers", has no hint: its options run to
 // the bottom and its question is the answers summary. A tool permission prompt ("Do you want to proceed?") ends in
-// "Esc to cancel" instead: its question is the dialog from its top rule, ╌ sections (the command) joined by " · ", Tips
-// dropped; tests/fixtures/permission-bash.txt is a real one. │ box borders are stripped. -> { question, options, descriptions, selected } or null
+// "Esc to cancel" instead: its question is the dialog from its top rule, its ╌ sections (title, command or a short diff,
+// the ask) joined by " · ", Tips dropped; tests/fixtures/permission-*.txt are real ones. │ box borders are stripped. -> { question, options, descriptions, selected } or null
 export function parseQuestion(pane) {
 
     const lines = String(pane ?? '').split('\n').map(l => l.replace(/^\s*│ ?|\s*│\s*$/g, '').replace(/\s+$/, ''));
@@ -133,16 +133,19 @@ export function parseQuestion(pane) {
         return null;
     }
 
+    // a line filling the pane's width (its longest line, the dialog's rule) was cut mid-word: its continuation joins without a space
+    const width = Math.max(...lines.map(l => l.length));
     const options = [], descriptions = [];
     let selected = -1;
-    for (const l of lines.slice(first, end)) {
+    for (const [i, l] of lines.slice(first, end).entries()) {
         const m = OPTION.exec(l);
         if (m && Number(m[1]) === options.length + 1) {
             selected = l.includes('❯') ? options.length : selected;
             options.push(m[2].trim());
             descriptions.push('');
         } else if (l.trim() && !/^[\s─]+$/.test(l)) {
-            descriptions[options.length - 1] = `${descriptions.at(-1)} ${l.trim()}`.trim();
+            const cut = lines[first + i - 1].length === width && descriptions.at(-1);
+            descriptions[options.length - 1] = `${descriptions.at(-1)}${cut ? '' : ' '}${l.trim()}`.trim();
         }
     }
     if (selected < 0 || options.some(o => /^\[.?\]/.test(o))) {
@@ -157,8 +160,18 @@ export function parseQuestion(pane) {
     while (top > 0 && lines[top - 1].trim() && !/^[\s─]+$/.test(lines[top - 1])) {
         top--;
     }
-    const question = lines.slice(top, from).map(l => (/^[\s╌]+$/.test(l) ? '●' : l.trim())).filter(l => l && !/^Tip:/.test(l))
-        .join(' ').replace(/\s*●\s*/g, ' · ');
+    // a permission prompt's ╌ sections: its title lines, the command or diff (dropped past 4 lines), the ask
+    const sections = [[]];
+    for (const l of lines.slice(top, from)) {
+        if (/^[\s╌]+$/.test(l)) {
+            sections.push([]);
+        } else if (l.trim() && !/^\s*Tip:/.test(l)) {
+            sections.at(-1).push(l.trim());
+        }
+    }
+    const parts = sections.length < 2 ? [sections[0].join(' ')]
+        : [sections[0].join(' · '), ...sections.slice(1, -1).filter(s => s.length <= 4).map(s => s.join(' ')), sections.at(-1).join(' ')];
+    const question = parts.filter(Boolean).join(' · ').replace(/\s*●\s*/g, ' · ');
 
     return question && !/^[☐☒✔←]/.test(question) ? { question, options, descriptions, selected } : null;
 }

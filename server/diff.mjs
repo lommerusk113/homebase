@@ -3,8 +3,8 @@
 // listed for that repo. git runs without a shell, external diff drivers, textconv, fsmonitor or index writes.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { lstat, readFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { open } from 'node:fs/promises';
+import { existsSync, constants } from 'node:fs';
 import { basename, join } from 'node:path';
 import { sessions } from './sessions.mjs';
 
@@ -20,8 +20,10 @@ const GROUPS = ['uncommitted', 'committed'];
 const fail = (status, message) => Object.assign(new Error(message), { status });
 const trim = s => s.replace(/\n$/, '');
 
-// cwd is always absolute (folderFor), so it never reads as a flag; paths after `--` are literal, not pathspec patterns.
-const git = (cwd, args, maxBuffer = LIST_BYTES) => run('git', ['-C', cwd, '--no-optional-locks', '-c', 'core.fsmonitor=false', ...args],
+// cwd is always absolute (diffFolder), so it never reads as a flag; paths after `--` are literal, not pathspec patterns.
+// safe.bareRepository=explicit: a folder that merely looks like a git dir (planted inside a cloned repo, with its own
+// config and filter commands) is never used as the repo; only a .git found the normal way is.
+const git = (cwd, args, maxBuffer = LIST_BYTES) => run('git', ['-C', cwd, '--no-optional-locks', '-c', 'core.fsmonitor=false', '-c', 'safe.bareRepository=explicit', ...args],
     { timeout: 8000, maxBuffer, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_LITERAL_PATHSPECS: '1', GIT_TERMINAL_PROMPT: '0' } }).then(r => r.stdout);
 
 // `git diff --numstat -z --no-renames`: "add\tdel\tpath\0" records, "-\t-" for a binary file. path -> { add, del, binary }
@@ -66,7 +68,7 @@ async function baseOf(top) {
 
     const head = await git(top, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD']).then(trim, () => null);
     for (const ref of [head, 'origin/main', 'origin/master', 'main', 'master']) {
-        const sha = ref && await git(top, ['merge-base', 'HEAD', ref]).then(trim, () => null);
+        const sha = ref && await git(top, ['merge-base', '--end-of-options', 'HEAD', ref]).then(trim, () => null);
         if (sha) {
             return { ref, sha };
         }
@@ -78,8 +80,9 @@ async function baseOf(top) {
 // { top, against, view }: the repo's root, what uncommitted changes are compared with, and what the page gets. view.repo is null when the folder is gone or not in a git repo.
 export async function changes(folder) {
 
-    const top = folder && await git(folder, ['rev-parse', '--show-toplevel']).then(trim, () => null);
-    if (!top) {
+    // the repo's root, only when its git dir is that root's own .git or a linked worktree's (ponytail: so not a submodule's)
+    const [bare, top, gitDir, common] = folder ? await git(folder, ['rev-parse', '--path-format=absolute', '--is-bare-repository', '--show-toplevel', '--absolute-git-dir', '--git-common-dir']).then(o => o.split('\n'), () => []) : [];
+    if (bare !== 'false' || !top || (gitDir !== join(top, '.git') && !gitDir.startsWith(`${common}/worktrees/`))) {
         return { top: null, view: { repo: null } };
     }
 
@@ -125,16 +128,22 @@ export async function fileBody({ top, against, view }, group, path) {
     }
 
     if (file.status === '?') {
-        const st = await lstat(join(top, path)).catch(() => null);
-        if (!st?.isFile()) { // gone, a symlink or a folder (a nested repo)
-            return { text: '' };
-        }
-        if (st.size > MAX_DIFF_BYTES) {
-            return { tooLarge: true };
-        }
-        const buf = await readFile(join(top, path));
+        // O_NOFOLLOW: a symlink is never followed, also not one swapped in after git listed the path
+        const fh = await open(join(top, path), constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK).catch(() => null);
+        try {
+            const st = await fh?.stat();
+            if (!st?.isFile()) { // gone, a symlink or a folder (a nested repo)
+                return { text: '' };
+            }
+            if (st.size > MAX_DIFF_BYTES) {
+                return { tooLarge: true };
+            }
+            const buf = await fh.readFile();
 
-        return buf.includes(0) ? { binary: true } : { text: buf.toString('utf8') };
+            return buf.includes(0) ? { binary: true } : { text: buf.toString('utf8') };
+        } finally {
+            await fh?.close();
+        }
     }
 
     const range = group === 'committed' ? [view.base.sha, 'HEAD'] : [against];

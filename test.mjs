@@ -3417,6 +3417,34 @@ import { parseDiff, addedRows, diffTotals } from './public/diff.js';
         assert.deepEqual((await changes(root)).view, { repo: null }, 'not a git repository');
         assert.deepEqual((await changes(null)).view, { repo: null }, 'the folder is gone');
 
+        // a folder laid out like a git dir, planted inside the repo with its own config: its filter command must never run
+        const evil = join(repo, 'vendor', 'evil'), wt = join(evil, 'wt'), marker = join(root, 'marker');
+        const inEvil = (...args) => execFileSync('git', ['-c', 'safe.bareRepository=all', '-c', 'user.name=Test', '-c', 'user.email=test@example.com', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null', `--git-dir=${evil}`, `--work-tree=${wt}`, ...args], { stdio: 'pipe' });
+        execFileSync('git', ['init', '-q', '--bare', evil]);
+        mkdirSync(wt);
+        writeFileSync(join(wt, 'f.txt'), 'one\n');
+        inEvil('add', '-A');
+        inEvil('commit', '-q', '-m', 'planted');
+        inEvil('config', 'core.bare', 'false');
+        inEvil('config', 'core.worktree', wt);
+        inEvil('config', 'filter.x.clean', `touch '${marker}'; cat`);
+        writeFileSync(join(wt, '.gitattributes'), '* filter=x\n');
+        writeFileSync(join(wt, 'f.txt'), 'one\ntwo\n');
+        execFileSync('git', ['-C', evil, '-c', 'safe.bareRepository=all', 'diff', 'HEAD'], { stdio: 'pipe' });
+        assert.ok(readdirSync(root).includes('marker'), 'the fixture works: plain git runs the planted filter');
+        rmSync(marker);
+        for (const dir of [evil, wt, join(evil, 'objects')]) {
+            const v = (await changes(dir)).view;
+            assert.ok(v.repo === null || v.repo === 'repo', `never the planted repo: ${JSON.stringify(v)}`);
+        }
+        assert.deepEqual((await changes(evil)).view, { repo: null });
+        assert.equal(readdirSync(root).includes('marker'), false, 'the planted filter did not run');
+        rmSync(evil, { recursive: true });
+        // a linked worktree (a helper's folder) still works
+        git('worktree', 'add', '-q', '-b', 'helper', join(root, 'wt'), 'main');
+        assert.deepEqual([(await changes(join(root, 'wt'))).view.repo, (await changes(join(root, 'wt'))).view.branch], ['wt', 'helper']);
+        git('worktree', 'remove', '--force', join(root, 'wt'));
+
         // the folder comes from the session list only
         const list = async () => [{ id: 's1', cwd: repo, items: [{ key: 'agent-1', worktreePath: join(repo, 'src') }, { key: 'mr', worktreePath: null }, { key: 'rel', worktreePath: '../x' }] }, { id: 's2', cwd: 'relative/path', items: [{ key: 'other', worktreePath: root }] }];
         assert.equal(await diffFolder('s1', null, list), repo);

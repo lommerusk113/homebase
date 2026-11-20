@@ -1,7 +1,7 @@
 // The Changes view: what a chat or a helper changed in its git folder (GET /api/diff, server/diff.mjs), read-only.
 // A full-screen panel: the changed files left ("Uncommitted", "Committed on this branch"), the picked file's unified
 // diff right; on a phone the list first, then the diff with a back button. Diff text only ever reaches textContent.
-import { api, el, state } from './core.js';
+import { api, el, state, PR_HREF } from './core.js';
 
 const LINES = 500; // drawn at a time; "Show more" adds the next ones
 const COUNT_MS = 15_000; // the chat header's count is re-read at most this often, and only when the chat moved
@@ -169,9 +169,12 @@ function drawList() {
         ...(v.base ? [' → ', el('span', 'dv-branch mono', v.base.ref)] : []));
     part('dv-title').title = v.base ? `${v.branch} compared with ${v.base.ref} at ${v.base.sha.slice(0, 8)}` : '';
     part('dv-totals').replaceChildren(`${t.files} file${t.files === 1 ? '' : 's'} `, el('span', 'dv-add', `+${t.add}`), ' ', el('span', 'dv-del', `−${t.del}`));
-    const mr = /** @type {HTMLAnchorElement} */ (part('dv-mr')), url = mrUrl();
-    mr.hidden = !url;
-    mr.href = url ?? '';
+    const mr = /** @type {HTMLAnchorElement} */ (part('dv-mr')), url = mrUrl(), ok = PR_HREF.test(url ?? ''); // only an https MR/PR link
+    mr.hidden = !ok;
+    mr.toggleAttribute('href', false);
+    if (ok) {
+        mr.href = url;
+    }
     files.replaceChildren();
     for (const [group, label] of GROUPS) {
         const list = v[group];

@@ -318,7 +318,7 @@ export const prChip = s => {
 
 // Scan aids on rendered markdown: PR/MR links become chips, file paths become inline code, and !123/#123 (bare or in
 // backticks) become light accent text: chips for every ref made bold sentences hard to read.
-const PR_HREF = /^https:\/\/\S+?\/(?:-\/merge_requests|pull)\/\d+\/?$/;
+export const PR_HREF = /^https:\/\/\S+?\/(?:-\/merge_requests|pull)\/\d+\/?$/;
 const CHIP_OR_PATH = /(^|[\s(\[])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+\/?|[\w.@+-]+(?:\/[\w.@+-]+)+\.[a-z]\w{0,5}|[!#]\d+\b)/gi;
 function enrich(root) {
     for (const a of root.querySelectorAll('a')) {

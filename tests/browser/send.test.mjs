@@ -143,6 +143,22 @@ export default {
         assert.ok(m, send.body);
         assert.ok(m[1].startsWith(`${homebase}/uploads/`), m[1]);
         assert.equal(await page.ev(`document.getElementById('attached').hidden`), true, 'attachments cleared');
+        // the bubble shows the picture and the text, never the path
+        for (const [w, mobile] of [[1440, false], [390, true]]) {
+            await page.cmd('Emulation.setDeviceMetricsOverride', { width: w, height: 900, deviceScaleFactor: 1, mobile });
+            await sleep(100);
+            const r = await page.ev(`(() => { const b = document.querySelector('#feed .bubble.user:last-of-type'); return { img: !!b.querySelector('img'), text: b.querySelector('.body')?.textContent.trim(), path: /uploads|\\[Image/.test(b.textContent), sideScroll: document.documentElement.scrollWidth > innerWidth }; })()`);
+            assert.deepEqual(r, { img: true, text: 'what is this?', path: false, sideScroll: false }, `at ${w}px ${JSON.stringify(r)}`);
+            if (w === 390) {
+                await page.ev(`document.querySelector('#feed .bubble.user:last-of-type .b-images img').click()`);
+                await page.waitFor(`document.querySelector('.lightbox img')?.src.startsWith('data:image/png')`, { what: 'the lightbox' });
+                const shot = await page.cmd('Page.captureScreenshot', { format: 'png' });
+                (await import('node:fs')).writeFileSync('/private/tmp/claude-501/-Users-bruinen-IdeaProjects-Privat-codetool/a0da2e79-0e88-4132-aa8a-4f82c6fe07ad/scratchpad/image-bubble.png', Buffer.from(shot.data, 'base64'));
+                await page.key('Escape');
+                await page.waitFor(`!document.querySelector('.lightbox')`, { what: 'the lightbox closed' });
+            }
+        }
+        await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
     },
 
     'pasted images get their own row: thumbnails, status line and the last feed item never overlap, at desktop and phone width': async ({ page, open }) => {

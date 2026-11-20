@@ -348,15 +348,18 @@ function bubble(i, sid, prevTopic, look = {}) {
         }
         b.append(...parts);
     } else {
-        const body = rich(i.text);
-        if (!state.unfold.has(key)) {
-            body.classList.add('fold');
+        const text = withoutImageLines(i.text);
+        if (text || !imageNames(i.text).length) {
+            const body = rich(text);
+            if (!state.unfold.has(key)) {
+                body.classList.add('fold');
+            }
+            b.append(body);
         }
-        b.append(body);
         const names = imageNames(i.text);
         if (names.length) {
             const row = el('div', 'b-images');
-            row.append(...names.map(n => thumb(imageUrl(n), n)));
+            row.append(...names.map(n => zoomable(thumb(imageUrl(n), n))));
             b.append(row);
         }
     }
@@ -1146,7 +1149,11 @@ let attached = [];
 let uploading = false;
 // Upload names in a message's "[Image: …]" lines (only the names /api/upload makes).
 /** @param {string} text @returns {string[]} */
-const imageNames = text => [...(text || '').matchAll(/^\[Image: \/[^\]\n]*\/([0-9a-f-]{36}\.(?:png|jpe?g|gif|webp))\]$/gm)].map(m => m[1]);
+const IMAGE_LINE = /^\[Image: \/[^\]\n]*\/([0-9a-f-]{36}\.(?:png|jpe?g|gif|webp))\]$/gm;
+const imageNames = text => [...(text || '').matchAll(IMAGE_LINE)].map(m => m[1]);
+// The text without those lines: the bubble shows the pictures instead of their paths.
+/** @param {string} text */
+const withoutImageLines = text => (text || '').replace(IMAGE_LINE, '').replace(/\n{3,}/g, '\n\n').trim();
 
 // data: URLs, as the CSP allows no blob: images. /api/upload/<name> needs the token header, so no plain <img src>.
 /** @param {Blob} blob @returns {Promise<string>} */
@@ -1171,6 +1178,23 @@ function thumb(url, alt) {
     const img = el('img');
     img.alt = alt;
     url.then(u => { if (u) { img.src = u; } else { img.remove(); } });
+    return img;
+}
+// Click a bubble thumbnail: the full image over the page; click or Escape closes it.
+/** @param {HTMLImageElement} img */
+function zoomable(img) {
+    img.onclick = () => {
+        const box = el('div', 'lightbox'), full = el('img');
+        full.src = img.src;
+        full.alt = img.alt;
+        const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+        /** @param {KeyboardEvent} e */
+        const onKey = e => { if (e.key === 'Escape') { close(); } };
+        box.onclick = close;
+        document.addEventListener('keydown', onKey);
+        box.append(full);
+        document.body.append(box);
+    };
     return img;
 }
 

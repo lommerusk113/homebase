@@ -512,6 +512,16 @@ assert.deepEqual(['the verdict is **fix first**, so', 'Verdict was **ready**, wi
 const handback = said('2026-11-13T12:00:00Z', { type: 'tool_use', name: 'SubagentHandback', input: { message: '**Verdict: ready** — fine\n\n**TLDR:** **ready** for review, open !7.' } });
 assert.equal(gateRuns([handback], 'Run review-gate on the branch').at(0).verdict, 'ready');
 assert.deepEqual(gateRuns([handback], 'Implement the badge'), []);
+// a batch gate over several MRs: each MR gets the verdict its own line names, none when its verdict can't be told apart
+{
+    const batch = gateRuns([said('2026-11-13T13:00:00Z', { type: 'tool_use', name: 'SubagentHandback', input: { message: '!101 verdict: ready at commit abc1234\n!102 verdict: fix first\n!103 and !104 verdict: fix first\n\nTLDR: one ready.' } })],
+        'Review-gate supplier MRs batch A\nRun review-gate on !101, !102, !103 and !104, one after the other.');
+    assert.deepEqual([101, 102, 103, 104].map(n => toGate(gateFor(batch, mr(n), null), null)?.verdict), ['ready', 'fix first', undefined, undefined]);
+    assert.deepEqual([gateFor(batch, mr(101), null).commit, gateFor(batch, mr(102), null).commit], ['abc1234', null]);
+    // verdicts reported one message at a time keep counting
+    const later = gateRuns([said('t1', skill('review-gate', '!5 and !6')), said('t2', txt('!5 verdict: **ready**')), said('t3', txt('!6 — Verdict: fix first'))]);
+    assert.deepEqual([5, 6].map(n => gateFor(later, mr(n), null)?.verdict), ['ready', 'fix first']);
+}
 // association: URL, !N (not !40 or a path), branch
 assert.equal(gateFor(runs, mr(4), 'x'), runs[0]);
 assert.equal(gateFor(runs, mr(9), 'kjn-gate'), runs[1]);

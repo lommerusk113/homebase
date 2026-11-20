@@ -235,10 +235,13 @@ export function splitTldr(text) {
 // A bold ready alone ("MR is **ready** for review") said while the gate runs is no verdict.
 const VERDICT = /verdict\b[^\n.]{0,30}?\b(ready|fix[- ]first)\b|review[- ]gate\b[^\n.]{0,15}?\*\*(ready|fix[- ]first)\*\*/i;
 const GATE = /review[- ]gate/i;
+// The MRs a text names, as !N (GitLab refs and merge_requests URLs). ponytail: GitHub #N is skipped, it reads the same as an issue.
+const mrRefs = text => new Set([...text.matchAll(/(?<![\w/&])!(\d+)\b|\/merge_requests\/(\d+)\b/g)].map(m => m[1] ?? m[2]));
 const COMMIT = /\b(?:commit|head|sha)\b[\s:`@]*([0-9a-f]{7,40})\b/i;
 
 // review-gate runs in a transcript tail: a Skill tool_use for review-gate (or a subagent briefed with it, via `brief`),
-// then the first assistant text or handback naming a verdict. text = the skill args or brief plus the report, for gateFor.
+// then the first assistant text or handback naming a verdict. text = the skill args or brief plus the report, for gateFor;
+// a gate over several MRs gives each MR its own run (see below).
 export function gateRuns(entries, brief = null) {
 
     const runs = [];
@@ -254,10 +257,25 @@ export function gateRuns(entries, brief = null) {
             }
             const said = b.type === 'text' ? b.text : b.type === 'tool_use' && b.name === 'SubagentHandback' ? b.input?.message : null;
             const v = armed !== null && said?.match(VERDICT);
-            if (v) {
-                const text = `${armed}\n${said}`;
-                runs.push({ verdict: (v[1] ?? v[2]).toLowerCase().replace('-', ' '), at: Date.parse(e.timestamp) || 0, tldr: splitTldr(said).tldr, commit: text.match(COMMIT)?.[1] ?? null, text });
+            if (!v) {
+                continue;
+            }
+            const at = Date.parse(e.timestamp) || 0;
+            const run = (m, part, text) => ({ verdict: (m[1] ?? m[2]).toLowerCase().replace('-', ' '), at, tldr: splitTldr(part).tldr, commit: text.match(COMMIT)?.[1] ?? null, text });
+            if (mrRefs(`${armed}\n${said}`).size <= 1) {
+                runs.push(run(v, said, `${armed}\n${said}`));
                 armed = null;
+                continue;
+            }
+            // a batch over several MRs: one run per paragraph, else per line, that names one MR and a verdict; the arming
+            // stays for verdicts reported later. An MR whose verdict shares its text with another MR gets none.
+            for (const para of said.split(/\n\s*\n/)) {
+                for (const part of mrRefs(para).size === 1 ? [para] : para.split('\n')) {
+                    const m = mrRefs(part).size === 1 && part.match(VERDICT);
+                    if (m) {
+                        runs.push(run(m, part, part));
+                    }
+                }
             }
         }
     }

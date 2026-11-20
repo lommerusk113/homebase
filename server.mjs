@@ -14,7 +14,7 @@ import { limits } from './server/limits.mjs';
 import { log } from './server/log.mjs';
 import { MAX_SEND, withLock } from './server/tmux.mjs';
 import { createProject, cloneProject, openProject, githubProjects, localProjects, publicConfig } from './server/newproject.mjs';
-import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion } from './server/startup.mjs';
+import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion, confirmModelSwitch } from './server/startup.mjs';
 import { send, runningTwice, keepModelSetting, sendToNew, interrupt, clearChat, compactChat, restartChat, editors, openInEditor } from './server/control.mjs';
 import { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
 import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedRequest, pair, deviceOf, cookieOf, deviceCookie, pairPage, newCode, pairedDevices, revoke } from './server/pairing.mjs';
@@ -232,8 +232,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 if (url.searchParams.has('tmux')) {
                     await sendToNew(url.searchParams.get('tmux'), body); // a new project's chat that has no transcript yet
                 } else {
-                    const restore = /^\/model \w+$/.test(body.trim()) ? await keepModelSetting().catch(() => null) : null; // a pick is for this chat only
-                    await send(url.searchParams.get('id'), body, null, { after: restore });
+                    const pick = /^\/model \w+$/.test(body.trim());
+                    const restore = pick ? await keepModelSetting().catch(() => null) : null; // a pick is for this chat only
+                    // a pick also confirms Claude's "Switch model?"; a plain send never answers anything
+                    await send(url.searchParams.get('id'), body, null, { after: pick ? async name => { await confirmModelSwitch(name).catch(() => false); await restore?.(); } : null });
                     return res.end(await runningTwice(url.searchParams.get('id')) ?? 'ok'); // sent; the text is a warning
                 }
                 return res.end('ok');

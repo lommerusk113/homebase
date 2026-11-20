@@ -172,7 +172,7 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
         }
         await cancelQuestion(name, { tm, nap });
         await typeSteps(name, sendSteps(name, text), { tm, nap });
-        await after?.(); // still under the lock
+        await after?.(name); // still under the lock
 
         return name;
     });

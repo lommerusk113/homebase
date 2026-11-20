@@ -201,6 +201,29 @@ export async function paneQuestion(name, { tm = tmux } = {}) {
     return parseQuestion(await capture(name, tm));
 }
 
+// After a /model pick only: Claude Code asks "Switch model?" to repeat the choice the user just made, so Enter confirms it.
+// Only that dialog (first option "Yes, switch to …", the ❯ on it); any other, or none within waitMs, is left alone for
+// the card. -> true if confirmed
+export async function confirmModelSwitch(name, { tm = tmux, nap = sleep, waitMs = 2000 } = {}) {
+
+    check(name);
+    for (let t = 0; t < waitMs; t += 250) {
+        await nap(250);
+        const q = parseQuestion(await capture(name, tm));
+        if (q) {
+            const ours = /^Yes, switch to /.test(q.options[0]) && q.selected === 0;
+            if (ours) {
+                await tm(['send-keys', '-t', `=${name}:`, 'Enter']);
+                cache.delete(name);
+            }
+
+            return ours;
+        }
+    }
+
+    return false;
+}
+
 // Picks option `index` (labelled `label`) of the AskUserQuestion on screen, never the "Type something." text box.
 export async function answerQuestion(name, index, label, { tm = tmux, nap = sleep, seen = null } = {}) {
     if (!seen) {

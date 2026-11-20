@@ -3166,6 +3166,19 @@ import { cancelQuestion, questionOpen } from './server.mjs';
     ({ r } = await run([q]));
     assert.equal(r.status, 502, 'still open');
     assert.equal((await cancelQuestion('zsh', { tm: async () => ({ stdout: q }) }).catch(e => e)).status, 400);
+
+    const { confirmModelSwitch } = await import('./server/startup.mjs');
+    const sw = readFileSync(new URL('./tests/fixtures/dialog-switch-model.txt', import.meta.url), 'utf8');
+    const confirm = async panes => {
+        const keys = [];
+        const tm = async a => (a[0] === 'capture-pane' ? { stdout: panes.length > 1 ? panes.shift() : panes[0] } : void keys.push(a));
+        return { ok: await confirmModelSwitch('cc-new-x', { tm, nap: async () => {} }), keys };
+    };
+    assert.deepEqual(await confirm(['❯ /model fable', sw]), { ok: true, keys: [['send-keys', '-t', '=cc-new-x:', 'Enter']] }, 'the dialog, once drawn, is confirmed with one Enter');
+    assert.deepEqual(await confirm([sw.replace('❯ 1.', '  1.').replace('  2. No', '❯ 2. No')]), { ok: false, keys: [] }, 'the ❯ is not on Yes: left to the card');
+    assert.deepEqual(await confirm([q]), { ok: false, keys: [] }, 'another dialog is never answered');
+    assert.deepEqual(await confirm([sw.replace('Yes, switch to', 'Yes, delete')]), { ok: false, keys: [] }, 'nor one with another first option');
+    assert.deepEqual(await confirm(['idle']), { ok: false, keys: [] }, 'no dialog within the wait: nothing pressed');
     console.log('ok cancel question');
 }
 

@@ -920,6 +920,10 @@ export async function refreshChat() {
 
     const first = !chatKey?.startsWith(s.id);
     const top = feed.scrollTop;
+    // reading scrolled up: the window drops old items off the top, so pin the first visible bubble instead of the scroll offset
+    const feedTop = feed.getBoundingClientRect().top;
+    const anchor = [...feed.querySelectorAll('[data-key]')].find(b => b.getBoundingClientRect().bottom > feedTop + 5);
+    const anchorKey = /** @type {HTMLElement | undefined} */ (anchor)?.dataset.key, anchorY = anchor ? anchor.getBoundingClientRect().top - feedTop : 0;
     chatKey = key;
 
     let seen = seenStore(s.id);
@@ -975,6 +979,12 @@ export async function refreshChat() {
     addShowMore(feed);
     const was = feed.scrollTop;
     feed.scrollTop = keepFromBottom !== null ? feed.scrollHeight - keepFromBottom : first || atBottom || stick ? feed.scrollHeight : top;
+    if (keepFromBottom === null && !first && !atBottom && !stick && anchorKey) {
+        const same = [...feed.querySelectorAll('[data-key]')].find(b => /** @type {HTMLElement} */ (b).dataset.key === anchorKey);
+        if (same) {
+            feed.scrollTop += same.getBoundingClientRect().top - feedTop - anchorY;
+        }
+    }
     ownScroll = feed.scrollTop !== was ? feed.scrollTop : null;
     stick = false;
     keepFromBottom = null;

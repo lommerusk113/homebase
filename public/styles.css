@@ -196,11 +196,12 @@ a.chip:hover { text-decoration:underline; }
 
 .main { flex:1; display:flex; min-height:0; }
 .left { flex:1; min-width:0; display:flex; flex-direction:column; container-type:inline-size; }
-/* the board sits in one card: the Work | Issues title is its header, the body scrolls under it; the top margin puts the header's divider level with the chat header's */
-.left { --box-top:var(--sp-2); margin:var(--box-top) var(--sp-3) var(--sp-3); background:var(--box-bg); border:1px solid var(--line); border-radius:var(--r-m); box-shadow:0 1px 2px rgba(31,35,40,.04); overflow:hidden; }
-#chat { position:relative; width:33%; min-width:420px; max-width:720px; flex-shrink:0; background:var(--bg); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
-/* slim header row for the chat menu (wa-dropdown is display:contents, so the trigger is the flex item) */
-.c-head { flex-shrink:0; height:var(--bar-h); display:flex; align-items:center; justify-content:safe flex-end; gap:var(--sp-2); padding:0 var(--sp-2) 0 var(--sp-3); border-bottom:1px solid var(--line); }
+/* the board and the chat each sit in one card, side by side with the same gutters: the board's Work | Issues title is its header, the body scrolls under it */
+.left, #chat { margin:var(--sp-2) var(--sp-3) var(--sp-3); background:var(--box-bg); border:1px solid var(--line); border-radius:var(--r-m); box-shadow:0 1px 2px rgba(31,35,40,.04); overflow:hidden; }
+.left { margin-right:0; }
+#chat { position:relative; width:33%; min-width:420px; max-width:720px; flex-shrink:0; display:flex; flex-direction:column; min-height:0; }
+/* no header bar: a slim strip in the card's top gutter, the chat's controls on the right (wa-dropdown is display:contents, so the trigger is the flex item) */
+.c-head { flex-shrink:0; height:32px; display:flex; align-items:center; justify-content:safe flex-end; gap:var(--sp-1); padding:var(--sp-1) var(--sp-1) 0 var(--sp-3); }
 .c-back { flex-shrink:0; padding:3px 10px; border:1px solid var(--line); border-radius:var(--r-s); background:var(--bg); color:var(--fg); font:inherit; font-size:var(--fs-s); font-weight:500; cursor:pointer; white-space:nowrap; }
 .c-back:hover { background:var(--hover); }
 .c-back:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
@@ -209,7 +210,10 @@ a.chip:hover { text-decoration:underline; }
 .c-focus b { color:var(--fg); }
 .c-back[hidden] { display:none; }
 .c-next { flex-shrink:1; min-width:0; max-width:50%; overflow:hidden; text-overflow:ellipsis; }
-.c-branch, .c-unpushed { flex-shrink:.0001; min-width:0; max-width:35%; padding:1px 8px; border:0; background:var(--chip); border-radius:var(--r-pill); font-size:var(--fs-xs); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); }
+.c-branch, .c-unpushed { flex-shrink:.0001; min-width:0; max-width:30%; padding:0 7px; border:0; background:var(--chip); border-radius:var(--r-pill); font-size:var(--fs-xs); font-weight:400; line-height:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); }
+/* top-left of the chat card, the controls top-right; a newer-session note takes their place */
+.c-unpushed, .c-branch:has(+ .c-unpushed[hidden]) { margin-right:auto; }
+.c-head:has(.c-newer:not([hidden])) :is(.c-branch, .c-unpushed) { display:none; }
 .c-branch.warn { color:var(--c-warn); background:color-mix(in srgb, var(--c-warn) 12%, transparent); }
 .c-branch[hidden], .c-unpushed[hidden] { display:none; }
 .c-title { flex:1 1 auto; min-width:0; font-size:var(--fs-m); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -220,7 +224,7 @@ a.chip:hover { text-decoration:underline; }
 #newer-text { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 .c-newer .show { flex-shrink:0; }
 /* overflow-anchor: chat.js keeps the reader's place itself (restorePlace); the browser's own correction would read as the user scrolling */
-.c-feed { flex:1; min-width:0; overflow:auto; overflow-anchor:none; overflow-wrap:anywhere; padding:var(--sp-3); display:flex; flex-direction:column; gap:var(--sp-2); background:var(--canvas); }
+.c-feed { flex:1; min-width:0; overflow:auto; overflow-anchor:none; overflow-wrap:anywhere; padding:var(--sp-3); display:flex; flex-direction:column; gap:var(--sp-2); background:var(--box-bg); }
 .bubble { flex-shrink:0; max-width:92%; border-radius:var(--r-m); padding:2px var(--sp-3); font-size:var(--fs-l); line-height:1.55; overflow-wrap:anywhere; }
 /* only a bubble new since the last render (chat.js adds .enter), as the feed is redrawn whole */
 .bubble.enter { animation:rise .35s var(--ease) both; }
@@ -315,7 +319,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .c-term wa-button:hover::part(base) { color:var(--fg); }
 /* The ask, startup, waiting and old-rules cards and the info line sit between the feed and the dock and take their own room, so they never cover a card in the feed;
    a tall one scrolls there instead of pushing the dock and its own lower options off screen */
-.c-cards { flex-shrink:0; max-height:55dvh; overflow-y:auto; background:var(--canvas); }
+.c-cards { flex-shrink:0; max-height:55dvh; overflow-y:auto; }
 .c-cards:has(> :not([hidden]):not(:empty)) { padding-bottom:8px; }
 .c-cards > .c-ask { margin:8px 12px 0; }
 .c-wait { position:relative; overflow:hidden; flex-direction:column; align-items:stretch; gap:6px; margin:8px 12px 0; padding:8px 12px 8px 18px; border-radius:var(--r-m); background:var(--needs-bg); border:1px solid var(--needs-line); }
@@ -327,7 +331,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 /* Input dock: a fixed height (the composer's one-row height) that never changes, so the feed's height never does while
    typing or when the status changes. Its column is bottom-aligned, so anything taller (a growing textarea, the error)
    overflows upward over the feed. */
-.c-input { position:relative; z-index:1; flex-shrink:0; height:88px; display:flex; flex-direction:column; justify-content:flex-end; padding-bottom:12px; background:var(--canvas); }
+.c-input { position:relative; z-index:1; flex-shrink:0; height:88px; display:flex; flex-direction:column; justify-content:flex-end; padding-bottom:12px; }
 .c-input > * { flex-shrink:0; }
 /* attached images take their own row: the dock grows (the feed shrinks) instead of the row overflowing over the feed */
 .c-input:has(.c-attached:not([hidden])) { height:auto; min-height:88px; }
@@ -390,7 +394,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .lightbox { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,.8); cursor:zoom-out; }
 .lightbox img { max-width:100%; max-height:100%; object-fit:contain; }
 /* Changes view (diff.js): a full-screen panel, the files left and the picked file's diff right. Green and red are diff semantics here, kept soft. */
-.c-diff { flex-shrink:0; display:inline-flex; align-items:center; gap:5px; appearance:none; border:0; background:none; padding:2px 8px; border-radius:var(--r-pill); font:inherit; font-size:var(--fs-xs); color:var(--muted); cursor:pointer; }
+.c-diff { flex-shrink:0; display:inline-flex; align-items:center; gap:5px; appearance:none; border:0; background:none; height:26px; padding:0 8px; border-radius:var(--r-s); font:inherit; font-size:var(--fs-xs); color:var(--muted); cursor:pointer; }
 .c-diff:hover { color:var(--fg); background:var(--hover); }
 .c-diff:focus-visible, .dv-btn:focus-visible, .dv-file:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 .c-diff-icon { font-size:var(--fs-m); line-height:1; }
@@ -439,7 +443,6 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .dv-l.meta { color:var(--muted); font-style:italic; }
 .dv-more { display:block; margin:var(--sp-3) var(--sp-4) var(--sp-5); }
 @media (max-width: 700px) {
-  .c-diff-word { display:none; }
   .c-diff { min-width:40px; min-height:40px; justify-content:center; }
   .dv-files { flex:1; border-right:0; }
   .dv-pane { display:none; }
@@ -545,7 +548,8 @@ ul.comments a { color:var(--fg); }
 @media (max-width: 900px) {
   .main { flex-direction:column; overflow:auto; }
   .left { flex:none; min-height:60vh; }
-  #chat { width:auto; min-width:0; max-width:none; height:80vh; flex-shrink:0; border-left:0; border-top:1px solid var(--line); }
+  .left { margin-right:var(--sp-3); }
+  #chat { width:auto; min-width:0; max-width:none; height:80vh; flex-shrink:0; margin-top:0; }
 }
 
 .rows .prog { width:150px; }
@@ -577,7 +581,7 @@ ul.comments a { color:var(--fg); }
 
 /* Work | Issues: the board's view switch in the header (issues.js showTab). Two equal segments in a sunken track; a thumb slides under the selected one. */
 /* the board's title row: Work | Issues as two quiet words, level with the chat header */
-.vtitle { flex-shrink:0; height:calc(var(--bar-h) - var(--box-top) - 1px); display:flex; align-items:stretch; gap:var(--sp-3); padding:0 var(--sp-4); background:var(--bg); border-bottom:1px solid var(--line); }
+.vtitle { flex-shrink:0; height:36px; display:flex; align-items:stretch; gap:var(--sp-3); padding:0 var(--sp-4); background:var(--bg); border-bottom:1px solid var(--line); }
 .vtitle button { appearance:none; border:0; background:none; font:inherit; font-size:var(--fs-xl); font-weight:600; letter-spacing:-.01em; color:var(--muted); padding:0 var(--sp-2); border-radius:var(--r-xs); cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; transition:color .12s; }
 .vtitle button:first-child { margin-left:calc(-1 * var(--sp-2)); min-width:calc(var(--sp-2) * 2 + 5.4em); justify-content:flex-start; }
 .vtitle button:hover, .vtitle button[aria-selected="true"] { color:var(--fg); }
@@ -757,7 +761,7 @@ wa-details[open] .g-note { display:none; }
   .ms-menu button { min-height:44px; font-size:var(--fs-l); }
   .main { flex-direction:row; overflow:hidden; }
   .left { flex:1; min-height:0; margin:0; border:0; border-radius:0; box-shadow:none; background:none; } /* phones: the card is the whole pane */
-  #chat { flex:1; width:auto; height:auto; border:0; }
+  #chat { flex:1; width:auto; height:auto; margin:0; border:0; border-radius:0; box-shadow:none; }
   body[data-pane="chat"] .left, body[data-pane="board"] #chat, #tabs { display:none; }
   .masters { padding:12px 12px 24px; }
   .card { padding:12px 14px; gap:8px; }
@@ -785,9 +789,8 @@ wa-details[open] .g-note { display:none; }
 
   /* chat header: the title keeps some room; with a newer session the chips make way and Switch never truncates */
 
-  .c-head { height:44px; }
+  .c-head { height:44px; padding-top:0; }
   header.top .quiet, .c-head .quiet { min-width:40px; min-height:40px; }
-  .c-head:has(.c-newer:not([hidden])) :is(.c-branch, .c-unpushed) { display:none; }
 
 
   .c-newer .show { min-height:44px; }

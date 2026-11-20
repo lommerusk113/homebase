@@ -125,16 +125,14 @@ export default {
         }
     },
 
-    'the header and the input name the bound project, a long title truncated at the same header height': async ({ page, open }) => {
+    'no chat header: the input names the bound project, the menu sits in the card\'s top-right corner, level with the board card': async ({ page, open }) => {
         await open();
         await ready(page);
-        await page.waitFor(`document.getElementById('c-title').textContent === 'alpha · Release'`, { what: 'the project and topic in the header' });
-        assert.equal(await page.ev(`document.getElementById('msg').getAttribute('placeholder')`), 'Message Claude in alpha…');
-        const height = `document.querySelector('#chat .c-head').getBoundingClientRect().height`, h = await page.ev(height);
-        await page.ev(`document.getElementById('c-title').textContent = 'alpha · ' + 'a very long topic '.repeat(20)`);
-        assert.equal(await page.ev(height), h, 'header height unchanged');
-        assert.ok(await page.ev(`(() => { const t = document.getElementById('c-title'); return t.scrollWidth > t.clientWidth && getComputedStyle(t).textOverflow === 'ellipsis'; })()`), 'truncated with an ellipsis');
-        assert.ok(await page.ev(`document.querySelector('#c-menu button[slot="trigger"]').getBoundingClientRect().right <= document.getElementById('chat').getBoundingClientRect().right`), 'the menu stays in view');
+        await page.waitFor(`document.getElementById('msg').getAttribute('placeholder') === 'Message Claude in alpha…'`, { what: 'the project in the placeholder' });
+        assert.equal(await page.ev(`!document.getElementById('c-title') && getComputedStyle(document.querySelector('#chat .c-head')).borderBottomStyle`), 'none', 'no title, no header bar');
+        const r = await page.ev(`(() => { const c = document.getElementById('chat').getBoundingClientRect(), m = document.querySelector('#c-menu button[slot="trigger"]').getBoundingClientRect(), b = document.querySelector('.left').getBoundingClientRect(); return { right: c.right - m.right, top: m.top - c.top, level: c.top - b.top }; })()`);
+        assert.ok(r.right >= 0 && r.right <= 12 && r.top >= 0 && r.top <= 12, `the menu in the corner: ${JSON.stringify(r)}`);
+        assert.equal(r.level, 0, 'the two cards start level');
     },
 
     'TLDR folds the rest of the message': async ({ page, open }) => {

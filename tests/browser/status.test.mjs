@@ -13,7 +13,7 @@ export default {
         assert.equal(await page.ev(`document.getElementById('ask').hidden`), true);
     },
 
-    'header shows the branch chip, amber on main of a work repo, with the unpushed count': async ({ page, open }) => {
+    'the chat card shows the branch chip, amber on main of a work repo, with the unpushed count': async ({ page, open }) => {
         await open();
         await page.waitFor(`document.getElementById('c-branch').textContent === 'main'`, { what: 'the branch chip' });
         assert.equal(await page.ev(`document.getElementById('c-branch').classList.contains('warn')`), true);

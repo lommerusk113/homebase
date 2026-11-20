@@ -4,7 +4,7 @@ import { join, dirname } from 'node:path';
 
 const row = id => `#masters tr[data-key="asking:${id}"]`;
 const back = `document.getElementById('c-back')`;
-const title = `document.getElementById('c-title').textContent`;
+const title = `document.getElementById('msg').getAttribute('placeholder').replace(/^Message Claude in (.*)…$/, '$1')`;
 const focus = `document.getElementById('c-focus')`;
 
 export default {

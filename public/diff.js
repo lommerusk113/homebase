@@ -378,7 +378,7 @@ export function diffIcon(x, redraw) {
     return [b];
 }
 
-// The chat header's "Changes" button with the number of changed files. The number is read when the chat changes and,
+// The chat's corner "±" (Changes) button with the number of changed files. The number is read when the chat changes and,
 // while its transcript moves, at most every COUNT_MS: never on the poll itself.
 const head = { sid: /** @type {string | null} */ (null), at: 0, updated: 0 };
 /** @param {DiffView | null} v */
@@ -401,9 +401,9 @@ export function syncDiff(s) {
         b.setAttribute('aria-label', 'Changes');
         const n = el('span', 'c-diff-n');
         n.hidden = true;
-        b.append(el('span', 'c-diff-icon', '±'), el('span', 'c-diff-word', 'Changes'), n);
+        b.append(el('span', 'c-diff-icon', '±'), n);
         b.onclick = () => head.sid && !open && openDiff(head.sid);
-        document.getElementById('c-unpushed').after(b);
+        document.getElementById('c-menu').before(b);
     }
     const sid = s && !s.id.startsWith('cc-new-') ? s.id : null;
     b.hidden = !sid;

@@ -520,15 +520,12 @@ function showRules(s) {
     }
 }
 
-// The bound session's project (and topic) in the chat header, and in the input's placeholder.
+// The chat card's top strip (back, branch chips, Changes) and the project in the input's placeholder.
 /** @param {Session | null} s */
 function showHead(s) {
 
     $('c-back').hidden = !(s && s.id === state.focus);
     $('c-next').hidden = $('c-back').hidden || !nextId;
-    const title = s ? [s.project, s.topic].filter(Boolean).join(' · ') : '';
-    $('c-title').textContent = title;
-    $('c-title').title = title;
     const branch = $('c-branch'), un = $('c-unpushed');
     branch.hidden = !s?.branch;
     branch.textContent = branch.title = s?.branch ?? '';

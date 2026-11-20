@@ -378,11 +378,11 @@ function bubble(i, sid, prevTopic, look = {}) {
     return b;
 }
 
-// Under a user bubble: "Not sent", "Not confirmed" (with Retry and Dismiss), "sending…" or "queued" (with Send now), else null.
+// Under a user bubble: "Not sent" or "Not confirmed" (with Retry and Dismiss), "sending…" or "queued" (with Send now), else null.
 /** @param {ChatItem | OutboxItem} i @param {string} sid @param {string} key */
 function noteRow(i, sid, key) {
 
-    const lost = 'unconfirmed' in i && i.unconfirmed ? i : null;
+    const lost = ('unconfirmed' in i && i.unconfirmed) || (i.error && state.outbox.includes(/** @type {OutboxItem} */ (i))) ? /** @type {OutboxItem} */ (i) : null;
     const note = i.error ? 'Not sent' : lost ? 'Not confirmed — Claude may not have received this' : i.sending ? 'sending…' : i.pending ? 'queued' : null;
     if (!note) {
         return null;
@@ -1205,7 +1205,7 @@ export async function sendText(sid, text, answerTo, note) {
     $('c-err').textContent = '';
     /** @type {OutboxItem} */
     const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo, note };
-    state.outbox = [...state.outbox.filter(o => !o.error && !(answerTo && o.answerTo === answerTo)), out];
+    state.outbox = [...state.outbox.filter(o => !(o.error && o.sid === sid) && !(answerTo && o.answerTo === answerTo)), out];
     stick = true;
     refreshChat();
     try {

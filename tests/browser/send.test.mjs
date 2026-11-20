@@ -92,7 +92,7 @@ export default {
         await page.type('this one fails');
         await page.key('Enter');
         await page.waitFor(`document.querySelector('#feed .bubble.user.failed')`, { what: 'the failed bubble' });
-        assert.equal(await page.ev(`document.querySelector('#feed .bubble.user.failed .b-note').textContent`), 'Not sent');
+        assert.equal(await page.ev(`document.querySelector('#feed .bubble.user.failed .b-note').textContent`), 'Not sent RetryDismiss');
         assert.equal(await page.ev(`document.getElementById('c-err').textContent`), 'tmux down');
         assert.equal(await page.ev(`document.getElementById('msg').value`), 'this one fails');
         // the next send drops the failed bubble
@@ -100,6 +100,28 @@ export default {
         await page.key('Enter');
         await page.waitFor(`!document.querySelector('#feed .bubble.user.failed')`, { what: 'the failed bubble to go' });
         assert.equal(await page.ev(`document.getElementById('c-err').textContent`), '');
+    },
+
+    'a Not sent bubble has Retry and Dismiss': async ({ page, open, answerPosts }) => {
+        await open();
+        await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
+        page.route = q => (q.url.includes('/api/send') ? { status: 500, body: 'tmux down' } : answerPosts(q));
+        await page.click('#msg');
+        await page.type('retry me');
+        await page.key('Enter');
+        const failed = `document.querySelector('#feed .bubble.user.failed')`;
+        await page.waitFor(`${failed}?.querySelector('wa-button.retry') && ${failed}.querySelector('wa-button.dismiss')`, { what: 'Retry and Dismiss on the failed bubble' });
+        await page.clickOn(`${failed}.querySelector('wa-button.dismiss')`);
+        await page.waitFor(`!${failed}`, { what: 'the dismissed bubble to go' });
+        await page.ev(`document.getElementById('msg').value = ''`);
+        await page.click('#msg');
+        await page.type('second try');
+        await page.key('Enter');
+        await page.waitFor(`${failed}?.querySelector('wa-button.retry')`, { what: 'the failed bubble' });
+        page.route = answerPosts;
+        await page.clickOn(`${failed}.querySelector('wa-button.retry')`);
+        await page.waitFor(`!${failed}`, { what: 'the retried bubble' });
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')).map(p => p.body), ['retry me', 'second try', 'second try']);
     },
 
     'an attached image is uploaded and sent as an [Image: path] line, with a thumbnail': async ({ page, open, answerPosts, homebase }) => {

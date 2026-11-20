@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, NEEDS_ANSWER, openDecision } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, limitView, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, NEEDS_ANSWER, openDecision } from './core.js';
 import { renderBoard } from './list.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
@@ -887,8 +887,8 @@ function compactUi(s, data) {
 
     const idle = canCompact(s) && !data.working && !data.asking;
     $('compact-item').disabled = !idle;
-    $('compact-nudge').hidden = !(idle && ctxLevel(s.context ?? 0));
-    if (idle && store.get('auto-compact') === '1') {
+    $('compact-nudge').hidden = !(idle && compactNudgeDue(s));
+    if (idle && store.get('auto-compact') !== '0') {
         const key = `auto-compacted:${s.id}`, now = Date.now();
         if (autoCompactDue(s, now, Number(store.get(key)) || 0)) {
             store.set(key, String(now)); // before the POST, so a slow or failed one is not retried within the hour
@@ -1035,13 +1035,13 @@ function setNeedsOnly(on) {
 }
 
 function setAutoCompact(on) {
-    store.set('auto-compact', on ? '1' : '');
+    store.set('auto-compact', on ? '1' : '0'); // explicit off is kept; unset means on
     $('auto-compact').checked = on;
 }
 
 export function initChat() {
     setNeedsOnly(store.get('needs-only') === '1');
-    setAutoCompact(store.get('auto-compact') === '1');
+    setAutoCompact(store.get('auto-compact') !== '0');
     initNewMarker();
     $('msg').addEventListener('input', () => {
         syncSend();
@@ -1145,7 +1145,7 @@ export function initChat() {
             return setNeedsOnly(store.get('needs-only') !== '1'); // from our state, not the item's own toggle
         }
         if (e.detail.item.value === 'auto-compact') {
-            return setAutoCompact(store.get('auto-compact') !== '1');
+            return setAutoCompact(store.get('auto-compact') === '0');
         }
         if (e.detail.item.value === 'restart') {
             return void ($('restart-dlg').open = true);

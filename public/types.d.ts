@@ -51,6 +51,8 @@ interface Session {
     unpushed?: number | null;
     /** context window used, % (from the status-line dump); null when there is none */
     context: number | null;
+    /** context window size in tokens (from the same dump); null when unknown */
+    contextSize?: number | null;
     /** when that dump was written, ms */
     contextAt: number | null;
     tmux?: string;

@@ -513,7 +513,7 @@ async function sessionOf({ dir, file, path, st }, now, live) {
 
     const ctx = await contextOf(id);
 
-    return { ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, context: ctx?.percent ?? null, contextAt: ctx?.at ?? null, agents: subagents };
+    return { ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, context: ctx?.percent ?? null, contextSize: ctx?.size ?? null, contextAt: ctx?.at ?? null, agents: subagents };
 }
 
 // The work items of all sessions (their PRs/MRs and agents), with PR/MR state, human comments and milestone.

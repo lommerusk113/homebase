@@ -31,7 +31,7 @@ export default {
     },
 
     'the nudge asks first, then POSTs /api/compact once for the bound session': async ({ page, open, IDS }) => {
-        await open();
+        await open({ 'auto-compact': '0' });
         await loaded(page);
         assert.equal(await page.ev(`${nudge}.textContent`), 'Compact?');
         await page.click('#compact-nudge');
@@ -47,7 +47,7 @@ export default {
     },
 
     'the menu item is enabled when idle and compacts through the same confirm': async ({ page, open, IDS }) => {
-        await open();
+        await open({ 'auto-compact': '0' });
         await page.waitFor(`${item} && !${item}.disabled`, { what: 'the enabled menu item' });
         await page.click('#c-menu button[slot="trigger"]');
         await page.clickOn(item);
@@ -55,7 +55,6 @@ export default {
         await page.click('#compact-go');
         await waitForPost(page);
         assert.deepEqual(compactPosts(page), [`?id=${IDS.master}`]);
-        assert.ok(!await page.ev(`localStorage.getItem('auto-compact')`), 'auto mode stays off');
     },
 
     'working or asking: no nudge, and the menu item is disabled': async ({ page, open, IDS }) => {
@@ -77,13 +76,14 @@ export default {
         assert.equal(await page.ev(`document.getElementById('feed').textContent.includes('SUMMARY-TEXT')`), false);
     },
 
-    'auto-compact: off by default; on, it sends once for the idle chat over 70%': async ({ page, open, IDS }) => {
-        await open();
+    'auto-compact: on by default, an explicit off is respected; it sends once for the idle chat over 200k tokens': async ({ page, open, IDS }) => {
+        await open({ 'auto-compact': '0' });
         await loaded(page);
         await sleep(3500); // a poll or two
-        assert.deepEqual(compactPosts(page), [], 'off by default');
+        assert.deepEqual(compactPosts(page), [], 'explicit off');
+        assert.equal(await page.ev(`document.getElementById('auto-compact').checked`), false);
 
-        await open({ 'auto-compact': '1' });
+        await open();
         await waitForPost(page);
         await sleep(3500); // more polls: the hourly limit holds
         assert.deepEqual(compactPosts(page), [`?id=${IDS.master}`]);

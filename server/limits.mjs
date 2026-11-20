@@ -47,7 +47,7 @@ export function peakLimits(peaks, dumps, now = Date.now()) {
     return out.fiveHour || out.sevenDay ? out : null;
 }
 
-// A session's context window use from its own dump (<session id>.json): { percent, at: dump mtime ms }, or null when
+// A session's context window use from its own dump (<session id>.json): { percent, size: window tokens or null, at: dump mtime ms }, or null when
 // there is none yet (no status line has run for it) or it carries no percentage.
 export async function contextOf(id, dir = STATUS_DIR) {
 
@@ -56,9 +56,10 @@ export async function contextOf(id, dir = STATUS_DIR) {
     }
     try {
         const path = join(dir, `${id}.json`);
-        const percent = JSON.parse(await readFile(path, 'utf8'))?.context_window?.used_percentage;
+        const w = JSON.parse(await readFile(path, 'utf8'))?.context_window, percent = w?.used_percentage;
+        const size = typeof w?.context_window_size === 'number' ? w.context_window_size : null;
 
-        return typeof percent === 'number' ? { percent, at: (await stat(path)).mtimeMs } : null;
+        return typeof percent === 'number' ? { percent, size, at: (await stat(path)).mtimeMs } : null;
     } catch {
         return null;
     }

@@ -1890,12 +1890,12 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
     const { mkdtempSync, writeFileSync, rmSync, utimesSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     const { join } = await import('node:path');
-    const { ctxLevel, canCompact, autoCompactDue, AUTO_COMPACT } = await import('./public/core.js');
+    const { ctxLevel, canCompact, autoCompactDue, compactNudgeDue, tokenPercent, AUTO_COMPACT } = await import('./public/core.js');
 
     const dir = mkdtempSync(join(tmpdir(), 'homebase-ctx-')), id = 'bbbbbbbb-0000-4000-8000-000000000001';
     writeFileSync(join(dir, `${id}.json`), JSON.stringify({ context_window: { used_percentage: 72.5 } }));
     utimesSync(join(dir, `${id}.json`), 1000, 1000);
-    assert.deepEqual(await contextOf(id, dir), { percent: 72.5, at: 1_000_000 });
+    assert.deepEqual(await contextOf(id, dir), { percent: 72.5, size: null, at: 1_000_000 });
     assert.equal(await contextOf('bbbbbbbb-0000-4000-8000-000000000002', dir), null, 'no dump yet');
     writeFileSync(join(dir, `${id}.json`), JSON.stringify({ context_window: { used_percentage: null } }));
     assert.equal(await contextOf(id, dir), null, 'no percentage');
@@ -1912,10 +1912,15 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
     assert.deepEqual([0, 59.9, 60, 84.9, 85, 100].map(ctxLevel), ['', '', 'warn', 'warn', 'hot', 'hot']);
     assert.deepEqual([canCompact({ status: 'idle' }), canCompact({ status: 'waiting' }), canCompact({ status: 'working' }), canCompact({ status: 'waiting', asking: true })], [true, true, false, false]);
 
-    // auto-compact: idle for 2 min, at 70%, not tried within the hour
-    const t = 10 * 3600_000, ready = { status: 'idle', context: 70, lastActivity: t - AUTO_COMPACT.idleMs };
+    // thresholds are tokens: 150k / 200k of a 1M window, capped at 90% of a small one
+    assert.deepEqual([tokenPercent(150_000, {}), tokenPercent(200_000, {}), tokenPercent(200_000, { contextSize: 400_000 }), tokenPercent(200_000, { contextSize: 200_000 })], [15, 20, 50, 90]);
+    assert.equal(compactNudgeDue({ context: 15 }), true);
+    assert.equal(compactNudgeDue({ context: 14.9 }), false);
+    assert.equal(compactNudgeDue({ context: 37, contextSize: 400_000 }), false);
+    // auto-compact: idle for 2 min, at 200k tokens, not tried within the hour
+    const t = 10 * 3600_000, ready = { status: 'idle', context: 20, lastActivity: t - AUTO_COMPACT.idleMs };
     assert.equal(autoCompactDue(ready, t, 0), true);
-    assert.equal(autoCompactDue({ ...ready, context: 69.9 }, t, 0), false, 'under the threshold');
+    assert.equal(autoCompactDue({ ...ready, context: 19.9 }, t, 0), false, 'under the threshold');
     assert.equal(autoCompactDue({ ...ready, context: null }, t, 0), false, 'no context reading');
     assert.equal(autoCompactDue({ ...ready, lastActivity: t - AUTO_COMPACT.idleMs + 1 }, t, 0), false, 'idle under 2 min');
     assert.equal(autoCompactDue({ ...ready, lastActivity: null, updated: t - 60_000 }, t, 0), false, 'falls back to updated');

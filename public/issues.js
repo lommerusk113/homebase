@@ -150,11 +150,6 @@ const NO_GROUPS = { closable: [], doing: [], assigned: [], unassigned: [], done:
 /** @param {Milestones | null} [d] */
 export function renderIssues(d = data) {
     data = d;
-    // the Issues segment counts the milestone's open issues; how many nobody has taken is in its tooltip
-    const badge = $('tab-open'), open = d?.selected ? d.selected.total - d.selected.closed : 0, free = d?.selected?.groups?.unassigned.length ?? 0;
-    badge.hidden = !open;
-    badge.textContent = String(open);
-    badge.title = `${open} open${free ? `, ${free} unassigned` : ''}`;
     const pane = $('issues'), hadFocus = pane.contains(document.activeElement);
     const ms = d?.selected;
     if (d === undefined || ms?.loading) {

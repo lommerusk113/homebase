@@ -51,7 +51,7 @@ export default {
 
     'a needs-you MR without a milestone stays under a picked milestone': async ({ page, open }) => {
         await open();
-        await page.waitFor(`${row(MR(104))} && document.querySelector('.proj-chip')`);
+        await page.waitFor(`${row(MR(104))}`);
         const out = await page.ev(`(async () => {
             const core = await import('/core.js'), list = await import('/list.js');
             ${items}.find(i => i.key === ${JSON.stringify(MR(104))}).milestone = null;

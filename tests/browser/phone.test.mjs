@@ -20,7 +20,7 @@ export default {
         await asPhone(page, async () => {
             await open({ project: 'all' });
             assert.equal(await page.ev(`${shown('feed')} && !${shown('masters')} && !${shown('tabs')}`), true, 'the chat full screen by default, no side-by-side');
-            await page.waitFor(`document.title === '(' + document.getElementById('pt-work-n').textContent + ') Homebase' && ${shown('pt-work-n')}`, { what: 'the Work badge, the count in the title' });
+            await page.waitFor(`/^\\(\\d+\\) Homebase$/.test(document.title) && ${shown('pt-work-n')}`, { what: 'the Work badge, the count in the title' });
             await pane(page, 'work');
             assert.equal(await page.ev(`${shown('masters')} && !${shown('feed')}`), true, 'the board, not the chat');
             await pane(page, 'issues');

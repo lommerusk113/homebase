@@ -77,7 +77,8 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .pp-dot { flex-shrink:0; width:8px; height:8px; border-radius:50%; background:var(--c-idle); }
 [data-state="needs"] > .pp-dot { background:var(--c-needs); }
 [data-state="working"] > .pp-dot { background:var(--c-doing); }
-.pp-chev { flex-shrink:0; width:7px; height:7px; margin:-3px 3px 0 2px; border:solid var(--muted); border-width:0 1.5px 1.5px 0; transform:rotate(45deg); transition:transform .15s var(--ease), margin .15s var(--ease); }
+.pp-btn[data-other]:not([data-other=""])::after { content:attr(data-other); order:1; font-size:var(--fs-xs); font-weight:600; color:var(--c-needs); font-variant-numeric:tabular-nums; }
+.pp-chev { order:2; flex-shrink:0; width:7px; height:7px; margin:-3px 3px 0 2px; border:solid var(--muted); border-width:0 1.5px 1.5px 0; transform:rotate(45deg); transition:transform .15s var(--ease), margin .15s var(--ease); }
 .pp.open .pp-chev { transform:rotate(225deg); margin-top:4px; }
 .pp-pop { position:absolute; z-index:30; top:calc(100% + 6px); left:0; }
 .pp-panel { width:320px; display:flex; flex-direction:column; max-height:min(75vh, 620px); background:var(--bg); border:1px solid var(--line); border-radius:var(--r-m); box-shadow:var(--shadow); overflow:hidden; transform-origin:top left; animation:pp-in .14s var(--ease); }
@@ -103,23 +104,11 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .pp-foot button { appearance:none; border:0; background:none; color:var(--muted); font:inherit; font-size:var(--fs-m); text-align:left; padding:6px var(--sp-2); border-radius:var(--r-s); cursor:pointer; }
 .pp-foot button:hover, .pp-foot button:focus-visible { background:var(--hover); color:var(--fg); outline:0; }
 @media (prefers-reduced-motion: reduce) { .pp-pop, .pp-panel { animation:none !important; } .pp-btn, .pp-chev { transition:none; } }
-/* Header pills: one family for the project pills and the milestone pill. A soft fill, no outline; the picked one is solid. */
-.proj-chip, .ms-pick > summary { box-sizing:border-box; display:inline-flex; align-items:center; gap:6px; height:var(--pill-h); padding:0 10px; border:0; border-radius:var(--r-pill); background:var(--chip); color:var(--fg); font:inherit; font-size:var(--fs-s); font-weight:500; line-height:1; white-space:nowrap; cursor:pointer; transition:background-color .12s, color .12s; }
-.proj-chip:hover, .ms-pick > summary:hover, .ms-pick[open] > summary { background:var(--chip-hover); }
-.proj-chip:focus-visible, .ms-pick > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
-/* many projects: one row that scrolls sideways, fading out at the edges. The padding (taken back by the margin) is where
-   the fade and the focus ring live, so a row that fits looks untouched. */
-.proj-chips { --fade:var(--sp-3); display:flex; gap:6px; min-width:0; max-width:min(100%, 44vw); padding:4px var(--fade); margin:-4px calc(-1 * var(--fade)); overflow-x:auto; scroll-padding-inline:var(--fade); scrollbar-width:none; overscroll-behavior-x:contain;
-  -webkit-mask-image:linear-gradient(90deg, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); mask-image:linear-gradient(90deg, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent); }
-.proj-chips::-webkit-scrollbar { display:none; }
-.proj-chips:empty { display:none; }
-.proj-chip { appearance:none; position:relative; flex-shrink:0; padding-right:4px; }
-.pc-name { max-width:150px; overflow:hidden; text-overflow:ellipsis; line-height:var(--pill-h); }
-.pc-n { box-sizing:border-box; min-width:18px; height:18px; padding:0 5px; border-radius:var(--r-pill); font-size:var(--fs-xs); font-weight:600; line-height:18px; text-align:center; font-variant-numeric:tabular-nums; color:var(--c-needs); background:color-mix(in srgb, var(--c-needs) 14%, transparent); }
-.proj-chip.on { background:var(--pill-on); color:var(--bg); font-weight:600; }
-.proj-chip.on:hover { background:color-mix(in srgb, var(--fg) 76%, var(--bg)); }
-.proj-chip.on .pc-n { background:var(--bg); }
-@media (prefers-reduced-motion: reduce) { .proj-chip, .ms-pick > summary, .ms-pick > summary::after, .ms-menu button { transition:none; } .ms-menu { animation:none !important; } }
+/* Header pill: the milestone pill. A soft fill, no outline; the picked one is solid. */
+.ms-pick > summary { box-sizing:border-box; display:inline-flex; align-items:center; gap:6px; height:var(--pill-h); padding:0 10px; border:0; border-radius:var(--r-pill); background:var(--chip); color:var(--fg); font:inherit; font-size:var(--fs-s); font-weight:500; line-height:1; white-space:nowrap; cursor:pointer; transition:background-color .12s, color .12s; }
+.ms-pick > summary:hover, .ms-pick[open] > summary { background:var(--chip-hover); }
+.ms-pick > summary:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+@media (prefers-reduced-motion: reduce) { .ms-pick > summary, .ms-pick > summary::after, .ms-menu button { transition:none; } .ms-menu { animation:none !important; } }
 .quiet { appearance:none; border:0; background:none; color:var(--muted); font:inherit; font-size:16px; line-height:1; padding:2px 6px; border-radius:var(--r-s); cursor:pointer; }
 .quiet:hover { color:var(--fg); background:var(--hover); }
 .quiet:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
@@ -502,7 +491,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .body blockquote { border-left:3px solid var(--line); padding-left:10px; color:var(--muted); }
 .body a { color:var(--accent); }
 
-.masters { flex:1; overflow:auto; padding:var(--sp-4) var(--sp-5) 40px; display:flex; flex-direction:column; gap:var(--sp-3); }
+.masters { flex:1; overflow:auto; padding:0 var(--sp-5) 40px; display:flex; flex-direction:column; gap:var(--sp-3); }
 .group { background:var(--bg); border:1px solid var(--line-soft); border-radius:var(--r-m); overflow:hidden; flex-shrink:0; }
 .g-head { display:flex; align-items:center; gap:8px; margin:0; padding:8px var(--sp-4); font-size:var(--fs-s); font-weight:600; color:var(--fg); }
 .group.g-finished { opacity:.7; }
@@ -588,15 +577,17 @@ ul.comments a { color:var(--fg); }
 }
 
 /* Work | Issues: the board's view switch in the header (issues.js showTab). Two equal segments in a sunken track; a thumb slides under the selected one. */
-.seg { position:relative; display:inline-grid; grid-auto-flow:column; grid-auto-columns:1fr; height:30px; padding:2px; border:1px solid var(--line-soft); border-radius:var(--r-s); background:var(--canvas); }
-.seg::before { content:''; position:absolute; top:2px; bottom:2px; left:2px; width:calc(50% - 2px); border:1px solid var(--line); border-radius:var(--r-xs); background:var(--bg); transition:transform .18s var(--ease); }
-.seg[data-tab="issues"]::before { transform:translateX(100%); }
-.seg button { position:relative; appearance:none; border:0; background:none; font:inherit; font-size:var(--fs-m); font-weight:500; color:var(--muted); padding:0 12px; border-radius:var(--r-xs); cursor:pointer; display:flex; gap:6px; align-items:center; justify-content:center; white-space:nowrap; transition:color .12s; }
-.seg button:hover, .seg button[aria-selected="true"] { color:var(--fg); }
-.seg button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
-.seg .count, .ptabs .count { font-size:var(--fs-xs); padding:0 6px; border-radius:var(--r-pill); background:var(--chip); color:var(--muted); font-weight:500; font-variant-numeric:tabular-nums; }
-.seg .count.hot, .ptabs .count.hot { background:color-mix(in srgb, var(--c-needs) 16%, var(--bg)); color:var(--c-needs); }
-@media (prefers-reduced-motion: reduce) { .seg::before, .seg button { transition:none; } }
+/* the board's title row: Work | Issues as two quiet words, level with the chat header */
+.vtitle { flex-shrink:0; height:var(--bar-h); display:flex; align-items:center; gap:var(--sp-4); padding:0 var(--sp-5); }
+.vtitle button { appearance:none; border:0; background:none; font:inherit; font-size:var(--fs-xl); font-weight:600; letter-spacing:-.01em; color:var(--muted); height:28px; padding:0 var(--sp-2); border-radius:var(--r-xs); cursor:pointer; display:flex; align-items:center; gap:6px; white-space:nowrap; transition:color .12s; }
+.vtitle button:first-child { margin-left:calc(-1 * var(--sp-2)); min-width:calc(var(--sp-2) * 2 + 5.4em); }
+.vtitle button:hover, .vtitle button[aria-selected="true"] { color:var(--fg); }
+.vtitle button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+#tab-work[aria-selected="true"] .count { display:none; }
+.vtitle .count { font-size:var(--fs-xs); font-weight:600; color:var(--c-needs); font-variant-numeric:tabular-nums; }
+.ptabs .count { font-size:var(--fs-xs); padding:0 6px; border-radius:var(--r-pill); background:var(--chip); color:var(--muted); font-weight:500; font-variant-numeric:tabular-nums; }
+.ptabs .count.hot { background:color-mix(in srgb, var(--c-needs) 16%, var(--bg)); color:var(--c-needs); }
+@media (prefers-reduced-motion: reduce) { .vtitle button { transition:none; } }
 .issues { gap:14px; }
 .is-head { background:var(--bg); border:1px solid var(--line-soft); border-radius:var(--r-m); padding:14px 16px 12px; display:grid; grid-template-columns:auto 1fr auto; gap:6px 20px; align-items:end; flex-shrink:0; }
 .is-title { grid-column:1 / -1; display:flex; gap:10px; align-items:center; font-size:var(--fs-s); margin-bottom:4px; }
@@ -756,12 +747,9 @@ wa-details[open] .g-note { display:none; }
   .pp-row small { font-size:var(--fs-m); }
   /* pills: 32px to look at, 44px to tap (the ::before); the project row may take the full width and scroll */
   :root { --pill-h:32px; }
-  .proj-chip, .ms-pick > summary { position:relative; font-size:var(--fs-m); }
-  .proj-chip { padding-inline:12px 6px; }
+  .ms-pick > summary { position:relative; font-size:var(--fs-m); }
   .ms-pick.off > summary::after { display:none; } /* a status more than a menu: without the caret it fits beside the header's buttons */
-  .proj-chip::before, .ms-pick > summary::before { content:''; position:absolute; inset:-6px 0; height:44px; }
-  .proj-chips { max-width:100%; padding-block:6px; margin-block:-6px; }
-  .pc-n { min-width:20px; height:20px; line-height:20px; }
+  .ms-pick > summary::before { content:''; position:absolute; inset:-6px 0; height:44px; }
   .ms-pick > summary .d { display:none; }
   .ms-menu { position:fixed; top:auto; left:8px; right:8px; width:auto; margin-top:6px; transform-origin:top center; } /* top:auto: right under the pill, whichever header row it is on */
   .ms-menu button { min-height:44px; font-size:var(--fs-l); }

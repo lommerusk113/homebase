@@ -32,13 +32,7 @@
   <div class="brand"><img src="/icon.svg" width="26" height="26" alt="">Homebase</div>
   <span class="sep">/</span>
   <span class="pp"><button class="pp-btn" id="project" type="button" aria-label="Project" title="Switch project (g then p)"></button></span><!-- the list is built by picker.js -->
-  <span class="proj-chips" id="proj-chips" role="group" aria-label="Tracked projects"></span>
   <span id="milestone-slot"></span><!-- milestone pill goes here (milestoneSelector from milestone.js) -->
-  <!-- the board's view switch (issues.js showTab); phones use the bottom bar instead -->
-  <span class="seg" id="tabs" role="tablist" aria-label="Board view">
-    <button role="tab" id="tab-work" data-tab="work" aria-selected="true" aria-controls="masters" title="Work items (1, or t to swap)">Work<span class="count hot work-n" hidden></span></button>
-    <button role="tab" id="tab-issues" data-tab="issues" aria-selected="false" aria-controls="issues" tabindex="-1" title="Milestone issues by person (2, or t to swap)">Issues<span class="count" id="tab-open" hidden></span></button>
-  </span>
   <span class="updated" id="updated" role="status" hidden><span id="updated-text"></span> <button class="show" id="updated-go" type="button"></button></span>
   <span class="offline" id="offline" hidden>Offline</span>
   <span class="fmtwarn" id="format-warn" hidden>Claude Code's format changed — status may be wrong</span>
@@ -56,6 +50,11 @@
 </header>
 <div class="main">
   <div class="left">
+    <!-- the board's title and view switch (issues.js showTab); phones use the bottom bar instead -->
+    <span class="vtitle" id="tabs" role="tablist" aria-label="Board view">
+      <button role="tab" id="tab-work" data-tab="work" aria-selected="true" aria-controls="masters" title="Work items (1, or t to swap)">Work<span class="count hot work-n" hidden></span></button>
+      <button role="tab" id="tab-issues" data-tab="issues" aria-selected="false" aria-controls="issues" tabindex="-1" title="Milestone issues by person (2, or t to swap)">Issues</button>
+    </span>
     <div class="stale-note" role="status">Disconnected — showing the last known data</div>
     <div class="masters" id="masters" role="tabpanel" aria-labelledby="tab-work"></div>
     <div class="masters issues" id="issues" role="tabpanel" aria-labelledby="tab-issues" hidden></div>

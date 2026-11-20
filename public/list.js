@@ -1,5 +1,5 @@
 // Left column: work items grouped by what they wait on, and attention transitions.
-import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle, waitsOnYou } from './core.js';
+import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle, setWorkCount, waitsOnYou } from './core.js';
 import { chatSession, bindChat, focusChat, sendText, isMaster } from './chat.js';
 import { milestoneTag } from './milestone.js';
 import { diffLink } from './diff.js';
@@ -272,6 +272,7 @@ function renderItems() {
     const working = visibleSessions().filter(s => isMaster(s) && s.status === 'working' && !waitsOnYou(s) && !covered.has(s.id)).map(workingRow);
     const finishedKey = `fold:finished:${state.project}`, reviewKey = `fold:review:${state.project}`;
     const reviews = (state.reviews ?? []).filter(r => state.project === 'all' || r.project.split('/').pop() === state.project);
+    setWorkCount(items.filter(x => x.column === 'needs-you').length + asking.length); // the Needs you group's own count
     const groups = COLUMNS.map(c => {
         const list = items.filter(x => x.column === c.key), extra = c.key === 'doing' ? [...placeholders, ...working] : c.key === 'needs-you' ? asking : [];
         if (!list.length && !extra.length) {

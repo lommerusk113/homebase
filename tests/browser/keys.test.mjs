@@ -65,14 +65,14 @@ export default {
             tabbable: [...t.querySelectorAll('[role="tab"]')].filter(b => b.tabIndex === 0).map(b => b.dataset.tab).join(), work: !document.getElementById('masters').hidden, issues: !document.getElementById('issues').hidden, saved: localStorage.getItem('tab') }; })()`;
         const on = tab => ({ sel: tab, tabbable: tab, work: tab === 'work', issues: tab === 'issues', saved: tab });
         await open();
-        assert.equal(await page.ev(`document.getElementById('tabs').getAttribute('role') + ' in ' + document.getElementById('tabs').parentElement.localName + ', ' + document.querySelectorAll('#tabs [role="tab"]').length`), 'tablist in header, 2', 'a two-segment switch in the header, no Log');
-        assert.equal(await page.ev(`document.querySelector('.left').firstElementChild.className`), 'stale-note', 'no tab row above the board');
+        assert.equal(await page.ev(`document.getElementById('tabs').getAttribute('role') + ' in ' + document.getElementById('tabs').parentElement.localName + ', ' + document.querySelectorAll('#tabs [role="tab"]').length`), 'tablist in div, 2', 'the board title row, two words, no Log');
+        assert.equal(await page.ev(`document.querySelector('.left').firstElementChild.id + ' ' + !!document.querySelector('header.top #tabs')`), 'tabs false', 'the switch is the board pane\'s first child, not in the header');
+        assert.equal(await page.ev(`document.getElementById('tab-open')`), null, 'no count on Issues');
+        assert.equal(await page.ev(`getComputedStyle(document.querySelector('#tabs .work-n')).display`), 'none', 'no Work count while Work is selected');
         assert.deepEqual(await page.ev(view), on('work'));
-        await page.waitFor(`document.title === '(' + document.querySelector('#tabs .work-n').textContent + ') Homebase'`, { what: 'the waiting count on the Work segment' });
         await page.click('#tabs [data-tab="issues"]');
         assert.deepEqual(await page.ev(view), on('issues'), 'one click');
-        // the thumb sits under the selected segment
-        await page.waitFor(`(() => { const t = getComputedStyle(document.getElementById('tabs'), '::before'), r = document.getElementById('tabs').getBoundingClientRect(); return new DOMMatrix(t.transform).m41 > r.width / 2 - 6; })()`, { what: 'the thumb under Issues' });
+        await page.waitFor(`getComputedStyle(document.querySelector('#tabs .work-n')).display !== 'none' && Number(document.querySelector('#tabs .work-n').textContent) > 0`, { what: 'the needs-you count beside Work, shown on Issues' });
         // focus is on the clicked segment: an arrow key moves to the other one and selects it
         await page.key('ArrowLeft', 'ArrowLeft');
         assert.deepEqual(await page.ev(view), on('work'), 'ArrowLeft');

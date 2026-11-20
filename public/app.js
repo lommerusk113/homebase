@@ -77,43 +77,14 @@ function renderProjects() {
     }
     const names = [...state.tracked].sort((a, b) => a.localeCompare(b));
     projects.update([pickItem('all', 'All my projects', state.sessions.filter(isTracked)), ...names.map(n => pickItem(n, n, state.sessions.filter(s => s.project === n)))], state.project);
-    renderChips();
+    // the picker button is the one cue for chats waiting in other projects
+    const other = state.project === 'all' ? 0 : projectCounts(state.sessions, state.tracked).filter(c => c.project !== state.project).reduce((n, c) => n + c.waiting, 0);
+    const pb = $('project');
+    pb.dataset.other = other ? String(other) : '';
+    pb.setAttribute('aria-label', other ? `Project, ${other} waiting on you in other projects` : 'Project');
+    pb.title = other ? `${other} waiting on you in other projects` : 'Switch project (g then p)';
     renderMilestone();
 }
-// A pill per tracked project that waits on you: its name and the count as a badge; none, no container. Click switches to it.
-// Rebuilt only when a count or the selection changes, so a poll keeps focus and hover where they are.
-let chipsKey = '';
-function renderChips() {
-    const counts = projectCounts(state.sessions, state.tracked), key = JSON.stringify([counts, state.project]);
-    if (key === chipsKey) {
-        return;
-    }
-    chipsKey = key;
-    $('proj-chips').replaceChildren(...counts.map(({ project: p, waiting }) => {
-        const b = el('button', `proj-chip${p === state.project ? ' on' : ''}`);
-        b.append(el('span', 'pc-name', p), el('small', 'pc-n', String(waiting)));
-        b.setAttribute('aria-pressed', String(p === state.project));
-        b.setAttribute('aria-label', `${p}: ${waiting} waiting on you`);
-        b.title = `${p}: ${waiting} waiting on you`;
-        b.onclick = () => {
-            setProject(p);
-            const asking = state.sessions.find(s => s.project === p && waitsOnYou(s));
-            if (asking) {
-                focusChat(asking.id); // a chip with something waiting opens that question
-            }
-        };
-        return b;
-    }));
-    $('proj-chips').querySelector('.on')?.scrollIntoView({ block: 'nearest', inline: 'center' }); // the row scrolls sideways when there are many
-}
-// a mouse wheel scrolls the pill row sideways when it overflows
-$('proj-chips').addEventListener('wheel', e => {
-    const row = $('proj-chips');
-    if (row.scrollWidth > row.clientWidth && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        row.scrollLeft += e.deltaY;
-        e.preventDefault();
-    }
-}, { passive: false });
 /** @param {string} name a tracked project or 'all' */
 function setProject(name) {
     if (name === state.project) {

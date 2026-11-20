@@ -70,66 +70,29 @@ export default {
         await page.waitFor(`document.getElementById('dlg').open && !${isOpen}`, { what: 'the projects dialog' });
     },
 
-    'project chips show only projects that need you, as a count badge, and a click switches to it': async ({ page, open, IDS }) => {
-        const chip = name => `[...document.querySelectorAll('#proj-chips .proj-chip')].find(b => b.firstChild.textContent === '${name}')`;
+    'the picker button signals chats waiting in other projects, and the Work count is only the board\'s own Needs you rows': async ({ page, open, IDS }) => {
         const titleCount = `Number(document.title.match(/^\\((\\d+)\\)/)?.[1] ?? 0)`;
-        await open({ tracked: '["alpha"]' });
-        await page.waitFor(`${titleCount} > 0`, { what: 'a count in the title' });
-        const alphaOnly = await page.ev(titleCount);
-        await open();
-        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#proj-chips .proj-chip')].map(b => b.firstChild.textContent)`), ['alpha', 'beta'], 'gamma needs nothing: no chip');
-        assert.equal(await page.ev(`${chip('alpha')}.querySelectorAll('small').length`), 1, 'only the waiting count, no open number');
-        assert.equal(await page.ev(`${chip('alpha')}.getAttribute('aria-pressed')`), 'true');
-        await page.waitFor(`${chip('beta')}?.querySelector('.pc-n')?.textContent === '1'`, { what: "beta's asking chat on its chip" });
-        assert.ok(await page.ev(titleCount) > alphaOnly, 'the title counts beta, though alpha is selected');
-        assert.ok(!(await page.ev(`document.querySelector('#masters tr[data-key="asking:${IDS.asker}"]')`)), "beta's row stays off alpha's board");
-        await page.click('#proj-chips .proj-chip:nth-child(2)');
-        await page.waitFor(`localStorage.getItem('project') === 'beta' && document.getElementById('project').value === 'beta'`, { what: 'beta to be picked' });
+        const workN = `(() => { const n = document.querySelector('#tabs .work-n'); return n.hidden ? 0 : Number(n.textContent); })()`;
+        const needsRows = `document.querySelectorAll('#masters .g-needs-you tr[data-key]').length`;
+        await open({ tracked: '["gamma","beta"]', project: 'gamma' });
+        await page.waitFor(`${btn}.dataset.other && ${titleCount} > 0`, { what: 'the cue on the picker button and the global title count' });
+        const other = await page.ev(`Number(${btn}.dataset.other)`);
+        assert.ok(other >= 1);
+        assert.equal(await page.ev(`${btn}.getAttribute('aria-label')`), `Project, ${other} waiting on you in other projects`);
+        assert.equal(await page.ev(`getComputedStyle(${btn}, '::after').content`), `"${other}"`, 'a bare numeral on the button');
+        assert.equal(await page.ev(`!!document.getElementById('proj-chips')`), false, 'no project pills');
+        assert.equal(await page.ev(needsRows), 0, 'a quiet project: no Needs you rows');
+        await page.click('#tabs [data-tab="issues"]');
+        assert.equal(await page.ev(workN), 0, 'no count on Work for the other project\'s items');
+        await page.click('#project');
+        await page.click('.pp-row[data-value="beta"]');
         await page.waitFor(`document.querySelector('#masters tr[data-key="asking:${IDS.asker}"]')`, { what: "beta's board" });
-    },
-
-    'a project chip has a count badge with a spoken label, the current one is filled, and a poll keeps the nodes': async ({ page, open }) => {
-        const chip = n => `document.querySelector('#proj-chips .proj-chip:nth-child(${n})')`;
-        const css = (e, prop) => page.ev(`getComputedStyle(${e}).${prop}`);
-        await open();
-        await page.waitFor(`document.querySelectorAll('#proj-chips .proj-chip').length === 2`, { what: 'both chips' });
-        const n = await page.ev(`${chip(1)}.querySelector('.pc-n').textContent`);
-        assert.match(n, /^\d+$/, 'a bare number, no glyph');
-        assert.equal(await page.ev(`${chip(1)}.getAttribute('aria-label')`), `alpha: ${n} waiting on you`);
-        assert.equal(await page.ev(`${chip(1)}.title`), `alpha: ${n} waiting on you`);
-        assert.equal(await page.ev(`${chip(1)}.className + '|' + ${chip(2)}.className + '|' + ${chip(2)}.getAttribute('aria-pressed')`), 'proj-chip on|proj-chip|false');
-        assert.notEqual(await css(chip(1), 'backgroundColor'), await css(chip(2), 'backgroundColor'), 'the current chip is filled differently');
-        assert.equal(await css(chip(1), 'fontWeight'), '600');
-        assert.equal(await css(`${chip(1)}.querySelector('.pc-n')`, 'color'), await css(`${chip(2)}.querySelector('.pc-n')`, 'color'), 'the count keeps its needs-you colour on the filled chip');
-        assert.equal(await page.ev(`${chip(1)}.getBoundingClientRect().height === ${chip(2)}.getBoundingClientRect().height && ${chip(1)}.getBoundingClientRect().height === document.querySelector('#milestone-slot summary').getBoundingClientRect().height`), true, 'one height for the pill family');
-        // a poll with the same counts leaves the chips alone, so focus stays
-        await page.ev(`window.__chip = ${chip(2)}; window.__chip.focus(); window.__polls = performance.getEntriesByType('resource').filter(r => r.name.includes('/api/sessions')).length`);
-        await page.waitFor(`performance.getEntriesByType('resource').filter(r => r.name.includes('/api/sessions')).length >= window.__polls + 2`, { what: 'two more polls' });
-        assert.equal(await page.ev(`window.__chip === ${chip(2)} && document.activeElement === window.__chip`), true, 'same node, still focused');
-    },
-
-    'many project chips stay on one row that scrolls, long names are cut, and the current one is scrolled into view': async ({ page, open }) => {
-        const names = ['alpha', 'beta', 'a-very-long-project-name-that-never-ends', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9'];
-        await open({ tracked: JSON.stringify(names), project: 'p9' });
-        // every project asks: beta's asking chat, copied
-        const all = await page.ev(`import('/core.js').then(m => m.api('/api/sessions')).then(r => r.json())`);
-        const list = Array.isArray(all) ? all : all.sessions, ask = list.find(s => s.project === 'beta' && s.asking);
-        const more = names.slice(2).map(project => ({ ...ask, id: `copy-${project}`, project, tmux: null }));
-        const body = JSON.stringify(Array.isArray(all) ? [...all, ...more] : { ...all, sessions: [...list, ...more] });
-        const posts = page.route;
-        page.route = q => (new URL(q.url).pathname === '/api/sessions' ? { body, headers: { 'content-type': 'application/json' } } : posts(q));
-        await page.waitFor(`document.querySelectorAll('#proj-chips .proj-chip').length === ${names.length}`, { what: 'a chip per project' });
-        const row = `document.getElementById('proj-chips')`;
-        assert.equal(await page.ev(`new Set([...${row}.children].map(c => c.getBoundingClientRect().top)).size`), 1, 'one row');
-        assert.equal(await page.ev(`${row}.scrollWidth > ${row}.clientWidth && document.documentElement.scrollWidth <= innerWidth`), true, 'the row scrolls, the page does not');
-        assert.equal(await page.ev(`(() => { const n = [...${row}.querySelectorAll('.pc-name')].find(e => e.textContent.startsWith('a-very')); return n.scrollWidth > n.clientWidth; })()`), true, 'the long name is cut with an ellipsis');
-        await page.waitFor(`(() => { const r = ${row}.getBoundingClientRect(), c = ${row}.querySelector('.on').getBoundingClientRect(); return c.left >= r.left && c.right <= r.right; })()`, { what: 'the current chip in view' });
-    },
-
-    'project chips container is gone when no project needs you': async ({ page, open }) => {
-        await open({ tracked: '["gamma"]' });
-        await page.waitFor(`document.getElementById('project')`, { what: 'the header' });
-        assert.equal(await page.ev(`getComputedStyle(document.getElementById('proj-chips')).display`), 'none');
+        const rows = await page.ev(needsRows);
+        assert.ok(rows >= 1);
+        assert.equal(await page.ev(workN), rows, 'the count equals the Needs you rows on the board');
+        assert.ok(!(await page.ev(`${btn}.dataset.other`)), 'nothing waits in the other project now');
+        await page.click('#tabs [data-tab="work"]');
+        assert.equal(await page.ev(`getComputedStyle(document.querySelector('#tabs .work-n')).display`), 'none', 'on Work the group heading says it');
     },
 
     'milestone pill shows the active milestone and its counts': async ({ page, open }) => {

@@ -428,7 +428,7 @@ export const visibleSessions = () => state.sessions.filter(inView);
 // Waits on the user: a question or permission prompt, or idle with a reply that asks for a decision.
 /** @param {Session} s */
 export const waitsOnYou = s => !s.sidechain && (s.asking || (s.needsYou && s.status !== 'working'));
-// Tracked projects (by name) with something waiting on you, for the header chips: Needs you items plus chats asking or needing you.
+// Tracked projects (by name) with something waiting on you, for the project picker's cue: Needs you items plus chats asking or needing you.
 /** @param {Session[]} sessions @param {string[]} tracked @returns {{ project: string, waiting: number }[]} */
 export function projectCounts(sessions, tracked) {
     return [...tracked].sort((a, b) => a.localeCompare(b)).map(project => {
@@ -459,6 +459,14 @@ export const authorSummary = items => {
 };
 /** @param {WorkItem} x */
 const newCount = x => (x.pr ? freshComments(x.comments, seenAt(x.pr)).length : 0);
+// The Work count (the board's title and the phone's Work button): the Needs you rows the board shows now, set by list.js.
+/** @param {number} n */
+export function setWorkCount(n) {
+    for (const badge of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.work-n'))) {
+        badge.textContent = String(n);
+        badge.hidden = !n;
+    }
+}
 // Counts every tracked project, not only the selected one: the tab title is how another project's waiting chat gets seen.
 export function updateTitle() {
     const tracked = state.sessions.filter(isTracked);
@@ -466,11 +474,6 @@ export function updateTitle() {
     const asking = Math.max(tracked.filter(waitsOnYou).length, state.asking ? 1 : 0);
     const n = tracked.flatMap(s => s.items || []).filter(x => x.column === 'needs-you' || x.column === 'ready' || newCount(x)).length + asking;
     document.title = n ? `(${n}) Homebase` : 'Homebase';
-    // the same count on the Work segment in the header and on the phone's Work button (index.html)
-    for (const badge of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.work-n'))) {
-        badge.textContent = String(n);
-        badge.hidden = !n;
-    }
 }
 
 // A transcript model id (claude-opus-5-5) as its family name for the chat's model chip; null for none or <synthetic>.

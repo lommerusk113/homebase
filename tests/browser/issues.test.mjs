@@ -12,7 +12,6 @@ export default {
             { name: 'Ann', you: false, cards: ['issue:6'] },
             { name: 'Unassigned', you: false, cards: ['issue:7'] }
         ]);
-        assert.deepEqual(await page.ev(`(b => [b.textContent, b.title, b.hidden])(document.getElementById('tab-open'))`), ['4', '4 open, 1 unassigned', false], 'the Issues segment counts the open issues');
         assert.equal(await page.ev(`document.querySelector('#issues .is-big').textContent`), '4 open of 5');
     },
 

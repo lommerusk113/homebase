@@ -257,6 +257,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); box-shadow:none; tran
 .tools.compact { align-self:stretch; display:flex; align-items:center; gap:10px; padding:0; }
 .tools.compact::before { content:''; flex:1; border-top:1px solid var(--line); }
 .tools.compact::after { content:''; flex:1; border-top:1px solid var(--line); }
+.c-feed.needs-only .tools.c-new { display:flex; }
 #status-text { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 .c-status .pulse { flex-shrink:0; width:6px; height:6px; background:var(--c); animation:none; }
 .c-status.working { --c:var(--c-doing); color:var(--c-doing); }

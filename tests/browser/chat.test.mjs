@@ -170,6 +170,27 @@ export default {
         assert.ok(await page.ev(`(() => { const t = ${bubble('message 10')}.getBoundingClientRect().top; return t >= ${box}.top - 30 && t < ${box}.bottom; })()`), 'the view stays at what was the top');
     },
 
+    'a New divider marks what came since you left, until you scroll back to the bottom': async ({ page, open, IDS, answerPosts }) => {
+        const say = (text, n) => ({ type: 'assistant', timestamp: new Date(Date.UTC(2026, 10, 14, 10, n)).toISOString(), message: { content: [{ type: 'text', text }] } });
+        const turn = { type: 'user', message: { content: '<system-reminder>x</system-reminder>' } };
+        const { items } = chatFeed(Array.from({ length: 40 }, (_, n) => [turn, say(`message ${n}`, n)]).flat());
+        const key = `last-seen:${IDS.master}`;
+        await open({ [key]: String(Date.UTC(2026, 10, 14, 10, 35, 30)) });
+        page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: false, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        await page.waitFor(`${bubble('message 39')}`, { what: 'the routed feed' });
+        await page.waitFor(`document.querySelector('#feed .c-new')?.nextElementSibling === ${bubble('message 36')}`, { what: 'the New divider above the first later item' });
+        assert.equal(await page.ev(`document.querySelectorAll('#feed .c-new').length`), 1);
+        assert.equal(await page.ev(`document.querySelector('#feed .c-new').matches('.tools.compact') && document.querySelector('#feed .c-new').textContent`), 'New');
+        await page.ev(`document.getElementById('feed').scrollTop = 0`);
+        await page.ev(`new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))`);
+        assert.ok(await page.ev(`!!document.querySelector('#feed .c-new')`), 'scrolling up keeps it');
+        await page.ev(`document.getElementById('feed').scrollTop = document.getElementById('feed').scrollHeight`);
+        await page.waitFor(`!document.querySelector('#feed .c-new') && localStorage.getItem(${JSON.stringify(key)}) === ''`, { what: 'the divider to clear at the bottom' });
+        await page.ev(`window.dispatchEvent(new Event('blur'))`);
+        assert.ok(Number(await page.ev(`localStorage.getItem(${JSON.stringify(key)})`)) > Date.now() - 60_000, 'leaving marks the time');
+        await page.ev(`window.dispatchEvent(new Event('focus'))`);
+    },
+
     'an API error shows as a red line': async ({ page, open }) => {
         await open();
         await ready(page);

@@ -47,6 +47,9 @@ const FEED_STEP = 60; // items per load; "Show earlier" adds this many
 let feedMax = { sid: '', max: FEED_STEP };
 /** @type {number | null} */
 let keepFromBottom = null; // set by "Show earlier": the next render keeps the view where it was
+/** @type {number | null} */
+let ownScroll = null; // where the last render scrolled the feed, so its scroll event isn't taken for the user's
+let away = false; // the window lost focus or was hidden; back on focus
 
 // cleared:<id> holds a timestamp (Clear view) or {"at","mode":"new"} (New conversation: the same cut, but not a "hidden" one)
 /** @param {string | null} raw @returns {{ at: number, fresh: boolean }} */
@@ -709,7 +712,8 @@ export async function refreshChat() {
 
     const { items, hidden, cut } = feedItems(s, data);
     const fresh = cut.fresh || !!s.clearedFrom; // a New conversation, before or after the successor is bound
-    const key = s.id + JSON.stringify([items, data.asking, data.working, hidden, data.earlier]);
+    const lastSeen = Number(store.get(`last-seen:${s.id}`)) || Infinity;
+    const key = s.id + JSON.stringify([items, data.asking, data.working, hidden, data.earlier, lastSeen]);
     if (key === chatKey) {
         return;
     }
@@ -730,8 +734,9 @@ export async function refreshChat() {
         && !items.slice(n + 1).some(x => x.role === 'user');
     const latest = items.findLastIndex(i => i.role === 'assistant');
     const before = new Set([...feed.querySelectorAll('[data-key]')].map(b => /** @type {HTMLElement} */ (b).dataset.key));
+    const firstNew = items.findIndex(i => Date.parse(i.at) > lastSeen);
     let topic = null;
-    feed.replaceChildren(...items.map((i, n) => {
+    feed.replaceChildren(...items.flatMap((i, n) => {
         const prev = topic;
         if (i.role === 'assistant') {
             topic = i.topic;
@@ -743,7 +748,7 @@ export async function refreshChat() {
             b.classList.add('enter');
         }
 
-        return b;
+        return n === firstNew ? [el('div', 'tools compact c-new', 'New'), b] : [b];
     }));
 
     if (hidden && !cut.fresh) {
@@ -768,9 +773,38 @@ export async function refreshChat() {
     }
 
     addShowMore(feed);
+    const was = feed.scrollTop;
     feed.scrollTop = keepFromBottom !== null ? feed.scrollHeight - keepFromBottom : first || atBottom || stick ? feed.scrollHeight : top;
+    ownScroll = feed.scrollTop !== was ? feed.scrollTop : null;
     stick = false;
     keepFromBottom = null;
+}
+
+// "New since you looked": leaving the window marks the time per session (kept while an older mark is unread, i.e. the
+// feed is scrolled up); the feed draws a New divider above the first later item, gone once you're back and scroll to the bottom.
+function initNewMarker() {
+
+    const feed = $('feed');
+    const bottom = () => feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX;
+    const leave = () => {
+        const s = chatSession();
+        if (s && (!store.get(`last-seen:${s.id}`) || bottom())) {
+            store.set(`last-seen:${s.id}`, String(Date.now()));
+        }
+        away = true;
+    };
+
+    window.addEventListener('blur', leave);
+    window.addEventListener('focus', () => { away = false; });
+    document.addEventListener('visibilitychange', () => (document.hidden ? leave() : (away = false)));
+    feed.addEventListener('scroll', () => {
+        const own = feed.scrollTop === ownScroll, s = chatSession();
+        ownScroll = null;
+        if (!own && !away && s && store.get(`last-seen:${s.id}`) && bottom()) {
+            store.set(`last-seen:${s.id}`, '');
+            refreshChat();
+        }
+    });
 }
 
 /** @param {string} sid @param {string} key */
@@ -951,6 +985,7 @@ function setAutoCompact(on) {
 export function initChat() {
     setNeedsOnly(store.get('needs-only') === '1');
     setAutoCompact(store.get('auto-compact') === '1');
+    initNewMarker();
     $('msg').addEventListener('input', () => {
         syncSend();
         saveDraft(draftStorage(), chatSession()?.id, $('msg'));

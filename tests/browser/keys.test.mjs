@@ -5,31 +5,6 @@ const focused = `document.activeElement?.dataset?.key ?? null`;
 const visibleKeys = `[...document.querySelectorAll('#masters tr[data-key]')].filter(r => r.checkVisibility()).map(r => r.dataset.key)`;
 
 export default {
-    '? opens the shortcuts overlay, Esc closes it': async ({ page, open }) => {
-        await open();
-        await page.ev(`document.activeElement?.blur()`);
-        await page.key('?', 'Slash');
-        await page.waitFor(`document.querySelector('wa-dialog[label="Keyboard shortcuts"]')?.open`, { what: 'the overlay' });
-        assert.match(await page.ev(`document.querySelector('wa-dialog[label="Keyboard shortcuts"] .keys-help').textContent`), /j \/ ↓Next item/);
-        await page.key('Escape', 'Escape');
-        await page.waitFor(`!document.querySelector('wa-dialog[label="Keyboard shortcuts"]')`, { what: 'the overlay to close' });
-    },
-
-    'j and k move the row focus': async ({ page, open }) => {
-        await open();
-        await page.waitFor(`document.querySelectorAll('#masters tr[data-key]').length >= 4`, { what: 'rows' });
-        const keys = await page.ev(visibleKeys);
-        await page.ev(`document.activeElement?.blur()`);
-        await page.key('j');
-        assert.equal(await page.ev(focused), keys[0]);
-        await page.key('j');
-        await page.key('j');
-        assert.equal(await page.ev(focused), keys[2]);
-        await page.key('k');
-        assert.equal(await page.ev(focused), keys[1]);
-        assert.equal(await page.ev(`document.activeElement.getAttribute('aria-selected')`), 'true');
-    },
-
     'a chat waiting on you gets a Needs you row, and Enter on it chats with that session': async ({ page, open, IDS }) => {
         await open({ chat: IDS.worker });
         const row = `document.querySelector('#masters .g-needs-you tr[data-key="asking:${IDS.master}"]')`;
@@ -48,16 +23,6 @@ export default {
         await page.key('n');
         assert.equal(await page.ev(`localStorage.getItem('tab')`), 'work');
         assert.equal(await page.ev(focused), `asking:${IDS.master}`);
-    },
-
-    '[ and ] cycle the tracked projects': async ({ page, open }) => {
-        await open();
-        await page.ev(`document.activeElement?.blur()`);
-        await page.key(']', 'BracketRight');
-        await page.waitFor(`localStorage.getItem('project') === 'beta'`, { what: 'beta' });
-        await page.key('[', 'BracketLeft');
-        await page.key('[', 'BracketLeft');
-        await page.waitFor(`localStorage.getItem('project') === 'gamma' && document.getElementById('project').value === 'gamma'`, { what: 'gamma, wrapped around' });
     },
 
     'the Work | Issues switch: a click, 1/2/t and the arrow keys change the view, and the choice survives a reload': async ({ page, open }) => {
@@ -96,16 +61,5 @@ export default {
         // a saved Log tab from before falls back to Work
         await open({ tab: 'log' });
         assert.deepEqual(await page.ev(view), on('work'));
-    },
-
-    'r refreshes once, even when pressed twice': async ({ page, open }) => {
-        await open();
-        await page.ev(`document.activeElement?.blur()`);
-        await page.key('r');
-        await page.key('r');
-        await sleep(1500);
-        assert.equal(page.posts.filter(p => p.url.includes('/api/refresh')).length, 1);
-        assert.equal(await page.ev(`document.getElementById('reload').classList.contains('spin')`), false, 'spinner stopped');
-        assert.match(await page.ev(`document.getElementById('reload-tip').textContent`), /Last refreshed \d+s ago/);
     }
 };

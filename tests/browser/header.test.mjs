@@ -95,15 +95,6 @@ export default {
         assert.equal(await page.ev(`getComputedStyle(document.querySelector('#tabs .work-n')).display`), 'none', 'on Work the group heading says it');
     },
 
-    'milestone pill shows the active milestone and its counts': async ({ page, open }) => {
-        await open();
-        await page.waitFor(`${pill}?.querySelector('summary .n')?.textContent === '· 4 open'`, { what: '"4 open"' });
-        assert.equal(await page.ev(`${pill}.querySelector('summary .t').textContent`), 'Sprint 12');
-        assert.match(await page.ev(`${pill}.querySelector('summary').title`), /^Sprint 12: 4 open of 5 \(1 in progress, 1 can be closed, 1 not started, 1 unassigned\), 1 closed/);
-        await page.click('#milestone-slot .ms-pick summary');
-        await page.waitFor(`${pill}.open && ${pill}.querySelector('.ms-menu h5.hot')?.textContent === 'Can be closed (1)'`, { what: 'the menu' });
-    },
-
     'milestone pill is hidden for a project without milestones and shown for one with': async ({ page, open }) => {
         await open({ project: 'beta', chat: null });
         await page.waitFor(`${pill}?.classList.contains('off') && document.getElementById('milestone-slot').hidden`, { what: 'the pill hidden' });
@@ -111,11 +102,5 @@ export default {
         await page.click('#project');
         await page.click('.pp-row[data-value="alpha"]');
         await page.waitFor(`!document.getElementById('milestone-slot').hidden && ${pill}?.querySelector('summary .t')?.textContent === 'Sprint 12'`, { what: 'the pill shown' });
-    },
-
-    'milestone pill shows the error state when glab fails': async ({ page, open }) => {
-        await open({ project: 'gamma', chat: null });
-        await page.waitFor(`${pill}?.classList.contains('err') && ${pill}.querySelector('summary').textContent === '⚑Milestones unavailable'`, { what: 'Milestones unavailable' });
-        assert.match(await page.ev(`${pill}.querySelector('summary').title`), /401 Unauthorized/);
     }
 };

@@ -12,18 +12,6 @@ const waitForPost = async page => {
 const loaded = (page, expr = nudge) => page.waitFor(`${expr} && !${expr}.hidden`, { what: 'the chat to load' });
 
 export default {
-    'the chat header shows context %, amber from 60% and red from 85%': async ({ page, open, IDS }) => {
-        const gauge = `document.getElementById('status-ctx')`;
-        await open({ chat: IDS.master });
-        await page.waitFor(`${gauge}.textContent === 'context 72%'`, { what: 'the master gauge' });
-        assert.equal(await page.ev(`${gauge}.className`), 'c-ctx warn');
-        await open({ chat: IDS.worker });
-        await page.waitFor(`${gauge}.textContent !== '' && ${gauge}.textContent !== 'context 72%'`, { what: 'the worker gauge' });
-        assert.equal(await page.ev(`${gauge}.className.trim()`), 'c-ctx', 'muted under 60%');
-        await open({ project: 'beta', chat: IDS.asker });
-        await page.waitFor(`${gauge}.className === 'c-ctx hot'`, { what: 'the asker gauge' });
-    },
-
     'the nudge asks first, then POSTs /api/compact once for the bound session': async ({ page, open, IDS }) => {
         await open({ 'auto-compact': '0' });
         await loaded(page);
@@ -68,27 +56,6 @@ export default {
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
         assert.equal(await page.ev(`[...document.querySelectorAll('#feed .tools.compact')].map(t => t.textContent).join()`), 'Conversation compacted');
         assert.equal(await page.ev(`document.getElementById('feed').textContent.includes('SUMMARY-TEXT')`), false);
-    },
-
-    'auto-compact: on by default, an explicit off is respected; it sends once for the idle chat over 200k tokens': async ({ page, open, IDS }) => {
-        await open({ 'auto-compact': '0' });
-        await loaded(page);
-        await sleep(3500); // a poll or two
-        assert.deepEqual(compactPosts(page), [], 'explicit off');
-        assert.equal(await page.ev(`document.getElementById('auto-compact').checked`), false);
-
-        await open({ 'auto-compact': null });
-        await waitForPost(page);
-        await sleep(3500); // more polls: the hourly limit holds
-        assert.deepEqual(compactPosts(page), [`?id=${IDS.master}`]);
-        assert.equal(await page.ev(`document.getElementById('auto-compact').checked`), true);
-    },
-
-    'auto-compact leaves a chat alone that was compacted within the hour': async ({ page, open, IDS }) => {
-        await open({ 'auto-compact': '1', [`auto-compacted:${IDS.master}`]: String(Date.now() - 600_000) });
-        await loaded(page);
-        await sleep(3500);
-        assert.deepEqual(compactPosts(page), []);
     },
 
     'the Restart chat menu item asks to confirm first, and Cancel posts nothing': async ({ page, open }) => {

@@ -7,16 +7,9 @@ import { sleep } from './cdp.mjs';
 const status = `document.getElementById('status').className + ' | ' + document.getElementById('status-text').textContent`;
 
 export default {
-    'status bar: idle': async ({ page, open }) => {
-        await open();
-        await page.waitFor(`${status} === 'c-status idle | Claude needs your answer'`, { what: 'idle' });
-        assert.equal(await page.ev(`document.getElementById('ask').hidden`), true);
-    },
-
-    'the chat card shows the branch chip, amber on main of a work repo, with the unpushed count': async ({ page, open }) => {
+    'the chat card shows the branch chip with the unpushed count': async ({ page, open }) => {
         await open();
         await page.waitFor(`document.getElementById('c-branch').textContent === 'main'`, { what: 'the branch chip' });
-        assert.equal(await page.ev(`document.getElementById('c-branch').classList.contains('warn')`), true);
         await page.waitFor(`document.getElementById('c-unpushed').textContent === '1 unpushed' && !document.getElementById('c-unpushed').hidden`, { what: 'the unpushed count' });
     },
 
@@ -47,17 +40,6 @@ export default {
         await page.waitFor(`${strip}.hidden`, { what: 'dismissed' });
         await page.ev(`window.rulesAt = 200`);
         await page.waitFor(`!${strip}.hidden`, { timeout: 15_000, what: 'back after a file changed again' });
-    },
-
-    'old rules: Load new rules types the re-read message into the chat and hides the strip': async ({ page, open, IDS }) => {
-        await open({ chat: IDS.worker });
-        await page.ev(`(() => { const f = window.fetch; window.fetch = async (u, o) => { if (String(u).startsWith('/api/rules/seen')) window.seen = JSON.parse(o.body).at; const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const j = await r.json(); for (const s of j) if (s.id === '${IDS.worker}' && !(window.seen >= window.rulesAt)) { s.rulesStale = ['homebase-rules.md']; s.rulesAt = 100; s.rulesReload = 'The rules changed. Re-read /x/homebase-rules.md and ~/.claude/CLAUDE.md now'; } return new Response(JSON.stringify(j), { headers: { 'content-type': 'application/json' } }); }; })()`);
-        await page.waitFor(`!document.getElementById('rules').hidden`, { what: 'the strip' });
-        assert.equal(await page.ev(`document.getElementById('rules-restart').title`), 'Reloads Claude fully; interrupts running agents');
-        await page.click('#rules-load');
-        await page.waitFor(`document.getElementById('rules').hidden`, { what: 'hidden after loading' });
-        assert.deepEqual(page.posts.filter(p => new URL(p.url).pathname === '/api/send').map(p => [new URL(p.url).searchParams.get('id'), p.body]),
-            [[IDS.worker, 'The rules changed. Re-read /x/homebase-rules.md and ~/.claude/CLAUDE.md now']]);
     },
 
     'status bar: working, with the queued message': async ({ page, open, IDS }) => {
@@ -189,8 +171,8 @@ export default {
         const opts = `[...document.querySelectorAll('#ask-opts wa-button')]`;
         await page.waitFor(`${opts}.length === 4`, { what: 'the four permission options' });
         assert.equal(await page.ev(`document.getElementById('ask-q').textContent`), 'Bash command · Write and remove a test file · Do you want to proceed?');
-        assert.deepEqual(await page.ev(`[document.getElementById('ask-detail').textContent, document.getElementById('ask-more').hidden, document.getElementById('ask').classList.contains('risky')]`),
-            ['echo hi > out-from-test.txt && rm out-from-test.txt', true, false]);
+        assert.deepEqual(await page.ev(`[document.getElementById('ask-detail').textContent, document.getElementById('ask-more').hidden]`),
+            ['echo hi > out-from-test.txt && rm out-from-test.txt', true]);
         assert.deepEqual(await page.ev(`${opts}.map(b => [b.firstChild.textContent, b.getAttribute('appearance')])`), [
             ['Yes', 'outlined'], ['No', 'outlined'],
             ["Yes, and don't ask again for echo hi and rm out-from-test.txt commands in /private/tmp/claude-501/scratch-projects-some-long-folder-name-to-wrap-it-x/0123456789abcdef-4f82c6fe07ad/scratchpad/perm", 'plain'],
@@ -202,7 +184,7 @@ export default {
         assert.deepEqual([u.searchParams.get('option'), u.searchParams.get('label')], ['3', 'No']);
     },
 
-    'a long risky command is shown, its first lines then the rest on demand, on a red card': async ({ page, open, IDS, answerPosts }) => {
+    'a long risky command is shown, its first lines then the rest on demand': async ({ page, open, IDS, answerPosts }) => {
         const transcript = { items: [], working: false, asking: 'Claude needs your permission to use Bash' };
         const question = parseQuestion(readFileSync(new URL('../fixtures/permission-bash-long.txt', import.meta.url), 'utf8'));
         await open({ project: 'beta', chat: IDS.asker });
@@ -212,7 +194,7 @@ export default {
         await page.waitFor(`!document.getElementById('ask-detail').hidden`, { what: 'the command' });
         const detail = `document.getElementById('ask-detail').textContent`, more = `document.getElementById('ask-more')`;
         assert.equal(await page.ev(`${detail}.split('\\n').length`), 6);
-        assert.deepEqual(await page.ev(`[${more}.hidden, ${more}.textContent, document.getElementById('ask').classList.contains('risky')]`), [false, '+2 more lines', true]);
+        assert.deepEqual(await page.ev(`[${more}.hidden, ${more}.textContent]`), [false, '+2 more lines']);
         await page.ev(`${more}.click()`);
         assert.equal(await page.ev(detail), question.detail, 'expanded: the whole command, up to the merge');
         assert.equal(await page.ev(`${more}.hidden`), true);

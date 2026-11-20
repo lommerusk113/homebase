@@ -34,7 +34,7 @@ export default {
         })()`);
         await page.waitFor(`!${byId('boot')}.hidden`, { what: 'the startup panel' });
         assert.equal(await page.ev(`${byId('boot-q')}.textContent`), DIALOG.question);
-        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#boot-opts wa-button')].map(b => b.textContent)`), DIALOG.options);
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#boot-opts wa-button')].map(b => b.firstChild.textContent)`), DIALOG.options);
         assert.equal(await page.ev(`${byId('boot-cmd')}.textContent`), 'tmux attach -t cc-new-newrepo');
 
         // the message box refuses while it is up

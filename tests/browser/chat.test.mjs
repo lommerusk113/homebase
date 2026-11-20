@@ -36,7 +36,7 @@ export default {
         assert.ok(await page.ev(`${bubble('tag the release')}.matches('.bubble.assistant.needs.topical') && ${bubble('tag the release')}.querySelector('.need-pill').textContent === 'needs you'`));
         assert.ok(await page.ev(`${bubble('cookie scope')}.matches('.fyi') && !${bubble('cookie scope')}.querySelector('.need-pill')`), 'a question the user has replied to no longer needs them');
         assert.ok(await page.ev(`${bubble('push the branch')}.matches('.fyi')`), 'a plain reply is FYI');
-        assert.ok(await page.ev(`getComputedStyle(${bubble('tag the release')}).borderLeftWidth === '3px'`));
+        assert.ok(await page.ev(`getComputedStyle(${bubble('tag the release')}, '::before').width === '4px'`), 'the amber strip');
     },
 
     '"Claude needs your answer" and the needs-you pill scroll to and focus the newest needs-you bubble': async ({ page, open }) => {
@@ -79,7 +79,8 @@ export default {
     'quick replies under a closing question send as an answer tag': async ({ page, open, IDS }) => {
         await open();
         await ready(page);
-        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#feed .replies wa-button')].map(b => b.textContent)`), ['Yes', 'Do both', 'No']);
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#feed .replies wa-button')].map(b => b.firstChild.textContent)`), ['Yes', 'Do both', 'No']);
+        assert.ok(await page.ev(`!!${bubble('tag the release')}.querySelector('.replies')`), 'the options sit inside the card that asks');
         await page.click('#feed .replies wa-button:last-child');
         await page.waitFor(`${bubble('tag the release')}.querySelector('.answer')?.textContent === '✕ You: No · sending…'`, { what: 'the answer tag' });
         assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [[`/api/send?id=${IDS.master}`, 'No']]);
@@ -94,8 +95,8 @@ export default {
         await ready(page);
         page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: true, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
         await page.waitFor(`${bubble('link them from the README')}`, { what: 'the newest bubble' });
-        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#feed .replies')].map(r => r.previousElementSibling.textContent.includes('README'))`), [false], 'chips only under the older question while Claude works');
-        await page.clickOn(`${bubble('tag the release')}.nextElementSibling.querySelector('wa-button:last-child')`);
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#feed .replies')].map(r => r.closest('.bubble').textContent.includes('README'))`), [false], 'chips only under the older question while Claude works');
+        await page.clickOn(`${bubble('tag the release')}.querySelector('.replies wa-button:last-child')`);
         await page.waitFor(`${bubble('tag the release')}.querySelector('.answer')?.textContent === '✕ You: No · sending…'`, { what: 'the answer tag on the older question' });
         assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]),
             [[`/api/send?id=${IDS.master}`, 'No\n\n(Answering your earlier question from 2026-11-14T10:00:00.000Z: "Should I tag the release?")']]);
@@ -112,8 +113,8 @@ export default {
         await page.waitFor(`${b}?.querySelector('.b-options')`, { what: 'the options outside the fold' });
         assert.equal(await page.ev(`${b}.querySelector('.body:not(.b-options)').hidden`), true, 'the rest is folded');
         assert.match(await page.ev(`${b}.querySelector('.b-options').textContent`), /Which one should be the default\?[\s\S]*Postgres[\s\S]*SQLite/);
-        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#feed .replies wa-button')].map(c => [c.textContent, c.getAttribute('appearance')])`),
-            [['Postgres (Recommended)', 'accent'], ['SQLite', 'filled-outlined']], 'one chip per option, the recommended one primary');
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#feed .replies wa-button')].map(c => [c.firstChild.textContent, c.querySelector('.rec')?.textContent, c.getAttribute('appearance')])`),
+            [['Postgres', 'Recommended', 'accent'], ['SQLite', null, 'outlined']], 'one chip per option, the recommended one primary');
         await page.click('#feed .replies wa-button:last-child');
         await page.waitFor(`${b}.querySelector('.answer')?.textContent === '✓ You: SQLite · sending…'`, { what: 'the answer tag' });
         assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [[`/api/send?id=${IDS.master}`, 'SQLite']]);

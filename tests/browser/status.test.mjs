@@ -24,7 +24,7 @@ export default {
         assert.equal(await page.ev(`document.getElementById('ask').hidden`), false);
         // not in tmux (no pane to answer on): the transcript's question, its options read-only
         await page.waitFor(`document.getElementById('ask-q').textContent === 'Which database should be the default?'`, { what: 'the question' });
-        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#ask-opts .c-opt')].map(l => l.tagName + ' ' + l.textContent)`), ['DIV Postgres', 'DIV SQLite']);
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#ask-opts .c-opt')].map(l => l.tagName + ' ' + l.firstChild.textContent)`), ['DIV Postgres', 'DIV SQLite']);
         assert.equal(await page.ev(`document.getElementById('ask-cmd').textContent`), `tmux attach -t cc-${IDS.asker.slice(0, 8)}`);
         await page.waitFor(`document.title === '(1) Homebase'`, { what: 'the title count' });
     },
@@ -37,8 +37,8 @@ export default {
             : (q.url.includes('/api/question') && (question = null), answerPosts(q)));
         const opts = `[...document.querySelectorAll('#ask-opts wa-button')]`;
         await page.waitFor(`${opts}.length === 3`, { what: 'the option buttons' });
-        assert.deepEqual(await page.ev(`${opts}.map(b => [b.firstChild.textContent, b.querySelector('small')?.textContent, b.getAttribute('variant'), b.getAttribute('appearance')])`),
-            [['SQLite (Recommended)', 'file based', 'brand', 'accent'], ['Postgres', 'from the pane', 'neutral', 'outlined'], ['Chat about this', null, 'neutral', 'plain']],
+        assert.deepEqual(await page.ev(`${opts}.map(b => [b.firstChild.textContent, b.querySelector('small')?.textContent, b.querySelector('.rec')?.textContent, b.getAttribute('variant'), b.getAttribute('appearance')])`),
+            [['SQLite', 'file based', 'Recommended', 'brand', 'accent'], ['Postgres', 'from the pane', null, 'neutral', 'outlined'], ['Chat about this', null, null, 'neutral', 'plain']],
             'Type something left out; the recommended one is primary, Chat about this quiet and last');
         await page.ev(`${opts}[1].click()`);
         await page.waitFor(`document.getElementById('ask').hidden`, { what: 'the card gone once the pane has no question, though the transcript still asks it' });

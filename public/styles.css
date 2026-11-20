@@ -6,6 +6,11 @@
   --shadow:0 8px 24px rgba(140,149,159,.2);
   /* topic hues (chat.js topicHue): no amber/red, those mean needs-you and errors */
   --t0:var(--c-doing); --t1:var(--c-review); --t2:var(--c-ready); --t3:#bf3989; --t4:#0f766e; --t5:#4d7c0f; --t6:#4338ca; --t7:#0e7490;
+  /* chat cards; needs-you is the one loud colour */
+  --card-r:14px; --ease:cubic-bezier(.2,.8,.2,1);
+  --card-shadow:0 1px 2px rgba(31,35,40,.06), 0 2px 8px rgba(31,35,40,.04);
+  --card-shadow-hi:0 1px 2px rgba(31,35,40,.08), 0 8px 24px rgba(188,76,0,.12);
+  --needs-bg:color-mix(in srgb, var(--c-needs) 6%, var(--bg)); --needs-line:color-mix(in srgb, var(--c-needs) 35%, transparent);
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -15,6 +20,9 @@
     --c-warn:#d29922; --c-danger:#f85149;
     --shadow:0 8px 24px rgba(1,4,9,.75);
     --t3:#db61a2; --t4:#2dd4bf; --t5:#a3e635; --t6:#b08968; --t7:#22d3ee;
+    --card-shadow:0 0 0 1px rgba(255,255,255,.02), 0 2px 8px rgba(0,0,0,.4);
+    --card-shadow-hi:0 0 0 1px rgba(219,109,40,.15), 0 8px 28px rgba(219,109,40,.14);
+    --needs-bg:color-mix(in srgb, var(--c-needs) 9%, var(--bg));
   }
 }
 /* Web Awesome theme tokens mapped onto ours. Unlayered, so they win over the theme's layered values in light and dark. */
@@ -142,22 +150,35 @@ a.chip:hover { text-decoration:underline; }
 .c-hidden .show, .c-newer .show, .c-status .show { padding:0; }
 .c-feed { flex:1; overflow:auto; padding:14px 12px; display:flex; flex-direction:column; gap:10px; background:var(--canvas); }
 .bubble { flex-shrink:0; max-width:92%; border-radius:12px; padding:2px 12px; font-size:13.5px; line-height:1.6; overflow-wrap:anywhere; }
-.bubble.assistant { position:relative; align-self:flex-start; background:var(--bg); border:1px solid var(--line); border-bottom-left-radius:4px; }
-.bubble.user { align-self:flex-end; max-width:85%; background:var(--accent-bg); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-bottom-right-radius:4px; }
+/* only a bubble new since the last render (chat.js adds .enter), as the feed is redrawn whole */
+.bubble.enter { animation:rise .35s var(--ease) both; }
+@keyframes rise { from { opacity:0; transform:translateY(6px); } }
+@keyframes ping { 0% { box-shadow:0 0 0 0 color-mix(in srgb, var(--c-needs) 55%, transparent); } 70%, 100% { box-shadow:0 0 0 6px transparent; } }
+/* Claude's replies are cards: a topic pill and the time, the TLDR as the body, the rest under a dashed line */
+.bubble.assistant { position:relative; align-self:stretch; max-width:none; background:var(--bg); border:1px solid var(--line-soft); border-radius:var(--card-r); box-shadow:var(--card-shadow); padding:10px 14px 8px; transition:border-color .2s; }
+.bubble.assistant:hover { border-color:var(--line); }
+.bubble.user { align-self:flex-end; max-width:85%; background:var(--accent-bg); border:1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius:14px 14px 4px 14px; }
 .bubble.interrupted { border-left:3px solid var(--c-interrupted); background:color-mix(in srgb, var(--c-interrupted) 7%, var(--bg)); }
 .bubble .body.fold { max-height:9.6em; overflow:hidden; -webkit-mask-image:linear-gradient(#000 60%, transparent); mask-image:linear-gradient(#000 60%, transparent); }
-.bubble .b-topic { display:flex; align-items:center; gap:6px; font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--tc, var(--accent)); margin:6px 0 -4px; }
-.bubble .b-topic-name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-/* Attention scheme. needs: amber edge + tint + pill, full contrast. fyi: compact and muted, skippable.
-   The newest Claude bubble keeps normal contrast even when fyi. Topic: a tick in its hue at the top-left of every bubble. */
-.bubble.topical::before { content:''; position:absolute; top:-1px; left:12px; width:20px; height:3px; border-radius:0 0 3px 3px; background:var(--tc); }
-.bubble.needs { border-left:3px solid var(--c-needs); background:color-mix(in srgb, var(--c-needs) 7%, var(--bg)); }
-.need-pill { appearance:none; border:0; font:inherit; text-transform:inherit; cursor:pointer; display:inline-flex; align-items:center; gap:4px; flex-shrink:0; padding:0 7px; border-radius:99px; font-size:10px; line-height:16px; letter-spacing:.04em; color:var(--c-needs); background:color-mix(in srgb, var(--c-needs) 16%, transparent); }
-.need-pill .unread { width:6px; height:6px; border-radius:50%; background:var(--c-needs); }
-.bubble.fyi:not(.latest) { font-size:12.5px; border-color:var(--line-soft); background:color-mix(in srgb, var(--bg) 55%, var(--canvas)); }
-.bubble.fyi:not(.latest) .lead { font-size:13px; margin:5px 0; color:var(--muted); }
-.bubble.fyi:not(.latest) .lead strong { color:inherit; }
-.bubble.fyi:not(.latest) .show { padding-bottom:5px; }
+.bubble .b-topic { display:flex; align-items:center; gap:6px; min-width:0; margin-bottom:4px; }
+.bubble .b-topic-name { min-width:0; max-width:70%; padding:0 9px 0 7px; border-radius:99px; font-size:11.5px; font-weight:600; line-height:20px; color:var(--tc, var(--accent)); background:color-mix(in srgb, var(--tc, var(--accent)) 11%, transparent); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bubble .b-topic-name::before { content:''; display:inline-block; width:6px; height:6px; margin-right:6px; border-radius:2px; vertical-align:1px; background:currentColor; }
+.b-time { margin-left:auto; flex-shrink:0; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
+.bubble .lead { margin:2px 0 4px; }
+.bubble .lead:not([hidden]) ~ .body:not(.b-options) { margin-top:8px; padding-top:2px; border-top:1px dashed var(--line); }
+.bubble .show { display:inline-flex; align-items:center; gap:4px; padding:2px 0 4px; color:var(--muted); }
+.bubble .show:hover { color:var(--accent); }
+.bubble .show::after { content:'›'; font-size:15px; line-height:1; transition:transform .2s var(--ease); }
+.bubble .show[aria-expanded="true"]::after { transform:rotate(90deg); }
+/* Attention scheme. needs: an amber strip, tint and glow, the one loud colour. fyi: older ones flat and muted, skippable.
+   The newest Claude bubble keeps normal contrast even when fyi. */
+.bubble.needs { background:var(--needs-bg); border-color:var(--needs-line); box-shadow:var(--card-shadow-hi); padding-left:18px; overflow:hidden; }
+.bubble.needs::before, .c-ask::before { content:''; position:absolute; inset:0 auto 0 0; width:4px; background:var(--c-needs); }
+.need-pill { appearance:none; border:0; font:inherit; cursor:pointer; display:inline-flex; align-items:center; gap:5px; flex-shrink:0; padding:0 8px; border-radius:99px; font-size:11px; font-weight:600; line-height:20px; color:var(--c-needs); background:color-mix(in srgb, var(--c-needs) 15%, transparent); }
+.need-pill .unread { width:6px; height:6px; border-radius:50%; background:var(--c-needs); animation:ping 2s var(--ease) infinite; }
+.bubble.fyi:not(.latest) { font-size:12.5px; background:transparent; box-shadow:none; padding:7px 12px 5px; }
+.bubble.fyi:not(.latest) .lead { font-size:13px; color:var(--muted); }
+.bubble.fyi:not(.latest) .lead strong { color:var(--fg); }
 .c-feed.needs-only .bubble.fyi:not(.latest), .c-feed.needs-only .tools { display:none; }
 .bubble .b-note { font-size:11px; color:var(--muted); margin:-6px 0 6px; }
 .bubble.failed { border-color:var(--c-needs); }
@@ -178,21 +199,33 @@ a.chip:hover { text-decoration:underline; }
 .c-feed.needs-only .tools.api-error { display:block; }
 .c-note { margin:0 12px 8px; padding:8px 10px; border-radius:8px; font-size:12.5px; display:flex; gap:8px; align-items:center; }
 /* Claude is asking / startup question: a label, the question as the heading, an option per button, the terminal as a quiet fallback */
-.c-ask { flex-direction:column; align-items:stretch; gap:6px; padding:10px 12px; background:color-mix(in srgb, var(--c-needs) 8%, var(--bg)); border:1px solid color-mix(in srgb, var(--c-needs) 40%, transparent); }
-.c-ask-label { font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
-.c-ask-q { font-size:14px; font-weight:600; color:var(--fg); overflow-wrap:anywhere; }
-.c-opts { display:flex; flex-direction:column; gap:6px; }
+.c-ask { position:relative; overflow:hidden; flex-direction:column; align-items:stretch; gap:6px; padding:12px 14px 8px 18px; border-radius:var(--card-r); background:var(--needs-bg); border:1px solid var(--needs-line); box-shadow:var(--card-shadow-hi); animation:rise .35s var(--ease) both; }
+.c-ask-label { display:flex; align-items:center; gap:7px; font-size:11px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:var(--c-needs); }
+.c-ask-label::before { content:''; width:7px; height:7px; border-radius:50%; background:var(--c-needs); animation:ping 2s var(--ease) infinite; }
+.c-ask-q { margin-bottom:4px; font-size:15px; font-weight:600; line-height:1.4; color:var(--fg); overflow-wrap:anywhere; }
+.c-opts { display:grid; gap:6px; }
 .c-opts:empty { display:none; }
-wa-button.c-opt::part(base) { height:auto; min-height:var(--wa-form-control-height); padding-block:6px; justify-content:flex-start; text-align:left; white-space:normal; }
-wa-button.c-opt::part(label) { display:flex; flex-direction:column; align-items:flex-start; gap:1px; }
-.c-opt small { font-size:11.5px; font-weight:400; opacity:.75; }
-.c-opt.ro { display:flex; flex-direction:column; padding:6px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); font-weight:500; }
+/* Big options (chat.js optButton), in the ask card and the needs-you card: a number badge, the label, "Recommended" on the primary one */
+.replies { display:grid; gap:6px; margin:10px 0 6px; }
+/* min-height: their height before they render, so scrolling to the bottom shows them whole */
+wa-button.c-opt { display:block; width:100%; min-height:44px; font-size:13.5px; }
+wa-button.c-opt::part(base) { height:auto; min-height:44px; padding:8px 12px; gap:10px; justify-content:flex-start; text-align:left; white-space:normal; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--fg); transition:transform .12s var(--ease), border-color .15s, box-shadow .15s; }
+wa-button.c-opt:hover:not([disabled])::part(base) { border-color:var(--c-needs); box-shadow:0 2px 8px color-mix(in srgb, var(--c-needs) 14%, transparent); transform:translateY(-1px); }
+wa-button.c-opt::part(label) { flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:1px; }
+wa-button.c-opt.primary::part(base) { border-color:var(--c-needs); background:color-mix(in srgb, var(--c-needs) 9%, var(--bg)); }
+.c-opt .k { flex-shrink:0; display:grid; place-items:center; width:20px; height:20px; border-radius:6px; font-size:11px; font-weight:600; line-height:1; color:var(--muted); background:var(--chip); }
+.c-opt.primary .k { color:#fff; background:var(--c-needs); }
+.c-opt small { font-size:12px; font-weight:400; line-height:1.4; color:var(--muted); }
+.c-opt .rec { flex-shrink:0; padding:0 7px; border-radius:99px; font-size:10.5px; font-weight:600; line-height:18px; letter-spacing:.03em; color:#fff; background:var(--c-needs); }
+wa-button.c-opt.quiet { min-height:0; justify-self:start; width:auto; }
+wa-button.c-opt.quiet::part(base) { min-height:0; padding:2px 6px; border:0; background:none; color:var(--muted); font-size:12.5px; }
+wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); box-shadow:none; transform:none; }
+.c-opt.ro { display:flex; flex-wrap:wrap; align-items:center; gap:2px 10px; min-height:40px; padding:7px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); font-size:13.5px; font-weight:500; }
+.c-opt.ro .k { order:-1; }
+.c-opt.ro small { flex-basis:100%; padding-left:30px; }
 .c-term { display:flex; align-items:center; gap:6px; flex-wrap:wrap; color:var(--muted); font-size:11.5px; }
 .c-term code { background:var(--chip); padding:1px 5px; border-radius:4px; white-space:nowrap; color:var(--fg); }
 .c-copy::part(base) { color:var(--muted); padding-inline:6px; }
-/* min-height: the chips' height before they render, so scrolling to the bottom shows them whole */
-.replies { display:flex; flex-wrap:wrap; gap:6px; flex-shrink:0; margin-top:-4px; min-height:26px; }
-.replies wa-button { font-size:12.5px; }
 /* Input dock: a fixed height (26px status line + 56px one-row input) that never changes, so the feed's height never does.
    Its column is bottom-aligned, so anything taller (a growing textarea, the error, the ask note) overflows upward over the feed. */
 .c-input { position:relative; z-index:1; flex-shrink:0; height:82px; display:flex; flex-direction:column; justify-content:flex-end; }
@@ -214,7 +247,10 @@ wa-button.c-opt::part(label) { display:flex; flex-direction:column; align-items:
 .disconnected .stale-note { display:block; }
 .disconnected .masters { opacity:.5; }
 .c-status:not(.idle) .pulse { animation:pulse 1.2s ease-in-out infinite; }
-@media (prefers-reduced-motion: reduce) { .pulse, .dot.live, .stage .bar i.now { animation:none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  .pulse, .dot.live, .stage .bar i.now, .bubble.enter, .c-ask, .c-ask-label::before, .need-pill .unread { animation:none !important; }
+  .bubble .show::after, wa-button.c-opt::part(base) { transition:none; transform:none !important; }
+}
 .c-row { position:relative; display:flex; padding:4px 12px 12px; background:var(--bg); }
 #msg { flex:1; font-size:13.5px; --wa-form-control-padding-block:8px; --wa-form-control-padding-inline:10px; --wa-form-control-border-radius:8px; }
 #msg::part(textarea) { min-height:38px; max-height:180px; padding-right:44px; overflow:auto; }

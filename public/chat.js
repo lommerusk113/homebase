@@ -162,7 +162,41 @@ function markRead(sid, key, b) {
     b.querySelector('.unread')?.remove();
 }
 
-/** @param {ChatItem} i @param {string} sid @param {string | null} prevTopic @param {{ latest?: boolean, unread?: boolean }} [look] */
+// A big option button, as in the needs-you card and the ask card: a number badge, the label (its "(Recommended)" shown as
+// a badge instead) and an optional description. ro: a read-only row (no pane to answer on). quiet: a plain text
+// button with no number, for "Chat about this".
+/** @param {string} label @param {number} n @param {{ desc?: string, ro?: boolean, quiet?: boolean }} [o] */
+function optButton(label, n, { desc, ro, quiet } = {}) {
+
+    if (quiet && !ro) {
+        return waButton(label, 'c-opt quiet', { variant: 'neutral', appearance: 'plain' });
+    }
+    const rec = /\(recommended\)/i.test(label);
+    const text = label.replace(/\s*\(recommended\)/i, '');
+    const b = ro ? el('div', 'c-opt ro', text) : waButton(text, `c-opt${rec ? ' primary' : ''}`, { variant: rec ? 'brand' : 'neutral', appearance: rec ? 'accent' : 'outlined' });
+    const k = el('span', 'k', String(n + 1));
+    k.slot = 'start';
+    b.append(k);
+    if (desc) {
+        b.append(el('small', null, desc));
+    }
+    if (rec) {
+        const r = el('span', 'rec', 'Recommended');
+        r.slot = 'end';
+        b.append(r);
+    }
+
+    return b;
+}
+
+// "10:42" today, "Nov 14 10:42" before
+/** @param {string} at */
+function shortTime(at) {
+    const d = new Date(at), hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return d.toDateString() === new Date().toDateString() ? hm : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${hm}`;
+}
+
+/** @param {ChatItem} i @param {string} sid @param {string | null} prevTopic @param {{ latest?: boolean, unread?: boolean, replies?: HTMLElement | null }} [look] */
 function bubble(i, sid, prevTopic, look = {}) {
     if (i.role === 'tools') {
         return el('div', `tools${i.quiet ? ' quiet' : ''}`, i.text);
@@ -205,6 +239,9 @@ function bubble(i, sid, prevTopic, look = {}) {
                 b.addEventListener(ev, () => markRead(sid, key, b));
             }
         }
+        if (i.at) {
+            row.append(el('span', 'b-time', shortTime(i.at)));
+        }
         b.append(row);
     }
     if (i.role === 'assistant') {
@@ -228,6 +265,9 @@ function bubble(i, sid, prevTopic, look = {}) {
             row.append(...names.map(n => thumb(imageUrl(n), n)));
             b.append(row);
         }
+    }
+    if (look.replies) {
+        b.append(look.replies);
     }
     if (i.answer) {
         b.append(answerTag(i.answer));
@@ -386,10 +426,7 @@ function fillCard(id, tmux, question, options, answer) {
         $('announce').textContent = `Claude is asking: ${question}`;
     }
     $(`${id}-opts`).replaceChildren(...options.map((o, i) => {
-        const b = answer ? waButton(o.label, 'c-opt', { variant: o.primary ? 'brand' : 'neutral', appearance: o.primary ? 'accent' : o.quiet ? 'plain' : 'outlined' }) : el('div', 'c-opt ro', o.label);
-        if (o.desc) {
-            b.append(el('small', null, o.desc));
-        }
+        const b = optButton(o.label, i, { desc: o.desc, ro: !answer, quiet: o.quiet });
         if (answer) {
             b.onclick = async () => {
                 $('c-err').textContent = '';
@@ -590,8 +627,8 @@ function quickReplyRow(s, data, items, n) {
 
     const note = newest ? undefined : `(Answering your earlier question from ${q.at}: "${questionExcerpt(q)}")`;
     const row = el('div', 'replies');
-    row.append(...q.replies.map(t => {
-        const b = waButton(t, null, { variant: 'brand', appearance: /\(recommended\)/i.test(t) ? 'accent' : 'filled-outlined', pill: true });
+    row.append(...q.replies.map((t, i) => {
+        const b = optButton(t, i);
         b.onclick = () => sendText(s.id, t, q.at, note);
 
         return b;
@@ -672,16 +709,21 @@ export async function refreshChat() {
         && !seen.keys.includes(`${s.id}:${i.at}`)
         && !items.slice(n + 1).some(x => x.role === 'user');
     const latest = items.findLastIndex(i => i.role === 'assistant');
+    const before = new Set([...feed.querySelectorAll('[data-key]')].map(b => /** @type {HTMLElement} */ (b).dataset.key));
     let topic = null;
-    feed.replaceChildren(...items.flatMap((i, n) => {
+    feed.replaceChildren(...items.map((i, n) => {
         const prev = topic;
         if (i.role === 'assistant') {
             topic = i.topic;
         }
 
-        const row = quickReplyRow(s, data, items, n);
+        const b = bubble(i, s.id, prev, { latest: n === latest, unread: unread(i, n), replies: quickReplyRow(s, data, items, n) });
+        // only a bubble new since the last render rises in; a re-render redraws them all
+        if (!first && b.dataset.key && !before.has(b.dataset.key)) {
+            b.classList.add('enter');
+        }
 
-        return [bubble(i, s.id, prev, { latest: n === latest, unread: unread(i, n) }), ...(row ? [row] : [])];
+        return b;
     }));
 
     if (hidden && !cut.fresh) {

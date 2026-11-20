@@ -204,13 +204,8 @@ function reviewRow(r) {
     what.append(b, el('small', 'next', ''));
     what.lastElementChild.append(tag, ` ${r.project} · ${r.author}${r.draft ? ' · draft' : ''} · ${ago(r.updatedAt)}`, ...ciPill(r.pipeline).map(n => (n instanceof HTMLElement ? [' ', n] : [n])).flat());
     tr.append(what);
-    const open = () => window.open(r.url, '_blank', 'noopener');
-    tr.onclick = open;
-    tr.onkeydown = e => {
-        if (e.key === 'Enter') {
-            open();
-        }
-    };
+    tr.dataset.url = r.url;
+    tr.onclick = () => window.open(r.url, '_blank', 'noopener');
     return tr;
 }
 
@@ -225,7 +220,7 @@ function itemRows(x) {
     const live = x.agentStatus === 'running' && x.column === 'doing', stepFor = live && x.stepAt ? ago(x.stepAt) : 'now';
     const next = el('small', 'next', `${live ? 'Now' : 'Next'}: ${x.next}${stepFor === 'now' ? '' : ` · for ${stepFor}`}${fresh.length ? ` · ${fresh.length} new comment${fresh.length === 1 ? '' : 's'}` : ''}`);
     // before Next, so the ellipsis doesn't cut it
-    if (unanswered.has(x.key) && x.action && !x.sent && !x.requested) {
+    if (unanswered.get(x.key) === x.action?.label && x.action && !x.sent && !x.requested) {
         next.prepend(el('span', 'no-reply', 'No response yet — check the chat · '));
     }
     if (x.comments?.count) {
@@ -253,16 +248,7 @@ function itemRows(x) {
         }
     }
     const pr = el('td', 'pr');
-    if (x.pr) {
-        pr.append(prChip(x), ...ciPill(x.prState?.pipeline), ...gateBadge(x.gate));
-        // the lookup failed but an older answer is shown: say it may be out of date (with no answer, Next already says so)
-        if (x.forgeError && x.prState) {
-            const w = el('span', 'ci-pill stale', '⚠');
-            w.tabIndex = 0;
-            w.setAttribute('aria-label', 'May be out of date');
-            pr.append(w, tooltip(w, `Couldn't check this MR just now (${x.forgeError}), so this is what it was last time`));
-        }
-    }
+    pr.append(...prParts(x));
     const br = el('td', 'br');
     if (x.branch) {
         br.append(el('span', 'chip mono', x.branch));
@@ -284,6 +270,23 @@ function itemRows(x) {
     td.append(detail(x));
     more.append(td);
     return [tr, more];
+}
+
+// MR chip, CI pill, gate badge and the out-of-date warning: the row's MR cell, and on a phone (where that cell is hidden) the top of the detail.
+/** @param {WorkItem} x @returns {Node[]} */
+function prParts(x) {
+    if (!x.pr) {
+        return [];
+    }
+    const out = [prChip(x), ...ciPill(x.prState?.pipeline), ...gateBadge(x.gate)];
+    // the lookup failed but an older answer is shown: say it may be out of date (with no answer, Next already says so)
+    if (x.forgeError && x.prState) {
+        const w = el('span', 'ci-pill stale', '⚠');
+        w.tabIndex = 0;
+        w.setAttribute('aria-label', 'May be out of date');
+        out.push(w, tooltip(w, `Couldn't check this MR just now (${x.forgeError}), so this is what it was last time`));
+    }
+    return out;
 }
 
 /** @param {WorkItem[]} list */
@@ -369,7 +372,7 @@ function renderItems() {
     const hadFocus = $('masters').contains(document.activeElement); // replaceChildren drops it; keys.js puts it back
     const strip = renderSessions();
     // nothing open (only the folded Recently finished / Merged, or nothing at all): a calm line under the strip
-    const empty = !groups.some(g => g.localName === 'section') && el('div', strip ? 'd-empty' : 'welcome', 'No MRs or subagents right now');
+    const empty = !groups.some(g => g.localName === 'section' || g.classList.contains('g-review')) && el('div', strip ? 'd-empty' : 'welcome', 'No MRs or subagents right now');
     $('masters').replaceChildren(...[strip, empty, ...groups].filter(Boolean));
     hooks.rendered?.(hadFocus);
 }
@@ -401,7 +404,7 @@ const sent = new Map((() => {
         return [];
     }
 })());
-const unanswered = new Set(); // keys whose mark timed out
+const unanswered = new Map(); // key -> action label whose mark timed out
 const saveSent = () => {
     try {
         sessionStorage.setItem('sent', JSON.stringify([...sent]));
@@ -417,7 +420,7 @@ function optimistic(x, now = Date.now()) {
         sent.delete(x.key);
         saveSent();
         if (!x.requested && x.column !== 'doing') {
-            unanswered.add(x.key);
+            unanswered.set(x.key, x.action?.label);
         }
         return x;
     }
@@ -514,6 +517,11 @@ export function select(x) {
 /** @param {WorkItem} x */
 function detail(x) {
     const d = el('div', 'detail');
+    if (x.pr || x.branch) {
+        const m = el('div', 'd-mr');
+        m.append(...prParts(x), ...(x.branch ? [el('span', 'chip mono', x.branch)] : []));
+        d.append(m);
+    }
     if (x.comments?.count) {
         const fresh = freshComments(x.comments, state.opened?.key === x.key ? state.opened.since : seenAt(x.pr));
         const h = el('h4', null, fresh.length ? `New comments · ${fresh.length}` : `Comments · ${x.comments.count} · none new`), all = el('button', 'show mark-all', 'Mark all seen');
@@ -557,7 +565,7 @@ function detail(x) {
         }));
         d.append(el('h4', null, `Files edited · ${x.files.length}`), ul);
     }
-    if (!d.children.length) {
+    if (!d.querySelector(':scope > :not(.d-mr)')) {
         d.append(el('p', 'muted', 'Nothing to show yet.'));
     }
     d.onclick = e => e.stopPropagation();

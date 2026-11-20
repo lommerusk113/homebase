@@ -404,6 +404,7 @@ wa-details.group::part(icon) { color:var(--muted); font-size:12px; }
 .s-ctx { flex-shrink:0; opacity:.75; }
 .s-ctx.warn { color:var(--c-warn); opacity:1; }
 .s-ctx.hot { color:var(--c-danger); opacity:1; }
+.d-mr { display:none; }
 .s-more { appearance:none; flex-shrink:0; border:0; background:none; color:var(--muted); font:inherit; padding:3px 6px; border-radius:6px; cursor:pointer; }
 .s-more:hover { color:var(--accent); }
 .s-more:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
@@ -641,6 +642,9 @@ wa-details[open] .g-note { display:none; }
   .rows .what { padding:10px 14px 2px; }
   .rows .prog { width:auto; padding-left:14px; }
   .rows .pr, .rows .br { display:none; }
+  .d-mr { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
+  .s-row { flex-wrap:wrap; white-space:normal; }
+  .s-topic { overflow:visible; text-overflow:clip; }
   .rows .act, .rows .when { width:auto; }
   .rows .act wa-button[size="s"] { --wa-form-control-height:40px; font-size:13px; }
 

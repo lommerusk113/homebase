@@ -2,6 +2,7 @@
 import { open, stat, readFile, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { OUR_TMUX } from './tmux.mjs';
 
 export const ROOT = join(homedir(), '.claude', 'projects');
 // ponytail: only the tail is parsed (transcripts reach 70+ MB); subagent token totals use the offset reader below
@@ -16,6 +17,7 @@ export const cache = new Map(); // path -> { mtimeMs, entries }
 // Session ids held by a running Claude Code, from the registry it keeps in ~/.claude/sessions/<pid>.json (it follows
 // /clear and --resume), as a Map id -> its tmux session name ("tmux": "cc-x:@0.%0") or null outside tmux, or when two
 // live processes hold the id in different places; null when there is no registry (older Claude Code), so nothing is inferred.
+// Held in two or more of Homebase's own cc-* tmux sessions, the newest process (startedAt) wins and the others go in live.twice.
 // ponytail: liveness is kill(pid, 0); a reused pid keeps a dead session "live", which is the old behaviour. "tmux" is undocumented
 export async function liveSessions(dir = join(homedir(), '.claude', 'sessions')) {
 
@@ -26,22 +28,34 @@ export async function liveSessions(dir = join(homedir(), '.claude', 'sessions'))
         return null;
     }
 
-    const live = Object.assign(new Map(), { busy: new Set(), started: new Map() }); // busy: registry status "busy"; started: sessionId -> process start (ms)
+    // busy: registry status "busy"; started: sessionId -> process start (ms); twice: sessionId -> the older cc-* tmux names
+    const live = Object.assign(new Map(), { busy: new Set(), started: new Map(), twice: new Map() });
+    const procs = new Map(); // sessionId -> [{ t, startedAt }]
     for (const name of names) {
         try {
             const { pid, sessionId, tmux, status, startedAt } = JSON.parse(await readFile(join(dir, name), 'utf8'));
             if (alive(pid)) {
                 const t = typeof tmux === 'string' ? tmux.split(':')[0] || null : null;
-                live.set(sessionId, live.has(sessionId) && live.get(sessionId) !== t ? null : t);
-                if (startedAt) {
-                    live.started.set(sessionId, startedAt);
-                }
+                procs.set(sessionId, [...(procs.get(sessionId) ?? []), { t, startedAt: startedAt ?? 0 }]);
                 if (status === 'busy') {
                     live.busy.add(sessionId);
                 }
             }
         } catch {
             continue; // half-written or removed as the process exits
+        }
+    }
+
+    for (const [id, ps] of procs) {
+        ps.sort((a, b) => b.startedAt - a.startedAt);
+        const names = [...new Set(ps.map(p => p.t))];
+        const ours = names.every(t => t && OUR_TMUX.test(t));
+        live.set(id, names.length === 1 || ours ? ps[0].t : null);
+        if (names.length > 1 && ours) {
+            live.twice.set(id, names.slice(1));
+        }
+        if (ps[0].startedAt) {
+            live.started.set(id, ps[0].startedAt);
         }
     }
 

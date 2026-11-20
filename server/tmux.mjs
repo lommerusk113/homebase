@@ -78,12 +78,13 @@ export function sendSteps(name, text) {
 }
 
 const LIVE_ELSEWHERE_MS = 2 * 60_000;
+export const ELSEWHERE = 'Claude for this chat is running in a terminal outside Homebase. Quit it there (/exit), then send again.';
 
 // A recently written transcript without our tmux session means Claude runs in another terminal; a second one would share the transcript.
 export function refuseIfLiveElsewhere(ageMs) {
 
     if (ageMs < LIVE_ELSEWHERE_MS) {
-        throw Object.assign(new Error('This session is open in another terminal. Close it there first.'), { status: 409 });
+        throw Object.assign(new Error(ELSEWHERE), { status: 409 });
     }
 }
 

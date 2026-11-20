@@ -14,7 +14,7 @@ import { log } from './server/log.mjs';
 import { MAX_SEND, withLock } from './server/tmux.mjs';
 import { createProject, cloneProject, openProject, githubProjects, localProjects, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion } from './server/startup.mjs';
-import { send, keepModelSetting, sendToNew, interrupt, clearChat, compactChat, restartChat, editors, openInEditor } from './server/control.mjs';
+import { send, runningTwice, keepModelSetting, sendToNew, interrupt, clearChat, compactChat, restartChat, editors, openInEditor } from './server/control.mjs';
 import { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
 import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedRequest, pair, deviceOf, cookieOf, deviceCookie, pairPage, newCode, pairedDevices, revoke } from './server/pairing.mjs';
 import { readConfigFile } from './server/account.mjs';
@@ -37,7 +37,7 @@ export { limitsOf, peakLimits, contextOf } from './server/limits.mjs';
 export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
 export { tmuxArgs, tmuxFor, withLock, findClearedSuccessor, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
 export { parseDialog, parseQuestion, answerQuestion, cancelQuestion, questionOpen, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
-export { editorsFrom, openInEditor, refuseIfBusy, restartChat, promptUp, send, interrupt } from './server/control.mjs';
+export { editorsFrom, openInEditor, refuseIfBusy, restartChat, promptUp, send, runningTwice, interrupt } from './server/control.mjs';
 export { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
 export { remoteFrom, setupPairing, newCode, pair, deviceOf, cookieOf, deviceCookie, pairedDevices, revoke, isRemote, loginOk, isPairedRequest, pairPage, CODE_TTL_MS, MAX_FAILS, FAIL_WINDOW_MS } from './server/pairing.mjs';
 export { validName, mergeConfig, loadConfig, createProject, cloneProject, openProject, allowedDir, githubProjects, localProjects, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
@@ -216,6 +216,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 } else {
                     const restore = /^\/model \w+$/.test(body.trim()) ? await keepModelSetting().catch(() => null) : null; // a pick is for this chat only
                     await send(url.searchParams.get('id'), body, null, { after: restore });
+                    return res.end(await runningTwice(url.searchParams.get('id')) ?? 'ok'); // sent; the text is a warning
                 }
                 return res.end('ok');
             }

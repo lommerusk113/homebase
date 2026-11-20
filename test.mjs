@@ -236,7 +236,7 @@ assert.equal(summarizeAgent({ finished: false }, [tu('Read')], 1_000, 'agent-oth
 console.log('ok stage');
 
 import { refuseIfLiveElsewhere } from './server.mjs';
-assert.throws(() => refuseIfLiveElsewhere(60_000), { status: 409, message: /open in another terminal/ });
+assert.throws(() => refuseIfLiveElsewhere(60_000), { status: 409, message: /outside Homebase/ });
 assert.doesNotThrow(() => refuseIfLiveElsewhere(180_000));
 console.log('ok send guard');
 
@@ -2592,6 +2592,14 @@ import { liveSessions, closedSession } from './server/transcripts.mjs';
     writeFileSync(join(dir, '3.json'), JSON.stringify({ pid: process.pid, sessionId: 'twice', tmux: 'cc-aaaaaaaa:@1.%1' }));
     writeFileSync(join(dir, '4.json'), JSON.stringify({ pid: process.pid, sessionId: 'twice' }));
     assert.deepEqual(Object.fromEntries(await liveSessions(dir)), { up: null, cleared: 'cc-35ed361f', twice: null });
+    // the same id in two of Homebase's own tmux sessions: the newest process wins, the older is listed in twice
+    writeFileSync(join(dir, '5.json'), JSON.stringify({ pid: process.pid, sessionId: 'dup', tmux: 'cc-e9c15e3f:@3.%3', startedAt: 2000 }));
+    writeFileSync(join(dir, '6.json'), JSON.stringify({ pid: process.pid, sessionId: 'dup', tmux: 'cc-f67f8760:@2.%2', startedAt: 1000 }));
+    let dupReg = await liveSessions(dir);
+    assert.equal(dupReg.get('dup'), 'cc-e9c15e3f');
+    assert.deepEqual(dupReg.twice.get('dup'), ['cc-f67f8760']);
+    assert.equal(dupReg.started.get('dup'), 2000);
+    assert.ok(!dupReg.twice.has('twice'), 'one of them outside our tmux is still elsewhere');
     assert.equal(await liveSessions(join(dir, 'nope')), null);
     rmSync(dir, { recursive: true });
 
@@ -2745,7 +2753,7 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
 
 // Send: stubbed tmux and registry, nothing real is touched
 {
-    const { send, withLock, tmuxFor } = await import('./server.mjs');
+    const { send, withLock, tmuxFor, runningTwice } = await import('./server.mjs');
     const sid = 'dddddddd-0000-4000-8000-000000000001', session = { id: sid, cwd: '/tmp', updated: 0 };
     const q = '│ Which one?\n❯ 1. Red\n  2. Blue\nEnter to select · Esc to cancel\n';
     // tmux: live = names has-session finds; panes(calls) = what capture-pane shows
@@ -2774,6 +2782,16 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
         assert.equal((await send(sid, 'hi', session, f.opts(new Map([[sid, t]]))).catch(e => e)).status, 409, String(t));
         assert.ok(!f.calls.some(c => c[0] === 'new-session' || c[0] === 'send-keys'), String(t));
     }
+    // live in two of our tmux sessions (registry already picked the newest): sent there, and runningTwice says which to close
+    f = fake({ live: ['cc-e9c15e3f', 'cc-f67f8760'] });
+    const dup = Object.assign(new Map([[sid, 'cc-e9c15e3f']]), { twice: new Map([[sid, ['cc-f67f8760']]]) });
+    assert.equal(await send(sid, 'hi', session, f.opts(dup)), 'cc-e9c15e3f');
+    assert.match(await runningTwice(sid, async () => dup), /running twice.*cc-f67f8760/);
+    assert.equal(await runningTwice(sid, async () => new Map([[sid, 'cc-e9c15e3f']])), null);
+    assert.equal(await runningTwice(sid, async () => null), null);
+    // a real other terminal says what to do
+    f = fake();
+    assert.match((await send(sid, 'hi', session, f.opts(new Map([[sid, 'main']]))).catch(e => e)).message, /outside Homebase.*\/exit/);
     // registry says not live: a fresh transcript write doesn't refuse; the new Claude's prompt is awaited before typing
     const fresh = { ...session, updated: Date.now() };
     f = fake({ live: [], panes: calls => (calls.filter(c => c[0] === 'capture-pane').length < 3 ? 'loading' : '❯ ') });

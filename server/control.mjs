@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { sessions } from './sessions.mjs';
 import { liveSessions } from './transcripts.mjs';
 import { refuseIfTrustDialog, cancelQuestion, parseDialog, questionOpen, capture } from './startup.mjs';
-import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, sleep, NEW_TMUX, OUR_TMUX, withLock } from './tmux.mjs';
+import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, ELSEWHERE, sleep, NEW_TMUX, OUR_TMUX, withLock } from './tmux.mjs';
 
 const run = promisify(execFile);
 
@@ -115,7 +115,6 @@ export async function keepModelSetting(path = SETTINGS(), { waitMs = 5000, nap =
 }
 
 const conflict = msg => Object.assign(new Error(msg), { status: 409 });
-const ELSEWHERE = 'This session is open in another terminal. Close it there first.';
 const BOOT_MS = 30_000;
 
 // Types `text` into the session's tmux, starting one (claude --resume) when none runs. Claude Code's registry (reg) says
@@ -162,6 +161,15 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
 
         return name;
     });
+}
+
+// The chat's Claude runs in two of Homebase's tmux sessions (send uses the newest): a note naming the older ones to close, else null.
+// ponytail: no Close button; the note gives the tmux command
+export async function runningTwice(id, reg = liveSessions) {
+
+    const older = (await reg())?.twice?.get(id);
+
+    return older?.length ? `This chat is running twice; sent to the newest. Close the older one: tmux kill-session -t ${older.join(' / ')}` : null;
 }
 
 // Enter goes separately, later, so Claude doesn't treat it as part of the typed/pasted text; and not into a dialog that

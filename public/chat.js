@@ -1139,6 +1139,8 @@ export async function sendText(sid, text, answerTo, note) {
             throw new Error(await r.text());
         }
         out.okAt = Date.now();
+        const said = await r.text();
+        $('c-err').textContent = said === 'ok' ? '' : said; // sent, with a warning (running twice)
         answered(sid);
         setTimeout(refreshChat, 1000);
         return true;

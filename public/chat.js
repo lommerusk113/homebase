@@ -650,7 +650,7 @@ let answeredAsk = null; // data.asking of the question last answered on the pane
 let paneCheck = null;
 
 // The "Claude is asking" card. The question on the tmux pane gets buttons (the server moves the ❯ there and confirms,
-// one question at a time); descriptions come from the transcript, else the pane. Not in tmux: the transcript's questions, read-only.
+// one question at a time); descriptions come from the transcript, else the pane. No question readable there: the transcript's, see below.
 /** @param {Session} s @param {Transcript} data */
 async function showAsk(s, data) {
 
@@ -705,7 +705,16 @@ async function showAsk(s, data) {
         return;
     }
     if (!pane) {
-        fillCard('ask', tmux, questions.map(q => q.question).join(' · '), questions.flatMap(q => q.options.map((label, i) => ({ label, desc: q.descriptions?.[i] }))), null);
+        // no question readable on the pane (not in tmux, or a screen this can't parse): one question's options still answer by
+        // click, typed as a message naming the question (the server declines the dialog first); several stay read-only
+        const one = questions.length === 1 && questions[0].options.length ? questions[0] : null;
+        fillCard('ask', tmux, questions.map(q => q.question).join(' · '), questions.flatMap(q => q.options.map((label, i) => ({ label, desc: q.descriptions?.[i] }))), one && (async n => {
+            if (await sendText(s.id, one.options[n], undefined, `(Answering your question: "${one.question}")`)) {
+                answeredAsk = data.asking;
+            }
+            askKey = null;
+            refreshChat();
+        }));
         return;
     }
     const flat = t => t.replace(/\s+/g, ' ').trim();

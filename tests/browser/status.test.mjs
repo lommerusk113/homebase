@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseQuestion } from '../../server/startup.mjs';
 import { seenHash } from '../../public/core.js';
+import { sleep } from './cdp.mjs';
 
 const status = `document.getElementById('status').className + ' | ' + document.getElementById('status-text').textContent`;
 
@@ -70,11 +71,42 @@ export default {
         await open({ tracked: '["beta"]', project: 'beta', chat: IDS.asker }); // only beta: the title counts every tracked project
         await page.waitFor(`${status} === 'c-status asking | Claude is asking — see the question above'`, { what: 'asking' });
         assert.equal(await page.ev(`document.getElementById('ask').hidden`), false);
-        // not in tmux (no pane to answer on): the transcript's question, its options read-only
         await page.waitFor(`document.getElementById('ask-q').textContent === 'Which database should be the default?'`, { what: 'the question' });
-        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#ask-opts .c-opt')].map(l => l.tagName + ' ' + l.firstChild.textContent)`), ['DIV Postgres', 'DIV SQLite']);
         assert.equal(await page.ev(`document.getElementById('ask-cmd').textContent`), `tmux attach -t cc-${IDS.asker.slice(0, 8)}`);
         await page.waitFor(`document.title === '(1) Homebase'`, { what: 'the title count' });
+    },
+
+    'no question readable on the pane: an option still answers by a real click, typed as a message naming the question': async ({ page, open, IDS }) => {
+        await open({ project: 'beta', chat: IDS.asker });
+        const opts = `[...document.querySelectorAll('#ask-opts wa-button.c-opt')]`;
+        await page.waitFor(`${opts}.length === 2`, { what: "the transcript's options as buttons" });
+        assert.deepEqual(await page.ev(`${opts}.map(b => b.firstChild.textContent)`), ['Postgres', 'SQLite']);
+        await sleep(1700); // a poll passes: the buttons are the same nodes
+        await page.clickOn(`${opts}[1]`);
+        await page.waitFor(`document.getElementById('ask').hidden`, { what: 'the card gone once answered' });
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')).map(p => [new URL(p.url).searchParams.get('id'), p.body]),
+            [[IDS.asker, 'SQLite\n\n(Answering your question: "Which database should be the default?")']]);
+    },
+
+    'a tall question card scrolls in its own room: every option takes a real click and the input stays on screen': async ({ page, open, IDS, answerPosts }) => {
+        await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1280, height: 640, deviceScaleFactor: 1, mobile: false });
+        try {
+            await open({ project: 'beta', chat: IDS.asker });
+            const text = 'Which icon should Homebase use on the phone home screen, in the browser tab and in the dock? All four work in light and dark, so this is purely a matter of taste and I would rather not pick one for you. '.repeat(2).trim();
+            let question = { question: text, options: ['Home light (Recommended)', 'Orbit', 'Task house', 'Diamond', 'Type something.', 'Chat about this'], descriptions: ['A small house with a lit window: reads as Homebase at 16px and keeps its shape on a dark dock.', 'A dot circled by two smaller dots: says orchestration, anonymous at small sizes.', 'A house whose door is a check mark: says tasks, a bit busy at 16px.', 'A plain rotated square in the accent colour: the calmest, also the most generic.', '', ''], selected: 0 };
+            page.route = q => (q.url.includes('/api/question') && q.method !== 'POST'
+                ? { body: JSON.stringify({ question }), headers: { 'content-type': 'application/json' } }
+                : (q.url.includes('/api/question') && (question = null), answerPosts(q)));
+            const opts = `[...document.querySelectorAll('#ask-opts wa-button.c-opt')]`;
+            await page.waitFor(`${opts}.length === 5`, { what: 'the option buttons' });
+            assert.equal(await page.ev(`document.getElementById('msg').getBoundingClientRect().bottom <= innerHeight`), true, 'the input is on screen');
+            await page.clickOn(`${opts}[3]`); // the last described option: scrolled into view inside the cards
+            await page.waitFor(`document.getElementById('ask').hidden`, { what: 'the card gone once answered' });
+            const u = new URL(page.posts.find(p => p.url.includes('/api/question')).url);
+            assert.deepEqual([u.searchParams.get('option'), u.searchParams.get('label')], ['3', 'Diamond']);
+        } finally {
+            await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+        }
     },
 
     'an asking card answers the question on the pane by its button': async ({ page, open, IDS, answerPosts }) => {

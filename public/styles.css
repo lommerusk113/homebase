@@ -281,8 +281,9 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .c-term wa-button { --wa-form-control-height:22px; font-size:var(--fs-s); }
 .c-term wa-button::part(base) { color:var(--muted); padding-inline:4px; text-decoration:underline dotted; text-underline-offset:2px; }
 .c-term wa-button:hover::part(base) { color:var(--fg); }
-/* The ask, startup, waiting and old-rules cards and the info line sit between the feed and the dock and take their own room, so they never cover a card in the feed */
-.c-cards { flex-shrink:0; background:var(--canvas); }
+/* The ask, startup, waiting and old-rules cards and the info line sit between the feed and the dock and take their own room, so they never cover a card in the feed;
+   a tall one scrolls there instead of pushing the dock and its own lower options off screen */
+.c-cards { flex-shrink:0; max-height:55dvh; overflow-y:auto; background:var(--canvas); }
 .c-cards:has(> :not([hidden]):not(:empty)) { padding-bottom:8px; }
 .c-cards > .c-ask { margin:8px 12px 0; }
 .c-wait { position:relative; overflow:hidden; flex-direction:column; align-items:stretch; gap:6px; margin:8px 12px 0; padding:8px 12px 8px 18px; border-radius:var(--r-m); background:var(--needs-bg); border:1px solid var(--needs-line); }
@@ -690,7 +691,6 @@ wa-details[open] .g-note { display:none; }
 
   .c-newer .show { min-height:44px; }
   .c-feed { padding:12px 8px; }
-  .c-cards { max-height:55dvh; overflow-y:auto; }
   .c-cards > .c-ask, .c-wait { margin:8px 8px 0; }
   wa-button.c-opt { font-size:var(--fs-xl); }
   wa-button.c-opt.quiet { width:100%; }

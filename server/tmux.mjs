@@ -55,6 +55,24 @@ export function findClearedSuccessor(sessions, { from, cwd, clearedAt }) {
 
     return hits.sort((a, b) => b.created - a.created)[0] ?? null;
 }
+// Sets clearedFrom on each /clear successor: from the aliases, else, after a server restart emptied them, from the registry
+// (live: liveSessions()) showing a live session in an ended one's cc-<id8> tmux. The cleared chat's question went with
+// the clear, so it no longer needs you; otherwise its row opens a chat that the clear view shows as empty.
+// ponytail: the registry fallback finds only the first chat of a chain of /clears (the one whose own tmux it is)
+export function linkClears(sessions, live, map = aliases) {
+    for (const s of sessions) {
+        const t = live?.get(s.id);
+        const from = map.get(s.id)?.from ?? (t && sessions.find(o => o.id !== s.id && o.cwd === s.cwd && !live.has(o.id) && tmuxName(o.id) === t)?.id);
+        if (!from) {
+            continue;
+        }
+        s.clearedFrom = from;
+        const old = sessions.find(o => o.id === from);
+        if (old) {
+            old.needsYou = false;
+        }
+    }
+}
 export const tmuxSession = (id, cwd) => ['-s', tmuxName(id), '-c', cwd, ...claudeCmd(id)];
 
 export const MAX_SEND = 20 * 1024;

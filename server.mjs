@@ -35,7 +35,7 @@ export {
 export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones, mineView } from './server/milestones.mjs';
 export { limitsOf, peakLimits, contextOf } from './server/limits.mjs';
 export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
-export { tmuxArgs, tmuxFor, withLock, findClearedSuccessor, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
+export { tmuxArgs, tmuxFor, withLock, findClearedSuccessor, linkClears, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
 export { parseDialog, parseQuestion, answerQuestion, cancelQuestion, questionOpen, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
 export { editorsFrom, openInEditor, refuseIfBusy, restartChat, promptUp, send, runningTwice, interrupt } from './server/control.mjs';
 export { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';

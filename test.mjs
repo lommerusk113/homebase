@@ -1198,7 +1198,7 @@ import { askMarker, markerAsk } from './server.mjs';
     console.log('ok asking marker');
 }
 
-import { findClearedSuccessor, tmuxFor, lastActivity } from './server.mjs';
+import { findClearedSuccessor, tmuxFor, lastActivity, linkClears } from './server.mjs';
 {
     const ts = s => `2026-11-13T10:${s}:00.000Z`;
     const real = [
@@ -1228,6 +1228,23 @@ import { findClearedSuccessor, tmuxFor, lastActivity } from './server.mjs';
     const aliases = new Map([['new-id-123', { tmux: 'cc-old-id-1', from: 'old-id-1234' }]]);
     assert.equal(tmuxFor('new-id-123', aliases), 'cc-old-id-1');
     assert.equal(tmuxFor('abcdef0123', aliases), 'cc-abcdef01');
+}
+{
+    // after a server restart the in-memory alias is gone: the registry still shows the successor in the cleared session's tmux
+    const ss = [
+        { id: '5f274065-old', cwd: '/r', created: 0, needsYou: true },
+        { id: 'a0da2e79-new', cwd: '/r', created: 5 },
+        { id: 'bbbbbbbb-own', cwd: '/r', created: 6, needsYou: true }
+    ];
+    const live = new Map([['a0da2e79-new', 'cc-5f274065'], ['bbbbbbbb-own', 'cc-bbbbbbbb']]);
+    linkClears(ss, live, new Map());
+    assert.equal(ss[1].clearedFrom, '5f274065-old', 'the successor is found again');
+    assert.equal(ss[0].needsYou, false, 'a cleared chat no longer needs you: its question went with the clear');
+    assert.equal(ss[2].needsYou, true, 'a live chat in its own tmux keeps its question');
+    assert.equal(ss[2].clearedFrom, undefined);
+    const fresh = [{ id: 'x-old', cwd: '/r', created: 0, needsYou: true }, { id: 'y-new', cwd: '/r', created: 5 }];
+    linkClears(fresh, null, new Map([['y-new', { tmux: 'cc-x-old', from: 'x-old' }]]));
+    assert.deepEqual([fresh[1].clearedFrom, fresh[0].needsYou], ['x-old', false], 'a Homebase /clear still in memory too');
 }
 console.log('ok clear');
 

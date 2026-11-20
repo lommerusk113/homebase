@@ -112,7 +112,7 @@ for (const quoted of ['75\tconst bg = \'Command running in background with ID: b
 }
 console.log('ok agents');
 
-import { splitTldr, splitTopic, toolSummary, chatItems, pendingQuestion, sendSteps } from './server.mjs';
+import { splitTldr, splitTopic, toolSummary, chatItems, pendingQuestion, sendSteps, RISKY } from './server.mjs';
 assert.deepEqual(splitTldr('Long text.\n\n**TLDR:** It works.'), { tldr: 'It works.', text: 'Long text.' });
 assert.equal(splitTldr('a\n**TLDR**: fixed **now**').tldr, 'fixed **now**');
 assert.equal(splitTldr('**TL;DR: shipped**').tldr, 'shipped');
@@ -160,6 +160,18 @@ assert.deepEqual(chatItems([
     { type: 'user', message: { content: 'go' } }, say('On it.'), absorbed('completed', 'Agent "Fix login" is waiting on its own background work'),
     absorbed('completed', 'Agent "Docs" finished'), absorbed('killed', 'Agent "Lint" was stopped by Claude'), taskNote('completed', 'Agent "Fix login" is waiting on its own background work')
 ]).map(i => [i.role, i.text]), [['user', 'go'], ['assistant', 'On it.'], ['tools', 'Agent finished: Docs'], ['error', 'Agent stopped: Lint']]);
+// a push, merge or force gets its own visible line (the pattern the permission card turns red on); other commands stay quiet
+const cmdUse = command => tu('Bash', { input: { command } });
+assert.deepEqual(chatItems([
+    { type: 'user', message: { content: 'ship' } }, cmdUse('npm test'), cmdUse('git push origin main'), cmdUse('git status'),
+    cmdUse('glab mr merge 42 \\\n  --squash'), cmdUse('git pushd'), cmdUse('rm -fr build'), cmdUse('git merge-base a b')
+]).map(i => [i.role, i.text, i.quiet, i.risky]), [
+    ['user', 'ship', undefined, undefined], ['tools', 'Ran 1 command', true, undefined], ['tools', 'Ran: git push origin main', undefined, true],
+    ['tools', 'Ran 1 command', true, undefined], ['tools', 'Ran: glab mr merge 42 \\ --squash', undefined, true], ['tools', 'Ran 1 command', true, undefined],
+    ['tools', 'Ran: rm -fr build', undefined, true], ['tools', 'Ran 1 command', true, undefined]
+]);
+assert.ok(['git reset --hard HEAD~1', 'git push -f', 'git push --force-with-lease', 'gh pr merge 3', 'DROP TABLE users', 'kubectl delete pod x', 'rm -Rf /tmp/x'].every(c => RISKY.test(c)));
+assert.ok(!['git pull', 'git merge-base a b', 'npm run format', 'rm -r dist', 'git log --format=%H'].some(c => RISKY.test(c)));
 const topical = chatItems([{ type: 'user', message: { content: 'go' } }, say('**▸ Topic headers**\n\nDone.\n\n**TLDR:** shipped')]).at(-1);
 assert.deepEqual([topical.topic, topical.text, topical.tldr, topical.needsYou], ['Topic headers', 'Done.', 'shipped', false]);
 // needs-you: the topic marker, or (no marker) a TLDR ending in "?"

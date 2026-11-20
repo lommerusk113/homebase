@@ -154,6 +154,8 @@ interface ChatItem {
     interrupted?: boolean;
     /** a tools line with no edits or agents, hidden as noise */
     quiet?: boolean;
+    /** a tools line for one command that pushes, merges or forces (transcripts.mjs RISKY), always shown */
+    risky?: boolean;
     /** queued in the server's send queue */
     pending?: boolean;
     replies?: string[];

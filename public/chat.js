@@ -206,7 +206,7 @@ function shortTime(at) {
 /** @param {ChatItem} i @param {string} sid @param {string | null} prevTopic @param {{ latest?: boolean, unread?: boolean, replies?: HTMLElement | null }} [look] */
 function bubble(i, sid, prevTopic, look = {}) {
     if (i.role === 'tools') {
-        return el('div', `tools${i.quiet ? ' quiet' : ''}`, i.text);
+        return el('div', `tools${i.quiet ? ' quiet' : ''}${i.risky ? ' risky' : ''}`, i.text);
     }
     if (i.role === 'error') {
         return el('div', 'tools api-error', i.text);

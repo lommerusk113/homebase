@@ -245,7 +245,7 @@ export function gateRuns(entries, brief = null) {
 
 // Commands that change shared state or are hard to undo: a red permission card (startup.mjs parseQuestion) and their own
 // "Ran:" line in the feed (rawItems). The one list for both.
-export const RISKY = /\bgit\s+(?:push|merge)\b|--force\b|\breset\s+--hard\b|\brm\s+-\w*(?:r\w*f|f\w*r)|\b(?:mr|pr)\s+merge\b|\bdrop\s+table\b|\bkubectl\b/i;
+export const RISKY = /\bgit\s+(?:push|merge)(?![\w-])|--force\b|\breset\s+--hard\b|\brm\s+-\w*(?:r\w*f|f\w*r)|\b(?:mr|pr)\s+merge\b|\bdrop\s+table\b|\bkubectl\b/i;
 const TOOL_KIND = { Bash: 'cmd', Edit: 'edit', Write: 'edit', MultiEdit: 'edit', NotebookEdit: 'edit', Read: 'read', Grep: 'search', Glob: 'search', Agent: 'agent', Task: 'agent', WebFetch: 'web', WebSearch: 'web' };
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const PHRASES = {
@@ -445,7 +445,16 @@ function rawItems(entries) {
                 items.push({ role: 'assistant', text: entry.text, at: e.timestamp, ...(!newTurn && { continues: true }) });
                 newTurn = false;
             }
-            uses.push(...entry.uses);
+            for (const u of entry.uses) {
+                const cmd = u.name === 'Bash' ? String(u.input?.command ?? '').replace(/\s+/g, ' ').trim() : '';
+                if (RISKY.test(cmd)) {
+                    // a push, merge or force on its own visible line, never folded into the hidden "Ran N commands"
+                    flush();
+                    items.push({ role: 'tools', text: `Ran: ${cmd.length > 160 ? `${cmd.slice(0, 159)}…` : cmd}`, risky: true, at: e.timestamp });
+                } else {
+                    uses.push(u);
+                }
+            }
             entry.uses.filter(u => u.name === 'AskUserQuestion').forEach(u => asks.add(u.id));
         }
     }

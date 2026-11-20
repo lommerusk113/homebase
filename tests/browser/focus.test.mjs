@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 
 const row = id => `#masters tr[data-key="asking:${id}"]`;
 const back = `document.getElementById('c-back')`;
@@ -64,5 +65,22 @@ export default {
         assert.equal(await page.ev(`${back}.hidden`), false, 'no jump back');
         await page.click('#c-next');
         await page.waitFor(`!document.getElementById('ask').hidden && /Which database/.test(document.getElementById('ask-q').textContent) && document.getElementById('c-next').hidden`, { what: "the asker's question" });
+    },
+
+    "a focused chat that was /clear'ed shows its successor, like the main chat does": async ({ page, open, IDS, homebase }) => {
+        // the registry shows `other` live in an alpha chat's cc-<id8> tmux, so the server links it as that chat's /clear successor
+        const reg = join(dirname(homebase), 'home', '.claude', 'sessions');
+        mkdirSync(reg, { recursive: true });
+        writeFileSync(join(reg, `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: IDS.other, cwd: '/', tmux: 'cc-aaaaaaaa:@0.%0' }));
+        try {
+            await open({ project: 'all', chat: IDS.asker });
+            const from = `import('/core.js').then(m => m.state.sessions.find(s => s.id === ${JSON.stringify(IDS.other)})?.clearedFrom)`;
+            await page.waitFor(from, { what: 'the clear link' });
+            await page.ev(`${from}.then(id => import('/chat.js').then(m => m.focusChat(id)))`);
+            await page.waitFor(`import('/chat.js').then(m => m.chatSession()?.id === ${JSON.stringify(IDS.other)})`, { what: 'the successor in the pane' });
+            assert.equal(await page.ev(`${back}.hidden`), false, 'still a focused chat, with the way back');
+        } finally {
+            rmSync(reg, { recursive: true, force: true });
+        }
     }
 };

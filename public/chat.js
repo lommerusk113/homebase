@@ -146,13 +146,22 @@ export function bindChat(id) {
 // "← Main chat" (or Esc) goes back. The main chat itself just shows.
 /** @param {string} id */
 export function focusChat(id) {
-    const main = pickChat(visibleSessions(), store.get(bindKey()), state.chat);
     clearTimeout(returnTimer);
     nextId = null;
     $('c-next').hidden = true;
-    state.focus = id === main?.id ? null : id;
+    state.focus = id;
+    followFocus();
     renderBoard();
     refreshChat();
+}
+// A focused chat that was /clear'ed moves on to its successor, as the main binding does (pickChat); landing on the main chat ends the focus.
+function followFocus() {
+    const visible = visibleSessions();
+    if (!state.focus || !visible.some(s => s.id === state.focus)) {
+        return;
+    }
+    const to = pickChat(visible, state.focus, null)?.id;
+    state.focus = to === pickChat(visible, store.get(bindKey()), state.chat)?.id ? null : to;
 }
 // After a focused question is answered: back to the main chat in 1.5s, unless another chat waits on the user, then
 // the header offers "Next: <title> →" instead of jumping.
@@ -840,6 +849,7 @@ const NEAR_BOTTOM_PX = 40; // this close to the bottom counts as reading the new
 
 export async function refreshChat() {
 
+    followFocus();
     const s = chatSession(), feed = $('feed');
     // before the ask card can show and shorten the feed
     const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX;

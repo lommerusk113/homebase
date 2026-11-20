@@ -850,8 +850,8 @@ export async function sendText(sid, text, answerTo, note) {
         setTimeout(refreshChat, 1000);
         return true;
     } catch (err) {
-        $('c-err').textContent = err.message;
-        out.error = err.message;
+        out.error = friendly(err.message);
+        $('c-err').textContent = out.error;
         refreshChat();
         return false;
     }

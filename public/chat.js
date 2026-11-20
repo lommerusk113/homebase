@@ -145,9 +145,8 @@ function swapComposer(sid) {
         ta.value = '';
         $('c-err').textContent = '';
     }
-    syncSend();
     if (sid) {
-        restoreDraft(draftStorage(), sid, ta).then(ok => ok && syncSend());
+        restoreDraft(draftStorage(), sid, ta);
     }
 }
 
@@ -1195,8 +1194,6 @@ async function restart(sid) {
     refreshChat();
 }
 
-const syncSend = () => { $('send-btn').disabled = !$('msg').value?.trim() && !attached.length; };
-
 // Images attached to the next message. Sent as "[Image: <path>]" lines after uploading; Claude reads them by path.
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 /** @type {File[]} */
@@ -1287,7 +1284,6 @@ function showAttached() {
         return t;
     }));
     $('attached').hidden = !attached.length;
-    syncSend();
 }
 // Uploads the attached images; their "[Image: <path>]" lines, one per image.
 /** @param {File[]} files @returns {Promise<string[]>} */
@@ -1359,7 +1355,6 @@ export function initChat() {
     $('c-next').onclick = () => nextId && focusChat(nextId);
     document.addEventListener('keydown', e => e.key === 'Escape' && state.focus && !e.composedPath().some(n => /^(INPUT|WA-TEXTAREA|TEXTAREA|WA-DIALOG|WA-DROPDOWN)$/.test(/** @type {Element} */ (n).nodeName || '')) && unfocusChat());
     $('msg').addEventListener('input', () => {
-        syncSend();
         saveDraft(draftStorage(), draftSid, $('msg'));
     });
     $('send').onsubmit = async e => {
@@ -1396,7 +1391,6 @@ export function initChat() {
         }
         // clear at once; the "sending…" bubble shows progress
         ta.value = '';
-        syncSend();
         const ok = await sendText(target, text);
         if (draftSid !== (s?.id ?? null)) {
             // switched chats meanwhile: the box is the other chat's now, so a failed text goes back into its own chat's draft
@@ -1406,12 +1400,11 @@ export function initChat() {
         } else if (!ok && !ta.value) {
             // give the text back so it isn't lost
             ta.value = text;
-            syncSend();
         } else {
             saveDraft(draftStorage(), target, ta); // sent: drops the draft, or keeps whatever was typed meanwhile
         }
     };
-    $('attach-btn').onclick = () => $('attach-input').click();
+    $('plus-menu').addEventListener('wa-select', e => e.detail.item.value === 'files' && $('attach-input').click());
     $('attach-input').onchange = () => {
         attach($('attach-input').files ?? []);
         $('attach-input').value = '';
@@ -1431,7 +1424,6 @@ export function initChat() {
             const start = sel.selectionStart ?? ta.value.length, end = sel.selectionEnd ?? start;
             ta.value = ta.value.slice(0, start) + label + ta.value.slice(end);
             ta.updateComplete?.then(() => ta.setSelectionRange(start + label.length, start + label.length));
-            syncSend();
             saveDraft(draftStorage(), chatSession()?.id, ta);
         }
     });

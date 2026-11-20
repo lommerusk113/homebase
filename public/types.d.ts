@@ -360,9 +360,9 @@ interface PageIds {
     'compact-nudge': HTMLButtonElement;
     'c-menu': WaDropdown;
     send: HTMLFormElement;
-    'send-btn': HTMLButtonElement;
     attached: HTMLDivElement;
     'attach-btn': HTMLButtonElement;
+    'plus-menu': HTMLElement;
     'attach-input': HTMLInputElement;
 }
 

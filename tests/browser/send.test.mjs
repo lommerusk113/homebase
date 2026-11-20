@@ -5,20 +5,33 @@ import { sleep } from './cdp.mjs';
 const geometry = `(() => { const f = document.getElementById('feed'); return { scrollTop: f.scrollTop, clientHeight: f.clientHeight, scrollHeight: f.scrollHeight, bottom: f.getBoundingClientRect().bottom, dock: document.getElementById('send').offsetHeight }; })()`;
 
 export default {
-    'the upload and send buttons sit inside the field box, and the composer has no border': async ({ page, open }) => {
+    'the upload button sits inside the field box, and the composer has no border': async ({ page, open }) => {
         await open();
-        const r = await page.ev(`(() => { const box = document.querySelector('.c-row').getBoundingClientRect(), inside = id => { const b = document.getElementById(id).getBoundingClientRect(); return b.left >= box.left && b.right <= box.right && b.top >= box.top && b.bottom <= box.bottom; }; return { attach: inside('attach-btn'), send: inside('send-btn'), row: getComputedStyle(document.querySelector('.c-row')).borderTopWidth, composer: getComputedStyle(document.querySelector('.composer')).borderTopWidth }; })()`);
-        assert.deepEqual(r, { attach: true, send: true, row: '1px', composer: '0px' });
+        const r = await page.ev(`(() => { const box = document.querySelector('.c-row').getBoundingClientRect(), inside = id => { const b = document.getElementById(id).getBoundingClientRect(); return b.left >= box.left && b.right <= box.right && b.top >= box.top && b.bottom <= box.bottom; }; return { attach: inside('attach-btn'), row: getComputedStyle(document.querySelector('.c-row')).borderTopWidth, composer: getComputedStyle(document.querySelector('.composer')).borderTopWidth }; })()`);
+        assert.deepEqual(r, { attach: true, row: '1px', composer: '0px' });
     },
 
-    'the empty textarea is vertically centered on the send button, at desktop and phone width': async ({ page, open }) => {
+    'the upload button stays centered on the first line at 1, 3 and 8 lines, at desktop and phone width': async ({ page, open }) => {
         await open();
         for (const [w, mobile] of [[1440, false], [390, true]]) {
             await page.cmd('Emulation.setDeviceMetricsOverride', { width: w, height: 900, deviceScaleFactor: 1, mobile });
-            const d = await page.ev(`(() => { const c = e => { const b = e.getBoundingClientRect(); return (b.top + b.bottom) / 2; }; return Math.abs(c(document.getElementById('msg').shadowRoot.querySelector('textarea')) - c(document.getElementById('send-btn'))); })()`);
-            assert.ok(d <= 2, `textarea center is ${d}px off the send button at ${w}px`);
+            for (const lines of [1, 3, 8]) {
+                await page.ev(`document.getElementById('msg').value = ${JSON.stringify(Array(lines).fill('x').join('\n'))}`);
+                const d = await page.ev(`(async () => { const m = document.getElementById('msg'); await m.updateComplete; const t = m.shadowRoot.querySelector('textarea'), lh = parseFloat(getComputedStyle(t).lineHeight), pad = parseFloat(getComputedStyle(t).paddingTop), tb = t.getBoundingClientRect(), ab = document.getElementById('attach-btn').getBoundingClientRect(); return Math.abs((ab.top + ab.bottom) / 2 - (tb.top + pad + lh / 2)); })()`);
+                assert.ok(d <= 2, `attach icon is ${d}px off the first line with ${lines} lines at ${w}px`);
+            }
+            await page.ev(`document.getElementById('msg').value = ''`);
         }
         await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    },
+
+    'the + button opens a menu with Add files…, and Esc closes it': async ({ page, open }) => {
+        await open();
+        await page.click('#attach-btn');
+        await page.waitFor(`document.getElementById('plus-menu').open`, { what: 'the + menu' });
+        assert.equal(await page.ev(`document.querySelector('#plus-menu wa-dropdown-item').textContent`), 'Add files…');
+        await page.key('Escape');
+        await page.waitFor(`!document.getElementById('plus-menu').open`, { what: 'Esc to close it' });
     },
 
     'sending: the POST is intercepted, the outbox bubble shows and the input clears': async ({ page, open, IDS }) => {
@@ -26,12 +39,10 @@ export default {
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
         await page.click('#msg');
         await page.type('hello from the browser test');
-        await page.waitFor(`!document.getElementById('send-btn').disabled`, { what: 'the send button to enable' });
         await page.key('Enter');
         await page.waitFor(`document.querySelector('#feed .bubble.user:last-of-type')?.textContent.includes('hello from the browser test')`, { what: 'the outbox bubble' });
         assert.equal(await page.ev(`[...document.querySelectorAll('#feed .bubble.user')].at(-1).querySelector('.b-note').textContent`), 'sending…');
         assert.equal(await page.ev(`document.getElementById('msg').value`), '');
-        assert.equal(await page.ev(`document.getElementById('send-btn').disabled`), true);
         assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [[`/api/send?id=${IDS.master}`, 'hello from the browser test']]);
         assert.equal(await page.ev(`(() => { const f = document.getElementById('feed'); return f.scrollHeight - f.scrollTop - f.clientHeight < 40; })()`), true, 'scrolled to the new bubble');
     },
@@ -148,7 +159,6 @@ export default {
             dt.items.add(new File([Uint8Array.from(b, c => c.charCodeAt(0))], 'dot.png', { type: 'image/png' }));
             const i = document.getElementById('attach-input'); i.files = dt.files; i.dispatchEvent(new Event('change')); })()`);
         await page.waitFor(`document.querySelector('#attached .c-thumb img')?.src.startsWith('data:image/png')`, { what: 'the pending thumbnail' });
-        assert.equal(await page.ev(`document.getElementById('send-btn').disabled`), false, 'images alone can be sent');
         await page.click('#msg');
         await page.type('what is this?');
         await page.key('Enter');

@@ -21,7 +21,7 @@ The user drives this chat from Homebase, a dashboard that shows replies collapse
 ## Hobby repos
 Hobby repos are under `~/IdeaProjects/Privat` (CLAUDE.md). Keep the process light; these override stricter rules elsewhere for hobby repos:
 - One subagent per request unless parts truly run in parallel. Small fixes and tweaks go to one Sonnet subagent, also small bug fixes; the default model only for hard debugging or real design.
-- Subagents base on the latest local `main`, rebase onto it before handing back, and run only the tests for the area they touched (a filter) plus the type check. A failing test first only for real bugs, not UI tweaks.
+- Subagents base on the latest local `main`, rebase onto it before handing back, and run only the tests for the area they touched (a filter) plus the type check. A failing test first only for real bugs, not UI tweaks. No tests that pin pixels, colours or copy text, and no new test for a pure UI tweak.
 - No separate merge subagent: fast-forward main yourself; if it needs a rebase, ask the implementer (SendMessage) to rebase and re-run its filtered tests.
 - Run the full suite once per batch of landed changes, or before landing a risky change (server, security, data). A failure there goes back to the subagent that caused it.
 - No threat-review or code-review unless the change touches auth, remote access, file paths or shell. Screenshots only when the change is visual and the look is the question.

@@ -847,8 +847,11 @@ function quickReplyRow(s, data, items, n) {
 
 const NEAR_BOTTOM_PX = 40; // this close to the bottom counts as reading the newest: a re-render keeps it in view
 
+let refreshSeq = 0; // a refresh that finishes after a newer one started is stale: it must not render over it
+
 export async function refreshChat() {
 
+    const seq = ++refreshSeq;
     followFocus();
     const s = chatSession(), feed = $('feed');
     // before the ask card can show and shorten the feed
@@ -894,12 +897,15 @@ export async function refreshChat() {
         setOffline(true);
         return setStatus({ error: true });
     }
-    if (chatSession()?.id !== s.id) {
-        return; // switched while loading
+    if (chatSession()?.id !== s.id || seq !== refreshSeq) {
+        return; // switched while loading, or a newer refresh took over
     }
 
     setStatus(data);
     await showAsk(s, data);
+    if (seq !== refreshSeq) {
+        return;
+    }
     compactUi(s, data);
 
     const { items, hidden, cut } = feedItems(s, data);

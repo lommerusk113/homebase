@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
+import { appendFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { sleep } from './cdp.mjs';
 import { chatItems, chatFeed } from '../../server.mjs';
 
+const feedHas = t => `document.getElementById('feed').textContent.includes(${JSON.stringify(t)})`;
 const bubble = text => `[...document.querySelectorAll('#feed .bubble')].find(b => b.textContent.includes(${JSON.stringify(text)}))`;
 const ready = page => page.waitFor(`${bubble('tag the release')}`, { what: 'the newest master bubble' });
 
@@ -251,5 +255,31 @@ export default {
         await page.click('#wait-opts wa-button:last-child');
         await page.waitFor(`document.getElementById('wait').hidden`, { what: 'the strip to go once answered' });
         assert.deepEqual(page.posts.map(p => p.body), ['something else']);
+    },
+
+    'a slow transcript response that lands after a newer one does not roll the feed back': async ({ page, open, IDS, touchSession }) => {
+        await open();
+        await page.waitFor(feedHas('tag the release'), { what: 'the chat' });
+        // hold the next transcript response 4s in the page, as a slow poll would
+        await page.ev(`(() => {
+            const f = window.fetch;
+            window.__hold = true;
+            window.fetch = async (...a) => {
+                const r = await f(...a);
+                if (String(a[0]).startsWith('/api/transcript') && window.__hold) {
+                    window.__hold = false;
+                    await new Promise(ok => setTimeout(ok, 4000));
+                }
+                return r;
+            };
+        })()`);
+        await page.ev(`import('/chat.js').then(m => { m.refreshChat(); })`); // A: old data, held
+        await sleep(300);
+        touchSession('alpha', IDS.master, 'FRESH-REPLY-R1');
+        await page.ev(`import('/chat.js').then(m => m.refreshChat())`); // B: fresh
+        await page.waitFor(feedHas('FRESH-REPLY-R1'), { what: 'the fresh reply' });
+        await page.ev(`(() => { window.__lost = false; const t = setInterval(() => { if (!${feedHas('FRESH-REPLY-R1')}) { window.__lost = true; clearInterval(t); } }, 20); })()`);
+        await sleep(4500);
+        assert.equal(await page.ev('window.__lost'), false, 'the fresh reply vanished when the held (older) response rendered');
     }
 };

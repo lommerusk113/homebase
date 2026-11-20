@@ -11,6 +11,16 @@ export default {
         assert.deepEqual(r, { attach: true, send: true, row: '1px', composer: '0px' });
     },
 
+    'the empty textarea is vertically centered on the send button, at desktop and phone width': async ({ page, open }) => {
+        await open();
+        for (const [w, mobile] of [[1440, false], [390, true]]) {
+            await page.cmd('Emulation.setDeviceMetricsOverride', { width: w, height: 900, deviceScaleFactor: 1, mobile });
+            const d = await page.ev(`(() => { const c = e => { const b = e.getBoundingClientRect(); return (b.top + b.bottom) / 2; }; return Math.abs(c(document.getElementById('msg').shadowRoot.querySelector('textarea')) - c(document.getElementById('send-btn'))); })()`);
+            assert.ok(d <= 2, `textarea center is ${d}px off the send button at ${w}px`);
+        }
+        await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+    },
+
     'sending: the POST is intercepted, the outbox bubble shows and the input clears': async ({ page, open, IDS }) => {
         await open();
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });

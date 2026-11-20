@@ -316,12 +316,12 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); box-shadow:none; tran
   .pulse, .dot.live, .stage .bar i.now, .bubble.enter, .c-ask, .c-ask-label::before, .need-pill .unread { animation:none !important; }
   .bubble .show::after, wa-button.c-opt::part(base), .c-send, .c-row { transition:none; transform:none !important; }
 }
-.c-row { position:relative; display:flex; align-items:flex-end; gap:4px; padding:2px 6px 6px; border-radius:var(--card-r); background:var(--bg); border:1px solid var(--line-soft); box-shadow:var(--card-shadow); transition:border-color .15s, box-shadow .15s; }
+.c-row { --c-h:32px; position:relative; display:flex; align-items:flex-end; gap:4px; padding:2px 6px; border-radius:var(--card-r); background:var(--bg); border:1px solid var(--line-soft); box-shadow:var(--card-shadow); transition:border-color .15s, box-shadow .15s; }
 /* the field row draws the border and the focus ring, so the textarea has none */
 #msg { flex:1; font-size:13.5px; --wa-form-control-padding-block:7px; --wa-form-control-padding-inline:4px; --wa-form-control-border-color:transparent; --wa-form-control-background-color:transparent; --wa-focus-ring:none; }
 #msg::part(base), #msg::part(textarea) { outline:none; box-shadow:none; }
-#msg::part(textarea) { min-height:34px; max-height:180px; overflow:auto; }
-.c-send, .c-attach { flex-shrink:0; width:32px; height:32px; margin-bottom:1px; border:0; border-radius:10px; padding:0; display:grid; place-items:center; cursor:pointer; }
+#msg::part(textarea) { box-sizing:border-box; min-height:var(--c-h); max-height:180px; line-height:20px; padding-block:calc((var(--c-h) - 20px) / 2); overflow:auto; }
+.c-send, .c-attach { flex-shrink:0; width:var(--c-h); height:var(--c-h); margin-bottom:1px; border:0; border-radius:10px; padding:0; display:grid; place-items:center; cursor:pointer; }
 .c-send { background:var(--accent); color:#fff; transition:transform .12s var(--ease), filter .15s; }
 .c-send:hover:not(:disabled) { filter:brightness(1.1); transform:translateY(-1px); }
 .c-send:disabled { opacity:.35; cursor:default; }
@@ -675,6 +675,8 @@ wa-details[open] .g-note { display:none; }
   .c-input { height:auto; padding-bottom:8px; }
   .composer { margin:0 8px; }
   #msg { font-size:16px; } /* under 16px iOS zooms in on focus */
-  .c-send, .c-attach { width:44px; height:44px; border-radius:12px; }
+  .c-row { --c-h:44px; }
+  #msg::part(textarea) { line-height:24px; padding-block:calc((var(--c-h) - 24px) / 2); }
+  .c-send, .c-attach { border-radius:12px; }
   .c-send svg, .c-attach svg { width:20px; height:20px; }
 }

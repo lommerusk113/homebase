@@ -28,6 +28,12 @@ export default {
         const loose = await page.ev(`[...${pane}.querySelectorAll('.lg-commit .lg-c')].map(c => [c.querySelector('.lg-subj').textContent, c.querySelector('.lg-unpushed')?.textContent ?? null])`);
         assert.deepEqual(loose, [['Add a perks simulator', 'not pushed'], ['Add the audit log', null]]);
 
+        // chat topics are off until the Chat chip is on, and the choice is remembered
+        assert.equal(await page.ev(`${pane}.querySelector('.lg-topic').checkVisibility()`), false);
+        await page.click('#log .lg-chip:nth-child(3)');
+        await page.waitFor(`${pane}.querySelector('.lg-topic').checkVisibility()`, { what: 'chat topics to show' });
+        assert.equal(await page.ev(`localStorage.getItem('log:show:chat')`), '1');
+
         // chat topics, one line per topic change, with their TLDR; merged MRs the chat linked
         const topics = await page.ev(`[...${pane}.querySelectorAll('.lg-tname')].map(t => t.textContent + ' | ' + (t.nextElementSibling?.textContent ?? ''))`);
         assert.deepEqual(topics, ['Release | Should I tag the release now or wait for QA?', 'Fix login | ready']);
@@ -48,5 +54,17 @@ export default {
         await open({ tab: 'log', project: 'beta' });
         await page.waitFor(`${pane}.textContent.startsWith('Nothing')`, { what: 'the empty state' });
         assert.equal(await page.ev(`${pane}.textContent`), 'Nothing happened in beta in the last 7 days.');
+    },
+
+    'the Agents chip hides finished subagents, and the choice survives a reload': async ({ page, open }) => {
+        await open({ tab: 'log' });
+        await page.waitFor(`${agent}`, { what: 'the agent entry' });
+        assert.equal(await page.ev(`${agent}.checkVisibility()`), true);
+        await page.click('#log .lg-chip:nth-child(1)');
+        await page.waitFor(`!${agent}.checkVisibility()`, { what: 'the agent to hide' });
+        assert.equal(await page.ev(`${pane}.querySelector('.lg-chip').getAttribute('aria-pressed')`), 'false');
+        await page.goto(await page.ev('location.href'));
+        await page.waitFor(`${pane}.querySelector('.lg-day')`, { what: 'the log after reload' });
+        assert.equal(await page.ev(`${agent}.checkVisibility()`), false);
     }
 };

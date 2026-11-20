@@ -570,3 +570,7 @@ ul.comments a { color:var(--fg); }
 .card .ft wa-button { margin-left:auto; }
 .g-note { color:var(--muted); font-weight:normal; }
 wa-details[open] .g-note { display:none; }
+.lg-filters { display:flex; gap:6px; padding:8px 16px; }
+.lg-chip { font:inherit; font-size:11.5px; line-height:18px; padding:1px 10px; border-radius:99px; border:1px solid var(--line); background:transparent; color:var(--muted); cursor:pointer; }
+.lg-chip[aria-pressed="true"] { background:var(--accent-bg); color:var(--accent); border-color:transparent; }
+#log.hide-agent .lg-agent, #log.hide-commit :is(.lg-commit, .lg-mr), #log.hide-chat .lg-topic { display:none; }

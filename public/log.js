@@ -1,6 +1,6 @@
 // Log tab: the selected project's last 7 days from /api/log, grouped by day: finished subagents (their commits nested),
 // loose commits, chat topics and merged/closed MRs. Read-only; fetched when shown or the project changes, then each minute.
-import { api, $, el, state, prChip, foldable, rich } from './core.js';
+import { api, $, el, state, store, prChip, foldable, rich } from './core.js';
 import { topicHue } from './chat.js';
 
 const TTL_MS = 60_000;
@@ -70,6 +70,29 @@ function entry(e, d) {
     return li;
 }
 
+// Toggle chips above the days; each sets hide-<key> on the pane and CSS hides that entry type. Remembered; chat topics start off.
+const FILTERS = [['agent', 'Agents', '1'], ['commit', 'Commits & MRs', '1'], ['chat', 'Chat', '0']];
+const shown = (key, dflt) => (store.get(`log:show:${key}`) ?? dflt) === '1';
+
+function filters() {
+    const pane = $('log'), bar = el('div', 'lg-filters');
+    for (const [key, label, dflt] of FILTERS) {
+        const b = el('button', 'lg-chip', label);
+        const sync = () => {
+            pane.classList.toggle(`hide-${key}`, !shown(key, dflt));
+            b.setAttribute('aria-pressed', String(shown(key, dflt)));
+        };
+        sync();
+        b.onclick = () => {
+            store.set(`log:show:${key}`, shown(key, dflt) ? '0' : '1');
+            sync();
+        };
+        bar.append(b);
+    }
+
+    return bar;
+}
+
 /** @param {LogResponse} d */
 function render(d) {
 
@@ -79,7 +102,7 @@ function render(d) {
         pane.replaceChildren(el('div', 'welcome', d.error ?? `Nothing happened in ${d.project} in the last 7 days.`));
         return;
     }
-    pane.replaceChildren(...d.days.map(day => {
+    pane.replaceChildren(filters(), ...d.days.map(day => {
         const sec = el('section', 'group lg-day');
         const list = el('ul', 'lg-list');
         list.append(...day.entries.map(e => entry(e, d)));

@@ -1,5 +1,5 @@
 // Keyboard navigation over work-item rows (after Contado): j/k move, Enter/Space expand, o opens the MR, a runs the row action.
-// The same j/k/Enter/o work on the Issues tab's cards; 1, 2 and 3 switch tabs.
+// The same j/k/Enter/o work on the Issues tab's cards, j/k on the Log tab's entries; 1, 2 and 3 switch tabs; n jumps to a chat waiting on you; [ and ] cycle projects.
 // The focused row is tracked by item key, so it survives the 3s re-renders; list.js and issues.js call hooks.rendered after each one.
 import { $, el, waButton, state, hooks } from './core.js';
 import { select, renderBoard } from './list.js';
@@ -8,9 +8,10 @@ import { showTab, activeTab, collapseIssue } from './issues.js';
 const SHORTCUTS = [
     ['j / ↓', 'Next item'], ['k / ↑', 'Previous item'], ['Enter / Space', 'Expand or collapse, chat with its session'],
     ['o', 'Open the MR in a new tab'], ['a', "Run the row's action (asks first)"], ['/ or c', 'Focus the chat input'],
-    ['Esc', 'Leave the input, or collapse the row'], ['1 / 2 / 3', 'Work / Issues / Log tab'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['r', 'Refresh from GitLab/GitHub'], ['?', 'This overlay']
+    ['Esc', 'Leave the input, or collapse the row'], ['n', 'First chat waiting on you'], ['1 / 2 / 3', 'Work / Issues / Log tab'],
+    ['[ / ]', 'Previous / next project'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['r', 'Refresh from GitLab/GitHub'], ['?', 'This overlay']
 ];
-const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', r: 'refresh', g: 'g', 1: 'work', 2: 'issues', 3: 'log' };
+const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', r: 'refresh', g: 'g', n: 'needs', '[': 'prevProject', ']': 'nextProject', 1: 'work', 2: 'issues', 3: 'log' };
 
 // Action for a keydown ({ key, metaKey, ctrlKey, altKey }); prev is 'g' when g was pressed just before.
 /** @param {Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey'>} e @param {string | null} prev @returns {string | null} */
@@ -37,8 +38,18 @@ export function stepKey(keys, current, dir) {
     return keys[Math.max(0, Math.min(keys.length - 1, i + dir))];
 }
 
+// The project after (dir 1) or before (dir -1) current, wrapping around; from "All" (not in the list) it starts at an end.
+/** @param {string[]} list @param {string} current @param {number} dir @returns {string | null} */
+export function cycleProject(list, current, dir) {
+    if (!list.length) {
+        return null;
+    }
+    const i = list.indexOf(current);
+    return list[i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length];
+}
+
 let focusKey = null, prev = null, prevAt = 0;
-const ROWS = '#masters tr[data-key], #masters .s-row[data-key], #issues .card[data-key]'; // work rows, session rows and issue cards; the hidden tab's are skipped below
+const ROWS = '#masters tr[data-key], #masters .s-row[data-key], #issues .card[data-key], #log .lg-e[data-key]'; // work rows, session rows, issue cards and log entries; the hidden tab's are skipped below
 /** @returns {HTMLElement[]} */
 const rows = () => [.../** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(ROWS))].filter(r => r.checkVisibility()); // skips the folded Merged group
 const rowOf = key => rows().find(r => r.dataset.key === key);
@@ -106,6 +117,14 @@ function confirmAction(x) {
     go.onclick = () => { d.open = false; /** @type {HTMLElement | null} */ (rowOf(x.key)?.querySelector('.act-btn'))?.click(); }; // the button's own path: sent mark, chat binding
 }
 
+/** @param {number} dir */
+function cycle(dir) {
+    const next = cycleProject([...state.tracked].sort((a, b) => a.localeCompare(b)), state.project, dir);
+    if (next) {
+        hooks.setProject(next);
+    }
+}
+
 /** @param {KeyboardEvent} e */
 function onKey(e) {
     const path = e.composedPath();
@@ -161,6 +180,14 @@ function onKey(e) {
             }
         },
         refresh: () => hooks.refresh(),
+        needs: () => {
+            if (activeTab() !== 'work') {
+                showTab('work');
+            }
+            focusRow(rows().find(r => r.dataset.key.startsWith('asking:'))?.dataset.key);
+        },
+        prevProject: () => cycle(-1),
+        nextProject: () => cycle(1),
         g: () => {}
     }[action];
     run();

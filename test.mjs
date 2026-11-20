@@ -1300,7 +1300,7 @@ import { folderFor, editorsFrom, openInEditor } from './server.mjs';
 }
 console.log('ok open in editor');
 
-import { keyAction, stepKey } from './public/keys.js';
+import { keyAction, stepKey, cycleProject } from './public/keys.js';
 const kev = (key, mods = {}) => ({ key, ...mods });
 assert.equal(keyAction(kev('j')), 'next');
 assert.equal(keyAction(kev('ArrowUp')), 'prev');
@@ -1320,6 +1320,12 @@ assert.equal(stepKey(['a', 'b', 'c'], 'a', -1), 'a');
 assert.equal(stepKey(['a', 'b', 'c'], null, 1), 'a');
 assert.equal(stepKey(['a', 'b', 'c'], 'gone', -1), 'c');
 assert.equal(stepKey([], 'a', 1), null);
+assert.deepEqual(['n', '[', ']'].map(key => keyAction({ key }, null)), ['needs', 'prevProject', 'nextProject']);
+assert.equal(cycleProject(['a', 'b', 'c'], 'c', 1), 'a'); // wraps
+assert.equal(cycleProject(['a', 'b', 'c'], 'a', -1), 'c');
+assert.equal(cycleProject(['a', 'b', 'c'], 'all', 1), 'a');
+assert.equal(cycleProject(['a', 'b', 'c'], 'all', -1), 'c');
+assert.equal(cycleProject([], 'all', 1), null);
 console.log('ok keys');
 
 import { vendorPath } from './server.mjs';

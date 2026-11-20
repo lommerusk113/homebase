@@ -40,6 +40,35 @@ export default {
         await page.waitFor(`localStorage.getItem('chat') === ${JSON.stringify(IDS.master)}`, { what: 'the chat to bind the master' });
     },
 
+    'n jumps to the first chat waiting on you, from any tab': async ({ page, open, IDS }) => {
+        await open({ tab: 'issues' });
+        await page.ev(`document.activeElement?.blur()`);
+        await page.waitFor(`document.querySelector('#masters tr[data-key="asking:${IDS.master}"]')`, { what: 'the needs-you row' });
+        await page.key('n');
+        assert.equal(await page.ev(`localStorage.getItem('tab')`), 'work');
+        assert.equal(await page.ev(focused), `asking:${IDS.master}`);
+    },
+
+    '[ and ] cycle the tracked projects': async ({ page, open }) => {
+        await open();
+        await page.ev(`document.activeElement?.blur()`);
+        await page.key(']', 'BracketRight');
+        await page.waitFor(`localStorage.getItem('project') === 'beta'`, { what: 'beta' });
+        await page.key('[', 'BracketLeft');
+        await page.key('[', 'BracketLeft');
+        await page.waitFor(`localStorage.getItem('project') === 'gamma' && document.querySelector('#proj-chips .on')?.firstChild.textContent === 'gamma'`, { what: 'gamma, wrapped around' });
+    },
+
+    'j moves through the Log tab entries': async ({ page, open }) => {
+        await open({ tab: 'log' });
+        await page.waitFor(`document.querySelectorAll('#log .lg-e[data-key]').length >= 2`, { what: 'log entries' });
+        const keys = await page.ev(`[...document.querySelectorAll('#log .lg-e[data-key]')].map(r => r.dataset.key)`);
+        await page.ev(`document.activeElement?.blur()`);
+        await page.key('j');
+        await page.key('j');
+        assert.equal(await page.ev(focused), keys[1]);
+    },
+
     'r refreshes once, even when pressed twice': async ({ page, open }) => {
         await open();
         await page.ev(`document.activeElement?.blur()`);

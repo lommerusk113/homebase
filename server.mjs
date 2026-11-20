@@ -21,6 +21,7 @@ import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedReque
 import { readConfigFile } from './server/account.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
 import { saveUpload, readUpload } from './server/uploads.mjs';
+import { readTracked, saveTracked } from './server/tracked.mjs';
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 
@@ -46,6 +47,7 @@ export { validName, mergeConfig, loadConfig, createProject, cloneProject, openPr
 export { vendorPath } from './server/static.mjs';
 export { accountOf, readToken, ghRun, scrub } from './server/account.mjs';
 export { saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME } from './server/uploads.mjs';
+export { readTracked, saveTracked, validTracked } from './server/tracked.mjs';
 export { isStale, serverMtime, pageHash } from './server/reload.mjs';
 
 const PORT = Number(process.env.PORT ?? 4321);
@@ -175,6 +177,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 const list = await sessions();
                 watchSessions(DATA_DIR, list).catch(e => console.error(`push: ${e.message}`));
                 return json(list);
+            }
+            // The board's projects, shared by the Mac and its paired devices
+            if (url.pathname === '/api/tracked' && req.method === 'GET') {
+                return json(await readTracked(DATA_DIR));
+            }
+            if (isPost('/api/tracked')) {
+                await saveTracked(DATA_DIR, await readBody(req, 64 * 1024));
+                return res.end('ok');
             }
             if (url.pathname === '/api/version') {
                 return json(await version());

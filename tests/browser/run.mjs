@@ -172,6 +172,13 @@ const ctx = {
             .filter(([, v]) => v != null)
             .map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(v)});`);
         await page.ev(`localStorage.clear(); sessionStorage.clear(); ${sets.join(' ')}`);
+        // the server's board list (tracked.json) matches, so the page neither replaces its list nor posts one
+        const tracked = { ...DEFAULTS, ...storage }.tracked, trackedFile = join(env.HOMEBASE_DIR, 'tracked.json');
+        if (tracked == null) {
+            rmSync(trackedFile, { force: true });
+        } else {
+            writeFileSync(trackedFile, tracked);
+        }
         await page.goto(base);
         await page.waitFor(`document.querySelector('#masters tr[data-key], #masters .s-row, #masters .welcome') && document.getElementById('status-text').textContent !== 'Connecting…'`, { what: 'the board and the chat status' });
     },

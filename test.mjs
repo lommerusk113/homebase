@@ -1544,7 +1544,7 @@ import { remoteFrom, setupPairing, newCode, pair, deviceOf, cookieOf, deviceCook
     assert.equal(dev.name, 'My phone');
     // cookie: parse, flags, lookup, lastSeen
     const cookie = deviceCookie(secret);
-    assert.match(cookie, /^homebase_device=[0-9a-f]{64}; Path=\/; Max-Age=\d+; HttpOnly; Secure; SameSite=Strict$/);
+    assert.match(cookie, /^homebase_device=[0-9a-f]{64}; Path=\/; Max-Age=\d+; HttpOnly; Secure; SameSite=Lax$/);
     assert.equal(cookieOf(`a=1; homebase_device=${secret}; b=2`), secret);
     assert.equal(cookieOf('a=1'), null);
     assert.equal(deviceOf(secret, later).id, dev.id);
@@ -1772,7 +1772,7 @@ import { createServer as netServer } from 'node:net';
         const ok = await remote(form(code));
         assert.equal(ok.status, 303);
         const cookie = ok.headers['set-cookie'][0].split(';')[0];
-        assert.match(ok.headers['set-cookie'][0], /HttpOnly; Secure; SameSite=Strict/);
+        assert.match(ok.headers['set-cookie'][0], /HttpOnly; Secure; SameSite=Lax/);
         assert.equal((await remote(form(code))).status, 401, 'single use');
         // paired: the app with its token; the API needs the token too; pairing stays Mac-only
         const app = await remote({ headers: { cookie } });
@@ -2582,6 +2582,21 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
     assert.deepEqual(Object.keys(st.data.tracker), [own], 'the misfiled entry is dropped on load');
     assert.equal(st.dirty, true);
     console.log('ok accounts and repo filtering');
+}
+
+{
+    const { readTracked, saveTracked } = await import('./server.mjs');
+    const dir = join(mkdtempSync(join(tmpdir(), 'hb-tracked-')), 'homebase');
+    assert.equal(await readTracked(dir), null, 'nothing saved yet');
+    await saveTracked(dir, '["alpha","beta","alpha"]');
+    assert.deepEqual(await readTracked(dir), ['alpha', 'beta']);
+    await saveTracked(dir, '[]');
+    assert.deepEqual(await readTracked(dir), [], 'an emptied board stays empty');
+    for (const bad of ['nope', '{}', '[1]', '[""]', JSON.stringify(['x'.repeat(201)])]) {
+        await assert.rejects(saveTracked(dir, bad), e => e.status === 400, bad);
+    }
+    assert.deepEqual(await readTracked(dir), []);
+    console.log('ok tracked projects');
 }
 
 // fake glab first on PATH for the forge tests below; each test passes the script body it needs

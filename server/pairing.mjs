@@ -92,7 +92,7 @@ export function pair(given, name, now = Date.now()) {
     return secret;
 }
 
-export const deviceCookie = secret => `${COOKIE}=${secret}; Path=/; Max-Age=${COOKIE_MAX_AGE_S}; HttpOnly; Secure; SameSite=Strict`;
+export const deviceCookie = secret => `${COOKIE}=${secret}; Path=/; Max-Age=${COOKIE_MAX_AGE_S}; HttpOnly; Secure; SameSite=Lax`;
 
 export function cookieOf(header, name = COOKIE) {
 

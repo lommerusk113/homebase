@@ -34,14 +34,17 @@ const parse = v => {
         return [];
     }
 };
-// ponytail: tracked list lives in this browser's localStorage; move to a projects.json if you want it across browsers
+// The tracked list is the server's (tracked.json, shared with paired phones); localStorage keeps this browser's copy for a fast first paint.
 /**
  * @type {{ sessions: Session[], tracked: string[], project: string, selected: string | null, chat: string | null, unfold: Set<string>,
  *   outbox: OutboxItem[], nudged: Set<string>, offline?: boolean, limits?: Limits | null, asking?: string | null, reviews?: ReviewRequest[], items?: WorkItem[], editors?: Editor[],
  *   opened?: { key: string, since: number }, showMerged?: boolean, starting?: string | null, startingTmux?: string | null, focus?: string | null, boot?: { question: string, options: string[], selected: number } | null }}
  */
 export const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [], nudged: new Set(), limits: null };
-export const saveTracked = () => { store.set('tracked', JSON.stringify(state.tracked)); };
+export const saveTracked = () => {
+    store.set('tracked', JSON.stringify(state.tracked));
+    api('/api/tracked', { method: 'POST', body: JSON.stringify(state.tracked) }).catch(() => {});
+};
 
 // Every API call goes through here: the per-start token from index.html's meta tag, plus x-codetool on POSTs.
 // A 401 means the server restarted with a new token: read it from a fresh index.html (one fetch shared by concurrent

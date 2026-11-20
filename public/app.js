@@ -638,5 +638,16 @@ try {
     renderProjects();
     renderBoard();
 } catch {}
+// The server's list wins (the Mac's and every paired phone's board are one); none saved yet, this browser's list becomes it.
+api('/api/tracked').then(r => (r.ok ? r.json() : undefined)).then(list => {
+    if (list === null && state.tracked.length) {
+        saveTracked();
+    } else if (Array.isArray(list) && list.join() !== state.tracked.join()) {
+        state.tracked = list;
+        store.set('tracked', JSON.stringify(list));
+        renderProjects();
+        renderBoard();
+    }
+}).catch(() => {});
 poll();
 setInterval(poll, 3000);

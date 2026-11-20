@@ -21,11 +21,12 @@
 | `push.mjs` | Web Push: VAPID keys and JWT, RFC 8291 encryption, sending, `subscriptions.json`, the asking/needs-you transition watcher behind POST `/api/push/subscribe` and `/unsubscribe` |
 | `security.mjs` | Host/Origin/token checks, the local host list |
 | `pairing.mjs` | Remote access through `tailscale serve`: the `remote` config, the remote port test, one-time codes and their rate limit, device cookies (hashes in `devices.json`), revoke, the pair page, `isPairedRequest(req)` for other features |
+| `tracked.mjs` | The board's projects, GET/POST `/api/tracked` (`tracked.json`), shared by the Mac and its paired devices |
 | `reload.mjs` | Update without restarts: `/api/version` (server code newer than at start, browser-file mtime hash), POST `/api/server/reload` replacing the process, bind retry |
 | `static.mjs` | App file map, build hash, CSP, `public/vendor` serving, revalidation |
 
 Imports only go one way, with no cycles:
-`transcripts`, `tmux`, `security`, `pairing`, `static`, `uploads`, `push`, `reload` and `limits` import no other module; `forge` neither.
+`transcripts`, `tmux`, `security`, `pairing`, `static`, `uploads`, `tracked`, `push`, `reload` and `limits` import no other module; `forge` neither.
 `items` → transcripts, forge.
 `sessions` → transcripts, forge, items, tmux.
 `milestones` → forge, items, sessions.

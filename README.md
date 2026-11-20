@@ -128,13 +128,14 @@ The old `HOMEBASE_LAN=1` mode, which handed the token to any device on the netwo
    (`tailscale serve status` shows it; `tailscale serve --https=443 http://127.0.0.1:4322 off` stops it.)
 4. On the phone open `https://mymac.tail1234.ts.net`. It shows "Pair this device".
    On the Mac, open Homebase, ☰ → Pair a device…, and type the 6-digit code it shows on the phone.
+   Pair once per browser: each app with its own browser (Chrome, Safari, an in-app browser) keeps its own cookie. The board shows the same projects on every device (`tracked.json` in the Homebase dir).
 
 How it stays safe:
 
 * Homebase still listens on 127.0.0.1 only. Everything arriving on the remote port counts as remote, whatever its `Host` header says (`tailscale serve` routes by TLS name and passes the `Host` through, so a tailnet peer could otherwise claim to be `localhost`).
 * A remote device without a valid device cookie gets only the pair page; no token, no app files, no API.
 * A code is valid for 5 minutes and works once; a new code replaces the old one. After 5 wrong codes in a minute, all tries are refused until the minute is over.
-* Pairing sets a random 256-bit cookie (HttpOnly, Secure, SameSite=Strict, kept 400 days). Homebase stores only its SHA-256 in `~/.claude/homebase/devices.json`, with the device name and when it was last seen.
+* Pairing sets a random 256-bit cookie (HttpOnly, Secure, SameSite=Lax, kept 400 days). Lax, not Strict, so opening Homebase from the home screen or a link in another app keeps the pairing; cross-site POSTs are still refused by the `Sec-Fetch-Site`, `x-codetool`, Origin and token checks. Homebase stores only its SHA-256 in `~/.claude/homebase/devices.json`, with the device name and when it was last seen.
 * ☰ → Pair a device… also lists the paired devices; Revoke logs one out at once. Pairing is managed from the Mac only.
 * `Tailscale-User-Login` is set by `tailscale serve` itself, which drops any value the client sent; it is trusted only on the remote port, which only `serve` reaches.
 * A paired device gets the same per-start token as the Mac, so the Host, Origin and token checks above all apply too.

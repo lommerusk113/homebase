@@ -16,7 +16,7 @@ const pane = async (page, name) => {
 };
 
 export default {
-    'the bottom tab bar switches between the chat and the board tabs, and a tap on an asking row opens its chat': async ({ page, open, IDS }) => {
+    'the bottom bar switches between the chat, Work and Issues, and a tap on an asking row opens its chat': async ({ page, open, IDS }) => {
         await asPhone(page, async () => {
             await open({ project: 'all' });
             assert.equal(await page.ev(`${shown('feed')} && !${shown('masters')} && !${shown('tabs')}`), true, 'the chat full screen by default, no side-by-side');
@@ -25,10 +25,12 @@ export default {
             assert.equal(await page.ev(`${shown('masters')} && !${shown('feed')}`), true, 'the board, not the chat');
             await pane(page, 'issues');
             assert.equal(await page.ev(`${shown('issues')} && !${shown('masters')}`), true);
-            await pane(page, 'log');
-            assert.equal(await page.ev(`${shown('log')} && !${shown('issues')}`), true);
+            assert.equal(await page.ev(`localStorage.getItem('tab')`), 'issues', 'the same remembered view as the header switch');
+            // three buttons, each a full tap target; the header's switch is not shown twice, and the board starts right under the header
+            assert.deepEqual(await page.ev(`[...document.querySelectorAll('#ptabs button')].map(b => [b.dataset.pane, b.getBoundingClientRect().height >= 44, Math.round(b.getBoundingClientRect().width)])`), [['chat', true, 130], ['work', true, 130], ['issues', true, 130]]);
+            assert.equal(await page.ev(`Math.round(document.getElementById('issues').getBoundingClientRect().top - document.querySelector('header.top').getBoundingClientRect().bottom)`), 0);
             await pane(page, 'chat');
-            assert.equal(await page.ev(`${shown('feed')} && !${shown('log')}`), true);
+            assert.equal(await page.ev(`${shown('feed')} && !${shown('issues')}`), true);
             await pane(page, 'work');
             await page.click(`#masters tr[data-key="asking:${IDS.asker}"]`);
             await page.waitFor(`!document.getElementById('c-back').hidden && ${shown('feed')}`, { what: 'the asking chat, in the chat pane' });
@@ -74,14 +76,14 @@ export default {
         await asPhone(page, async () => {
             await open({ project: 'beta', chat: IDS.asker });
             await page.waitFor(`!document.getElementById('ask').hidden`, { what: 'the ask card' });
-            const wide = `[document.documentElement, document.body, ...document.querySelectorAll('header.top, .main, #chat, #feed, .c-cards, #send, #masters, #issues, #log, #ptabs')]
+            const wide = `[document.documentElement, document.body, ...document.querySelectorAll('header.top, .main, #chat, #feed, .c-cards, #send, #masters, #issues, #ptabs')]
                 .filter(e => e.offsetParent !== null || e === document.body || e === document.documentElement)
                 .filter(e => e.scrollWidth > e.clientWidth + 1 || e.getBoundingClientRect().right > innerWidth + 1).map(e => e.id || e.className || e.tagName)`;
             assert.deepEqual(await page.ev(wide), [], 'chat');
             const small = `[...document.querySelectorAll('#ask-opts wa-button, #ask .c-term wa-button:not([hidden]), #send-btn')].filter(e => e.offsetParent !== null && e.getBoundingClientRect().height < 44).map(e => e.id || e.textContent)`;
             await page.waitFor(`${small}.length === 0`, { what: 'tap targets of at least 44px (once the buttons render)' });
             await open({ project: 'alpha' });
-            for (const name of ['work', 'issues', 'log']) {
+            for (const name of ['work', 'issues']) {
                 await pane(page, name);
                 await page.waitFor(`document.querySelector('#${name === 'work' ? 'masters' : name}').children.length`, { what: name });
                 assert.deepEqual(await page.ev(wide), [], name);

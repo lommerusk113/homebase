@@ -1,5 +1,6 @@
-// Log tab: the selected project's last 7 days from /api/log, grouped by day: finished subagents (their commits nested),
-// loose commits, chat topics and merged/closed MRs. Read-only; fetched when shown or the project changes, then each minute.
+// Activity log (☰ → "Activity log…", or l): the selected project's last 7 days from /api/log, grouped by day: finished subagents
+// (their commits nested), loose commits, chat topics and merged/closed MRs. Read-only; fetched while its dialog is open: when
+// it opens or the project changes, then each minute.
 import { api, $, el, state, store, prChip, foldable, rich } from './core.js';
 import { topicHue } from './chat.js';
 
@@ -112,11 +113,18 @@ function render(d) {
     }), ...(d.error ? [el('div', 'is-note', d.error)] : []));
 }
 
-// Fetches when the tab is visible and the project changed or the last answer is a minute old; re-renders only on change.
+export function openLog() {
+    const dlg = /** @type {HTMLElement & { open: boolean }} */ ($('log-dlg'));
+    dlg.setAttribute('label', state.project === 'all' ? 'Activity log' : `Activity log · ${state.project}`);
+    dlg.open = true;
+    refreshLog();
+}
+
+// Fetches while the dialog is open and the project changed or the last answer is a minute old; re-renders only on change.
 export async function refreshLog() {
 
     const pane = $('log');
-    if (pane.hidden) {
+    if (!(/** @type {HTMLElement & { open: boolean }} */ ($('log-dlg'))).open) {
         return;
     }
     const project = state.project;

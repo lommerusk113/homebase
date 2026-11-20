@@ -7,7 +7,7 @@ import { milestoneSelector, inMilestone } from './milestone.js';
 import { initKeys } from './keys.js';
 import { picker } from './picker.js';
 import { renderIssues, showTab, activeTab } from './issues.js';
-import { refreshLog } from './log.js';
+import { refreshLog, openLog } from './log.js';
 
 // One milestone pill for the selected project (none for "All"); it filters the list. Rebuilt only when the project changes.
 // The old pill stops (timers, in-flight fetch) the moment the project changes; data for another project is dropped.
@@ -165,8 +165,14 @@ function renderDialog() {
         $('dlg').open = false;
         openPairing();
     };
+    const logBtn = waButton('Activity log…', 'd-log-btn', { variant: 'brand', appearance: 'outlined' });
+    logBtn.title = 'What happened in the selected project in the last 7 days (l)';
+    logBtn.onclick = () => {
+        $('dlg').open = false;
+        openLog();
+    };
     const top = el('div', 'd-new');
-    top.append(add, existing, pairBtn);
+    top.append(add, existing, pairBtn, logBtn);
     body.replaceChildren(
         top,
         el('h4', null, 'On board'),
@@ -603,10 +609,19 @@ async function refreshLimits() {
 for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) {
     b.onclick = () => showTab(b.dataset.tab);
 }
+// with two segments every arrow key goes to the other one; selection follows focus, as in a tablist
+$('tabs').addEventListener('keydown', e => {
+    if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+        const want = e.key === 'Home' ? 'work' : e.key === 'End' ? 'issues' : activeTab() === 'work' ? 'issues' : 'work';
+        showTab(want);
+        /** @type {HTMLElement} */ (document.querySelector(`#tabs [data-tab="${want}"]`)).focus();
+        e.preventDefault();
+    }
+});
 showTab(store.get('tab'));
 
 // Phones (≤ 700px, styles.css): the bottom bar shows the chat or one board tab. body[data-pane] does nothing wider.
-/** @param {string} pane chat, work, issues or log */
+/** @param {string} pane chat, work or issues */
 function showPane(pane) {
     document.body.dataset.pane = pane === 'chat' ? 'chat' : 'board';
     if (pane !== 'chat') {

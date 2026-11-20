@@ -1,17 +1,18 @@
 // Keyboard navigation over work-item rows (after Contado): j/k move, Enter/Space expand, o opens the MR, a runs the row action.
-// The same j/k/Enter/o work on the Issues tab's cards, j/k on the Log tab's entries; 1, 2 and 3 switch tabs; n jumps to a chat waiting on you; [ and ] cycle projects.
+// The same j/k/Enter/o work on the Issues view's cards; 1 and 2 pick Work or Issues and t swaps them; l opens the activity log; n jumps to a chat waiting on you; [ and ] cycle projects.
 // The focused row is tracked by item key, so it survives the 3s re-renders; list.js and issues.js call hooks.rendered after each one.
 import { $, el, waButton, state, hooks } from './core.js';
 import { select, renderBoard } from './list.js';
 import { showTab, activeTab, collapseIssue } from './issues.js';
+import { openLog } from './log.js';
 
 const SHORTCUTS = [
     ['j / ↓', 'Next item'], ['k / ↑', 'Previous item'], ['Enter / Space', 'Expand or collapse, chat with its session'],
     ['o', 'Open the MR in a new tab'], ['a', "Run the row's action (asks first)"], ['/ or c', 'Focus the chat input'],
-    ['Esc', 'Leave the input, or collapse the row'], ['n', 'First chat waiting on you'], ['1 / 2 / 3', 'Work / Issues / Log tab'],
+    ['Esc', 'Leave the input, or collapse the row'], ['n', 'First chat waiting on you'], ['1 / 2', 'Work / Issues'], ['t', 'Swap Work and Issues'], ['l', 'Activity log'],
     ['[ / ]', 'Previous / next project'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['r', 'Refresh from GitLab/GitHub'], ['?', 'This overlay']
 ];
-const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', r: 'refresh', g: 'g', n: 'needs', '[': 'prevProject', ']': 'nextProject', 1: 'work', 2: 'issues', 3: 'log' };
+const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', r: 'refresh', g: 'g', n: 'needs', '[': 'prevProject', ']': 'nextProject', 1: 'work', 2: 'issues', t: 'swap', l: 'log' };
 
 // Action for a keydown ({ key, metaKey, ctrlKey, altKey }); prev is 'g' when g was pressed just before.
 /** @param {Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey'>} e @param {string | null} prev @returns {string | null} */
@@ -49,7 +50,7 @@ export function cycleProject(list, current, dir) {
 }
 
 let focusKey = null, prev = null, prevAt = 0;
-const ROWS = '#masters tr[data-key], #issues .card[data-key], #log .lg-e[data-key]'; // work rows, issue cards and log entries; the hidden tab's are skipped below
+const ROWS = '#masters tr[data-key], #issues .card[data-key]'; // work rows and issue cards; the hidden view's are skipped below
 /** @returns {HTMLElement[]} */
 const rows = () => [.../** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll(ROWS))].filter(r => r.checkVisibility()); // skips the folded Merged group
 const rowOf = key => rows().find(r => r.dataset.key === key);
@@ -165,7 +166,8 @@ function onKey(e) {
         },
         work: () => showTab('work'),
         issues: () => showTab('issues'),
-        log: () => showTab('log'),
+        swap: () => showTab(activeTab() === 'work' ? 'issues' : 'work'),
+        log: openLog,
         help,
         project: () => {
             hooks.openProjects();

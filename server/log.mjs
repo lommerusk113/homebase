@@ -1,4 +1,4 @@
-// Log tab: one project's last 7 days, newest first and grouped by day, for GET /api/log. Read-only sources: finished
+// Activity log: one project's last 7 days, newest first and grouped by day, for GET /api/log. Read-only sources: finished
 // subagents (with the commits they made nested), git commits in the main checkout, the master chat's ▸ topics, and
 // merged or closed MRs.
 import { readdir, stat, readFile, open } from 'node:fs/promises';

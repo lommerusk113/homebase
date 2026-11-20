@@ -5,9 +5,22 @@ const pane = `document.getElementById('log')`;
 const days = `[...${pane}.querySelectorAll('.lg-day > .g-head')].map(h => h.textContent)`;
 const agent = `${pane}.querySelector('.lg-agent[data-key="log:agent-notes"]')`;
 
+const dlg = `document.getElementById('log-dlg')`;
+// ☰ → "Activity log…"
+async function openLog(page) {
+    await page.waitFor(`customElements.get('wa-dialog')`, { what: 'the dialog component' }); // right after a reload it may not be loaded yet
+    await page.click('#manage');
+    await page.waitFor(`document.querySelector('.d-log-btn')?.checkVisibility()`, { what: 'the ☰ dialog' });
+    await page.click('.d-log-btn');
+    await page.waitFor(`${dlg}.open && !document.getElementById('dlg').open && ${pane}.checkVisibility()`, { what: 'the activity log dialog' });
+}
+
 export default {
-    'the Log tab shows a project\'s week by day': async ({ page, open }) => {
-        await open({ tab: 'log' });
+    '☰ → Activity log shows a project\'s week by day': async ({ page, open }) => {
+        await open();
+        assert.equal(await page.ev(`document.querySelector('[data-tab="log"], [data-pane="log"]')`), null, 'no Log tab');
+        await openLog(page);
+        assert.equal(await page.ev(`${dlg}.getAttribute('label')`), 'Activity log · alpha');
         await page.waitFor(`${pane}.querySelector('.lg-day')`, { what: 'the day groups' });
         const labels = await page.ev(days);
         assert.match(labels[0], /^(Today|Yesterday) · \d+$/, 'newest day first');
@@ -40,30 +53,34 @@ export default {
         assert.equal(await page.ev(`${pane}.querySelector('.lg-mr a.chip').getAttribute('href')`), MR(100));
     },
 
-    '3 switches to the Log tab': async ({ page, open }) => {
+    'l opens the activity log over the board, Esc closes it': async ({ page, open }) => {
         await open();
         await page.ev(`document.activeElement?.blur()`);
-        await page.key('3', 'Digit3');
-        await page.waitFor(`!${pane}.hidden && document.getElementById('masters').hidden`, { what: 'the Log tab' });
-        assert.equal(await page.ev(`document.querySelector('#tabs [data-tab="log"]').getAttribute('aria-selected')`), 'true');
-        assert.equal(await page.ev(`localStorage.getItem('tab')`), 'log');
-        await page.waitFor(`${pane}.querySelector('.lg-day')`, { what: 'the log to load' });
+        await page.key('l');
+        await page.waitFor(`${dlg}.open && ${pane}.querySelector('.lg-day')`, { what: 'the log to load' });
+        assert.equal(await page.ev(`!document.getElementById('masters').hidden && localStorage.getItem('tab')`), 'work', 'the board keeps its view');
+        await page.key('Escape', 'Escape');
+        await page.waitFor(`!${dlg}.open`, { what: 'the dialog to close' });
     },
 
     'a project with nothing in the last week shows a calm empty state': async ({ page, open }) => {
-        await open({ tab: 'log', project: 'beta' });
+        await open({ project: 'beta' });
+        await openLog(page);
         await page.waitFor(`${pane}.textContent.startsWith('Nothing')`, { what: 'the empty state' });
         assert.equal(await page.ev(`${pane}.textContent`), 'Nothing happened in beta in the last 7 days.');
     },
 
     'the Agents chip hides finished subagents, and the choice survives a reload': async ({ page, open }) => {
-        await open({ tab: 'log' });
+        await open();
+        await openLog(page);
         await page.waitFor(`${agent}`, { what: 'the agent entry' });
         assert.equal(await page.ev(`${agent}.checkVisibility()`), true);
         await page.click('#log .lg-chip:nth-child(1)');
         await page.waitFor(`!${agent}.checkVisibility()`, { what: 'the agent to hide' });
         assert.equal(await page.ev(`${pane}.querySelector('.lg-chip').getAttribute('aria-pressed')`), 'false');
         await page.goto(await page.ev('location.href'));
+        await page.waitFor(`document.querySelector('#masters tr[data-key]')`, { what: 'the board after reload' });
+        await openLog(page);
         await page.waitFor(`${pane}.querySelector('.lg-day')`, { what: 'the log after reload' });
         assert.equal(await page.ev(`${agent}.checkVisibility()`), false);
     }

@@ -1,5 +1,5 @@
 /* Design tokens. Everything below draws from these: one accent, one loud colour (needs-you), red for errors only. */
-:root { --bar-h:39.5px; /* tab bar + chat header: button 9+19.5(13px*1.5)+8+2, plus 1px border */
+:root { --bar-h:39.5px; /* chat header: 9+19.5(13px*1.5)+8+2, plus 1px border */
   /* type scale */
   --fs-xs:11px; --fs-s:12px; --fs-m:13px; --fs-l:14px; --fs-xl:15px;
   /* spacing scale (4px grid) */
@@ -525,14 +525,16 @@ ul.comments a { color:var(--fg); }
   .sep { display:none; }
 }
 
-/* Work | Issues tabs (issues.js) */
-.tabs { display:flex; height:var(--bar-h); gap:var(--sp-1); padding:0 var(--sp-5); background:var(--bg); border-bottom:1px solid var(--line); flex-shrink:0; }
-.tabs button { appearance:none; border:0; background:none; font:inherit; font-size:var(--fs-m); font-weight:500; color:var(--muted); padding:9px 10px 8px; border-bottom:2px solid transparent; cursor:pointer; display:flex; gap:6px; align-items:center; }
-.tabs button:hover { color:var(--fg); }
-.tabs button[aria-selected="true"] { color:var(--fg); font-weight:600; border-bottom-color:var(--fg); }
-.tabs button:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
-.tabs .count, .ptabs .count { font-size:var(--fs-xs); padding:0 6px; border-radius:var(--r-pill); background:var(--chip); color:var(--muted); font-weight:500; }
-.tabs .count.hot, .ptabs .count.hot { background:color-mix(in srgb, var(--c-needs) 16%, var(--bg)); color:var(--c-needs); }
+/* Work | Issues: the board's view switch in the header (issues.js showTab). Two equal segments in a sunken track; a thumb slides under the selected one. */
+.seg { position:relative; display:inline-grid; grid-auto-flow:column; grid-auto-columns:1fr; height:30px; padding:2px; border:1px solid var(--line-soft); border-radius:var(--r-s); background:var(--canvas); }
+.seg::before { content:''; position:absolute; top:2px; bottom:2px; left:2px; width:calc(50% - 2px); border:1px solid var(--line); border-radius:var(--r-xs); background:var(--bg); transition:transform .18s var(--ease); }
+.seg[data-tab="issues"]::before { transform:translateX(100%); }
+.seg button { position:relative; appearance:none; border:0; background:none; font:inherit; font-size:var(--fs-m); font-weight:500; color:var(--muted); padding:0 12px; border-radius:var(--r-xs); cursor:pointer; display:flex; gap:6px; align-items:center; justify-content:center; white-space:nowrap; transition:color .12s; }
+.seg button:hover, .seg button[aria-selected="true"] { color:var(--fg); }
+.seg button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.seg .count, .ptabs .count { font-size:var(--fs-xs); padding:0 6px; border-radius:var(--r-pill); background:var(--chip); color:var(--muted); font-weight:500; font-variant-numeric:tabular-nums; }
+.seg .count.hot, .ptabs .count.hot { background:color-mix(in srgb, var(--c-needs) 16%, var(--bg)); color:var(--c-needs); }
+@media (prefers-reduced-motion: reduce) { .seg::before, .seg button { transition:none; } }
 .issues { gap:14px; }
 .is-head { background:var(--bg); border:1px solid var(--line-soft); border-radius:var(--r-m); padding:14px 16px 12px; display:grid; grid-template-columns:auto 1fr auto; gap:6px 20px; align-items:end; flex-shrink:0; }
 .is-title { grid-column:1 / -1; display:flex; gap:10px; align-items:center; font-size:var(--fs-s); margin-bottom:4px; }
@@ -639,7 +641,13 @@ ul.comments a { color:var(--fg); }
 /* a row's milestone: the same pill, small and quiet */
 .ms-tag { margin-right:6px; padding:0 7px; font-size:var(--fs-xs); font-weight:500; color:var(--muted); vertical-align:1px; }
 
-/* Log tab (log.js) */
+/* Activity log dialog (log.js) */
+#log-dlg { --width:min(760px, calc(100vw - 32px)); }
+#log-dlg::part(dialog) { border:1px solid var(--line); border-radius:var(--r-m); box-shadow:var(--shadow); }
+#log-dlg::part(header) { border-bottom:1px solid var(--line); }
+#log-dlg::part(title) { font-size:var(--fs-l); font-weight:600; padding-block:14px; }
+#log-dlg::part(body) { padding:0; }
+#log { max-height:70vh; overflow:auto; padding:var(--sp-2) var(--sp-4) var(--sp-4); display:flex; flex-direction:column; gap:var(--sp-3); }
 .lg-list { list-style:none; margin:0; padding:0; border-top:1px solid var(--line-soft); }
 .lg-e { display:flex; gap:12px; padding:7px 16px; border-top:1px solid var(--line-soft); font-size:var(--fs-m); }
 .lg-e:first-child { border-top:0; }

@@ -3,7 +3,6 @@
 import { $, el, link, ago, prChip, tooltip, waButton, store, hooks, firstName, visibleSessions } from './core.js';
 import { ciPill, startingIssues } from './list.js';
 import { chatSession, sendText } from './chat.js';
-import { refreshLog } from './log.js';
 
 const STATES = { doing: 'in progress', closable: 'can be closed', todo: 'not started', free: 'unassigned' };
 
@@ -117,20 +116,21 @@ function sendIssue(c) {
     sendText(s.id, chatMessage(c));
 }
 
-// Tabs: Work (the item list), Issues and Log. 1, 2 and 3 switch (keys.js); the choice survives reloads.
+// The board's two views: Work (the item list) and Issues, switched by the header's segmented control (#tabs).
+// 1 and 2 pick one, t swaps (keys.js); the choice survives reloads.
 /** @param {string | null} tab */
 export function showTab(tab) {
-    tab = tab === 'issues' || tab === 'log' ? tab : 'work';
+    tab = tab === 'issues' ? tab : 'work';
     store.set('tab', tab);
+    $('tabs').dataset.tab = tab; // moves the selected segment's thumb (styles.css .seg)
     for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) {
-        b.setAttribute('aria-selected', b.dataset.tab === tab);
+        b.setAttribute('aria-selected', String(b.dataset.tab === tab));
+        b.tabIndex = b.dataset.tab === tab ? 0 : -1;
     }
     $('masters').hidden = tab !== 'work';
     $('issues').hidden = tab !== 'issues';
-    $('log').hidden = tab !== 'log';
-    refreshLog();
 }
-export const activeTab = () => (!$('issues').hidden ? 'issues' : !$('log').hidden ? 'log' : 'work');
+export const activeTab = () => ($('issues').hidden ? 'work' : 'issues');
 
 // Grey placeholder lanes while the issues load: three lanes of a few cards.
 function skeleton() {
@@ -150,9 +150,11 @@ const NO_GROUPS = { closable: [], doing: [], assigned: [], unassigned: [], done:
 /** @param {Milestones | null} [d] */
 export function renderIssues(d = data) {
     data = d;
-    const badge = $('tab-free'), free = d?.selected?.groups?.unassigned.length ?? 0;
-    badge.hidden = !free;
-    badge.textContent = `${free} unassigned`;
+    // the Issues segment counts the milestone's open issues; how many nobody has taken is in its tooltip
+    const badge = $('tab-open'), open = d?.selected ? d.selected.total - d.selected.closed : 0, free = d?.selected?.groups?.unassigned.length ?? 0;
+    badge.hidden = !open;
+    badge.textContent = String(open);
+    badge.title = `${open} open${free ? `, ${free} unassigned` : ''}`;
     const pane = $('issues'), hadFocus = pane.contains(document.activeElement);
     const ms = d?.selected;
     if (d === undefined || ms?.loading) {

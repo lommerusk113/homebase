@@ -60,14 +60,42 @@ export default {
         await page.waitFor(`localStorage.getItem('project') === 'gamma' && document.getElementById('project').value === 'gamma'`, { what: 'gamma, wrapped around' });
     },
 
-    'j moves through the Log tab entries': async ({ page, open }) => {
-        await open({ tab: 'log' });
-        await page.waitFor(`document.querySelectorAll('#log .lg-e[data-key]').length >= 2`, { what: 'log entries' });
-        const keys = await page.ev(`[...document.querySelectorAll('#log .lg-e[data-key]')].map(r => r.dataset.key)`);
+    'the Work | Issues switch: a click, 1/2/t and the arrow keys change the view, and the choice survives a reload': async ({ page, open }) => {
+        const view = `(() => { const t = document.getElementById('tabs'); return { sel: [...t.querySelectorAll('[role="tab"]')].filter(b => b.getAttribute('aria-selected') === 'true').map(b => b.dataset.tab).join(),
+            tabbable: [...t.querySelectorAll('[role="tab"]')].filter(b => b.tabIndex === 0).map(b => b.dataset.tab).join(), work: !document.getElementById('masters').hidden, issues: !document.getElementById('issues').hidden, saved: localStorage.getItem('tab') }; })()`;
+        const on = tab => ({ sel: tab, tabbable: tab, work: tab === 'work', issues: tab === 'issues', saved: tab });
+        await open();
+        assert.equal(await page.ev(`document.getElementById('tabs').getAttribute('role') + ' in ' + document.getElementById('tabs').parentElement.localName + ', ' + document.querySelectorAll('#tabs [role="tab"]').length`), 'tablist in header, 2', 'a two-segment switch in the header, no Log');
+        assert.equal(await page.ev(`document.querySelector('.left').firstElementChild.className`), 'stale-note', 'no tab row above the board');
+        assert.deepEqual(await page.ev(view), on('work'));
+        await page.waitFor(`document.title === '(' + document.querySelector('#tabs .work-n').textContent + ') Homebase'`, { what: 'the waiting count on the Work segment' });
+        await page.click('#tabs [data-tab="issues"]');
+        assert.deepEqual(await page.ev(view), on('issues'), 'one click');
+        // the thumb sits under the selected segment
+        await page.waitFor(`(() => { const t = getComputedStyle(document.getElementById('tabs'), '::before'), r = document.getElementById('tabs').getBoundingClientRect(); return new DOMMatrix(t.transform).m41 > r.width / 2 - 6; })()`, { what: 'the thumb under Issues' });
+        // focus is on the clicked segment: an arrow key moves to the other one and selects it
+        await page.key('ArrowLeft', 'ArrowLeft');
+        assert.deepEqual(await page.ev(view), on('work'), 'ArrowLeft');
+        assert.equal(await page.ev(`document.activeElement.dataset.tab`), 'work', 'focus follows');
+        await page.key('ArrowRight', 'ArrowRight');
+        assert.deepEqual(await page.ev(view), on('issues'), 'ArrowRight');
         await page.ev(`document.activeElement?.blur()`);
-        await page.key('j');
-        await page.key('j');
-        assert.equal(await page.ev(focused), keys[1]);
+        await page.key('1', 'Digit1');
+        assert.deepEqual(await page.ev(view), on('work'), '1');
+        await page.key('2', 'Digit2');
+        assert.deepEqual(await page.ev(view), on('issues'), '2');
+        await page.key('t');
+        assert.deepEqual(await page.ev(view), on('work'), 't swaps');
+        await page.key('t');
+        assert.deepEqual(await page.ev(view), on('issues'), 't swaps back');
+        await page.key('3', 'Digit3');
+        assert.deepEqual(await page.ev(view), on('issues'), '3 is no view any more');
+        await page.goto(await page.ev('location.href'));
+        await page.waitFor(`document.querySelector('#issues .card')`, { what: 'the Issues view after a reload' });
+        assert.deepEqual(await page.ev(view), on('issues'), 'remembered');
+        // a saved Log tab from before falls back to Work
+        await open({ tab: 'log' });
+        assert.deepEqual(await page.ev(view), on('work'));
     },
 
     'r refreshes once, even when pressed twice': async ({ page, open }) => {

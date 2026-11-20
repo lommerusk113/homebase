@@ -466,10 +466,11 @@ export function updateTitle() {
     const asking = Math.max(tracked.filter(waitsOnYou).length, state.asking ? 1 : 0);
     const n = tracked.flatMap(s => s.items || []).filter(x => x.column === 'needs-you' || x.column === 'ready' || newCount(x)).length + asking;
     document.title = n ? `(${n}) Homebase` : 'Homebase';
-    // the phone's Work tab badge (index.html #ptabs)
-    const badge = $('pt-work-n');
-    badge.textContent = String(n);
-    badge.hidden = !n;
+    // the same count on the Work segment in the header and on the phone's Work button (index.html)
+    for (const badge of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.work-n'))) {
+        badge.textContent = String(n);
+        badge.hidden = !n;
+    }
 }
 
 // A transcript model id (claude-opus-5-5) as its family name for the chat's model chip; null for none or <synthetic>.

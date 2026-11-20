@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { appendFileSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { deflateSync, crc32 } from 'node:zlib';
+import { randomBytes } from 'node:crypto';
 import { sleep } from './cdp.mjs';
 import { chatItems, chatFeed } from '../../server.mjs';
 
@@ -20,8 +21,8 @@ async function restored(path, fn) {
     }
 }
 
-// A grey w x h PNG.
-function png(w, h) {
+// A w x h PNG: grey, or noise (megabytes, slow to decode, as a real screenshot is) when noisy.
+function png(w, h, noisy = false) {
 
     const chunk = (type, data) => {
         const body = Buffer.concat([Buffer.from(type), data]), len = Buffer.alloc(4), sum = Buffer.alloc(4);
@@ -33,13 +34,18 @@ function png(w, h) {
     head.writeUInt32BE(w, 0);
     head.writeUInt32BE(h, 4);
     head[8] = 8;
+    const rows = noisy ? randomBytes((w + 1) * h) : Buffer.alloc((w + 1) * h, 128);
+    for (let y = 0; noisy && y < h; y++) {
+        rows[y * (w + 1)] = 0; // each row's filter byte
+    }
 
-    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', head), chunk('IDAT', deflateSync(Buffer.alloc((w + 1) * h, 128))), chunk('IEND', Buffer.alloc(0))]);
+    return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', head), chunk('IDAT', deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
 }
 
-// Opens gamma's chat grown to 25 questions and replies, questions 5 and 23 with a pasted image, and runs
+// Opens gamma's chat grown to 25 questions and replies, questions 5 and 23 with a pasted image (or those in `shots`:
+// question → noisy), and runs
 // fn(add, fromBottom): add(n, more) appends question and reply n (more: further text for the reply), fromBottom is the page expression for the feed's distance to its end.
-async function withImageChat({ page, open, IDS, homebase }, fn) {
+async function withImageChat({ page, open, IDS, homebase }, fn, shots = { 5: false, 23: false }) {
 
     const home = join(dirname(homebase), 'home'), file = join(home, '.claude', 'projects', '-fx-gamma', `${IDS.gamma}.jsonl`);
     const base = { isSidechain: false, cwd: join(home, 'repos', 'gamma'), sessionId: IDS.gamma, version: '2.1.322', gitBranch: 'main' };
@@ -52,18 +58,18 @@ async function withImageChat({ page, open, IDS, homebase }, fn) {
     const put = lines => appendFileSync(file, lines.map(l => JSON.stringify(l)).join('\n') + '\n');
     mkdirSync(join(homebase, 'uploads'), { recursive: true });
     const image = n => {
-        const path = join(homebase, 'uploads', `00000000-0000-4000-8000-00000000000${n}.png`);
-        writeFileSync(path, png(400, 300));
+        const path = join(homebase, 'uploads', `00000000-0000-4000-8000-${String(n).padStart(12, '0')}.png`);
+        writeFileSync(path, shots[n] ? png(2600, 1800, true) : png(400, 300));
         return `\n[Image: ${path}]`;
     };
     await restored(file, async () => {
-        put(Array.from({ length: 25 }, (_, k) => turn(k, 900 - k * 10, k === 5 ? image(1) : k === 23 ? image(2) : '')).flat());
+        put(Array.from({ length: 25 }, (_, k) => turn(k, 900 - k * 10, k in shots ? image(k) : '')).flat());
         await open({ project: 'gamma', chat: IDS.gamma });
         await page.waitFor(`${feedHas('reply 24')} && [...document.querySelectorAll('#feed img')].every(i => i.offsetHeight > 50)`, { what: 'the long chat and its thumbnails' });
         await sleep(300);
         await fn(async (n, more) => {
             put(turn(n, 5, '', more));
-            await page.waitFor(feedHas(`reply ${n}`), { what: `reply ${n}`, timeout: 8000 });
+            await page.waitFor(`${feedHas(`reply ${n}`)} && [...document.querySelectorAll('#feed img')].every(i => i.offsetHeight > 50)`, { what: `reply ${n}`, timeout: 8000 });
             await sleep(400); // a redrawn thumbnail has loaded again
         }, `(() => { const f = document.getElementById('feed'); return Math.round(f.scrollHeight - f.scrollTop - f.clientHeight); })()`);
     });
@@ -419,5 +425,17 @@ export default {
         const before = await page.ev(y);
         await add(31);
         assert.equal(await page.ev(y), before, 'the opened reply moved');
-    })
+    }),
+
+    ...Object.fromEntries([['big screenshots in the last screenful', { 21: true, 22: true, 23: true, 24: true }], ['no images', {}]].map(([what, shots]) => [
+        `reloading the page with a chat open lands on its newest message: ${what}`,
+        async ctx => withImageChat(ctx, async (add, fromBottom) => {
+            const { page } = ctx;
+            for (let round = 0; round < 3; round++) {
+                await page.cmd('Page.reload', {});
+                await add(30 + round); // a reply lands while the page is still loading
+                assert.ok(await page.ev(fromBottom) < 40, `reload ${round + 1} left the feed ${await page.ev(fromBottom)}px from the end`);
+            }
+        }, shots)
+    ]))
 };

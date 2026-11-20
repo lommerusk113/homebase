@@ -914,22 +914,22 @@ const nearBottom = feed => feed.scrollHeight - feed.scrollTop - feed.clientHeigh
 const keyed = feed => /** @type {HTMLElement[]} */ ([...feed.querySelectorAll('[data-key]')]);
 
 // Where the reader is: at the newest (end), or with the first visible bubble (key) y px below the feed's top. Taken
-// only when the feed's offset (top) or content height differs from the one last taken or set, i.e. when the user
-// scrolled or opened a Show more: content that changes height by itself (a re-render, a thumbnail loading, the
-// composer resizing the feed) is not the reader moving, and restorePlace puts them back.
-/** @type {{ end: boolean, top: number, height: number, key?: string, y: number }} */
-let place = { end: true, top: 0, height: 0, y: 0 };
+// only when the feed's offset differs from the one last taken or set (top), i.e. when the user scrolled, and after a
+// click in the feed (Show more). Content that changes height by itself (a re-render, a thumbnail loading, a button
+// upgrading, the composer resizing the feed) is not the reader moving: watchSizes sees it and restorePlace puts them back.
+/** @type {{ end: boolean, top: number, key?: string, y: number }} */
+let place = { end: true, top: 0, y: 0 };
 /** @param {HTMLElement} feed */
 function notePlace(feed) {
     const feedTop = feed.getBoundingClientRect().top;
     // the window drops old items off the top, so the bubble is the anchor, not the scroll offset
     const b = keyed(feed).find(b => b.getBoundingClientRect().bottom > feedTop + 5);
-    place = { end: nearBottom(feed), top: feed.scrollTop, height: feed.scrollHeight, key: b?.dataset.key, y: b ? b.getBoundingClientRect().top - feedTop : 0 };
+    place = { end: nearBottom(feed), top: feed.scrollTop, key: b?.dataset.key, y: b ? b.getBoundingClientRect().top - feedTop : 0 };
 }
-// True when the user moved since the place was taken; takes the new one. late: the content just changed height by itself.
-/** @param {HTMLElement} feed @param {boolean} [late] */
-function syncPlace(feed, late) {
-    const moved = feed.scrollTop !== place.top || (!late && feed.scrollHeight !== place.height);
+// True when the user scrolled since the place was taken; takes the new one.
+/** @param {HTMLElement} feed */
+function syncPlace(feed) {
+    const moved = feed.scrollTop !== place.top;
     if (moved) {
         notePlace(feed);
     }
@@ -947,7 +947,24 @@ function restorePlace(feed) {
         }
     }
     place.top = feed.scrollTop;
-    place.height = feed.scrollHeight;
+}
+/** @type {ResizeObserver | undefined} */
+let sizes;
+let clicked = false; // a click in the feed is being handled: a size change now is the reader's own (Show more)
+// Watches the feed and every item in it for a change of size, whatever the cause; called after each redraw.
+/** @param {HTMLElement} feed */
+function watchSizes(feed) {
+    sizes ??= new ResizeObserver(() => {
+        if (clicked) {
+            return notePlace(feed);
+        }
+        syncPlace(feed);
+        restorePlace(feed);
+    });
+    sizes.disconnect();
+    for (const e of [feed, ...feed.children]) {
+        sizes.observe(e);
+    }
 }
 
 let refreshSeq = 0; // a refresh that finishes after a newer one started is stale: it must not render over it
@@ -1078,6 +1095,7 @@ export async function refreshChat() {
         place.end ||= first || stick;
         restorePlace(feed);
     }
+    watchSizes(feed);
     stick = false;
     keepFromBottom = null;
 }
@@ -1087,13 +1105,16 @@ export async function refreshChat() {
 function initNewMarker() {
 
     const feed = $('feed');
-    // a strip appearing above the composer resizes the feed, and a thumbnail grows when it loads: the reader stays put
-    const keep = () => {
-        syncPlace(feed, true);
-        restorePlace(feed);
-    };
-    new ResizeObserver(keep).observe(feed);
-    feed.addEventListener('load', keep, true);
+    watchSizes(feed);
+    // Show more grew a bubble: the reader stays on it, not at the end. Capture, as the button stops the click; the
+    // place is taken once it has toggled, by the timeout or by watchSizes, whichever the browser runs first.
+    feed.addEventListener('click', () => {
+        clicked = true;
+        setTimeout(() => {
+            clicked = false;
+            notePlace(feed);
+        });
+    }, true);
     const bottom = () => nearBottom(feed);
     const leave = () => {
         const s = chatSession();

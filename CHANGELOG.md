@@ -14,3 +14,4 @@ The first numbered state.
 * A `/model <alias>` sent from a chat backs up `~/.claude/settings.json` before restoring the default model.
 * The session list is built once for all pages polling at the same time.
 * On a phone: board actions ask before sending, a send button (Enter adds a line), a one-row header, menus and tables that fit the screen, 44px tap targets, and no "Pair a device…" on a paired device.
+* In the chat, a button's message ("Load new rules", a row action, an issue's Start), slash-command and `!` output, and a "Ran: …" line each show as one line that opens to the full text; commands in a row fold into one.

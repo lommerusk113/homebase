@@ -117,7 +117,7 @@ function askingRow(s) {
         what.append(b, el('small', 'next', [s.project, s.title || sessionTopic(s), since === 'now' ? 'now' : `${since} ago`].join(' · ')));
     } else {
         b.append(el('span', 'pulse'), ` ${state.project === 'all' ? `${s.project} · ` : ''}${s.title || sessionTopic(s)} ${s.asking ? 'is asking' : 'needs you'}`);
-        what.append(b, el('small', 'next', `${s.asking ? s.question || 'Claude asked a question.' : 'Claude’s last reply wants your decision'} · click to answer in the chat`));
+        what.append(b, el('small', 'next', `${s.asking ? s.question || 'Claude asked a question.' : 'Claude’s last reply wants your decision'}${touch() ? '' : ' · click to answer in the chat'}`)); // a phone's line is too short for the hint, and the row is plainly a button there
     }
     // a reply that wrongly needs you can be marked as handled; a question or permission prompt is answered in the chat
     const reply = s.asking ? null : s.needsId;

@@ -299,6 +299,7 @@ tr.asking .need-done { float:right; }
 .c-ask-q { margin-bottom:4px; font-size:var(--fs-xl); font-weight:600; line-height:1.4; color:var(--fg); overflow-wrap:anywhere; }
 /* a permission prompt's command or diff, its first lines until expanded; red when it pushes, merges, force-resets or deletes */
 .c-ask-detail { margin:0 0 2px; padding:8px 10px; max-height:40vh; overflow:auto; border:1px solid var(--line); border-radius:var(--r-s); background:var(--bg); color:var(--fg); font-size:var(--fs-s); line-height:1.45; white-space:pre-wrap; overflow-wrap:anywhere; }
+html[data-remote] #ask-term-toggle { display:none; } /* a paired phone has no terminal on the Mac to answer in */
 .c-ask-more { align-self:flex-start; margin-top:-4px; --wa-form-control-height:22px; font-size:var(--fs-s); }
 .c-ask.risky { background:color-mix(in srgb, var(--c-danger) 7%, var(--bg)); border-color:color-mix(in srgb, var(--c-danger) 45%, transparent); }
 .c-ask.risky::before, .c-ask.risky .c-ask-label::before { background:var(--c-danger); }

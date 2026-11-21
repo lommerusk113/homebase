@@ -8,6 +8,7 @@
   "engines": { "node": ">=20" },
   "scripts": {
     "start": "node server.mjs",
+    "demo": "node server.mjs --demo",
     "test": "node test.mjs",
     "doctor": "node server.mjs --doctor",
     "setup": "node server.mjs --setup"

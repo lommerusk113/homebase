@@ -9,6 +9,20 @@ It is one Node process with no npm dependencies and no build step; the few brows
 
 All screenshots show invented fixture data; `node scripts/screenshots.mjs` retakes them.
 
+## Try the demo
+
+```sh
+git clone https://github.com/lommerusk113/homebase.git && cd homebase
+node server.mjs --demo    # or: npm run demo
+```
+
+It needs only Node.js 20 or newer and `git`: no tmux, no `claude` CLI, no sign-in.
+The command prints a `http://localhost:<port>` address on a free port; open it in a browser.
+You get the same invented projects as in the screenshots, with a "Demo" marker in the header.
+Everything can be looked at, but nothing is sent: a message or an answer comes back as "Not sent" with the reason.
+The demo runs in a temp folder with its own home directory, so it never reads your `~/.claude`, your tmux sessions or a Homebase you already run on port 4321.
+Ctrl+C stops it and removes the temp folder.
+
 ## What you get
 
 * **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested", "Doing" and "In review", and the Issues tab shows the milestone's issues. Merge requests and pull requests come from `glab` and `gh`.

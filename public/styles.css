@@ -112,6 +112,7 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .quiet { appearance:none; border:0; background:none; color:var(--muted); font:inherit; font-size:16px; line-height:1; padding:2px 6px; border-radius:var(--r-s); cursor:pointer; }
 .quiet:hover { color:var(--fg); background:var(--hover); }
 .quiet:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.top .demo { border:1px solid var(--c-needs); border-radius:999px; padding:1px 8px; color:var(--c-needs); font-size:var(--fs-s); }
 .offline { margin-left:auto; color:var(--c-needs); font-size:var(--fs-s); }
 .offline:not([hidden]) + #bell { margin-left:12px !important; }
 .fmtwarn { margin-left:auto; color:var(--c-needs); font-size:var(--fs-s); }

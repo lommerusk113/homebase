@@ -3786,3 +3786,30 @@ import { merge, setup, settingsPath, wanted } from './server/setup.mjs';
     }
     console.log('ok setup merge');
 }
+
+// `node server.mjs --demo`: its own server on a free port over fixture data, refusing sends, gone with its temp dir on exit
+{
+    const demo = spawn(process.execPath, ['server.mjs', '--demo'], { cwd: import.meta.dirname, stdio: ['ignore', 'pipe', 'inherit'] });
+    let out = '';
+    demo.stdout.on('data', d => { out += d; });
+    try {
+        for (let i = 0; i < 100 && !/Homebase on http/.test(out); i++) {
+            await new Promise(r => setTimeout(r, 100));
+        }
+        const base = out.match(/Homebase on (http:\/\/localhost:\d+)/)[1], dir = out.match(/removes (\S+)/)[1];
+        assert.notEqual(base, 'http://localhost:4321');
+        const html = await (await fetch(base)).text();
+        assert.doesNotMatch(html, /data-demo hidden/, 'the Demo marker shows');
+        const headers = { 'x-homebase-token': html.match(/homebase-token" content="(\w+)"/)[1], 'x-codetool': '1' };
+        const list = await (await fetch(`${base}/api/sessions`, { headers })).json();
+        assert.ok(list.some(x => x.project === 'alpha' && x.cwd.startsWith(dir)), 'the board is the fixture\'s');
+        const sent = await fetch(`${base}/api/send?id=${list[0].id}`, { method: 'POST', headers, body: 'hi' });
+        assert.deepEqual([sent.status, /demo/.test(await sent.text())], [409, true], 'a send is refused with the reason');
+        demo.kill('SIGTERM');
+        await new Promise(r => demo.once('exit', r));
+        assert.throws(() => statSync(dir), 'the temp dir is removed');
+    } finally {
+        demo.kill('SIGKILL');
+    }
+    console.log('ok demo mode');
+}

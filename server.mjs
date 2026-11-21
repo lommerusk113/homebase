@@ -56,6 +56,7 @@ export { isStale, serverMtime, pageHash } from './server/reload.mjs';
 export { parseNumstat, parseNameStatus, parseStatus, changes, fileBody, diffFolder, diff, MAX_DIFF_BYTES } from './server/diff.mjs';
 
 const PORT = Number(process.env.PORT ?? 4321);
+const DEMO = !!process.env.HOMEBASE_DEMO; // set by scripts/demo.mjs for the server it starts on invented data
 
 async function readBody(req, max) {
 
@@ -85,7 +86,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         console.log(await setup());
         process.exit(0);
     }
-    const missing = missingTools();
+    if (process.argv.includes('--demo')) {
+        await (await import('./scripts/demo.mjs')).runDemo();
+    }
+    const missing = DEMO ? [] : missingTools(); // the demo starts no chats
     if (missing.length) {
         console.warn(`Warning: ${missing.join(' and ')} not found on PATH, so Homebase cannot start chats (run: node server.mjs --doctor)`);
     }
@@ -163,11 +167,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 // The token reaches only a page served to a request that passed the Host and Origin checks above.
                 res.setHeader('content-security-policy', CSP);
                 res.setHeader('cache-control', 'no-store');
-                return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN).replace('__HOMEBASE_BUILD__', BUILD));
+                return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN).replace('__HOMEBASE_BUILD__', BUILD).replace('data-demo hidden', DEMO ? 'data-demo' : 'data-demo hidden'));
             }
             const vendored = vendorPath(url.pathname);
             if (vendored && await serveVendor(vendored, req, res)) {
                 return;
+            }
+            // The demo types nothing anywhere; a 409's text is what the chat shows under the unsent message or answer.
+            if (DEMO && req.method === 'POST' && /^\/api\/(send|startup|question|clear|compact|restart|interrupt|projects\/|server\/reload)/.test(url.pathname)) {
+                throw Object.assign(new Error('This is the demo: nothing is sent to Claude'), { status: 409 });
             }
             // Pairing is managed on the Mac only, never by a remote device.
             if (url.pathname.startsWith('/api/pair/') && remote) {

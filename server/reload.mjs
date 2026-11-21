@@ -73,8 +73,12 @@ export function replaceSelf(servers, port, logFile) {
 export function listenRetry(server, port, done, tries = 25) {
 
     server.once('error', e => {
-        if (e.code !== 'EADDRINUSE' || tries <= 0) {
+        if (e.code !== 'EADDRINUSE') {
             throw e;
+        }
+        if (tries <= 0) {
+            console.error(`Port ${port} is already in use, by another Homebase or another program. Stop that one, or pick another port: PORT=<number> node server.mjs (the remote port is remote.port in config.json).`);
+            process.exit(1);
         }
         setTimeout(() => listenRetry(server, port, done, tries - 1), 200);
     });

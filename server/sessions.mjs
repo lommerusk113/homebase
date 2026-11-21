@@ -17,6 +17,7 @@ import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor, linkClea
 const run = promisify(execFile);
 
 const MAX_AGE_MS = Number(process.env.MAX_AGE_DAYS ?? 3) * 864e5;
+const WAITS_AGE_MS = Math.max(MAX_AGE_MS, 14 * 864e5); // a chat that still waits on the user stays listed this long
 const WAITING_MS = 30 * 60_000;
 const FINISHED_MS = 2 * 3600_000; // a finished subagent counts as recent this long
 const AGENT_TAIL_BYTES = 128 * 1024;
@@ -456,7 +457,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
     };
 }
 
-// Session transcripts written within MAX_AGE_MS, as { dir, file, path, st }. A project folder or transcript that vanishes mid-listing is skipped.
+// Session transcripts written within MAX_AGE_MS, plus older ones (old: true) up to WAITS_AGE_MS not known as settled, as { dir, file, path, st, old }. A project folder or transcript that vanishes mid-listing is skipped.
 async function* recentTranscripts(now) {
 
     for (const dir of await projectDirs()) {
@@ -475,13 +476,30 @@ async function* recentTranscripts(now) {
             } catch {
                 continue; // deleted between readdir and stat
             }
-            if (now - st.mtimeMs > MAX_AGE_MS) {
+            const old = now - st.mtimeMs > MAX_AGE_MS;
+            if (now - st.mtimeMs > WAITS_AGE_MS || (old && settled.get(path) === st.mtimeMs)) {
                 continue;
             }
 
-            yield { dir, file, path, st };
+            yield { dir, file, path, st, old };
         }
     }
+}
+
+// An old transcript (past MAX_AGE_MS) is listed only while its chat still waits on the user. One that doesn't is noted
+// in `settled` and not read again until it changes; one that does is `held`, so its cached tail stays.
+const settled = new Map(); // path -> the mtime it was found settled at
+const held = new Set();
+function keepOld({ path, st }, s) {
+
+    if (s.needsYou || s.asking) {
+        held.add(path);
+        return true;
+    }
+    settled.set(path, st.mtimeMs);
+    cache.delete(path);
+
+    return false;
 }
 
 // The newest SendMessage summary per agent id: an agent the master continued for other work goes by that.
@@ -642,11 +660,17 @@ const byActivity = (a, b) => (b.lastActivity ?? b.created) - (a.lastActivity ?? 
 function forgetAged(now) {
 
     for (const [path, hit] of cache) {
-        if (now - hit.mtimeMs > MAX_AGE_MS) {
+        if (now - hit.mtimeMs > MAX_AGE_MS && !held.has(path)) {
             cache.delete(path);
             prompts.delete(path);
             usageCache.delete(path);
             stagePeak.delete(basename(path, '.jsonl'));
+        }
+    }
+    held.clear(); // refilled by this listing
+    for (const [path, mtimeMs] of settled) {
+        if (now - mtimeMs > WAITS_AGE_MS) {
+            settled.delete(path);
         }
     }
 }
@@ -665,7 +689,7 @@ export async function sessions() {
     const out = [];
     for await (const transcript of recentTranscripts(now)) {
         const s = await sessionOf(transcript, now, live);
-        if (s) {
+        if (s && (!transcript.old || keepOld(transcript, s))) {
             out.push(s);
         }
     }

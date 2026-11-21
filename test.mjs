@@ -4291,3 +4291,30 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.equal(!!turnState(open, 31 * min, null, Object.assign(new Set(['s']), { busy: new Set(['s']) })).died, false, 'a long tool call of a busy process');
     console.log('ok died turn');
 }
+
+// A chat that still waits on the user stays listed past the 3-day window (up to 14 days); a settled one of that age does not.
+{
+    const home = mkdtempSync(join(tmpdir(), 'hb-aged-'));
+    const dir = join(home, '.claude', 'projects', 'p');
+    mkdirSync(dir, { recursive: true });
+    const day = 864e5, now = Date.now();
+    const chat = (id, days, reply) => {
+        const at = s => new Date(now - days * day + s * 1000).toISOString();
+        writeFileSync(join(dir, `${id}.jsonl`), [
+            { type: 'user', sessionId: id, cwd: '/r', uuid: 'p', timestamp: at(0), turnPosition: { promptIndex: 1, turnIndex: 1 }, message: { role: 'user', content: 'go' } },
+            { type: 'assistant', sessionId: id, uuid: 'a', timestamp: at(1), message: { content: [{ type: 'text', text: reply }] } },
+            { type: 'system', subtype: 'turn_duration', timestamp: at(2) }
+        ].map(e => JSON.stringify(e)).join('\n') + '\n');
+        utimesSync(join(dir, `${id}.jsonl`), new Date(now - days * day), new Date(now - days * day));
+    };
+    const asks = '**▸ Pick a port** · needs you\n\nWhich port should it use?', done = '**▸ Tidied**\n\nAll done.';
+    chat('fresh-done', 1, done);
+    chat('old-asks', 4, asks);
+    chat('old-done', 4, done);
+    chat('ancient-asks', 20, asks);
+    const code = "import { sessions } from './server/sessions.mjs'; await sessions(); console.log(JSON.stringify((await sessions()).map(s => [s.id, s.needsYou]).sort()));";
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home, HOMEBASE_DIR: home, HOMEBASE_TMUX_SOCKET: 'homebase-test-none' }, cwd: import.meta.dirname, encoding: 'utf8' });
+    assert.deepEqual(JSON.parse(out), [['fresh-done', false], ['old-asks', true]]);
+    rmSync(home, { recursive: true, force: true });
+    console.log('ok aged chat that needs you');
+}

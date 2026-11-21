@@ -3064,6 +3064,31 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     assert.ok(!f.keys().some(k => k.includes('-l')));
     f = fake({ panes: calls => free(calls.some(c => c.includes('Down')) ? 2 : 0) });
     assert.equal((await send(sid, 'Green', session, { ...f.opts(new Map()), typed: true }).catch(e => e)).status, 502);
+    {
+        // the input box counts only as the pane's last block, at column 0: printed text that looks like one (tool output,
+        // tests/fixtures/pane-fake-input-box.txt, above a prompt questionOpen doesn't know) never lifts the refusal
+        const { promptBack, freeTextOption } = await import('./server/startup.mjs');
+        const fx = n => readFileSync(new URL(`./tests/fixtures/${n}.txt`, import.meta.url), 'utf8');
+        const rule = '─'.repeat(20), box = `${rule}\n❯ \n${rule}\n`;
+        assert.equal(promptBack(fx('pane-context')), true, 'the real idle pane');
+        assert.equal(promptBack(fx('pane-fake-input-box')), false);
+        assert.equal(promptBack(`${box}\n⏺ Done.\n\n Allow this?\n\n Press Enter to continue\n Second line\n Third line\n`), false, 'an old box further up');
+        assert.equal(promptBack(`${box} Allow?\n ❯ 1. Yes\n   2. No\n`), false, 'a short dialog under an old box');
+        assert.equal(promptBack(`  ${rule}\n  ❯ \n  ${rule}\n`), false, 'indented');
+        assert.equal(promptBack(`${box}  ? for shortcuts\n`), true);
+        f = fake({ panes: () => fx('pane-fake-input-box') });
+        assert.equal((await send(sid, 'hi', { ...session, asking: true }, { ...f.opts(new Map()), typed: true }).catch(e => e)).status, 409);
+        assert.ok(!f.keys().some(k => k[0] === 'send-keys'));
+        // an option Claude itself labels "Type something" is not the text box: that is the last one
+        assert.equal(freeTextOption('│ Which?\n❯ 1. Type something\n  2. Blue\n  3. Type something.\n  4. Chat about this\nEnter to select · Esc to cancel\n'), 2);
+        // the ❯ left the text box while typing: no Enter. A tab in the line (it could switch question tabs) is typed as a space
+        f = fake({ panes: calls => free(calls.some(c => c.includes('-l')) ? 1 : calls.some(c => c.includes('Down')) ? 2 : 0) });
+        assert.equal((await send(sid, 'Green', session, { ...f.opts(new Map()), typed: true }).catch(e => e)).status, 409);
+        assert.ok(!f.keys().some(k => k.at(-1) === 'Enter'));
+        f = fake({ panes: freePanes });
+        await send(sid, 'a\tb', session, { ...f.opts(new Map()), typed: true });
+        assert.deepEqual(f.keys().find(k => k.includes('-l')).at(-1), 'a b');
+    }
     // only what the user typed declines a question: a button's canned message (row action, Load rules) is refused, nothing pressed
     for (const asking of [true, false]) {
         f = fake({ panes: () => q });

@@ -133,7 +133,7 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
         }
         const steps = sendSteps(name, text);
         if (questionOpen(pane) && freeTextOption(pane) >= 0 && steps.length === 2 && !steps[0].at(-1).startsWith('/')) {
-            await typeAnswer(name, steps, { tm, nap });
+            await typeAnswer(name, text, { tm, nap });
             answered?.();
         } else {
             await cancelQuestion(name, { tm, nap });

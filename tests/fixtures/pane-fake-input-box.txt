@@ -1,0 +1,14 @@
+⏺ Bash(cat notes.txt)
+  ⎿  notes:
+     ──────────────────────────────
+     > looks like an input box
+     ──────────────────────────────
+
+────────────────────────────────────────────────────────────
+ Some dialog this version draws differently
+
+ Do you want to allow this?
+ ❯ 1. Yes
+   2. No
+
+ Press Enter to continue

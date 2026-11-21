@@ -1,6 +1,6 @@
 // Claude Code's blocking startup dialogs (workspace trust, first-run prompts) in a Homebase tmux pane: read them off the screen
 // and answer by moving the ❯ selection to the option the user clicked. Homebase never picks an option by itself.
-import { tmux, sleep } from './tmux.mjs';
+import { tmux, sleep, sendSteps } from './tmux.mjs';
 import { RISKY } from './transcripts.mjs';
 import { seenHash } from '../public/core.js';
 
@@ -243,14 +243,19 @@ export async function answerQuestion(name, index, label, { tm = tmux, nap = slee
 }
 
 // The index of the text-box option of the question on screen, or -1
-export const freeTextOption = pane => parseQuestion(pane)?.options.findIndex(o => FREE_FORM.test(o)) ?? -1;
+export const freeTextOption = pane => parseQuestion(pane)?.options.findLastIndex(o => FREE_FORM.test(o)) ?? -1; // the last: Claude Code adds its own after the question's options
 
-// Answers the question on screen in its own text box: the ❯ goes onto it, `steps` (sendSteps) type the text there and
-// press Enter. Fails if the same question is still up afterwards.
+// Answers the question on screen in its own text box: the ❯ goes onto it, the text is typed there (a tab as a space: Tab
+// switches between questions), and Enter follows only with the ❯ still seen on the box. Fails if the same question is
+// still up afterwards.
 // ponytail: one line of text only (send declines for more), and with several questions it answers the one showing
-export async function typeAnswer(name, steps, { tm = tmux, nap = sleep } = {}) {
+export async function typeAnswer(name, text, { tm = tmux, nap = sleep } = {}) {
 
     check(name);
+    const [type, enter, more] = sendSteps(name, text.replace(/\t/g, ' '));
+    if (more) {
+        throw Object.assign(new Error('Only one line fits a question\'s text box'), { status: 400 });
+    }
     const pane = await capture(name, tm);
     const dialog = parseQuestion(pane), index = freeTextOption(pane);
     if (index < 0) {
@@ -258,10 +263,13 @@ export async function typeAnswer(name, steps, { tm = tmux, nap = sleep } = {}) {
     }
 
     await moveTo(name, dialog, index, { tm, nap, parse: parseQuestion });
-    for (const args of steps) {
-        await tm(args);
-        await nap(300); // Enter apart from the text, as in a plain send
+    await tm(type);
+    await nap(300); // Enter apart from the text, as in a plain send
+    const now = parseQuestion(await capture(name, tm));
+    if (now?.question !== dialog.question || now.selected !== index) {
+        throw Object.assign(new Error('The question changed while typing: check it in the terminal'), { status: 409 });
     }
+    await tm(enter);
 
     await nap(700);
     cache.delete(name);
@@ -298,7 +306,19 @@ export function questionOpen(pane) {
 export const inputLine = lines => lines.findLastIndex((l, i) => i > 0 && /^[│\s]*[❯>]/.test(l) && /^\s*[╭─]─{2,}/.test(lines[i - 1]));
 
 // Nothing is being asked: the input box is on screen (a question or permission prompt takes its place) and no question is open.
-export const promptBack = pane => inputLine(String(pane ?? '').split('\n')) >= 0 && !questionOpen(pane);
+// Strict, as this lifts a refusal: the box must be the pane's last block (under its closing rule only a few status lines, none
+// with a ❯ selection), its rules and its ❯ at column 0. Printed text that looks like a box (indented tool output, or a box
+// with a dialog below it) doesn't count. tests/fixtures/pane-context.txt (real) and pane-fake-input-box.txt
+const BOX_RULE = /^(─{3,}|[╭╰]─{2,}[╮╯]?)$/;
+export function promptBack(pane) {
+
+    const lines = String(pane ?? '').split('\n').map(l => l.trimEnd());
+    const close = lines.findLastIndex(l => BOX_RULE.test(l));
+    const open = lines.slice(0, Math.max(close, 0)).findLastIndex(l => BOX_RULE.test(l));
+    const below = lines.slice(close + 1).filter(Boolean);
+
+    return open >= 0 && /^(│ ?)?[❯>]/.test(lines[open + 1]) && below.length <= 4 && !below.some(l => l.includes('❯')) && !questionOpen(pane);
+}
 
 // A typed message instead of a click: Esc cancels the open question first, so the text arrives as a new message (Claude sees
 // the question declined, then the message) instead of being typed into the options. -> true if one was cancelled

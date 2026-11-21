@@ -162,6 +162,16 @@ export default {
         assert.match(await page.ev(`${b}.querySelector('.body').textContent`), /The notes cover the login redirect/);
     },
 
+    'hiding earlier messages keeps the question that still waits for an answer': async ({ page, open, IDS }) => {
+        await open();
+        await ready(page);
+        const all = await page.ev(`document.querySelectorAll('#feed .bubble').length`);
+        await page.ev(`(localStorage.setItem('cleared:${IDS.master}', String(Date.now())), import('/chat.js').then(m => m.refreshChat()))`);
+        await page.waitFor(`document.querySelector('#feed .c-hidden')`, { what: 'the hidden line' });
+        assert.ok(await page.ev(`document.querySelectorAll('#feed .bubble').length`) < all, 'earlier messages are hidden');
+        assert.ok(await page.ev(`!!${bubble('tag the release')}?.querySelector('.replies wa-button')`), 'the open question and its options stay');
+    },
+
     'quick replies under a closing question send as an answer tag': async ({ page, open, IDS }) => {
         await open();
         await ready(page);

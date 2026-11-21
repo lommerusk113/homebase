@@ -882,7 +882,10 @@ function feedItems(s, data) {
     // Clear view: items up to the stored cut-off stay hidden in Homebase only
     const cut = clearState(store.get(`cleared:${s.id}`));
     const hidden = items.findLastIndex(i => i.at && Date.parse(i.at) <= cut.at) + 1;
-    items.splice(0, hidden);
+    // not the question that still waits for an answer (a decision, or reply chips nothing came after), nor a message that is not confirmed sent
+    const open = openDecision({ items }), n = items.findLastIndex(i => i.replies?.length && !i.answer);
+    const asks = n >= 0 && !items.slice(n + 1).some(x => x.role === 'user') ? items[n] : null;
+    items.unshift(...items.splice(0, hidden).filter(i => i === open || i === asks || state.outbox.includes(/** @type {OutboxItem} */ (i))));
 
     return { items, hidden, cut };
 }

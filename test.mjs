@@ -1009,6 +1009,10 @@ import { keepModelSetting } from './server/control.mjs';
         assert.equal(await restore(), true);
         assert.deepEqual(JSON.parse(readFileSync(f, 'utf8')), { ...expected, b: 2 });
     }
+    // one backup per run, taken before the first rewrite: the file as Claude Code left it
+    const backups = readdirSync(dir).filter(n => n.endsWith('.bak'));
+    assert.equal(backups.length, 1);
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, backups[0]), 'utf8')), { a: 1, model: 'fable', b: 2 });
     writeFileSync(f, '{"model":"x"}');
     assert.equal(await (await keepModelSetting(f, { waitMs: 500, nap }))(), false); // never changed: left alone
     rmSync(dir, { recursive: true });

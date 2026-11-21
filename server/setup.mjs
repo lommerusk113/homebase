@@ -181,6 +181,13 @@ export function doctor(root = ROOT, path = settingsPath(), version = readClaudeV
     return { lines, failed: missing > 0 };
 }
 
+// Copies the settings file next to itself before Homebase changes it. -> the backup's path
+export function backupSettings(path) {
+    const backup = `${path}.${new Date().toISOString().replace(/[:.]/g, '-')}.bak`;
+    copyFileSync(path, backup);
+    return backup;
+}
+
 // Reads the settings file: { raw, settings } or { error }; a missing file is an empty object with raw null
 function load(path) {
     if (!existsSync(path)) {
@@ -201,8 +208,7 @@ function save(path, raw, next) {
     mkdirSync(dirname(path), { recursive: true });
     let backup = '';
     if (raw !== null) {
-        backup = `${path}.${new Date().toISOString().replace(/[:.]/g, '-')}.bak`;
-        copyFileSync(path, backup);
+        backup = backupSettings(path);
     }
     writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`);
     return `Done${backup ? `, backup at ${backup}` : ''}`;

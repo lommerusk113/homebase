@@ -75,6 +75,15 @@ flowchart LR
     server -- "glab, gh" --> forge["GitLab, GitHub"]
 ```
 
+## What Homebase writes to Claude's settings file
+
+Homebase changes `~/.claude/settings.json` in these cases only.
+
+* `node server.mjs --setup` adds its hooks and statusline, and `--unsetup` removes them, each after showing the change and asking (see Setup and Uninstall).
+* A `/model <alias>` sent from a chat, such as `/model opus`. Claude Code saves that pick as the default model for every chat, and a pick made in one Homebase chat is meant for that chat only. So Homebase waits up to 5 seconds for the `model` key to change and then puts the old value back (or removes the key). The other keys are kept, but the file is rewritten as 2-space JSON, and a `/model` you typed in a terminal in the same seconds is reverted too.
+
+Before the first such rewrite after each server start, the file is copied to `settings.json.<timestamp>.bak` next to it, the same kind of backup setup makes.
+
 ## Requirements
 
 * macOS. Linux is untested: the demo needs only Node, the keychain token for [New project](#new-project) is macOS only, and doctor prints a warning.

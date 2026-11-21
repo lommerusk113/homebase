@@ -1,10 +1,8 @@
 // The POST actions on a session: type into its tmux session, interrupt, /clear, /compact.
 import { stat, readFile, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { sessions } from './sessions.mjs';
 import { liveSessions } from './transcripts.mjs';
-import { versionWarning } from './setup.mjs';
+import { versionWarning, settingsPath, backupSettings } from './setup.mjs';
 import { refuseIfTrustDialog, cancelQuestion, parseDialog, parseQuestion, questionOpen, capture, inputLine, promptBack, freeTextOption, typeAnswer } from './startup.mjs';
 import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, ELSEWHERE, sleep, NEW_TMUX, OUR_TMUX, withLock } from './tmux.mjs';
 
@@ -30,9 +28,10 @@ async function resumable(id) {
 
 // `/model <alias>` makes Claude Code save the model as the global default; a pick from the chat is for that chat only.
 // Returns restore(): waits (up to waitMs) for the top-level "model" in settings.json to change, then puts the old value back (or removes the key).
+// The first restore of each server run copies the file first (setup's backupSettings): this is a write the user didn't ask for by name.
 // ponytail: a /model typed by hand in the same few seconds gets reverted too; the rest of the file is kept, but reformatted as 2-space JSON
-export const SETTINGS = () => join(homedir(), '.claude', 'settings.json');
-export async function keepModelSetting(path = SETTINGS(), { waitMs = 5000, nap = sleep } = {}) {
+const backedUp = new Set();
+export async function keepModelSetting(path = settingsPath(), { waitMs = 5000, nap = sleep } = {}) {
 
     const read = async () => JSON.parse(await readFile(path, 'utf8'));
     const old = await read();
@@ -46,6 +45,10 @@ export async function keepModelSetting(path = SETTINGS(), { waitMs = 5000, nap =
                     now.model = old.model;
                 } else {
                     delete now.model;
+                }
+                if (!backedUp.has(path)) {
+                    backupSettings(path);
+                    backedUp.add(path);
                 }
                 await writeFile(path, JSON.stringify(now, null, 2) + '\n');
 

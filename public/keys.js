@@ -1,8 +1,9 @@
 // Keyboard navigation over work-item rows (after Contado): j/k move, Enter/Space expand, o opens the MR, a runs the row action.
-// The same j/k/Enter/o work on the Issues view's cards; 1 and 2 pick Work or Issues and t swaps them; l opens the activity log; n jumps to a chat waiting on you; [ and ] cycle projects.
+// The same j/k/Enter/o work on the Issues view's cards; 1 and 2 pick Work or Issues and t swaps them; l opens the activity log; n jumps to a chat waiting on you; a digit picks the numbered option of the question open in the chat; [ and ] cycle projects.
 // The focused row is tracked by item key, so it survives the 3s re-renders; list.js and issues.js call hooks.rendered after each one.
 import { $, el, waButton, state, hooks } from './core.js';
 import { select, renderBoard } from './list.js';
+import { openOptions, focusOptionOf } from './chat.js';
 import { showTab, activeTab, collapseIssue } from './issues.js';
 import { openLog } from './log.js';
 
@@ -10,7 +11,7 @@ const SHORTCUTS = [
     ['d', 'Changes (diff) of the open chat; j / k move between its files'],
     ['j / ↓', 'Next item'], ['k / ↑', 'Previous item'], ['Enter / Space', 'Expand or collapse, chat with its session'],
     ['o', 'Open the MR in a new tab'], ['a', "Run the row's action (asks first)"], ['/ or c', 'Focus the chat input'],
-    ['Esc', 'Leave the input, or collapse the row'], ['n', 'First chat waiting on you'], ['1 / 2', 'Work / Issues'], ['t', 'Swap Work and Issues'], ['l', 'Activity log'],
+    ['Esc', 'Leave the input, or collapse the row'], ['n', 'First chat waiting on you'], ['1 – 9', 'Pick that option of the question open in the chat'], ['1 / 2', 'Work / Issues, when no question is open'], ['t', 'Swap Work and Issues'], ['l', 'Activity log'],
     ['[ / ]', 'Previous / next project'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['r', 'Refresh from GitLab/GitHub'], ['?', 'This overlay']
 ];
 const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', r: 'refresh', g: 'g', n: 'needs', '[': 'prevProject', ']': 'nextProject', 1: 'work', 2: 'issues', t: 'swap', l: 'log' };
@@ -138,6 +139,13 @@ function onKey(e) {
         if (e.key === 'Escape') { /** @type {HTMLElement | null} */ (document.activeElement)?.blur(); rowOf(focusKey)?.focus({ preventScroll: true }); }
         return;
     }
+    // a question's number badges are its keys while it is open in the chat; the views keep t
+    const opts = /^[1-9]$/.test(e.key) && !(e.metaKey || e.ctrlKey || e.altKey) ? openOptions() : [];
+    if (opts.length) {
+        opts.find(b => b.querySelector('.k')?.textContent === e.key && !b.hasAttribute('disabled'))?.click();
+        e.preventDefault();
+        return;
+    }
     const action = keyAction(e, Date.now() - prevAt < 1500 ? prev : null);
     prev = e.key;
     prevAt = Date.now();
@@ -152,7 +160,14 @@ function onKey(e) {
     const run = {
         next: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, 1)),
         prev: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, -1)),
-        toggle: () => (card ? card.click() : x && rowOf(x.key) && select(x)),
+        toggle: () => {
+            // opening a waiting chat by keyboard: its first option takes the focus once the question is drawn
+            const waiting = focusKey?.startsWith('asking:') ? focusKey.slice(7) : x?.column === 'needs-you' && state.selected !== x.key ? x.sessionId : null;
+            if (waiting) {
+                focusOptionOf(waiting);
+            }
+            return card ? card.click() : x && rowOf(x.key) && select(x);
+        },
         open: () => (card ? card.dataset.url && window.open(card.dataset.url, '_blank', 'noopener') : x?.pr && window.open(x.pr, '_blank', 'noopener')),
         act: () => (card?.dataset.msg
             ? card.querySelector('.act-btn:not([disabled])') && confirmAction({ key: focusKey, action: { label: card.dataset.label, message: card.dataset.msg } })

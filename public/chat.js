@@ -269,6 +269,36 @@ function optButton(label, n, { desc, ro, quiet } = {}) {
     return b;
 }
 
+// The numbered options of the question open in the pane: a startup or ask card's, else the strip's above the composer,
+// else the newest reply row's. keys.js: a digit picks the one with that badge.
+/** @returns {HTMLElement[]} */
+export const openOptions = () => [.../** @type {NodeListOf<HTMLElement>} */ ([$('boot-opts'), $('ask-opts'), $('wait-opts'), [...document.querySelectorAll('#feed .replies')].at(-1)]
+    .find(c => c?.checkVisibility() && c.querySelector('wa-button.c-opt .k'))?.querySelectorAll('wa-button.c-opt') ?? [])];
+
+// Enter on a waiting row (keys.js): once that chat's question is drawn, its first option takes the focus.
+/** @type {{ sid: string, until: number } | null} */
+let wantOption = null;
+/** @param {string} sid */
+export function focusOptionOf(sid) {
+    wantOption = { sid, until: Date.now() + 5000 }; // ponytail: a chat that takes longer to load keeps focus on its row
+    if (chatKey?.startsWith(sid)) { // already on screen
+        focusWanted(sid);
+    }
+}
+/** @param {string} sid */
+function focusWanted(sid) {
+    if (wantOption?.sid !== sid) {
+        return;
+    }
+    const b = Date.now() < wantOption.until && openOptions()[0];
+    if (b || Date.now() >= wantOption.until) {
+        wantOption = null;
+    }
+    if (b) {
+        /** @type {any} */ (b).updateComplete.then(() => b.focus({ preventScroll: true })); // a button drawn just now has nothing to focus yet
+    }
+}
+
 // "10:42" today, "Nov 14 10:42" before
 /** @param {string} at */
 function shortTime(at) {
@@ -418,11 +448,11 @@ function noteRow(i, sid, key) {
     if (lost) {
         const drop = () => { state.outbox = state.outbox.filter(o => o !== lost); };
         const retry = waButton('Retry', 'retry', { pill: true }), dismiss = waButton('Dismiss', 'dismiss', { pill: true, appearance: 'plain' });
-        retry.onclick = () => {
+        retry.onclick = e => {
             drop();
             sendText(lost.sid, lost.text, lost.answerTo, lost.note, lost.canned);
         };
-        dismiss.onclick = () => {
+        dismiss.onclick = e => {
             drop();
             refreshChat();
         };
@@ -632,7 +662,7 @@ function fillCard(id, tmux, question, options, answer, { detail = '', risky = fa
     $(`${id}-opts`).replaceChildren(...options.map((o, i) => {
         const b = optButton(o.label, i, { desc: o.desc, ro: !answer, quiet: o.quiet });
         if (answer) {
-            b.onclick = async () => {
+            b.onclick = async e => {
                 $('c-err').textContent = '';
                 for (const x of $(`${id}-opts`).children) {
                     x.setAttribute('disabled', '');
@@ -883,7 +913,9 @@ function showWait(s, data, items) {
     const opts = w.ask?.options ?? (w.replies ?? []).map(label => ({ label, desc: '' }));
     $('wait-opts').replaceChildren(...opts.map(({ label, desc }, k) => {
         const b = optButton(label, k, { desc });
-        b.onclick = () => sendChip(b, s.id, label, w.at, answerNote(items, n));
+        b.onclick = e => {
+            sendChip(b, s.id, label, w.at, answerNote(items, n));
+        };
 
         return b;
     }));
@@ -907,7 +939,9 @@ function quickReplyRow(s, data, items, n) {
     const row = el('div', 'replies');
     row.append(...q.replies.map((t, i) => {
         const b = optButton(t, i);
-        b.onclick = () => sendChip(b, s.id, t, q.at, note);
+        b.onclick = e => {
+            sendChip(b, s.id, t, q.at, note);
+        };
 
         return b;
     }));
@@ -1056,7 +1090,7 @@ export async function refreshChat() {
     const lastSeen = Number(store.get(`last-seen:${s.id}`)) || Infinity;
     const key = s.id + JSON.stringify([items, data.asking, data.working, hidden, data.more, lastSeen]);
     if (key === chatKey) {
-        return;
+        return focusWanted(s.id);
     }
 
     const first = !chatKey?.startsWith(s.id);
@@ -1124,6 +1158,7 @@ export async function refreshChat() {
     watchSizes(feed);
     stick = false;
     keepFromBottom = null;
+    focusWanted(s.id);
 }
 
 // "New since you looked": leaving the window marks the time per session (kept while an older mark is unread, i.e. the

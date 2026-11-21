@@ -177,10 +177,10 @@ function itemRows(x) {
     what.append(name, next);
     // with a milestone picked every row is in it, so the tag would only repeat the header pill
     if (x.milestone && !hooks.milestoneId()) {
-        what.firstElementChild.prepend(milestoneTag(x));
+        name.prepend(milestoneTag(x));
     }
     if (state.project === 'all') {
-        what.firstElementChild.prepend(el('span', 's-proj', x.project), ' ');
+        name.prepend(el('span', 's-proj', x.project), ' ');
     }
     const prog = el('td', 'prog');
     prog.append(stageBar(x));
@@ -439,6 +439,9 @@ export function select(x) {
         (x.column === 'needs-you' ? focusChat : bindChat)(x.sessionId);
     } else {
         renderBoard();
+    }
+    if (state.selected) { // a row opened low on the board: its detail comes into view (a frame later, once the redraw put the scroll offset back)
+        requestAnimationFrame(() => document.querySelector('#masters tr.detail')?.scrollIntoView({ block: 'nearest' }));
     }
 }
 /** @param {WorkItem} x */

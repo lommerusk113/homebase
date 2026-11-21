@@ -515,6 +515,9 @@ function addShowMore(feed) {
             btn.textContent = folded ? 'Show more' : 'Show less';
             btn.setAttribute('aria-expanded', String(!folded));
             body.parentElement.dispatchEvent(new Event('click')); // marks a needs-you bubble read
+            if (!folded) {
+                body.scrollIntoView({ block: 'nearest' }); // text taller than the pane starts at its top
+            }
         };
         body.after(btn);
     }

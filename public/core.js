@@ -420,6 +420,9 @@ export function foldable(tldr, rest, key) {
             state.unfold.delete(key);
         }
         set(open);
+        if (open) {
+            body.scrollIntoView({ block: 'nearest' }); // text taller than the pane starts at its top
+        }
     };
     return [top, body, btn];
 }

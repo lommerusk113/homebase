@@ -1,34 +1,92 @@
 # Homebase
 
-A local dashboard over your Claude Code sessions.
+Homebase is a local web page for driving several Claude Code sessions at once.
+Each Claude runs in its own tmux session on your Mac; Homebase reads their transcripts and shows, per project, what needs you, what is being worked on and what is in review, next to a chat with the session you picked.
+You answer questions with a click, send messages from the page, and look at diffs without opening an editor.
+It is one Node process with no npm dependencies and no build step; the few browser libraries it uses are checked in under `public/vendor`.
+
+![The work page of a project on the left, the chat with its Claude on the right](docs/img/board.png)
+
+All screenshots show invented fixture data; `node scripts/screenshots.mjs` retakes them.
+
+## What you get
+
+* **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested", "Doing" and "In review", and the Issues tab shows the milestone's issues. Merge requests and pull requests come from `glab` and `gh`.
+* **A chat view.** The transcript of one session, with each reply collapsed to its `TLDR:` line; "Show more" opens the full reply.
+
+  ![A chat with one reply opened and one collapsed](docs/img/chat.png)
+* **Questions as buttons.** When Claude asks (AskUserQuestion) or waits on a permission prompt, the options show as buttons and the chat is listed under "Needs you". A short question at the end of a reply gets reply buttons too.
+
+  ![A question from Claude with one button per option](docs/img/question.png)
+* **Subagent rows.** Each subagent a chat starts is a row on the Work tab with what it is doing now, the MR it belongs to and that MR's pipeline.
+* **A diff viewer.** "Changes" lists the uncommitted and committed files of a chat's folder, or of a subagent's worktree, and shows each file's diff. It is read-only.
+
+  ![The Changes view: file list on the left, one file's diff on the right](docs/img/diff.png)
+* **A composer with a menu.** Type a message, paste or drop images, or run a slash command. The + menu adds files, hides earlier messages, starts a fresh conversation, compacts, restarts the chat and switches notifications on.
+
+  ![The + menu above the message box](docs/img/composer.png)
+* **Auto-compact.** A chat that has been idle for 2 minutes with more than 100k tokens of context, and no subagent running, gets `/compact` typed for it, at most once an hour. From 70k the chat offers "Compact?". It is on by default, the + menu switches it off, and it only happens while a Homebase page is open.
+* **Remote access.** The same page on your phone through Tailscale, with every device paired by a one-time code, and Web Push when a chat needs you. See [Security](#security) and [Use from your phone](#use-from-your-phone-tailscale).
+
+  <img src="docs/img/phone.png" width="300" alt="The chat at phone width">
+
+## How it works
+
+* One tmux session per Claude, named `cc-<id8>` (the first 8 characters of the session id). tmux keeps Claude running between messages, and `tmux attach -t cc-<id8>` reaches it from any terminal.
+* The server reads the transcripts Claude Code writes under `~/.claude/projects`. It keeps no copy of them. The page asks the server for the current state every 1.5 seconds.
+* A message you send is typed into the tmux session with `tmux send-keys` (several lines go in as one paste), then Enter. A chat with no tmux session gets one started with `claude --resume <id>`.
+* `hooks/asking.mjs` is a Claude Code hook. It writes a small marker file while a session waits on a question or a permission prompt, because Claude Code writes some questions to the transcript only once they are answered. The options are also read from the tmux pane, and a click selects one there.
+* `homebase-rules.md` is appended to the system prompt of every Claude that Homebase starts or resumes (`--append-system-prompt-file`). It tells Claude how replies, subagents and questions fit Homebase.
+
+```mermaid
+flowchart LR
+    page["Browser page"] -- "HTTP on 127.0.0.1:4321" --> server["server.mjs"]
+    server -- "send-keys, capture-pane" --> tmux["tmux session cc-1a2b3c4d"]
+    tmux --> claude["claude"]
+    claude -- "writes" --> transcripts["~/.claude/projects/*/*.jsonl"]
+    transcripts -- "read" --> server
+    claude -- "runs hook" --> hook["hooks/asking.mjs"]
+    hook -- "marker file" --> server
+    server -- "glab, gh" --> forge["GitLab, GitHub"]
+```
 
 ## Requirements
 
-* macOS (the keychain and `/usr/bin` tools are macOS ones), Node.js.
-* `tmux`, and the `claude` CLI on the PATH of your login shell (`$SHELL -lic`).
+* macOS (the keychain and `/usr/bin` tools are macOS ones).
+* Node.js 20 or newer, `tmux`, and the `claude` CLI on the PATH of your login shell (`$SHELL -lic`).
 * Optional: `gh` and `glab`, signed in, for GitHub PRs and GitLab MRs.
 
-```sh
-node server.mjs          # http://localhost:4321 (set PORT to change)
-```
+## Setup
 
-The rate limits in the header come from `scripts/statusline.sh`: set it as Claude Code's `statusLine` command.
+1. Get the code. There is nothing to install or build.
 
-Homebase remembers the MRs/PRs it has seen in `~/.claude/homebase/items.json` (`HOMEBASE_DIR` moves it), so the Work view doesn't lose one when its link scrolls out of a transcript; deleting the file is safe.
+   ```sh
+   git clone https://github.com/lommerusk113/homebase.git
+   cd homebase
+   ```
+2. Check what is missing.
 
-Images attached in the chat (paste, drop or the paperclip) are stored in `~/.claude/homebase/uploads/` (`HOMEBASE_DIR` moves it) and sent as `[Image: <path>]` lines, which Claude opens with its Read tool; the folder is never cleaned up, so delete old files when you like.
+   ```sh
+   npm run doctor           # the same as: node server.mjs --doctor
+   ```
 
-Push notifications: "Enable notifications on this device" in the chat's ⋯ menu makes the server send a Web Push when a chat starts asking or needs you, at most one per chat per 30s, and none while a Homebase page was focused in the last minute.
-They arrive with the page closed. On an iPhone (iOS 16.4+), open Homebase over HTTPS, add it to the Home Screen, open it from there and enable it in the menu.
-The VAPID keys and subscriptions live in `~/.claude/homebase/vapid.json` and `subscriptions.json` (`HOMEBASE_DIR` moves them); this computer's browser and paired devices may subscribe.
+   It checks Node, tmux, claude and the five hooks (required), and `gh` and the statusline (optional). It prints one line per check and changes nothing.
+3. Add the hooks and the statusline to Claude Code's settings.
 
-## Asking hook
+   ```sh
+   npm run setup            # the same as: node server.mjs --setup
+   ```
 
-A chat waiting on you (an AskUserQuestion or a tool permission prompt) shows as "<chat> is asking" at the top of Needs you in the Work view; click it to answer in the chat, where each option of the question on its tmux pane is a button.
-Claude Code writes an AskUserQuestion to the transcript only once it is answered when the same message also started background agents, so Homebase also reads a marker that `hooks/asking.mjs` keeps in `~/.claude/homebase/asking/<session>.json` (`HOMEBASE_DIR` moves it).
+   It shows the entries it will add to `~/.claude/settings.json` and asks y/N before it writes. It copies the file to `settings.json.<timestamp>.bak` first. Hooks and keys you already have stay as they are. If you already have a different statusline, it asks separately before replacing it.
+4. Start the server and open the page.
 
-Every Claude that Homebase starts or resumes gets `homebase-rules.md` appended to its system prompt (`--append-system-prompt-file`): how replies, subagents and questions fit Homebase. Edit it to change how all Homebase chats behave; chats already running show a strip whose "Load new rules" has Claude re-read it (and `~/.claude/CLAUDE.md`) without a restart; "Restart chat" reloads Claude fully.
-Install it in `~/.claude/settings.json`, with `<homebase-dir>` as the absolute path of this checkout (merge into any `hooks` you already have):
+   ```sh
+   npm start                # the same as: node server.mjs; http://localhost:4321 (set PORT to change)
+   ```
+5. Pick your projects in the ☰ dialog ("Projects on your board"). Homebase lists sessions whose transcript was written in the last 3 days.
+6. Optional: phone access, see [Use from your phone](#use-from-your-phone-tailscale).
+
+What setup adds, with `<homebase-dir>` as the absolute path of this checkout:
 
 ```json
 {
@@ -38,12 +96,40 @@ Install it in `~/.claude/settings.json`, with `<homebase-dir>` as the absolute p
     "Notification": [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs" }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs" }] }],
     "Stop": [{ "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs" }] }]
-  }
+  },
+  "statusLine": { "type": "command", "command": "<homebase-dir>/scripts/statusline.sh" }
 }
 ```
 
-The answer, the next tool (for a permission prompt), a new prompt or the end of the turn removes the marker; Homebase also ignores one the transcript has moved past, or one older than a day.
 The hook never blocks or changes anything in Claude Code and prints nothing. Without it, only questions already in the transcript show.
+The statusline script saves Claude Code's status JSON, which is where the rate limits in the header come from.
+
+## Configuration
+
+Environment variables of the server:
+
+* `PORT`: the local port (default 4321).
+* `HOMEBASE_DIR`: where Homebase keeps its own files (default `~/.claude/homebase`).
+* `MAX_AGE_DAYS`: how old a transcript may be and still be listed (default 3).
+* `HOMEBASE_CLAUDE_SETTINGS`: the settings file that doctor and setup read and write (default `~/.claude/settings.json`).
+
+Optional settings live in `config.json` in the Homebase dir. Homebase never writes it. Its two keys are `newProject` (see [New project](#new-project)) and `remote` (see [Use from your phone](#use-from-your-phone-tailscale)).
+
+`homebase-rules.md` in this checkout is the text every Homebase chat gets.
+To use your own rules, put them in `homebase-rules.local.md` next to it. That file is gitignored and replaces the tracked one; it is not added to it. The server picks the file when it starts, so restart the server after creating or removing it.
+Edit the rules file to change how all Homebase chats behave; chats already running show a strip whose "Load new rules" has Claude re-read it (and `~/.claude/CLAUDE.md`) without a restart; "Restart chat" reloads Claude fully.
+
+What Homebase stores, all in the Homebase dir:
+
+* `items.json`: the MRs/PRs it has seen, so the Work view doesn't lose one when its link scrolls out of a transcript; deleting the file is safe.
+* `uploads/`: images attached in the chat (paste, drop or the + menu). They are sent as `[Image: <path>]` lines, which Claude opens with its Read tool; the folder is never cleaned up, so delete old files when you like.
+* `asking/<session>.json`: the hook's markers. The answer, the next tool (for a permission prompt), a new prompt or the end of the turn removes the marker; Homebase also ignores one the transcript has moved past, or one older than a day.
+* `tracked.json`: the projects on your board.
+* `vapid.json` and `subscriptions.json`: the Web Push keys and subscriptions; this computer's browser and paired devices may subscribe.
+* `devices.json`: the paired devices (see [Use from your phone](#use-from-your-phone-tailscale)).
+
+Push notifications: "Enable notifications on this device" in the chat's + menu makes the server send a Web Push when a chat starts asking or needs you, at most one per chat per 30s, and none while a Homebase page was focused in the last minute.
+They arrive with the page closed. On an iPhone (iOS 16.4+), open Homebase over HTTPS, add it to the Home Screen, open it from there and enable it in the menu.
 
 ## New project
 
@@ -87,7 +173,7 @@ A file's diff is cut off at 200 KB ("Diff too large"), a list at 300 files per g
 Every merge must pass these:
 
 ```sh
-node test.mjs                  # unit tests
+node test.mjs                  # unit tests (also: npm test)
 node tests/browser/run.mjs     # headless browser tests (about 30 s)
 ./check-types.sh               # type-checks public/*.js, no build
 ```
@@ -155,3 +241,7 @@ Until Claude writes its first transcript (on the first prompt) the chat sends to
 When Homebase's own code changes on disk the header says "Homebase was updated — Reload server": `POST /api/server/reload` (local requests only, never the remote port) starts a fresh detached `node server.mjs` with the same arguments and environment, logging to `server.log` in the Homebase dir, closes its listeners and exits once the new one answers; the page then reloads itself. If only `public/*.js` or `.css` changed it offers "Page updated — Refresh" instead.
 The chat menu's "Restart chat" (`POST /api/restart?id=`) kills the chat's Homebase tmux session and resumes it so Claude reloads (e.g. an edited `homebase-rules.md`); refused while Claude is working or asking, or when the chat doesn't run in Homebase's tmux.
 Once the transcript exists, Homebase maps it to that tmux session on every poll (same start folder, no tmux of its own), so no second Claude is started.
+
+## Licence
+
+MIT, see [`LICENSE`](LICENSE).

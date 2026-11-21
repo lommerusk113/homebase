@@ -67,6 +67,30 @@ export default {
         });
     },
 
+    'the keyboard: the layout shrinks to the visible height, the header and the composer stay on screen and the feed at its end': async ({ page, open }) => {
+        await asPhone(page, async () => {
+            await open();
+            await page.waitFor(`document.querySelector('#feed .bubble')`, { what: 'the chat' });
+            await page.ev(`document.getElementById('msg').focus()`);
+            // header, composer and the feed's end inside the top h px
+            const fits = h => `(() => { const top = document.querySelector('header.top').getBoundingClientRect(), send = document.getElementById('send').getBoundingClientRect(), f = document.getElementById('feed');
+                return top.top >= 0 && top.height > 0 && send.bottom <= ${h} && f.clientHeight > 0 && f.scrollHeight > f.clientHeight && f.scrollHeight - f.scrollTop - f.clientHeight < 2 && scrollY === 0; })()`;
+            const vvEvent = `visualViewport.dispatchEvent(new Event('resize')); visualViewport.dispatchEvent(new Event('scroll'));`;
+            // iOS: only the visual viewport shrinks (stubbed: headless Chrome has no keyboard), the page is scrolled to the input
+            await page.ev(`Object.defineProperty(visualViewport, 'height', { get: () => innerHeight / 2, configurable: true }); scrollTo(0, 50); ${vvEvent}`);
+            await page.waitFor(fits('innerHeight / 2'), { what: 'header, composer and the feed\'s end above the keyboard' });
+            // keyboard closed: the full height again, no gap left under the composer
+            await page.ev(`delete visualViewport.height; ${vvEvent}`);
+            await page.waitFor(`document.documentElement.style.getPropertyValue('--vvh') === '' && document.body.getBoundingClientRect().height === innerHeight`, { what: 'the full height back' });
+            // a real keyboard takes many frames; here the next resize must not land in the same frame as this one
+            await page.ev(`window.__frame = false; requestAnimationFrame(() => requestAnimationFrame(() => { window.__frame = true; }))`);
+            await page.waitFor(`window.__frame`, { what: 'a frame' });
+            // Android: the keyboard resizes the page itself
+            await page.cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 420, deviceScaleFactor: 1, mobile: true });
+            await page.waitFor(fits('innerHeight'), { what: 'header, composer and the feed\'s end in the resized page' });
+        });
+    },
+
     'a tap on a row\'s action shows what it will send first, and sends only on Send': async ({ page, open }) => {
         await asPhone(page, async () => {
             await open();

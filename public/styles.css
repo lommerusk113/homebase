@@ -780,7 +780,7 @@ wa-details[open] .g-note { display:none; }
 /* Phones: one pane at a time behind a bottom tab bar (app.js showPane), touch-sized controls, no sideways scroll */
 .ptabs { display:none; }
 @media (max-width: 700px) {
-  body { height:100dvh; }
+  body { height:var(--vvh, 100dvh); } /* --vvh: the height above an iOS keyboard (app.js fitKeyboard) */
   header.top { gap:8px; padding:max(8px, env(safe-area-inset-top)) 12px 8px; }
   header.top > * { min-width:0; }
   /* one row: no logo, separator or bell (desktop notifications; a phone's are in the + menu), the milestone as its name only */
@@ -834,6 +834,7 @@ wa-details[open] .g-note { display:none; }
   body:has(#wait:not([hidden]), #ask:not([hidden]), #boot:not([hidden])) .pt-dot { display:inline-block; }
   /* typing: the keyboard is up, so the composer gets the bottom edge */
   body:has(#msg:focus-within) .ptabs { display:none; }
+  body:has(#msg:focus-within) #status-text { white-space:nowrap; overflow:hidden; } /* and the status one line: the room goes to the chat */
 
   /* chat header: the title keeps some room; with a newer session the chips make way and Switch never truncates */
 

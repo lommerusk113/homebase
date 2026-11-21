@@ -613,6 +613,21 @@ for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySele
     b.onclick = () => showPane(b.dataset.pane);
 }
 showPane('chat');
+// The on-screen keyboard on a phone. Android shrinks the page itself (interactive-widget in index.html). iOS only shrinks
+// the visual viewport and scrolls the page up to the input, which takes the header off screen: there the body gets the
+// visible height (--vvh, styles.css) and the page stays unscrolled. No keyboard, pinch-zoomed or wider: back to 100dvh.
+const vv = window.visualViewport, phoneWidth = matchMedia('(max-width: 700px)');
+function fitKeyboard() {
+    const root = document.documentElement;
+    if (!phoneWidth.matches || vv.scale !== 1 || vv.height >= innerHeight - 1) {
+        root.style.removeProperty('--vvh');
+        return;
+    }
+    root.style.setProperty('--vvh', `${vv.height}px`);
+    scrollTo(0, 0);
+}
+vv?.addEventListener('resize', fitKeyboard);
+vv?.addEventListener('scroll', fitKeyboard);
 // A tap on the board that picks a chat, or on an "is asking" row, opens the chat pane; capture runs before the row's handler.
 let chatBefore = null;
 const board = document.querySelector('.left');

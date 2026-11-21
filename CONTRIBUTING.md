@@ -1,0 +1,43 @@
+# Contributing to Homebase
+
+Homebase is a hobby project.
+Small, focused changes are welcome.
+
+## Run the checks
+
+All three must pass before a change goes in:
+
+```sh
+node test.mjs                  # unit tests; needs tmux on the PATH (one test types into a private tmux server)
+node tests/browser/run.mjs     # headless browser tests, a minute or two; needs a local Chrome
+./check-types.sh               # type-checks public/*.js; fetches TypeScript through npx, so it needs the network
+```
+
+One line reading "items.json is corrupt" in the unit test output is expected.
+The checks never touch your Claude sessions, your tmux sessions, your `~/.claude/settings.json` or a running Homebase; keep it that way in new tests (`HOMEBASE_CLAUDE_SETTINGS` points the settings code at a temp file).
+The README's "Checks" section has the details.
+
+There is no CI yet: the unit tests need `tmux` and the browser tests need Chrome, and they have only been run on macOS.
+
+## No dependencies
+
+Homebase runs on Node 20 or newer with nothing installed: no `npm install`, no build step, no bundler.
+Use what Node and the browser have.
+A change that adds a package will not be merged.
+
+## Commits
+
+One line per commit, no body, describing what changed:
+
+```
+## - <message>
+```
+
+One commit per logical change.
+When behaviour described in the README changes, update the README in the same commit, and add a line to `CHANGELOG.md` for anything a user would notice.
+
+## After a Claude Code update
+
+Homebase reads Claude Code's screen and transcripts, which can change with any release (README, "Why tmux, not the Agent SDK").
+When you have run the checks and driven a real chat (send, answer a question, a permission prompt, `/model`, `/compact`) on a newer Claude Code, set `VERIFIED_CLAUDE` in `server/setup.mjs` to that version.
+Screens used as test fixtures go in `tests/fixtures/`, captured from a real Claude Code with `tmux capture-pane -p`.

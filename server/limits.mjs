@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 // HOMEBASE_STATUSLINE_DIR lets a test server read sample dumps instead of the real folder.
-const STATUS_DIR = process.env.HOMEBASE_STATUSLINE_DIR ?? join(homedir(), '.claude', 'homebase', 'statusline');
+const STATUS_DIR = process.env.HOMEBASE_STATUSLINE_DIR ?? join(process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase'), 'statusline');
 
 // Status-line JSON -> { fiveHour, sevenDay: { used, resetsAt } }; windows past their reset are dropped, as Claude Code does.
 export function limitsOf(j, now = Date.now()) {

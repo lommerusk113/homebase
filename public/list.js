@@ -406,7 +406,7 @@ export function select(x) {
         markSeen(x.pr);
         updateTitle();
     }
-    if (x.sessionId && x.sessionId !== chatSession()?.id) {
+    if (state.selected && x.sessionId && x.sessionId !== chatSession()?.id) { // opening only: closing a detail leaves the chat alone
         (x.column === 'needs-you' ? focusChat : bindChat)(x.sessionId);
     } else {
         renderBoard();

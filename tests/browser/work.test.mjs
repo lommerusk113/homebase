@@ -7,6 +7,27 @@ const row = key => `document.querySelector('#masters tr[data-key="${key}"]')`;
 const groups = `Object.fromEntries([...document.querySelectorAll('#masters .group')].map(g => [g.className.match(/g-([\\w-]+)/)[1], [...g.querySelectorAll('tr[data-key]')].map(r => r.dataset.key)]))`;
 
 export default {
+    'closing a row\'s detail leaves the chat where it is': async ({ page, open }) => {
+        await open();
+        await page.waitFor(`${row(MR(102))} && ${row(MR(106))}`, { what: 'the rows' });
+        const chat = `localStorage.getItem('chat')`, mine = await page.ev(chat);
+        // a row of another session: opening it binds the chat there
+        let key = null;
+        for (const k of [MR(103), MR(107), MR(106), MR(102), MR(101), MR(105)]) {
+            await page.ev(`${row(k)}.click()`);
+            await page.waitFor(`import('/core.js').then(m => m.state.selected === ${JSON.stringify(k)})`, { what: `row ${k} selected` });
+            if (await page.ev(chat) !== mine) {
+                key = k;
+                break;
+            }
+        }
+        assert.ok(key, 'the fixture has a row of another session');
+        await page.ev(`import('/chat.js').then(m => m.bindChat(${JSON.stringify(mine)}))`); // back to my chat, the row still open
+        await page.ev(`${row(key)}.click()`);
+        await page.waitFor(`import('/core.js').then(m => m.state.selected === null)`, { what: 'the detail to close' });
+        assert.equal(await page.ev(chat), mine);
+    },
+
     'work rows land in the right groups': async ({ page, open }) => {
         await open();
         await page.waitFor(`${row(MR(102))} && ${row(MR(106))}`, { what: 'the !102 row and the forge-seeded !106' });

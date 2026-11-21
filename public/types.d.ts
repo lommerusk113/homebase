@@ -29,6 +29,8 @@ interface Session {
     needsYou: boolean;
     /** what that reply asks, one line (its Waiting on you question, else its TLDR); null unless needsYou */
     needsText?: string | null;
+    /** that reply's id, to mark it as handled (POST /api/handled); null unless needsYou */
+    needsId?: string | null;
     /** start of the running turn; null when idle or unknown */
     since: number | null;
     /** the human prompt the running turn works on; null when idle */
@@ -167,6 +169,8 @@ interface ChatItem {
     cmd?: string;
     hint?: string;
     text: string;
+    /** a Claude reply's id: its newest transcript entry's uuid */
+    id?: string;
     at?: string;
     topic?: string | null;
     needsYou?: boolean;

@@ -29,7 +29,7 @@ Ctrl+C stops it and removes the temp folder.
 * **A chat view.** The transcript of one session, with each reply collapsed to its `TLDR:` line; "Show more" opens the full reply.
 
   ![A chat with one reply opened and one collapsed](docs/img/chat.png)
-* **Questions as buttons.** When Claude asks (AskUserQuestion) or waits on a permission prompt, the options show as buttons and the chat is listed under "Needs you". A short question at the end of a reply gets reply buttons too.
+* **Questions as buttons.** When Claude asks (AskUserQuestion) or waits on a permission prompt, the options show as buttons and the chat is listed under "Needs you". A short question at the end of a reply gets reply buttons too. A reply that says "needs you" when nothing does can be marked as handled with the ✓ beside its pill or on its "Needs you" row.
 
   ![A question from Claude with one button per option](docs/img/question.png)
 * **Subagent rows.** Each subagent a chat starts is a row on the Work tab with what it is doing now, the MR it belongs to and that MR's pipeline.
@@ -231,6 +231,7 @@ What Homebase stores, all in the Homebase dir:
 * `uploads/`: images attached in the chat (paste, drop or the + menu). They are sent as `[Image: <path>]` lines, which Claude opens with its Read tool; the folder is never cleaned up, so delete old files when you like.
 * `asking/<session>.json`: the hook's markers. The answer, the next tool (for a permission prompt), a new prompt or the end of the turn removes the marker; Homebase also ignores one the transcript has moved past, a permission prompt that was answered (Claude's input box is back on the chat's screen while the approved tool still runs), or one older than a day.
 * `tracked.json`: the projects on your board.
+* `handled.json`: the replies you marked as handled (the newest 500), as `<session>/<reply>` ids.
 * `vapid.json` and `subscriptions.json`: the Web Push keys and subscriptions; this computer's browser and paired devices may subscribe.
 * `devices.json`: the paired devices (see [Use from your phone](#use-from-your-phone-tailscale)).
 

@@ -251,6 +251,14 @@ export const openDecision = d => {
     const i = d?.items?.findLast(x => x.role === 'assistant');
     return i?.waiting && !i.answer && !i.error ? i : null;
 };
+// Marks a reply as handled: a "needs you" Claude got wrong. The server then says so to the chat, the board and push.
+/** @param {string} sid @param {string} reply */
+export async function markHandled(sid, reply) {
+    const r = await api(`/api/handled?id=${encodeURIComponent(sid)}&reply=${encodeURIComponent(reply)}`, { method: 'POST' });
+    if (!r.ok) {
+        throw new Error(await r.text());
+    }
+}
 // Chat status bar: a failed poll wins (never claim "Idle" on data we couldn't fetch), then asking over working
 // (Claude waits on you); working counts from the turn start (`since`), else from your last message. Idle says whether
 // Claude's last reply wants you (or its newest reply still waits on you, said since or not) and whether its agents

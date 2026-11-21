@@ -254,7 +254,10 @@ a.chip:hover { text-decoration:underline; }
 .bubble.needs::before, .c-ask::before { content:''; position:absolute; inset:0 auto 0 0; width:4px; background:var(--c-needs); }
 .b-heads { margin-top:6px; color:var(--c-warn); }
 .need-pill { appearance:none; border:0; font:inherit; cursor:pointer; display:inline-flex; align-items:center; gap:5px; flex-shrink:0; padding:0 8px; border-radius:var(--r-pill); font-size:var(--fs-xs); font-weight:600; line-height:20px; color:var(--c-needs); background:color-mix(in srgb, var(--c-needs) 12%, transparent); }
-.need-pill:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.need-pill:focus-visible, .need-done:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.need-done { appearance:none; border:0; font:inherit; cursor:pointer; flex-shrink:0; padding:0 6px; border-radius:var(--r-pill); font-size:var(--fs-xs); line-height:20px; color:var(--c-needs); background:transparent; }
+tr.asking .need-done { float:right; }
+.need-done:hover { background:color-mix(in srgb, var(--c-needs) 12%, transparent); }
 .need-pill .unread { width:6px; height:6px; border-radius:50%; background:var(--c-needs); animation:ping 2s var(--ease) infinite; }
 .bubble.fyi:not(.latest) { font-size:var(--fs-m); background:transparent; border-color:transparent; padding:2px 14px 0; }
 .bubble.fyi:not(.latest) .lead { font-size:var(--fs-m); color:var(--muted); }

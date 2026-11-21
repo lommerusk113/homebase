@@ -1,5 +1,5 @@
 // Left column: work items grouped by what they wait on, and attention transitions.
-import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle, setWorkCount, waitsOnYou } from './core.js';
+import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle, setWorkCount, waitsOnYou, markHandled } from './core.js';
 import { chatSession, bindChat, focusChat, sendText, isMaster } from './chat.js';
 import { milestoneTag } from './milestone.js';
 import { diffIcon } from './diff.js';
@@ -117,6 +117,19 @@ function askingRow(s) {
     } else {
         b.append(el('span', 'pulse'), ` ${state.project === 'all' ? `${s.project} · ` : ''}${s.title || sessionTopic(s)} ${s.asking ? 'is asking' : 'needs you'}`);
         what.append(b, el('small', 'next', `${s.asking ? s.question || 'Claude asked a question.' : 'Claude’s last reply wants your decision'} · click to answer in the chat`));
+    }
+    // a reply that wrongly needs you can be marked as handled; a question or permission prompt is answered in the chat
+    const reply = s.asking ? null : s.needsId;
+    if (reply) {
+        const done = el('button', 'need-done', '✓');
+        done.type = 'button';
+        done.title = 'Mark as handled';
+        done.setAttribute('aria-label', 'Mark as handled');
+        done.onclick = e => {
+            e.stopPropagation();
+            markHandled(s.id, reply).then(() => tr.remove(), () => {}); // the next poll has the server's word either way
+        };
+        what.prepend(done);
     }
     what.colSpan = 6;
     tr.append(what);

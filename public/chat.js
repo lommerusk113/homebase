@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou, markHandled } from './core.js';
 import { renderBoard, sessionTopic } from './list.js';
 import { syncDiff } from './diff.js';
 
@@ -331,6 +331,15 @@ function bubble(i, sid, prevTopic, look = {}) {
                 pill.prepend(el('span', 'unread'));
             }
             row.append(pill);
+            if (i.id) {
+                // Claude got it wrong (it only wants a later deploy, say): the reply stops needing you, here and on the board
+                const done = el('button', 'need-done', '✓');
+                done.type = 'button';
+                done.title = 'Mark as handled';
+                done.setAttribute('aria-label', 'Mark as handled');
+                done.onclick = () => markHandled(sid, /** @type {string} */ (i.id)).then(refreshChat, err => showErr(err.message));
+                row.append(done);
+            }
             b.tabIndex = 0;
             for (const ev of ['click', 'focusin']) { // focus: reading by keyboard counts, Show more included
                 b.addEventListener(ev, () => markRead(sid, key, b));

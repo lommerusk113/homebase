@@ -111,6 +111,26 @@ export default {
         assert.ok(await page.ev(`${bubble('push the branch')}.matches('.fyi')`), 'a plain reply is FYI');
     },
 
+    'marking a needs-you reply as handled removes its pill and its Needs you row': async ({ page, open, IDS, homebase, answerPosts }) => {
+        const file = join(dirname(homebase), 'home', '.claude', 'projects', '-fx-alpha', `${IDS.master}.jsonl`);
+        await restored(file, async () => {
+            // the reply gets an id as real transcripts have: a UUID
+            const lines = readFileSync(file, 'utf8').split('\n');
+            const n = lines.findLastIndex(l => l.includes('tag the release') && l.includes('"assistant"'));
+            lines[n] = JSON.stringify({ ...JSON.parse(lines[n]), uuid: 'dddddddd-0000-4000-8000-00000000d15d' });
+            writeFileSync(file, lines.join('\n'));
+            const row = `document.querySelector('#masters tr[data-key="asking:${IDS.master}"]')`;
+            await open();
+            page.route = q => (q.url.includes('/api/handled') ? null : answerPosts(q)); // this POST only writes the fixture's handled.json
+            await ready(page);
+            await page.waitFor(`${bubble('tag the release')}.querySelector('.need-done') && ${row}?.querySelector('.need-done')`, { what: 'the dismiss control in the chat and on the board' });
+            await page.ev(`${bubble('tag the release')}.querySelector('.need-done').click()`);
+            await page.waitFor(`!${bubble('tag the release')}.querySelector('.need-pill') && !${bubble('tag the release')}.matches('.needs')`, { what: 'the pill gone' });
+            await page.waitFor(`!${row}`, { what: 'the Needs you row gone' });
+        });
+        await page.waitFor(`document.querySelector('#masters tr[data-key="asking:${IDS.master}"]')`, { what: 'the fixture reply needing you again, for the next test' });
+    },
+
     '"Claude needs your answer" and the needs-you pill scroll to and focus the newest needs-you bubble': async ({ page, open }) => {
         await open();
         await ready(page);

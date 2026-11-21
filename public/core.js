@@ -403,11 +403,18 @@ export function foldable(tldr, rest, key) {
     if (!more) {
         return [top];
     }
-    const body = rich(more), btn = el('button', 'show');
+    const body = rich(more);
+    return [top, body, foldButton(body, key, tldr ? null : top)];
+}
+
+// A fold's Show more button: opens body, and hides lead (a cut of the body) meanwhile. Open state survives re-renders via state.unfold.
+/** @param {HTMLElement} body @param {string} key @param {HTMLElement | null} [lead] */
+export function foldButton(body, key, lead) {
+    const btn = el('button', 'show');
     const set = open => {
         body.hidden = !open;
-        if (!tldr) {
-            top.hidden = open;
+        if (lead) {
+            lead.hidden = open;
         }
         btn.textContent = open ? 'Show less' : 'Show more';
         btn.setAttribute('aria-expanded', String(open));
@@ -426,7 +433,27 @@ export function foldable(tldr, rest, key) {
             body.scrollIntoView({ block: 'nearest' }); // text taller than the pane starts at its top
         }
     };
-    return [top, body, btn];
+    return btn;
+}
+
+// One line that opens: the line, its Show more next to it, the body under them.
+/** @param {HTMLElement} line @param {HTMLElement} body @param {string} key */
+export function foldLine(line, body, key) {
+    const box = el('div', 'fold-line');
+    box.append(line, foldButton(body, key), body);
+    return box;
+}
+
+// Commands with nothing between them show as one line: the run starting at n, or [] where n is inside one. One with
+// a hint (a picker left open) stays its own line, so the hint is never folded away.
+/** @param {ChatItem[]} items @param {number} n @returns {ChatItem[]} */
+export function commandRun(items, n) {
+    const plain = i => i?.role === 'command' && !i.hint;
+    if (!plain(items[n])) {
+        return [items[n]];
+    }
+    const end = items.findIndex((i, k) => k > n && !plain(i));
+    return plain(items[n - 1]) ? [] : items.slice(n, end < 0 ? items.length : end);
 }
 
 // Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected), hooks.milestoneId to the picked one, hooks.refresh for keys.js's r, hooks.setProject for its [ and ] and hooks.openProjects for its g p;

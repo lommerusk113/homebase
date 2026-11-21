@@ -1,6 +1,7 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, touch, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou, markHandled } from './core.js';
+import { api, $, el, state, store, touch, visibleSessions, updateTitle, rich, foldable, foldLine, foldButton, commandRun, waButton, tooltip, chatStatus, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou, markHandled } from './core.js';
 import { renderBoard, sessionTopic } from './list.js';
+import { cannedLabel } from './canned.js';
 import { syncDiff } from './diff.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
@@ -315,10 +316,37 @@ function shortTime(at) {
     return d.toDateString() === new Date().toDateString() ? hm : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${hm}`;
 }
 
+// A slash command or `!` bash line on one line: the command and a hint of its result, opening to the panel or output
+// as the terminal drew it. Several in a row: one line that opens to the list.
+/** @param {ChatItem[]} run @param {string} sid */
+function commandLine(run, sid) {
+    const [i] = run, line = el('div', 'tools detail command'), top = el('div', 'c-cmd');
+    line.dataset.key = `${sid}:${i.at}:${run.length > 1 ? 'cmds' : i.cmd}`;
+    if (run.length > 1) {
+        const list = el('div', 'c-cmds');
+        list.append(...run.map(c => commandLine([c], sid)));
+        line.append(foldLine(el('div', 'c-cmd', `${run.length} commands`), list, line.dataset.key));
+        return line;
+    }
+    const lines = i.text ? i.text.split('\n') : [], long = lines.length > 1 || i.text.length > 80;
+    top.append(el('span', 'mono', i.cmd), ...(i.text ? [el('span', 'c-result', long ? ` · ${lines.length} line${lines.length > 1 ? 's' : ''}` : ` · ${i.text}`)] : []));
+    line.append(long ? foldLine(top, el('pre', 'c-panel mono', i.text), line.dataset.key) : top);
+    if (i.hint) { // what to do about a picker left open: never folded away
+        line.append(el('div', 'c-result', i.hint));
+    }
+    return line;
+}
+
 /** @param {ChatItem} i @param {string} sid @param {string | null} prevTopic @param {{ latest?: boolean, unread?: boolean, replies?: HTMLElement | null }} [look] */
 function bubble(i, sid, prevTopic, look = {}) {
     if (i.role === 'tools') {
         const line = el('div', `tools${i.quiet ? ' quiet' : ''}${i.risky ? ' risky' : ''}`, i.detail ? undefined : i.text);
+        if (i.risky) { // "Ran: git merge …" on one line, cut by the page (addShowMore drops the button where nothing is cut)
+            const [, cmd, failed] = i.text.match(/^([\s\S]*?)( · \d+ failed)?$/), box = el('div', 'fold-line');
+            const short = el('span', 'c-ran', cmd), full = el('div', 'c-ran-full', cmd);
+            box.append(short, ...(failed ? [el('span', 'c-failed', failed)] : []), foldButton(full, `${sid}:${i.at}:ran`, short), full);
+            line.replaceChildren(box);
+        }
         if (i.detail) { // a finished agent's result, folded under its line
             line.classList.add('detail');
             line.append(...foldable(i.text, i.detail, `${sid}:${i.at}:detail`));
@@ -331,16 +359,8 @@ function bubble(i, sid, prevTopic, look = {}) {
     if (i.role === 'compact') {
         return el('div', 'tools compact', i.text);
     }
-    if (i.role === 'command') { // a slash command's panel or output, as the terminal drew it
-        const b = el('div', 'bubble assistant command');
-        const head = el('div', 'b-topic');
-        head.append(el('span', 'b-topic-name', i.cmd));
-        b.append(head, el('pre', 'c-panel mono', i.text));
-        if (i.hint) {
-            b.append(el('div', 'b-note', i.hint));
-        }
-        b.dataset.key = `${sid}:${i.at}:${i.cmd}`;
-        return b;
+    if (i.role === 'command') {
+        return commandLine([i], sid);
     }
     // only the newest reply can be waiting on the user: an older one reads as a plain card
     const needs = i.role === 'assistant' && i.needsYou && !i.error && !!look.latest;
@@ -409,6 +429,9 @@ function bubble(i, sid, prevTopic, look = {}) {
             parts.splice(1, 0, heads);
         }
         b.append(...parts);
+    } else if (i.label) { // a button's message: the action on one line, what it typed behind it
+        b.classList.add('canned');
+        b.append(foldLine(el('div', 'body', i.label), rich(i.text), key));
     } else {
         const text = withoutImageLines(i.text);
         if (text || !imageNames(i.text).length) {
@@ -498,6 +521,9 @@ function answerTag(a) {
 
 // "Show more" only where the fold actually cuts something off; needs layout, so runs after insertion.
 function addShowMore(feed) {
+    for (const ran of /** @type {NodeListOf<HTMLElement>} */ (feed.querySelectorAll('.c-ran:not([hidden])'))) {
+        /** @type {HTMLElement} */ (ran.parentElement.querySelector('.show')).hidden = ran.scrollWidth <= ran.clientWidth;
+    }
     for (const body of feed.querySelectorAll('.body.fold')) {
         if (body.scrollHeight <= body.clientHeight + 4) {
             body.classList.remove('fold');
@@ -882,7 +908,9 @@ function feedItems(s, data) {
         const i = items.findIndex(x => Date.parse(x.at) > Date.parse(o.at));
         const r = o.result;
         const hint = r?.stuck ?? (r?.pick ? 'Pick this in the terminal, or type the command with its argument (e.g. /model opus)' : undefined);
-        items.splice(i < 0 ? items.length : i, 0, o, ...(r ? [{ role: /** @type {const} */ ('command'), text: r.text, cmd: o.text, at: o.at, hint }] : []));
+        // a slash command that went through is its command line; one still sending or not sent keeps its bubble (Retry)
+        const ran = r || (o.text.startsWith('/') && !o.sending && !o.error);
+        items.splice(i < 0 ? items.length : i, 0, ...(ran ? [{ role: /** @type {const} */ ('command'), text: r?.text ?? '', cmd: o.text, at: o.at, hint }] : [o]));
     }
 
     // Clear view: items up to the stored cut-off stay hidden in Homebase only
@@ -1145,6 +1173,10 @@ export async function refreshChat() {
             topic = i.topic;
         }
 
+        const run = i.role === 'command' ? commandRun(items, n) : null;
+        if (run && run.length !== 1) { // commands in a row: one line where the run starts
+            return run.length ? [commandLine(run, s.id)] : [];
+        }
         const b = bubble(i, s.id, prev, { latest: n === latest, unread: unread(i, n), replies: quickReplyRow(s, data, items, n) });
         // only a bubble new since the last render rises in; a re-render redraws them all
         if (!first && b.dataset.key && !before.has(b.dataset.key)) {
@@ -1398,7 +1430,7 @@ async function upload(files) {
 export async function sendText(sid, text, answerTo, note, canned) {
     $('c-err').textContent = '';
     /** @type {OutboxItem} */
-    const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo, note, canned };
+    const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo, note, canned, ...(canned && { label: cannedLabel(text) ?? undefined }) };
     state.outbox = [...state.outbox.filter(o => !(o.error && o.sid === sid) && !(answerTo && o.answerTo === answerTo)), out];
     stick = true;
     refreshChat();

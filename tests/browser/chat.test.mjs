@@ -260,7 +260,57 @@ export default {
         assert.equal(await page.ev(`${result}.closest('[hidden]') !== null`), true, 'folded by default');
         await page.click('#feed .tools.detail button');
         assert.equal(await page.ev(`${result}.closest('[hidden]') !== null`), false, 'shown on demand');
-        assert.equal(await page.ev(`document.querySelector('#feed .bubble.command .c-panel').textContent`), 'notes.txt');
+        assert.equal(await page.ev(`document.querySelector('#feed .tools.command').textContent.includes('notes.txt')`), true, 'a one-line result shows on the command line');
+    },
+
+    'a button message, command output and a named command each show as one line that opens': async ({ page, open, answerPosts }) => {
+        const at = n => `2026-11-14T10:0${n}:00.000Z`, long = `git merge --no-ff ${'feature/a-rather-long-branch-name '.repeat(8)}`.trim();
+        const rules = 'The rules changed. Re-read ~/rules.md and ~/.claude/CLAUDE.md now and follow them from here on (they override your earlier instructions where they differ).';
+        const items = chatItems([
+            { type: 'user', timestamp: at(0), message: { content: rules } },
+            { type: 'assistant', timestamp: at(1), message: { content: [{ type: 'tool_use', id: 'b1', name: 'Bash', input: { command: long } }] } },
+            { type: 'user', timestamp: at(2), message: { content: [{ type: 'tool_result', tool_use_id: 'b1', is_error: true, content: 'conflict' }] } },
+            { type: 'assistant', timestamp: at(3), message: { content: [{ type: 'text', text: 'Merged.' }] } },
+            { type: 'user', timestamp: at(4), message: { content: '<bash-input>ls</bash-input>' } },
+            { type: 'user', timestamp: at(5), message: { content: '<bash-stdout>a.txt\nb.txt\nc.txt</bash-stdout>' } },
+            { type: 'user', timestamp: at(6), message: { content: '<bash-input>pwd</bash-input>' } },
+            { type: 'user', timestamp: at(7), message: { content: '<bash-stdout>/tmp/x</bash-stdout>' } }
+        ]);
+        await open();
+        await ready(page);
+        page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: false, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        await page.waitFor(`document.querySelector('#feed .bubble.canned')`, { what: 'the button message' });
+        const hidden = (sel, text) => `[...document.querySelectorAll('#feed ${sel} *')].find(n => n.textContent === ${JSON.stringify(text)}).closest('[hidden]') !== null`;
+        assert.equal(await page.ev(hidden('.bubble.canned', rules)), true, 'only the action shows');
+        await page.ev(`document.querySelector('#feed .bubble.canned button.show').focus()`);
+        await page.key('Enter');
+        assert.equal(await page.ev(hidden('.bubble.canned', rules)), false, 'Enter opens the text it typed');
+
+        // two commands in a row: one line, opening to the two, of which the longer opens to its output
+        assert.equal(await page.ev(`document.querySelectorAll('#feed > .tools.command').length`), 1);
+        assert.equal(await page.ev(hidden('.tools.command', 'a.txt\nb.txt\nc.txt')), true);
+        await page.click('#feed > .tools.command > .fold-line > button.show');
+        assert.equal(await page.ev(`document.querySelectorAll('#feed .c-cmds:not([hidden]) > .tools.command').length`), 2);
+        await page.click('#feed .c-cmds .tools.command button.show');
+        assert.equal(await page.ev(hidden('.tools.command', 'a.txt\nb.txt\nc.txt')), false);
+
+        // a phone: the named command stays on one line with its failed mark, and opens to the whole command
+        await page.cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+        try {
+            const ran = `document.querySelector('#feed .tools.risky')`;
+            await page.waitFor(`${ran} && !${ran}.querySelector('button.show').hidden`, { what: 'the cut command with its Show more' });
+            const shut = await page.ev(`(() => { const r = ${ran}, f = r.querySelector('.c-failed').getBoundingClientRect(), s = r.querySelector('.c-ran'); return { h: r.offsetHeight, cut: s.scrollWidth > s.clientWidth, failedIn: f.width > 0 && f.right <= innerWidth, oneLine: r.offsetHeight < 2 * f.height }; })()`);
+            assert.deepEqual([shut.cut, shut.failedIn, shut.oneLine], [true, true, true]);
+            await page.ev(`${ran}.querySelector('button.show').click()`);
+            const opened = await page.ev(`(() => { const r = ${ran}, f = r.querySelector('.c-failed').getBoundingClientRect(); return { h: r.offsetHeight, text: r.querySelector('.c-ran-full').textContent, failedIn: f.width > 0 }; })()`);
+            assert.deepEqual([opened.h > shut.h, opened.text, opened.failedIn], [true, `Ran: ${long}`, true]);
+            await page.ev(`window.dispatchEvent(new Event('focus'))`);
+            await sleep(1500); // a redraw or two
+            assert.equal(await page.ev(`${ran}.querySelector('.c-ran-full').hidden`), false, 'still open after the feed redraws');
+            assert.equal(await page.ev(hidden('.bubble.canned', rules)), false);
+        } finally {
+            await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+        }
     },
 
     'a short reply becomes the answer tag of the question before it': async ({ page, open }) => {

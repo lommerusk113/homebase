@@ -240,7 +240,7 @@ a.chip:hover { text-decoration:underline; }
 /* Claude's replies are cards: a topic pill and the time, the TLDR as the body, the rest under a dashed line */
 .bubble.assistant { position:relative; align-self:stretch; max-width:none; background:var(--bg); border:1px solid var(--line-soft); border-radius:var(--r-m); padding:10px 14px 8px; }
 .bubble.assistant:hover { border-color:var(--line); }
-.bubble .c-panel { margin:0; white-space:pre; overflow:auto; max-height:24em; line-height:1.4; }
+.bubble .c-panel, .tools .c-panel { margin:0; white-space:pre; overflow:auto; max-height:24em; line-height:1.4; }
 .bubble.user { align-self:flex-end; max-width:85%; background:var(--accent-bg); border-radius:var(--r-m) var(--r-m) var(--r-xs) var(--r-m); }
 .bubble.interrupted { border-left:3px solid var(--c-interrupted); background:color-mix(in srgb, var(--c-interrupted) 7%, var(--bg)); }
 .bubble .body.fold { max-height:9.6em; overflow:hidden; -webkit-mask-image:linear-gradient(#000 60%, transparent); mask-image:linear-gradient(#000 60%, transparent); }
@@ -286,9 +286,17 @@ tr.asking .need-done { float:right; }
 .tools.quiet { display:none; }
 .tools.detail { align-self:stretch; }
 .tools.detail::before { content:none; }
+.fold-line { display:flex; flex-wrap:wrap; align-items:baseline; column-gap:8px; }
+.fold-line > .show { padding:0; }
+.c-ran { flex:1 1 0; max-width:max-content; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.c-failed { white-space:nowrap; }
+.fold-line > :last-child { flex-basis:100%; min-width:0; }
+.c-cmd { min-width:0; overflow-wrap:anywhere; }
+.c-cmds { padding-left:12px; }
 .tools.api-error { color:var(--c-danger); }
-.tools.risky { font-family:var(--wa-font-family-code); font-size:var(--fs-s); white-space:pre-wrap; overflow-wrap:anywhere; }
-.c-feed.needs-only .tools.risky { display:block; }
+.tools.risky { align-self:stretch; display:flex; font-family:var(--wa-font-family-code); font-size:var(--fs-s); white-space:pre-wrap; overflow-wrap:anywhere; }
+.tools.risky .fold-line { flex:1; min-width:0; }
+.c-feed.needs-only .tools.risky { display:flex; }
 .tools.api-error::before { content:'⚠ '; }
 .c-feed.needs-only .tools.api-error { display:block; }
 .c-note { margin:0 12px 8px; padding:8px 10px; border-radius:var(--r-s); font-size:var(--fs-m); display:flex; gap:8px; align-items:center; }

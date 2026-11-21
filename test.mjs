@@ -115,6 +115,8 @@ for (const quoted of ['75\tconst bg = \'Command running in background with ID: b
 console.log('ok agents');
 
 import { splitTldr, splitTopic, toolSummary, chatItems, pendingQuestion, sendSteps, RISKY } from './server.mjs';
+import { canned } from './public/canned.js';
+import { commandRun } from './public/core.js';
 assert.deepEqual(splitTldr('Long text.\n\n**TLDR:** It works.'), { tldr: 'It works.', text: 'Long text.' });
 assert.equal(splitTldr('a\n**TLDR**: fixed **now**').tldr, 'fixed **now**');
 assert.equal(splitTldr('**TL;DR: shipped**').tldr, 'shipped');
@@ -977,6 +979,23 @@ console.log('ok interrupted');
     ]);
     assert.deepEqual(cmds.map(i => [i.role, i.cmd, i.text]), [['command', '/context', 'Tokens: 12k'], ['command', '/model opus', 'Set'], ['command', '! ls', 'a.txt\nno such dir']]);
     console.log('ok command output in the feed');
+
+    // commands with nothing between them are one run, shown as one line
+    assert.deepEqual([commandRun(cmds, 0).length, commandRun(cmds, 1), commandRun(cmds, 2)], [3, [], []]);
+    const apart = chatItems([u('<bash-input>ls</bash-input>'), u('<bash-stdout>a</bash-stdout>'), u('and now?'), u('<bash-input>pwd</bash-input>'), u('<bash-stdout>/x</bash-stdout>')]);
+    assert.deepEqual([apart.map(i => i.role), commandRun(apart, 0).length, commandRun(apart, 2).length], [['command', 'user', 'command'], 1, 1], 'a message between them: each its own line');
+    assert.deepEqual([0, 1, 2].map(n => commandRun([cmds[0], { ...cmds[1], hint: 'Pick this in the terminal' }, cmds[2]], n).length), [1, 1, 1], 'one with a hint stays its own line');
+    console.log('ok command runs');
+
+    // a button's message is a labelled item that keeps its whole text; a typed one that only resembles it is a plain bubble
+    const fix = canned('fix', '!4 (https://gitlab.com/g/p/-/merge_requests/4)');
+    const sent = [reloadMessage(['/p/CLAUDE.md']), fix.message, canned('continue', 'Fix login').message, 'Implement #12', 'Close #9, its MR !30 is merged',
+        `${reloadMessage()} Also tidy up.`, `Please ${fix.message}`, 'Implement #12 the way we discussed', 'The rules changed.'];
+    const labelled = chatItems(sent.map(u));
+    assert.deepEqual(labelled.map(i => i.text), sent, 'the text is kept');
+    assert.deepEqual(labelled.map(i => i.label), ['Load new rules', 'Fix & reply !4', 'Continue Fix login', 'Start #12', 'Close #9', undefined, undefined, undefined, undefined]);
+    assert.equal(fix.label, 'Fix & reply');
+    console.log('ok button messages in the feed');
 
     // a subagent's result rides along on its "Agent finished" line
     const note = (status, extra) => u(`<task-notification>\n<task-id>x</task-id>\n<status>${status}</status>\n<summary>Agent "Fix login" ${status}</summary>\n${extra}</task-notification>`);

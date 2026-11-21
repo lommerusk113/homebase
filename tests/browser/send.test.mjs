@@ -266,17 +266,17 @@ export default {
             '/model': { text: 'Select model\n  1.  Opus\n❯ 2.  Fable ✔', pick: true }
         };
         page.route = q => (q.method === 'POST' && q.url.includes('/api/send') ? { body: JSON.stringify({ ...panels[q.postData], warning: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
-        const panel = cmd => `[...document.querySelectorAll('#feed .bubble.command')].find(b => b.querySelector('.b-topic-name').textContent === ${JSON.stringify(cmd)})`;
+        const panel = cmd => `[...document.querySelectorAll('#feed .tools.command')].find(b => !b.querySelector('.c-cmds') && b.querySelector('.mono').textContent === ${JSON.stringify(cmd)})`;
         for (const cmd of Object.keys(panels)) {
             await page.click('#msg');
             await page.type(cmd);
             await page.key('Enter');
             await page.waitFor(`${panel(cmd)}`, { what: `the ${cmd} panel` });
         }
-        const usage = await page.ev(`(() => { const b = ${panel('/usage')}, pre = b.querySelector('pre'); return { text: pre.textContent, ws: getComputedStyle(pre).whiteSpace, font: getComputedStyle(pre).fontFamily, note: b.querySelector('.b-note')?.textContent ?? null, after: b.previousElementSibling.textContent.includes('/usage') }; })()`);
-        assert.deepEqual({ ...usage, font: /Mono|monospace/.test(usage.font) }, { text: panels['/usage'].text, ws: 'pre', font: true, note: null, after: true });
-        assert.equal(await page.ev(`${panel('/model')}.querySelector('.b-note').textContent`), 'Pick this in the terminal, or type the command with its argument (e.g. /model opus)');
-        assert.equal(await page.ev(`!!${panel('/usage')}.previousElementSibling.querySelector('.b-note')`), false, 'a sent command is done: no pending note on its bubble');
+        const usage = await page.ev(`(() => { const b = ${panel('/usage')}, pre = b.querySelector('pre'); return { text: pre.textContent, ws: getComputedStyle(pre).whiteSpace, font: getComputedStyle(pre).fontFamily, note: b.querySelector('div.c-result')?.textContent ?? null, bubble: [...document.querySelectorAll('#feed .bubble.user')].some(u => u.textContent.includes('/usage')) }; })()`);
+        assert.deepEqual({ ...usage, font: /Mono|monospace/.test(usage.font) }, { text: panels['/usage'].text, ws: 'pre', font: true, note: null, bubble: false }, 'a sent command is its command line, not a bubble');
+        assert.equal(await page.ev(`${panel('/model')}.querySelector('div.c-result').textContent`), 'Pick this in the terminal, or type the command with its argument (e.g. /model opus)');
+        assert.equal(await page.ev(`document.querySelectorAll('#feed > .tools.command').length`), 2, 'one with a hint is never folded into a run');
         await page.ev(`(() => { const now = Date.now; Date.now = () => now() + 31_000; })()`); // past OUTBOX_TTL_MS
         await page.click('#msg');
         await page.type('x');

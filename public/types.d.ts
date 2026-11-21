@@ -72,7 +72,7 @@ interface Session {
     clearedFrom?: string;
 }
 
-type Column = 'needs-you' | 'doing' | 'review' | 'ready' | 'finished' | 'done' | 'idle';
+type Column = 'needs-you' | 'doing' | 'review' | 'ready' | 'finished' | 'done' | 'closed' | 'idle';
 
 interface Pipeline { status: string; url?: string; at?: string }
 

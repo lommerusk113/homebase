@@ -298,7 +298,7 @@ function renderItems() {
         if (!list.length && !extra.length) {
             return null;
         }
-        if (c.key === 'done') {
+        if (c.key === 'done' || c.key === 'closed') { // ponytail: the two folds open and close together
             return foldGroup(c, list, !!state.showMerged, v => { state.showMerged = v; });
         }
         if (c.key === 'finished') {
@@ -553,7 +553,7 @@ export function attentionEvents(prevItems, nextItems, seen = () => 0) {
         const p = before.get(x.key), was = p?.column;
         const kind = x.column === 'needs-you' && was !== 'needs-you' ? 'needs-you'
             : x.column === 'ready' && was !== 'ready' ? 'ready'
-            : was === 'doing' && (x.column === 'review' || x.column === 'done' || x.column === 'finished') ? 'finished'
+            : was === 'doing' && (x.column === 'review' || x.column === 'done' || x.column === 'closed' || x.column === 'finished') ? 'finished'
             : failing(x) && !failing(p) ? 'failing' : null;
         return kind ? [/** @type {AttentionEvent} */ ({ kind, item: x })] : [];
     });

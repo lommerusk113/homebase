@@ -8,7 +8,8 @@ export const COLUMNS = [
     { key: 'review', label: 'In review', color: '--c-review' },
     { key: 'ready', label: 'Ready to merge', color: '--c-ready' },
     { key: 'finished', label: 'Recently finished', color: '--c-done' },
-    { key: 'done', label: 'Merged', color: '--c-done' }
+    { key: 'done', label: 'Merged', color: '--c-done' },
+    { key: 'closed', label: 'Closed without merging', color: '--c-done' }
 ];
 export const COL = Object.fromEntries(COLUMNS.map(c => [c.key, c]));
 export const LIFECYCLE = ['Implement', 'Verify', 'Review', 'Approved', 'Merged'];

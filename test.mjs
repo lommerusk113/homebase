@@ -384,7 +384,7 @@ assert.deepEqual(workItems([{ id: 'm', project: 'p', prs: [], agents: [agent('r'
     .map(i => [i.title, i.firstTitle]), [['Also rebase', 'Fix login']]);
 const one = prOf => workItems([{ id: 's', project: 'p', prs: [{ url: mr(5), at: 1 }], agents: [] }], prOf, 0, new Map())[0];
 assert.equal(one(() => open({ ready: true })).stageLabel, 'Approved');
-assert.deepEqual((({ column, stageLabel, next }) => [column, stageLabel, next])(one(() => ({ state: 'closed' }))), ['done', 'Closed', 'Closed without merging']);
+assert.deepEqual((({ column, stageLabel, next }) => [column, stageLabel, next])(one(() => ({ state: 'closed' }))), ['closed', 'Closed', 'Closed without merging']);
 const verifying = workItems([{ id: 's', project: 'p', prs: [], agents: [agent('v', 1, { status: 'running', stage: 2 })] }], () => null, 0, new Map());
 assert.deepEqual(verifying.map(i => i.stageLabel), ['Verify']);
 // forge-seeded MRs: deduped against transcript URLs, bound to the project's newest session, others' projects untouched
@@ -4032,4 +4032,13 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.throws(() => sendSteps('s', ' \n'), e => e.status === 400 && e.message === 'empty message');
     await assert.rejects(interrupt('nope'), e => e.status === 400 && e.message === 'bad id');
     console.log('ok error replies');
+}
+
+{
+    // an MR closed without merging is not "merged": its own group, and an issue whose only MR was closed starts afresh
+    assert.equal(column('idle', { state: 'closed' }, true), 'closed');
+    assert.equal(itemColumn({ state: 'closed' }, { status: 'running' }, true), 'closed');
+    assert.equal(chatMessage({ iid: 10, st: 'todo', mrs: [{ iid: 150, state: 'closed' }] }), 'Implement #10');
+    assert.equal(chatMessage({ iid: 10, st: 'doing', mrs: [{ iid: 150, state: 'closed' }, { iid: 151, state: 'open' }] }), 'Check on #10 and !151');
+    console.log('ok closed MRs');
 }

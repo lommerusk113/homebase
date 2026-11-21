@@ -67,9 +67,10 @@ export function closedBy(done) {
 }
 
 // What "Send to chat" types: start a not-started issue, close one whose MR is merged, or check on one with an MR (its open MR first).
+// An MR closed without merging is no work on the issue: with only those it starts afresh.
 /** @param {Issue & { st?: string }} card */
 export function chatMessage(card) {
-    const mr = card.mrs.find(m => m.state === 'open') ?? card.mrs[0];
+    const mr = card.mrs.find(m => m.state === 'open') ?? card.mrs.find(m => m.state !== 'closed');
     if (card.st === 'closable' && mr) {
         const m = card.mrs.find(x => x.state === 'merged') ?? mr;
         return canned('close', card.iid, m.iid).message;

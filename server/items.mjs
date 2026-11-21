@@ -11,7 +11,7 @@ export function column(status, prState, hasPr) {
         return 'doing';
     }
     if (prState?.state === 'merged' || prState?.state === 'closed') {
-        return 'done';
+        return prState.state === 'merged' ? 'done' : 'closed';
     }
     // review comments, a failing pipeline, a needed rebase or a draft (not reviewable yet; once its pipeline is through) wait on
     // you (each gets its rowAction button), not on a reviewer
@@ -74,7 +74,7 @@ export const itemUpdated = (agent, linkedAt, prState) => Math.max(agent?.updated
 export function itemColumn(prState, agent, hasPr) {
 
     if (prState?.state === 'merged' || prState?.state === 'closed') {
-        return 'done';
+        return prState.state === 'merged' ? 'done' : 'closed';
     }
     if (agent?.status === 'running') {
         return 'doing';

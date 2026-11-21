@@ -233,6 +233,7 @@ interface OutboxItem extends ChatItem {
 interface Transcript {
     items: ChatItem[];
     more?: boolean; // older messages exist that are not in items
+    capped?: boolean; // older messages exist, but before the part of the transcript the server reads
     asking: string | null;
     questions: { question: string; options: string[]; descriptions?: string[] }[] | null;
     working: boolean;

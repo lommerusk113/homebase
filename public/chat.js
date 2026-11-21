@@ -1214,7 +1214,7 @@ export async function refreshChat() {
     showFocus(s, items);
     const fresh = cut.fresh || !!s.clearedFrom; // a New conversation, before or after the successor is bound
     const lastSeen = Number(store.get(`last-seen:${s.id}`)) || Infinity;
-    const key = s.id + JSON.stringify([items, data.asking, data.working, hidden, data.more, lastSeen]);
+    const key = s.id + JSON.stringify([items, data.asking, data.working, hidden, data.more, data.capped, lastSeen]);
     if (key === chatKey) {
         return focusWanted(s.id);
     }
@@ -1279,6 +1279,8 @@ export async function refreshChat() {
         };
         line.append(btn);
         feed.prepend(line);
+    } else if (data.capped && !hidden) { // the server reads no further back: say so, rather than end as if this were the start
+        feed.prepend(el('div', 'c-hidden c-capped', 'Older messages are not shown here — the terminal has the whole chat'));
     } else if (!items.length) {
         feed.append(el('div', 'welcome', fresh ? 'New conversation — say something to Claude' : 'No messages yet. Send one below, or run `claude` in a terminal in this project.'));
     }

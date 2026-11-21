@@ -4318,3 +4318,25 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     rmSync(home, { recursive: true, force: true });
     console.log('ok aged chat that needs you');
 }
+
+// "Show earlier" at the read limit: the feed says its history was cut there (capped), instead of ending as if that were the start.
+{
+    const { feedTail } = await import('./server/transcripts.mjs');
+    const f = join(mkdtempSync(join(tmpdir(), 'hb-')), 'capped.jsonl');
+    const pad = 'x'.repeat(4000);
+    const rows = Array.from({ length: 400 }, (_, n) => [
+        { type: 'user', timestamp: new Date(1e12 + n * 120_000).toISOString(), message: { content: `ask ${n}` } },
+        { type: 'assistant', timestamp: new Date(1e12 + n * 120_000 + 1000).toISOString(), pad, message: { content: [{ type: 'text', text: `reply ${n}` }] } },
+        { type: 'system', subtype: 'turn_duration', turnPosition: { n } }
+    ]).flat();
+    writeFileSync(f, rows.map(l => JSON.stringify(l)).join('\n') + '\n');
+    const st = statSync(f);
+    const few = await feedTail(f, st, 60, 1024 * 1024);
+    assert.deepEqual([few.more, !!few.capped], [true, false], 'more to show first');
+    const cut = await feedTail(f, st, 10_000, 1024 * 1024);
+    assert.ok(cut.items.length < 800 && cut.items[0].text !== 'ask 0', 'the read stops at the limit');
+    assert.deepEqual([cut.more, cut.capped], [false, true]);
+    const all = await feedTail(f, st, 10_000);
+    assert.deepEqual([all.items[0].text, all.more, !!all.capped], ['ask 0', false, false], 'a chat read to its start is not capped');
+    console.log('ok show earlier at the read limit');
+}

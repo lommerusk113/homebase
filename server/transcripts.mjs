@@ -160,15 +160,16 @@ export async function tailOf(path, st) {
 }
 
 // The chat feed of a transcript: the cached tail's, or, when "Show earlier" asks for more items (max) than that tail
-// holds, a tail read further back. more: older messages exist that are not in items.
+// holds, a tail read further back. more: older messages exist that are not in items and can be asked for. capped: older
+// ones exist but lie before the last `cap` bytes, which is as far back as this reads.
 // ponytail: one deeper tail is kept (the chat being scrolled back), re-read at its size on each transcript write and
 // never past TAIL_MAX_BYTES; page by byte offset if scrolling far back in a 20+ MB transcript gets slow
 let deep = null; // { path, mtimeMs, entries, bytes, cut }
-export async function feedTail(path, st, max = FEED_ITEMS) {
+export async function feedTail(path, st, max = FEED_ITEMS, cap = TAIL_MAX_BYTES) {
 
     const entries = await tailOf(path, st);
     let tail = cache.get(path), feed = chatFeed(entries, max);
-    const short = () => max > FEED_ITEMS && !feed.earlier && tail.cut && tail.bytes < TAIL_MAX_BYTES;
+    const short = () => max > FEED_ITEMS && !feed.earlier && tail.cut && tail.bytes < cap;
     if (short()) {
         const kept = deep?.path === path ? deep : null;
         tail = kept?.mtimeMs === st.mtimeMs ? kept : await readTailInfo(path, st.size, kept?.bytes ?? tail.bytes * 2);
@@ -177,12 +178,13 @@ export async function feedTail(path, st, max = FEED_ITEMS) {
             if (!short()) {
                 break;
             }
-            tail = await readTailInfo(path, st.size, Math.min(tail.bytes * 2, TAIL_MAX_BYTES));
+            tail = await readTailInfo(path, st.size, Math.min(tail.bytes * 2, cap), cap);
         }
         deep = { path, mtimeMs: st.mtimeMs, entries: tail.entries, bytes: tail.bytes, cut: tail.cut };
     }
+    const more = feed.earlier > 0 || (tail.cut && tail.bytes < cap);
 
-    return { ...feed, entries, more: feed.earlier > 0 || (tail.cut && tail.bytes < TAIL_MAX_BYTES) };
+    return { ...feed, entries, more, capped: !more && tail.cut };
 }
 
 export function textOf(entry) {
@@ -1296,11 +1298,11 @@ export async function transcript(dir, id, max) {
     }
 
     const st = await stat(path);
-    const { items, more, entries } = await feedTail(path, st, Math.min(Math.max(Math.trunc(Number(max)) || FEED_ITEMS, 1), 10_000));
+    const { items, more, capped, entries } = await feedTail(path, st, Math.min(Math.max(Math.trunc(Number(max)) || FEED_ITEMS, 1), 10_000));
 
     const live = await liveSessions();
     const marker = await askMarker(id, { live });
     const turn = turnState(entries, Date.now() - st.mtimeMs, marker, live);
 
-    return { items, more, asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', stuck: turn.state === 'stuck', since: turn.since };
+    return { items, more, capped, asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', stuck: turn.state === 'stuck', since: turn.since };
 }

@@ -53,6 +53,27 @@ export default {
         assert.deepEqual(page.posts.map(p => p.body), [label]);
     },
 
+    'closing help, the changes panel or a row action puts focus back on the row, also when the board was redrawn meanwhile': async ({ page, open }) => {
+        await open();
+        const redraw = `import('/list.js').then(m => (m.renderBoard(), true))`;
+        const key = await page.waitFor(`document.querySelector('#masters tr[data-key] .act-btn')?.closest('tr').dataset.key`, { what: 'a row with an action' });
+        await page.ev(`document.querySelector('#masters tr[data-key="${key}"]').focus()`);
+        await page.key('?', 'Slash');
+        await page.waitFor(`document.querySelector('wa-dialog .keys-help')?.checkVisibility()`, { what: 'the help' });
+        await page.ev(redraw);
+        await page.key('Escape');
+        await page.waitFor(`${focused} === ${JSON.stringify(key)}`, { what: 'focus back on the row after help' });
+        await page.key('d');
+        await page.waitFor(`document.querySelector('.dv')`, { what: 'the changes panel' });
+        await page.ev(redraw);
+        await page.key('Escape');
+        await page.waitFor(`!document.querySelector('.dv') && ${focused} === ${JSON.stringify(key)}`, { what: 'focus back on the row after the changes panel' });
+        await page.key('a');
+        await page.waitFor(`document.querySelector('wa-dialog .keys-msg')?.checkVisibility()`, { what: 'the confirm dialog' });
+        await page.clickOn(`document.querySelector('wa-dialog:has(.keys-msg) wa-button[variant="brand"]')`);
+        await page.waitFor(`!document.querySelector('wa-dialog .keys-msg') && ${focused} === ${JSON.stringify(key)}`, { what: 'focus back on the row after its action' });
+    },
+
     'the Work | Issues switch: a click, 1/2/t and the arrow keys change the view, and the choice survives a reload': async ({ page, open, IDS }) => {
         const view = `(() => { const t = document.getElementById('tabs'); return { sel: [...t.querySelectorAll('[role="tab"]')].filter(b => b.getAttribute('aria-selected') === 'true').map(b => b.dataset.tab).join(),
             tabbable: [...t.querySelectorAll('[role="tab"]')].filter(b => b.tabIndex === 0).map(b => b.dataset.tab).join(), work: !document.getElementById('masters').hidden, issues: !document.getElementById('issues').hidden, saved: localStorage.getItem('tab') }; })()`;

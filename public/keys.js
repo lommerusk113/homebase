@@ -78,6 +78,13 @@ function syncRows(refocus) {
     }
 }
 
+// Focus fell to <body> (a dialog or the changes panel closed over a row that was redrawn meanwhile): back to the tracked row.
+function refocus() {
+    if (!document.activeElement || document.activeElement === document.body) {
+        syncRows(true);
+    }
+}
+
 function focusRow(key) {
     const r = key && rowOf(key);
     if (!r) {
@@ -97,6 +104,7 @@ function dialog(label, body, footer = []) {
     d.addEventListener('wa-after-hide', e => {
         if (e.target === d) {
             d.remove();
+            refocus(); // the row it was opened from may have been redrawn meanwhile
         }
     });
     document.body.append(d);
@@ -214,6 +222,7 @@ function onKey(e) {
 
 export function initKeys() {
     hooks.rendered = syncRows;
+    hooks.refocus = refocus;
     document.addEventListener('focusin', e => {
         const r = /** @type {HTMLElement | null} */ (e.target instanceof Element ? e.target.closest(ROWS) : null);
         if (r) {

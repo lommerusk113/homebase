@@ -1,7 +1,7 @@
 // The Changes view: what a chat or a helper changed in its git folder (GET /api/diff, server/diff.mjs), read-only.
 // A full-screen panel: the changed files left ("Uncommitted", "Committed on this branch"), the picked file's unified
 // diff right; on a phone the list first, then the diff with a back button. Diff text only ever reaches textContent.
-import { api, el, waButton, state, PR_HREF } from './core.js';
+import { api, el, waButton, state, hooks, PR_HREF } from './core.js';
 
 const LINES = 500; // drawn at a time; "Show more" adds the next ones
 const COUNT_MS = 15_000; // the chat header's count is re-read at most this often, and only when the chat moved
@@ -341,6 +341,8 @@ export function closeDiff() {
     panel.remove();
     if (back instanceof HTMLElement && back.isConnected) {
         back.focus({ preventScroll: true });
+    } else {
+        hooks.refocus?.(); // the row it was opened from was redrawn meanwhile
     }
 }
 

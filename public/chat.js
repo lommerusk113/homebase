@@ -299,6 +299,15 @@ function focusWanted(sid) {
     }
 }
 
+// A keyboard press on a button that is about to go away (an option, Retry, Dismiss): the composer takes the focus, which
+// would otherwise fall to <body>. Not after a tap (a phone would raise its keyboard) or a digit key (focus is elsewhere).
+/** @param {Event} e */
+function focusComposer(e) {
+    if (/** @type {MouseEvent} */ (e).detail === 0 && document.activeElement === e.currentTarget) {
+        $('msg').focus({ preventScroll: true });
+    }
+}
+
 // "10:42" today, "Nov 14 10:42" before
 /** @param {string} at */
 function shortTime(at) {
@@ -450,10 +459,12 @@ function noteRow(i, sid, key) {
         const retry = waButton('Retry', 'retry', { pill: true }), dismiss = waButton('Dismiss', 'dismiss', { pill: true, appearance: 'plain' });
         retry.onclick = e => {
             drop();
+            focusComposer(e);
             sendText(lost.sid, lost.text, lost.answerTo, lost.note, lost.canned);
         };
         dismiss.onclick = e => {
             drop();
+            focusComposer(e);
             refreshChat();
         };
         n.append(' ', ...(lost.refused ? [] : [retry]), dismiss); // a refusal (409) would only be refused again: its reason says what to do
@@ -663,6 +674,7 @@ function fillCard(id, tmux, question, options, answer, { detail = '', risky = fa
         const b = optButton(o.label, i, { desc: o.desc, ro: !answer, quiet: o.quiet });
         if (answer) {
             b.onclick = async e => {
+                focusComposer(e);
                 $('c-err').textContent = '';
                 for (const x of $(`${id}-opts`).children) {
                     x.setAttribute('disabled', '');
@@ -914,6 +926,7 @@ function showWait(s, data, items) {
     $('wait-opts').replaceChildren(...opts.map(({ label, desc }, k) => {
         const b = optButton(label, k, { desc });
         b.onclick = e => {
+            focusComposer(e);
             sendChip(b, s.id, label, w.at, answerNote(items, n));
         };
 
@@ -940,6 +953,7 @@ function quickReplyRow(s, data, items, n) {
     row.append(...q.replies.map((t, i) => {
         const b = optButton(t, i);
         b.onclick = e => {
+            focusComposer(e);
             sendChip(b, s.id, t, q.at, note);
         };
 

@@ -78,7 +78,8 @@ const open = async (storage = {}) => {
 };
 const shot = async name => {
     await page.ev(`document.getElementById('format-warn').style.display = 'none'`); // the fixture's Claude Code version is invented
-    await page.cmd('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
+    await page.ev(`document.querySelectorAll('.tools.api-error').forEach(e => e.style.display = 'none')`); // the hero image shouldn't lead with the fixture's 529 line
+    await page.cmd('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
     await sleep(300);
     writeFileSync(join(OUT, `${name}.png`), Buffer.from((await page.cmd('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
 };

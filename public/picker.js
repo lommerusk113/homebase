@@ -3,7 +3,7 @@
 import { el } from './core.js';
 
 const SEARCH_FROM = 8; // the filter field shows from this many rows; with fewer it appears once something is typed
-const phone = matchMedia('(max-width: 700px)');
+const phone = matchMedia('(max-width: 900px)');
 let n = 0;
 
 /**

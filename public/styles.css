@@ -184,7 +184,7 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 wa-dropdown-item { font-size:var(--fs-m); }
 wa-dropdown-item [slot="details"] { font-size:var(--fs-s); color:var(--muted); }
 /* phones: a menu no wider than the screen, so an item's explanation goes under its label instead of off the edge; a full tap height */
-@media (max-width: 700px) {
+@media (max-width: 900px) {
   wa-dropdown-item { flex-wrap:wrap; min-height:44px; max-width:calc(100vw - 32px); }
   wa-dropdown-item::part(details) { flex-basis:100%; justify-content:flex-start; }
   wa-dropdown-item [slot="details"] { position:relative; left:-2em; } /* takes back the library's 2em gap to the label, now above it */
@@ -382,7 +382,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .c-feed.needs-only .tools.c-new { display:flex; }
 #status-text { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 /* phones: the status takes a second line instead of being cut, and its controls are 44px to tap (the ::before) in a 44px line */
-@media (max-width: 700px) {
+@media (max-width: 900px) {
   .c-status { height:auto; min-height:44px; padding-top:0; overflow:visible; }
   #status-text { white-space:normal; overflow:visible; line-height:1.3; }
   #status-text .show { text-align:left; }
@@ -476,7 +476,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .dv-l.hunk { background:var(--canvas); color:var(--muted); }
 .dv-l.meta { color:var(--muted); font-style:italic; }
 .dv-more { display:block; margin:var(--sp-3) var(--sp-4) var(--sp-5); }
-@media (max-width: 700px) {
+@media (max-width: 900px) {
   .c-diff { min-width:40px; min-height:40px; justify-content:center; }
   .dv-files { flex:1; border-right:0; }
   .dv-pane { display:none; }
@@ -581,12 +581,6 @@ ul.comments li.seen a { color:var(--muted); }
 @container (max-width: 1200px) { .rows .br { width:0; padding:0; } }
 .rows .ci-narrow { display:none; float:left; margin:0 6px 0 0; }
 @container (max-width: 700px) { .rows .pr { width:0; padding:0; } .rows .ci-narrow { display:inline-flex; } }
-@media (max-width: 900px) {
-  .main { flex-direction:column; overflow:auto; }
-  .left { flex:none; min-height:60vh; }
-  .left { margin-right:var(--sp-3); }
-  #chat { width:auto; min-width:0; max-width:none; height:80vh; flex-shrink:0; margin-top:0; }
-}
 
 .rows .prog { width:150px; }
 .stage { display:flex; flex-direction:column; gap:3px; }
@@ -610,7 +604,7 @@ ul.comments li.seen a { color:var(--muted); }
 .keys-help dd { margin:0; color:var(--muted); }
 .keys-msg { white-space:pre-wrap; overflow-wrap:anywhere; font-size:var(--fs-m); background:var(--chip); padding:8px; border-radius:var(--r-s); }
 /* phones: small controls keep their look and get a 44px tap height (the ::before), as the milestone pill has; dialog buttons grow to it */
-@media (max-width: 700px) {
+@media (max-width: 900px) {
   :is(.c-back, .show, .need-pill, a.ci-pill, a.chip, .ms-menu .info a) { position:relative; }
   :is(.c-back, .show, .need-pill, a.ci-pill, a.chip, .ms-menu .info a)::before { content:''; position:absolute; inset:50% 0 auto; height:44px; transform:translateY(-50%); }
   a.ci-pill::before { inset-inline:-10px; }
@@ -781,7 +775,7 @@ wa-details[open] .g-note { display:none; }
 
 /* Phones: one pane at a time behind a bottom tab bar (app.js showPane), touch-sized controls, no sideways scroll */
 .ptabs { display:none; }
-@media (max-width: 700px) {
+@media (max-width: 900px) {
   body { height:var(--vvh, 100dvh); } /* --vvh: the height above an iOS keyboard (app.js fitKeyboard) */
   header.top { gap:8px; padding:max(8px, env(safe-area-inset-top)) 12px 8px; }
   header.top > * { min-width:0; }
@@ -812,7 +806,7 @@ wa-details[open] .g-note { display:none; }
   .ms-menu button { min-height:44px; font-size:var(--fs-l); }
   .main { flex-direction:row; overflow:hidden; }
   .left { flex:1; min-height:0; margin:0; border:0; border-radius:0; box-shadow:none; background:none; } /* phones: the card is the whole pane */
-  #chat { flex:1; width:auto; height:auto; margin:0; border:0; border-radius:0; box-shadow:none; }
+  #chat { flex:1; width:auto; min-width:0; max-width:none; height:auto; margin:0; border:0; border-radius:0; box-shadow:none; }
   body[data-pane="chat"] .left, body[data-pane="board"] #chat, #tabs { display:none; }
   .masters { padding:12px 12px 24px; }
   .card { padding:12px 14px; gap:8px; }
@@ -862,4 +856,11 @@ wa-details[open] .g-note { display:none; }
   #msg::part(textarea) { line-height:24px; padding-block:calc((var(--c-h) - 24px) / 2); }
   .c-attach { border-radius:var(--r-s); }
   .c-attach svg { width:20px; height:20px; }
+}
+/* narrow and short with a mouse (a desktop at 200% zoom or more): the page itself scrolls, so the header and the pane
+   tabs give way and the chat or board gets the whole height. Not on touch: a phone's keyboard makes it this short too,
+   and there the header stays (app.js fitKeyboard) */
+@media (max-width: 900px) and (max-height: 500px) and (hover: hover) and (pointer: fine) {
+  html, body { height:auto; }
+  .main { flex:none; height:100dvh; }
 }

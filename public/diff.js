@@ -57,7 +57,7 @@ export function diffTotals(v) {
     return { files: new Set(all.map(f => f.path)).size, add: all.reduce((n, f) => n + (f.add ?? 0), 0), del: all.reduce((n, f) => n + (f.del ?? 0), 0) };
 }
 
-const phone = () => matchMedia('(max-width: 700px)').matches;
+const phone = () => matchMedia('(max-width: 900px)').matches;
 /** @param {string} sid @param {string | null} item @param {Record<string, string>} [more] */
 const urlOf = (sid, item, more = {}) => `/api/diff?${new URLSearchParams({ session: sid, ...(item != null && { item }), ...more })}`;
 /** @param {string} url */

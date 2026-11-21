@@ -598,7 +598,7 @@ $('tabs').addEventListener('keydown', e => {
 });
 showTab(store.get('tab'));
 
-// Phones (≤ 700px, styles.css): the bottom bar shows the chat or one board tab. body[data-pane] does nothing wider.
+// Narrow windows (≤ 900px, styles.css: phones, and desktops zoomed in): the bottom bar shows the chat or one board tab. body[data-pane] does nothing wider.
 /** @param {string} pane chat, work or issues */
 function showPane(pane) {
     document.body.dataset.pane = pane === 'chat' ? 'chat' : 'board';
@@ -616,7 +616,7 @@ showPane('chat');
 // The on-screen keyboard on a phone. Android shrinks the page itself (interactive-widget in index.html). iOS only shrinks
 // the visual viewport and scrolls the page up to the input, which takes the header off screen: there the body gets the
 // visible height (--vvh, styles.css) and the page stays unscrolled. No keyboard, pinch-zoomed or wider: back to 100dvh.
-const vv = window.visualViewport, phoneWidth = matchMedia('(max-width: 700px)');
+const vv = window.visualViewport, phoneWidth = matchMedia('(max-width: 900px)');
 function fitKeyboard() {
     const root = document.documentElement;
     if (!phoneWidth.matches || vv.scale !== 1 || vv.height >= innerHeight - 1) {

@@ -146,5 +146,15 @@ export default {
         });
         await open();
         assert.equal(await page.ev(sendBtn), false, 'no send button with a mouse');
+    },
+
+    'the message box shows its placeholder only: its screen-reader name takes no room': async ({ page, open }) => {
+        await asPhone(page, async () => {
+            await open();
+            await page.waitFor(`!!document.getElementById('msg').shadowRoot?.querySelector('[part~="label"]')`, { what: 'the message box' });
+            const r = await page.ev(`(() => { const m = document.getElementById('msg'), l = m.shadowRoot.querySelector('[part~="label"]').getBoundingClientRect(); return [Math.round(l.width), Math.round(l.height), Math.round(m.getBoundingClientRect().height)]; })()`);
+            assert.deepEqual(r.slice(0, 2), [1, 1]);
+            assert.ok(r[2] <= 48, `one line high, got ${r[2]}`);
+        });
     }
 };

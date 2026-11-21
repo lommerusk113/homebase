@@ -927,6 +927,7 @@ function landedIn(items, o) {
     const sameSend = (text, at) => [o.text, o.note && `${o.text}\n\n${o.note}`].some(t => t && norm(text) === norm(t)) && !(Date.parse(at) < Date.parse(o.at) - LANDED_SLACK_MS);
     return items.some(i => (i.role === 'user' && sameSend(i.text, i.at))
         || (i.role === 'command' && sameSend(i.cmd, i.at)) // a slash command whose output the transcript now holds
+        || (i.role === 'compact' && /^\/compact\b/.test(o.text) && !(Date.parse(i.at) < Date.parse(o.at) - LANDED_SLACK_MS)) // a /compact is its divider
         || (i.answer && sameSend(i.answer.text, i.answer.at)));
 }
 // The same, read fresh from the server: before Retry sends a not confirmed message again. Throws when it can't be read.

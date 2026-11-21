@@ -604,7 +604,8 @@ function rawItems(entries) {
             items.push({ role: 'user', text: entry.text, at: e.timestamp, src: entry.src });
         } else if (entry?.kind === 'local') {
             ran = entry.cmd ?? ran;
-            if (entry.out) {
+            // a /compact that went through is the "Conversation compacted" divider: its echo would say it twice
+            if (entry.out && !(/^\/compact\b/.test(ran ?? '') && /^Compacted\b/.test(entry.out))) {
                 flush();
                 items.push({ role: 'command', cmd: ran ?? '', text: entry.out, at: e.timestamp });
             }

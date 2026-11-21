@@ -2361,6 +2361,10 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
     assert.deepEqual(compacted.map(i => [i.role, i.text]), [['user', 'go'], ['assistant', 'Done.'], ['compact', 'Conversation compacted'], ['assistant', 'Carrying on.']]);
     assert.equal(compacted[2].at, boundary.timestamp);
     assert.equal(isHumanPrompt(summary), false, 'the summary is not a prompt');
+    // the /compact echo after the boundary adds nothing to the divider; a failed one still shows what went wrong
+    const echo = out => [{ type: 'user', message: { content: '<command-name>/compact</command-name>\n<command-args>Keep it short</command-args>' } }, { type: 'user', message: { content: `<local-command-stdout>${out}</local-command-stdout>` } }];
+    assert.deepEqual(chatItems([boundary, summary, ...echo('\x1b[2mCompacted (ctrl+o to see full summary)\x1b[22m')]).map(i => i.role), ['compact']);
+    assert.deepEqual(chatItems(echo('Error: Not enough messages to compact.')).map(i => [i.role, i.cmd]), [['command', '/compact Keep it short']]);
     console.log('ok context and compact');
 }
 

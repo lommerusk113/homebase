@@ -1,11 +1,11 @@
 // Which GitHub account a repo's gh calls run as. The work account is the user's own gh login (GITHUB_TOKEN); personal
 // repos (origin via the configured SSH host alias, or owned by the configured owner) run as the keychain token instead.
 // The token lives in memory only: it reaches the gh child through its env and nowhere else, and errors are scrubbed.
-import { readFileSync } from 'node:fs';
+import { readFileSync, renameSync, existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 
 const run = promisify(execFile);
 
@@ -38,18 +38,41 @@ export function mergeConfig(file) {
     return c;
 }
 
-// The parsed config.json, or undefined when there is none.
+// A data file that can't be parsed is moved to <file>.bak with one log line, and the caller goes on without it (`then`).
+export function keepAside(file, reason, then) {
+
+    console.error(`${basename(file)} is corrupt (${reason}); ${then}, kept ${file}.bak`);
+    try {
+        renameSync(file, `${file}.bak`);
+    } catch {}
+}
+
+// The parsed config.json, or undefined when there is none or it is no JSON (truncated, empty, a folder): that one is set aside.
 export function readConfigFile(path = CONFIG_FILE()) {
 
     try {
         return JSON.parse(readFileSync(path, 'utf8'));
     } catch (e) {
         if (e.code !== 'ENOENT') {
-            throw Object.assign(new Error('config.json is not valid JSON'), { status: 500 });
+            keepAside(path, e.message, 'using the defaults');
         }
     }
 
     return undefined;
+}
+
+// For doctor: [what is wrong with config.json, what to do], or null. Reads only; the server is what sets a bad file aside.
+export function configProblem(path = CONFIG_FILE()) {
+
+    try {
+        JSON.parse(readFileSync(path, 'utf8'));
+    } catch (e) {
+        if (e.code !== 'ENOENT') {
+            return [`${path} is not valid JSON`, `Homebase starts with the defaults and moves it to config.json.bak; fix or delete it`];
+        }
+    }
+
+    return existsSync(`${path}.bak`) ? [`${path}.bak is a config.json Homebase could not read`, 'it runs on the defaults; fix the file and rename it back, or delete it'] : null;
 }
 
 export const loadConfig = (path = CONFIG_FILE()) => mergeConfig(readConfigFile(path));

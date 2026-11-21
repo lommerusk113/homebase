@@ -4,7 +4,7 @@ import { readdir, stat, open, readFile } from 'node:fs/promises';
 import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ROOT, WORKING_MS, cache, liveSessions, closedSession, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, hasTurnMarkers, turnPrompts, pendingQuestion, askMarker, readUsage, usageCache, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
+import { ROOT, projectDirs, WORKING_MS, cache, liveSessions, closedSession, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, hasTurnMarkers, turnPrompts, pendingQuestion, askMarker, readUsage, usageCache, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
 import { loadStore, record, seeds, flush } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { repoPaths, accountOf } from './account.mjs';
@@ -458,7 +458,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
 // Session transcripts written within MAX_AGE_MS, as { dir, file, path, st }. A project folder or transcript that vanishes mid-listing is skipped.
 async function* recentTranscripts(now) {
 
-    for (const dir of await readdir(ROOT)) {
+    for (const dir of await projectDirs()) {
         let files;
         try {
             files = (await readdir(join(ROOT, dir))).filter(f => f.endsWith('.jsonl'));

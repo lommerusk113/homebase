@@ -5,7 +5,7 @@ import { readdir, stat, readFile, open } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { ROOT, readTail, readUsage, textOf, splitTopic, splitTldr, USAGE_KEYS, formatDuration, formatTokens } from './transcripts.mjs';
+import { ROOT, projectDirs, readTail, readUsage, textOf, splitTopic, splitTldr, USAGE_KEYS, formatDuration, formatTokens } from './transcripts.mjs';
 import { projectOf, summarizeAgent } from './sessions.mjs';
 import { prState } from './forge.mjs';
 import { sameRepo } from './items.mjs';
@@ -286,7 +286,7 @@ export async function log(project, now = Date.now()) {
         }
     }
     const masters = [];
-    for (const dir of await readdir(ROOT)) {
+    for (const dir of await projectDirs()) {
         let files;
         try {
             files = (await readdir(join(ROOT, dir))).filter(f => f.endsWith('.jsonl'));

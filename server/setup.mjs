@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
 import { loginShell } from './tmux.mjs';
+import { configProblem } from './account.mjs';
 
 export const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 // HOMEBASE_CLAUDE_SETTINGS points at another file, so tests never touch the real one
@@ -142,7 +143,9 @@ export function otherRoots(settings, root = ROOT) {
     return [...new Set(roots.filter(r => r !== null && r !== root))];
 }
 
-export function doctor(root = ROOT, path = settingsPath(), version = readClaudeVersion()) {
+// configFile: Homebase's config.json, checked for being readable.
+export function doctor(root = ROOT, path = settingsPath(), version = readClaudeVersion(), configFile = undefined) {
+    const config = configProblem(configFile);
     const rows = [];
     // kind: what a failed row is called; only 'missing' fails the run
     const row = (name, ok, fix, kind = 'missing') => rows.push({ name, ok, fix, kind });
@@ -171,6 +174,9 @@ export function doctor(root = ROOT, path = settingsPath(), version = readClaudeV
     for (const other of otherRoots(settings, root)) {
         const gone = existsSync(other + HOOK) ? '' : ', which no longer exists';
         row(`entries for another checkout: ${other}${gone}`, false, `run node server.mjs --unsetup there${gone ? ' if you still have it' : ''}, or remove them from the file by hand`, 'warning');
+    }
+    if (config) {
+        row(config[0], false, config[1], 'warning');
     }
     if (versionWarning(version)) {
         row(versionWarning(version), false, 'if something looks wrong, check for a newer Homebase (README, "Why tmux, not the Agent SDK")', 'warning');

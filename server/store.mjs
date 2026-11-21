@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { sameRepo } from './items.mjs';
+import { keepAside } from './account.mjs';
 
 export const STORE_FILE = join(process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase'), 'items.json');
 const PRUNE_MS = 30 * 864e5;
@@ -35,10 +36,7 @@ export function loadStore(file = STORE_FILE) {
             }
         }
     } catch (e) {
-        console.error(`items.json is corrupt (${e.message}); starting empty, kept ${file}.bak`);
-        try {
-            renameSync(file, `${file}.bak`);
-        } catch {}
+        keepAside(file, e.message, 'starting empty');
     }
 
     return store;

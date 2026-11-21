@@ -3877,8 +3877,8 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.equal(versionWarning(`${major}.${minor - 1}.${patch * 10}`), '', 'compared as numbers, part by part');
     assert.notEqual(versionWarning(`${major}.${minor + 9}.0`), '');
     const file = join(mkdtempSync(join(tmpdir(), 'doctor-')), 'settings.json');
-    assert.ok(doctor('/opt/hb', file, newer).lines.some(l => l.startsWith('warning ') && l.includes(newer)), '--doctor prints it');
-    assert.ok(!doctor('/opt/hb', file, VERIFIED_CLAUDE).lines.some(l => l.startsWith('warning ')));
+    assert.ok(doctor('/opt/hb', file, newer, `${file}.config`).lines.some(l => l.startsWith('warning ') && l.includes(newer)), '--doctor prints it');
+    assert.ok(!doctor('/opt/hb', file, VERIFIED_CLAUDE, `${file}.config`).lines.some(l => l.startsWith('warning ')));
     console.log('ok claude version');
 }
 {
@@ -4224,4 +4224,45 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     await read({ path: 'bad', st: { size: 2 } });
     assert.equal(logged.length, 2, 'logged again once the file changed size');
     console.log('ok odd transcript entries');
+}
+
+// First run: with no ~/.claude/projects folder (Claude Code never ran) there are no chats and no log, not an error.
+{
+    const home = mkdtempSync(join(tmpdir(), 'hb-fresh-'));
+    const code = "import { sessions, startingChats } from './server/sessions.mjs'; import { log } from './server/log.mjs'; await log('p'); console.log(JSON.stringify([await sessions(), await startingChats()]));";
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home, HOMEBASE_DIR: home, HOMEBASE_TMUX_SOCKET: 'homebase-test-none' }, cwd: import.meta.dirname, encoding: 'utf8' });
+    assert.deepEqual(JSON.parse(out), [[], []]);
+    rmSync(home, { recursive: true, force: true });
+    console.log('ok no projects folder');
+}
+
+// A config.json that is no JSON (truncated, empty, a folder) is set aside like a corrupt items.json: defaults apply,
+// one log line says so, and doctor reports it.
+{
+    const { readConfigFile, loadConfig, DEFAULTS: NEW_PROJECT_DEFAULTS } = await import('./server/account.mjs');
+    const { doctor } = await import('./server/setup.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'hb-config-')), file = join(dir, 'config.json');
+    const settings = join(dir, 'settings.json');
+    const warns = () => doctor('/opt/hb', settings, null, file).lines.filter(l => l.includes('config.json'));
+    assert.deepEqual(warns(), [], 'no config: nothing to say');
+    const logged = [], error = console.error;
+    console.error = m => logged.push(m);
+    try {
+        for (const make of [() => writeFileSync(file, '{"newProject": {"own'), () => writeFileSync(file, ''), () => mkdirSync(file)]) {
+            make();
+            assert.equal(warns().length, 1, 'doctor sees a config it cannot read');
+            assert.equal(readConfigFile(file), undefined);
+            assert.equal(loadConfig(file).sshHost, NEW_PROJECT_DEFAULTS.sshHost, 'defaults apply');
+            assert.throws(() => statSync(file), 'the bad file is moved away');
+            statSync(`${file}.bak`);
+            assert.equal(warns().length, 1, 'doctor still says a config was set aside');
+            rmSync(`${file}.bak`, { recursive: true });
+        }
+    } finally {
+        console.error = error;
+    }
+    assert.equal(logged.length, 3, 'one line per bad file');
+    assert.ok(logged.every(l => l.includes(`${file}.bak`)));
+    rmSync(dir, { recursive: true, force: true });
+    console.log('ok corrupt config.json');
 }

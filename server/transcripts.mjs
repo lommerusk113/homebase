@@ -7,6 +7,8 @@ import { capture, promptBack } from './startup.mjs';
 import { cannedLabel } from '../public/canned.js';
 
 export const ROOT = join(homedir(), '.claude', 'projects');
+// The project folders under ROOT; none when Claude Code never ran on this machine.
+export const projectDirs = () => readdir(ROOT).catch(e => (e.code === 'ENOENT' ? [] : Promise.reject(e)));
 // ponytail: only the tail is parsed (transcripts reach 70+ MB); subagent token totals use the offset reader below
 const TAIL_BYTES = 512 * 1024;
 const TAIL_MIN_LINES = 200;

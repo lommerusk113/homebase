@@ -489,7 +489,18 @@ function noteRow(i, sid, key) {
     if (lost) {
         const drop = () => { state.outbox = state.outbox.filter(o => o !== lost); };
         const retry = waButton('Retry', 'retry', { pill: true }), dismiss = waButton('Dismiss', 'dismiss', { pill: true, appearance: 'plain' });
-        retry.onclick = e => {
+        retry.onclick = async e => {
+            if (lost.unconfirmed) { // it may have arrived after all: look before sending a second copy
+                retry.disabled = true;
+                try {
+                    if (await arrived(lost)) {
+                        return refreshChat(); // which drops the bubble for the transcript's own
+                    }
+                } catch {
+                    retry.disabled = false;
+                    return showErr('Couldn’t check whether this arrived, so it was not sent again. Try Retry once Homebase answers.');
+                }
+            }
             drop();
             const ta = /** @type {WaTextarea} */ ($('msg'));
             if (ta.value === lost.text && (draftSid ?? startingTarget()) === lost.sid) { // a failed send gave the text back: sent from here, it must not wait for a second Enter
@@ -910,6 +921,28 @@ async function showBoot(tmux) {
 const LANDED_SLACK_MS = 10_000; // a transcript item may predate the send it matches by this much
 const OUTBOX_TTL_MS = 30_000; // after a successful send, a bubble nothing matched by then is marked not confirmed
 
+// Whether the transcript's items hold what an outbox item sent (see feedItems).
+/** @param {ChatItem[]} items @param {OutboxItem} o */
+function landedIn(items, o) {
+    const sameSend = (text, at) => [o.text, o.note && `${o.text}\n\n${o.note}`].some(t => t && norm(text) === norm(t)) && !(Date.parse(at) < Date.parse(o.at) - LANDED_SLACK_MS);
+    return items.some(i => (i.role === 'user' && sameSend(i.text, i.at))
+        || (i.role === 'command' && sameSend(i.cmd, i.at)) // a slash command whose output the transcript now holds
+        || (i.answer && sameSend(i.answer.text, i.answer.at)));
+}
+// The same, read fresh from the server: before Retry sends a not confirmed message again. Throws when it can't be read.
+/** @param {OutboxItem} o */
+async function arrived(o) {
+    const s = state.sessions.find(x => x.id === o.sid);
+    if (!s) {
+        return false; // a chat still starting has no transcript to ask
+    }
+    const r = await api(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}`);
+    if (!r.ok) {
+        throw new Error(await r.text());
+    }
+    return landedIn((await r.json()).items, o);
+}
+
 // The transcript's items merged with this session's outbox, minus what Clear view hides; prunes state.outbox and
 // state.nudged on the way. hidden: how many items the cut-off removed from the front.
 /** @param {Session} s @param {Transcript} data @returns {{ items: ChatItem[], hidden: number, cut: { at: number, fresh: boolean } }} */
@@ -919,11 +952,7 @@ function feedItems(s, data) {
     // LANDED_SLACK_MS before: the transcript is the source of truth. OUTBOX_TTL_MS after the send succeeded with no
     // match, it stays marked not confirmed (Retry / Dismiss) rather than vanishing.
     // (compared with what was sent: the text, or the text plus its unshown note, as the transcript has the two together)
-    const sameSend = (text, at, o) => [o.text, o.note && `${o.text}\n\n${o.note}`].some(t => t && norm(text) === norm(t)) && !(Date.parse(at) < Date.parse(o.at) - LANDED_SLACK_MS);
-    const landed = /** @param {OutboxItem} o */ o => data.items.some(i => (i.role === 'user' && sameSend(i.text, i.at, o))
-        || (i.role === 'command' && sameSend(i.cmd, i.at, o)) // a slash command whose output the transcript now holds
-        || (i.answer && sameSend(i.answer.text, i.answer.at, o)));
-    state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !landed(o));
+    state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !landedIn(data.items, o));
     // a slash command with no output in the transcript never shows there: once sent it stays, with its result; so does an
     // answer typed into a question's text box, unless the transcript shows it as that question's answer
     for (const o of state.outbox) {
@@ -1503,6 +1532,17 @@ export async function sendText(sid, text, answerTo, note, canned) {
         setTimeout(refreshChat, 1000);
         return true;
     } catch (err) {
+        if (err.name === 'TimeoutError') {
+            // no answer is not a refusal: the server may still type it. Not confirmed (the transcript drops the bubble
+            // once it has the text, and Retry looks there first), and the text is not handed back to be sent twice.
+            out.sending = false;
+            out.unconfirmed = true;
+            if ((draftSid ?? startingTarget()) === sid) {
+                $('c-err').textContent = 'Homebase did not answer in 45 s, so this may or may not have reached Claude.';
+            }
+            refreshChat();
+            return true;
+        }
         if (/typing can't answer/.test(err.message)) { // control.mjs NEEDS_CLICK: the card gets that dialog
             paneCheck = sid;
             refreshChat();

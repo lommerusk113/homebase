@@ -50,5 +50,29 @@ export default {
         await page.clickOn(row);
         await page.waitFor(`!${row}`, { what: 'the row gone once looked at' });
         assert.equal(await page.ev(`document.getElementById('feed').textContent.includes('The cache is fine')`), true, 'and its chat open');
+    },
+
+    'a send Homebase never answered is not confirmed, and Retry sends no second copy once the first arrived': async ({ page, open }) => {
+        await open();
+        await page.waitFor(loaded, { what: 'the chat' });
+        // the send times out in the page; once window.landed is set, the transcript shows the message after all
+        await page.ev(`(() => { window.sends = 0; const f = window.fetch; window.fetch = async (u, o) => {
+            if (String(u).startsWith('/api/send')) { window.sends++; throw new DOMException('signal timed out', 'TimeoutError'); }
+            const r = await f(u, o);
+            if (!String(u).startsWith('/api/transcript') || !window.landed) return r;
+            const d = await r.json();
+            d.items.push({ role: 'user', text: 'slow but delivered', at: new Date().toISOString() });
+            return new Response(JSON.stringify(d), { status: 200, headers: { 'content-type': 'application/json' } });
+        }; })()`);
+        await page.click('#msg');
+        await page.type('slow but delivered');
+        await page.key('Enter');
+        const mine = `[...document.querySelectorAll('#feed .bubble.user')].find(b => b.textContent.includes('slow but delivered'))`;
+        await page.waitFor(`!!${mine}?.querySelector('wa-button.retry')`, { what: 'the bubble with Retry' });
+        assert.equal(await page.ev(`document.getElementById('msg').value`), '', 'the text is not handed back to be sent again');
+        assert.deepEqual(await page.ev(`import('/core.js').then(m => m.state.outbox.map(o => [!!o.unconfirmed, !!o.error]))`), [[true, false]], 'marked as not confirmed, not as failed');
+        await page.ev(`window.landed = true, ${mine}.querySelector('wa-button.retry').click()`);
+        await page.waitFor(`document.querySelectorAll('#feed wa-button.retry').length === 0 && !!${mine}`, { what: 'the delivered message without Retry' });
+        assert.equal(await page.ev(`window.sends`), 1, 'no second copy');
     }
 };

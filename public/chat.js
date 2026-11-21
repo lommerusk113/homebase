@@ -459,6 +459,11 @@ function noteRow(i, sid, key) {
         const retry = waButton('Retry', 'retry', { pill: true }), dismiss = waButton('Dismiss', 'dismiss', { pill: true, appearance: 'plain' });
         retry.onclick = e => {
             drop();
+            const ta = /** @type {WaTextarea} */ ($('msg'));
+            if (ta.value === lost.text && (draftSid ?? startingTarget()) === lost.sid) { // a failed send gave the text back: sent from here, it must not wait for a second Enter
+                ta.value = '';
+                saveDraft(draftStorage(), lost.sid, ta);
+            }
             focusComposer(e);
             sendText(lost.sid, lost.text, lost.answerTo, lost.note, lost.canned);
         };

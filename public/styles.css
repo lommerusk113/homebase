@@ -341,7 +341,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .c-input { position:relative; z-index:1; flex-shrink:0; height:88px; display:flex; flex-direction:column; justify-content:flex-end; padding-bottom:12px; }
 .c-input > * { flex-shrink:0; }
 /* attached images take their own row: the dock grows (the feed shrinks) instead of the row overflowing over the feed */
-.c-input:has(.c-attached:not([hidden])) { height:auto; min-height:88px; }
+.c-input:has(.c-attached:not([hidden])), .c-input:has(#c-err:not(:empty)) { height:auto; min-height:88px; }
 /* the composer card: the status as a slim coloured top line (context use on the right), then the input and the send button */
 .composer { margin:0 12px; }
 .c-row:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }

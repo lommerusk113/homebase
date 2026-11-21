@@ -47,6 +47,25 @@ export default {
         assert.equal(await page.ev(`(() => { const f = document.getElementById('feed'); return f.scrollHeight - f.scrollTop - f.clientHeight < 40; })()`), true, 'scrolled to the new bubble');
     },
 
+    'a failed send: its Retry row stays clear of the error line, and Retry by keyboard empties the given-back text and focuses the composer': async ({ page, open, answerPosts }) => {
+        await open();
+        await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
+        page.route = q => (q.method === 'POST' && q.url.includes('/api/send') ? { status: 500, body: 'no such session' } : answerPosts(q));
+        await page.click('#msg');
+        await page.type('goes wrong once');
+        await page.key('Enter');
+        const mine = `[...document.querySelectorAll('#feed .bubble.user')].find(b => b.textContent.includes('goes wrong once'))`;
+        await page.waitFor(`${mine}?.querySelector('wa-button.retry') && document.getElementById('msg').value === 'goes wrong once' && document.getElementById('c-err').textContent`, { what: 'the failed bubble, the text given back and the error line' });
+        await page.waitFor(`${mine}.querySelector('.b-note').getBoundingClientRect().bottom <= document.getElementById('c-err').getBoundingClientRect().top`, { what: 'the Retry row above the error line', timeout: 3000 });
+        page.route = answerPosts;
+        await page.ev(`${mine}.querySelector('wa-button.retry').focus()`);
+        await page.key('Enter', 'Enter');
+        await page.waitFor(`${mine}?.querySelector('.b-note')?.textContent === 'sending…'`, { what: 'the retried bubble' });
+        assert.equal(await page.ev(`document.getElementById('msg').value`), '', 'nothing left to send twice');
+        assert.equal(await page.ev(`document.activeElement?.id`), 'msg', 'focus on the composer');
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')).map(p => p.body), ['goes wrong once', 'goes wrong once']);
+    },
+
     'a send the transcript never shows stays as not confirmed, with Retry and Dismiss': async ({ page, open, IDS }) => {
         await open();
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });

@@ -930,6 +930,14 @@ console.log('ok interrupted');
     assert.deepEqual(own.map(i => [i.role, i.answer?.text]), [['user', undefined], ['assistant', 'Redis · 8080']]);
     assert.ok(shown(own[1]).includes('Two things to settle.') && shown(own[1]).includes('Which cache?'));
     console.log('ok answered question in the feed');
+
+    // a failed tool call makes its activity line visible and counted
+    const failed = chatItems([u('go'), tu('Bash', { id: 'b1' }), tu('Bash', { id: 'b2' }), res('b1', { is_error: true }), res('b2'), say('Hm.')]);
+    assert.deepEqual(failed.map(i => [i.role, i.quiet, i.failed]), [['user', undefined, undefined], ['tools', false, 1], ['assistant', undefined, undefined]]);
+    assert.deepEqual(chatItems([u('go'), tu('Bash', { id: 'b1' }), res('b1')]).map(i => [i.quiet, i.failed]), [[undefined, undefined], [true, undefined]]);
+    const pushed = chatItems([u('go'), tu('Bash', { id: 'b3', input: { command: 'git push origin x' } }), res('b3', { is_error: true })]);
+    assert.deepEqual([pushed[1].risky, pushed[1].failed], [true, 1]);
+    console.log('ok failed tool calls');
 }
 
 import { peakLimits } from './server.mjs';

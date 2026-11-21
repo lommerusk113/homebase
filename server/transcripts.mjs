@@ -473,10 +473,25 @@ function rawItems(entries) {
 
     const items = [];
     let uses = [];
+    const lines = new Map(); // tool_use id -> the activity line it is on, once that line exists
+    const failed = new Set(); // ids whose result is an error (failed test run, exit 1, rejected edit, hook block), not on a line yet
+    // "Ran 3 commands · 1 failed", never hidden as quiet
+    const fail = line => {
+        line.failed = (line.failed ?? 0) + 1;
+        line.quiet = false;
+        line.text = `${line.text.replace(/ · \d+ failed$/, '')} · ${line.failed} failed`;
+    };
     const flush = () => {
         if (uses.length) {
             // quiet: only commands, reads, searches and the like; the page hides those lines as noise
-            items.push({ role: 'tools', text: toolSummary(uses), quiet: !uses.some(u => ['edit', 'agent'].includes(TOOL_KIND[u.name])) });
+            const line = { role: 'tools', text: toolSummary(uses), quiet: !uses.some(u => ['edit', 'agent'].includes(TOOL_KIND[u.name])) };
+            items.push(line);
+            for (const u of uses) {
+                lines.set(u.id, line);
+                if (failed.delete(u.id)) {
+                    fail(line);
+                }
+            }
             uses = [];
         }
     };
@@ -492,6 +507,12 @@ function rawItems(entries) {
             flush();
             answerAsk(items, e, reply, asks.get(reply.tool_use_id), !newTurn);
             newTurn = true; // what Claude says after the answer is its own bubble
+        }
+        for (const b of !e.isSidechain && e.type === 'user' && Array.isArray(e.message?.content) ? e.message.content : []) {
+            if (b.type === 'tool_result' && b.is_error && b !== reply) {
+                const line = lines.get(b.tool_use_id);
+                line ? fail(line) : failed.add(b.tool_use_id);
+            }
         }
     if (entry?.kind === 'interrupt') {
             // a turn that ran tools but wrote nothing yet gets its own line: the reply before your prompt was not cut
@@ -539,6 +560,7 @@ function rawItems(entries) {
                     // a push, merge or force on its own visible line, never folded into the hidden "Ran N commands"
                     flush();
                     items.push({ role: 'tools', text: `Ran: ${cmd.length > 160 ? `${cmd.slice(0, 159)}…` : cmd}`, risky: true, at: e.timestamp });
+                    lines.set(u.id, items.at(-1));
                 } else {
                     uses.push(u);
                 }

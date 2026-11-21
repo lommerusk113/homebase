@@ -163,7 +163,7 @@ interface Answer { text: string; at?: string; queued?: boolean; sending?: boolea
 
 interface ChatItem {
     role: 'user' | 'assistant' | 'tools' | 'error' | 'compact' | 'command';
-    /** a 'command' item (client-only): the slash command whose panel or output `text` is, and what to do next */
+    /** a 'command' item: the slash command or `! bash` line whose panel or output `text` is, and (client-only) what to do next */
     cmd?: string;
     hint?: string;
     text: string;
@@ -174,6 +174,10 @@ interface ChatItem {
     interrupted?: boolean;
     /** a tools line with no edits or agents, hidden as noise */
     quiet?: boolean;
+    /** how many of a tools line's calls failed (never quiet then) */
+    failed?: number;
+    /** a finished agent's result, folded under its line */
+    detail?: string;
     /** a tools line for one command that pushes, merges or forces (transcripts.mjs RISKY), always shown */
     risky?: boolean;
     /** queued in the server's send queue */

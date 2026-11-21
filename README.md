@@ -75,6 +75,20 @@ flowchart LR
     server -- "glab, gh" --> forge["GitLab, GitHub"]
 ```
 
+## Why tmux, not the Agent SDK
+
+Homebase does not run its own agent: it types into the interactive `claude` you already use, started through your login shell inside tmux.
+
+What that buys:
+
+* Chats use the sign-in, settings, hooks, plugins and `CLAUDE.md` files your terminal's Claude Code uses, and slash commands typed in a chat reach the same program.
+* `tmux attach -t cc-<id8>` opens the very same chat in any terminal, and it keeps running when the Homebase server stops.
+* Chats you start in a terminal show on the board too, because Homebase reads the transcripts Claude Code writes itself.
+
+What it costs: Claude Code offers no interface for this, so Homebase reads its screen (`tmux capture-pane`) and its transcript files, and neither format is documented. A Claude Code update can break status, questions or sends.
+
+How that is contained: `VERIFIED_CLAUDE` in `server/setup.mjs` names the newest Claude Code the parsing was checked with (2.1.330 now). When the installed one is newer, the page header, `node server.mjs --doctor` and the server's start-up output say so. The header also warns when a transcript has no turn markers or a question is asked that the screen parser cannot read. `tests/fixtures/` holds screens captured from a real Claude Code, which the unit tests parse.
+
 ## What Homebase writes to Claude's settings file
 
 Homebase changes `~/.claude/settings.json` in these cases only.

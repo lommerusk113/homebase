@@ -15,3 +15,4 @@ The first numbered state.
 * The session list is built once for all pages polling at the same time.
 * On a phone: board actions ask before sending, a send button (Enter adds a line), a one-row header that stays on screen above the keyboard, menus and tables that fit the screen, 44px tap targets, and no "Pair a device…" on a paired device.
 * In the chat, a button's message ("Load new rules", a row action, an issue's Start), slash-command and `!` output, and a "Ran: …" line each show as one line that opens to the full text; commands in a row fold into one.
+* Issues and forge: an issue a chat already works on offers "Check on it" instead of a second Start, a forge that cannot be reached says so on the board in plain words (old data kept and dated), GitHub issues link to their PRs and say PR/GitHub, a conflicting PR is blocked, a project without milestones shows the issues assigned to you, and an MR closed without merging has its own group.

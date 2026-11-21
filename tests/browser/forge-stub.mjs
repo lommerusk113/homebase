@@ -138,6 +138,18 @@ function gh(rest) {
     if (p === 'repos/acme/beta/milestones' || (p === `repos/${OWNER}/tracker/milestones` && personal())) {
         return out([]);
     }
+    // beta has no milestones: its Issues tab lists my open issues, #3 linked to PR 7 by its closing keyword
+    if (p === 'repos/acme/beta/issues') {
+        const gi = (number, title) => ({ number, title, state: 'open', assignees: [{ login: 'tester' }], html_url: `https://github.com/acme/beta/issues/${number}`, milestone: null, body: `Details for ${title}.`, updated_at: ago(7200) });
+
+        return out([gi(3, 'Add SQLite support'), gi(4, 'Document the config')]);
+    }
+    if (p === 'repos/acme/beta/pulls') {
+        return out([{ number: 7, html_url: 'https://github.com/acme/beta/pull/7', state: 'open', merged_at: null, title: 'Add SQLite support', body: 'Closes #3', head: { ref: 'sqlite' }, user: { login: 'tester' } }]);
+    }
+    if (new RegExp(`^repos/${OWNER}/tracker/(issues|pulls)$`).test(p) && personal()) {
+        return out([]);
+    }
     if (new RegExp(`^repos/${OWNER}/tracker/(issues|pulls)/32/(comments|reviews)$`).test(p) && personal()) {
         return out([]);
     }

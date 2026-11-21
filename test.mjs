@@ -4099,3 +4099,33 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.equal(groupIssues([{ iid: 7, state: 'open', assignees: [] }], links).groups.doing.length, 1);
     console.log('ok github parity');
 }
+
+{
+    // a project without milestones answers with the user's open issues instead of an empty state, whatever was picked before
+    const { milestones, defaultMilestone } = await import('./server/milestones.mjs');
+    const { repoPaths, accountOf } = await import('./server/account.mjs');
+    const { swr, me } = await import('./server/forge.mjs');
+    const repo = { host: 'gitlab.nm.test', path: 'g/nm' }, who = { name: 'Me', username: 'me' };
+    repoPaths.set('nm', repo);
+    me.set(`${accountOf(repo)}:${repo.host}`, { at: Date.now(), value: who });
+    swr.set('ms:nm', { at: Date.now(), value: [] });
+    swr.set('issues:nm:mine', { at: Date.now(), value: groupIssues([{ iid: 3, state: 'open', assignees: [who] }]) });
+    try {
+        for (const pick of ['', 'none', 'mine']) {
+            const d = await milestones('nm', pick);
+            assert.deepEqual([d.reason, d.selected?.mine, d.selected?.groups.assigned.map(i => i.iid)], [null, true, [3]], `pick "${pick}"`);
+        }
+    } finally {
+        repoPaths.delete('nm');
+        ['ms:nm', 'issues:nm:mine'].forEach(k => swr.delete(k));
+    }
+
+    // no MR of mine in any milestone: the only one, else the next one due, else the last one that was
+    const ms = (id, due) => ({ id, due });
+    assert.equal(defaultMilestone([ms(1, null)], [], '2026-06-01').id, 1);
+    assert.equal(defaultMilestone([ms(1, '2026-05-01'), ms(2, '2026-07-01'), ms(3, '2026-06-15'), ms(4, null)], [], '2026-06-01').id, 3);
+    assert.equal(defaultMilestone([ms(1, '2026-05-01'), ms(2, '2026-04-01')], [], '2026-06-01').id, 1);
+    assert.equal(defaultMilestone([ms(1, '2026-07-01'), ms(2, '2026-06-15')], [1], '2026-06-01').id, 1, 'the one my MRs are in wins');
+    assert.equal(defaultMilestone([ms(1, null), ms(2, null)], [], '2026-06-01'), null);
+    console.log('ok milestone defaults');
+}

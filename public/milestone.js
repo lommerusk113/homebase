@@ -140,10 +140,12 @@ export function milestoneSelector(project, { signal, onChange, onData, onBusy } 
     /** @param {Milestones} data */
     function render(data) {
         const ms = data.selected, empty = emptyPill(data);
-        pick.classList.toggle('off', !!empty);
+        // no milestones: the answer is the user's own issues, which the Issues tab shows without the pill
+        const bare = !data.milestones.length && !data.loading && (!data.reason || data.reason === 'none');
+        pick.classList.toggle('off', !!empty || bare);
         pick.classList.toggle('err', !!empty?.err);
         if (pick.parentElement) {
-            pick.parentElement.hidden = data.reason === 'none' || data.reason === 'unsupported'; // no milestones: no pill, no gap in the header
+            pick.parentElement.hidden = bare || data.reason === 'unsupported'; // no milestones: no pill, no gap in the header
         }
         if (data.loading) { // a slow forge: the list is not in yet
             summary.replaceChildren(el('span', null, '⚑'), el('span', 'ld', 'Loading…'), el('wa-spinner'));

@@ -45,11 +45,19 @@ export default {
         await page.waitFor(`document.querySelector('#milestone-slot .ms-pick')?.textContent.includes('Loading')`, { what: 'the alpha pill loading' });
         await page.click('#project');
         await page.click('.pp-row[data-value="beta"]');
-        await page.waitFor(`document.querySelector('#milestone-slot .ms-pick')?.textContent.includes('No milestones')`, { what: 'the beta pill' });
+        await page.waitFor(`document.querySelector('#issues .card[data-key="issue:4"]')`, { what: "beta's issues" });
         await new Promise(r => setTimeout(r, 2500)); // past alpha's delayed answer
-        assert.equal(await page.ev(`document.querySelector('#milestone-slot .ms-pick summary').textContent`), '⚑No milestones');
-        assert.equal(await page.ev(`document.querySelectorAll('#issues .card').length`), 0, 'no alpha issue cards');
-        assert.match(await page.ev(`document.querySelector('#issues .welcome')?.textContent`), /^No open milestones in beta\./);
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#issues .card')].map(c => c.dataset.key)`), ['issue:3', 'issue:4'], 'no alpha issue cards');
+    },
+
+    'a GitHub project without milestones shows my issues, with its PRs linked and in its own words': async ({ page, open }) => {
+        await open({ tab: 'issues', project: 'beta', chat: IDS.asker, 'milestone:beta': 'none' });
+        await page.waitFor(`document.querySelector('#issues .card[data-key="issue:4"]')`, { what: "beta's issues" });
+        assert.equal(await page.ev(`document.getElementById('milestone-slot').hidden`), true, 'no pill: the tab shows them by itself');
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#issues .card')].map(c => [c.dataset.key, c.classList.contains('doing'), !!c.querySelector('a.chip')])`),
+            [['issue:3', true, true], ['issue:4', false, false]], 'the issue with an open PR is in progress');
+        await page.click('#issues .card[data-key="issue:4"]');
+        await page.waitFor(`document.querySelector('#issues .card.open .more')`, { what: 'the open card' });
     },
 
     'Start on a collapsed card sends Implement #N to the chat and marks it starting': async ({ page, open }) => {

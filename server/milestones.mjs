@@ -118,6 +118,15 @@ export function activeMilestones(mrs, list) {
     return [...score].sort((a, b) => b[1] - a[1]).map(([id]) => id);
 }
 
+// The milestone to open with when none was picked: the one most of my MRs are in, else the only one, else the next one
+// due (today counts), else the one that was due last. null when several have no due date at all.
+export function defaultMilestone(list, detected, today = new Date().toISOString().slice(0, 10)) {
+
+    const dated = list.filter(m => m.due).toSorted((a, b) => a.due.localeCompare(b.due));
+
+    return list.find(m => m.id === detected[0]) ?? (list.length === 1 ? list[0] : dated.find(m => m.due >= today) ?? dated.at(-1) ?? null);
+}
+
 // The issue groups of one milestone; its open issues' MRs in parallel (api's limiter bounds them).
 async function milestoneIssues(project, repo, load) {
 
@@ -136,7 +145,7 @@ async function milestoneIssues(project, repo, load) {
 
 // A project's open milestones, the ids its MRs point at, and the issue groups of the chosen one.
 // pick: a milestone id (or a title, as older saved choices hold), "none" for no milestone, "mine" for the open issues
-// assigned to the signed-in user in every milestone (works without milestones too), empty for the most active one.
+// assigned to the signed-in user in every milestone (all a project without milestones has), empty for the default one.
 export async function milestones(project, pick) {
 
     // right after start the projects come from the warm-up's session scan
@@ -161,15 +170,13 @@ export async function milestones(project, pick) {
         // a slow forge is no error: the calls go on in the background and the page keeps asking (the CLI's own timeout ends a hung one)
         return e === STILL_LOADING ? { ...noMilestones(project, repo, null), loading: true } : noMilestones(project, repo, 'error', problemText(e, w.cli));
     }
-    if (pick === 'mine') {
+    // without milestones the user's open issues are all there is to show, whatever was picked before
+    if (pick === 'mine' || !list.length) {
         return mineView(project, repo, list, me);
-    }
-    if (!list.length) {
-        return { ...noMilestones(project, repo, 'none'), me };
     }
     const mrs = [...prs].filter(([url, hit]) => hit.value && sameRepo(url, project)).map(([, hit]) => hit.value);
     const detected = activeMilestones(mrs, list);
-    const ms = pick === 'none' ? null : list.find(m => String(m.id) === pick || m.title === pick) ?? list.find(m => m.id === detected[0]);
+    const ms = pick === 'none' ? null : list.find(m => String(m.id) === pick || m.title === pick) ?? defaultMilestone(list, detected);
 
     // the issue groups never wait: until the first load is in, selected has the list's counts and loading: true
     const issues = ms && swrEntry(`issues:${project}:${ms.id}`, MS_ISSUES_TTL_MS, () => milestoneIssues(project, repo, () => fetchIssues(repo, ms)));

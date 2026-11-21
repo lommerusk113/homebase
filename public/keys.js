@@ -1,7 +1,7 @@
 // Keyboard navigation over work-item rows (after Contado): j/k move, Enter/Space expand, o opens the MR, a runs the row action.
 // The same j/k/Enter/o work on the Issues view's cards; 1 and 2 pick Work or Issues and t swaps them; l opens the activity log; n steps through the chats waiting on you; a digit picks the numbered option of the question open in the chat; [ and ] cycle projects.
 // The focused row is tracked by item key, so it survives the 3s re-renders; list.js and issues.js call hooks.rendered after each one.
-import { $, el, waButton, state, hooks } from './core.js';
+import { $, el, waButton, state, store, hooks, plainKeysOff } from './core.js';
 import { select, renderBoard } from './list.js';
 import { openOptions, focusQuestionOf } from './chat.js';
 import { showTab, activeTab, collapseIssue } from './issues.js';
@@ -114,7 +114,13 @@ function dialog(label, body, footer = []) {
 function help() {
     const dl = el('dl', 'keys-help');
     dl.append(...SHORTCUTS.flatMap(([k, what]) => [el('dt', null, k), el('dd', null, what)]));
-    dialog('Keyboard shortcuts', dl);
+    // WCAG 2.1.4: single-character shortcuts can be turned off (they collide with screen reader and speech input keys)
+    const toggle = el('label', 'keys-toggle'), box = el('input');
+    box.type = 'checkbox';
+    box.checked = store.get('keys') !== 'off';
+    box.onchange = () => store.set('keys', box.checked ? 'on' : 'off');
+    toggle.append(box, 'Letter, number and symbol shortcuts. Off: only Enter, Space, the arrows, Esc and ? work.');
+    dialog('Keyboard shortcuts', dl, [toggle]);
 }
 // The action types into the user's Claude session, so it asks first, showing the message; the dialog itself has focus,
 // so a stray Enter or a second a does nothing, and only a click (or Tab to Send) sends.
@@ -146,6 +152,9 @@ function onKey(e) {
     }
     if (typing(path)) {
         if (e.key === 'Escape') { /** @type {HTMLElement | null} */ (document.activeElement)?.blur(); rowOf(focusKey)?.focus({ preventScroll: true }); }
+        return;
+    }
+    if (plainKeysOff(e)) {
         return;
     }
     // a question's number badges are its keys while it is open in the chat; the views keep t

@@ -29,6 +29,10 @@ export const store = {
         } catch {}
     }
 };
+// The ? overlay's switch: with single-character shortcuts off, a letter, digit or symbol key does nothing outside a
+// text field. Enter, Space, the arrows, Esc and ? (the way back to the switch) stay.
+/** @param {KeyboardEvent} e */
+export const plainKeysOff = e => e.key.length === 1 && e.key !== ' ' && e.key !== '?' && store.get('keys') === 'off';
 const parse = v => {
     try {
         return JSON.parse(v) || [];

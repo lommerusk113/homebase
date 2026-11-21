@@ -73,6 +73,26 @@ export default {
         assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')), [], 'nothing sent');
     },
 
+    'with single-character shortcuts switched off in the ? overlay, n and a digit do nothing; switched on again they work': async ({ page, open, IDS }) => {
+        await open();
+        await page.waitFor(`document.querySelectorAll('#feed .replies wa-button').length === 3 && document.querySelector('#masters tr[data-key="asking:${IDS.master}"]')`, { what: 'the question and its row' });
+        await page.ev(`document.activeElement?.blur()`);
+        await page.key('?', 'Slash');
+        await page.waitFor(`document.querySelector('wa-dialog .keys-toggle input')?.checkVisibility()`, { what: 'the switch' });
+        await page.ev(`document.querySelector('wa-dialog .keys-toggle input').click()`);
+        await page.key('Escape', 'Escape');
+        await page.waitFor(`!document.querySelector('wa-dialog .keys-help')`, { what: 'the help to close' });
+        await page.ev(`document.activeElement?.blur()`);
+        await page.key('n');
+        await page.key('3', 'Digit3');
+        await sleep(300);
+        assert.equal(await page.ev(focused), null, 'n moved nothing');
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')), [], 'the digit answered nothing');
+        await page.ev(`localStorage.setItem('keys', 'on')`);
+        await page.key('n');
+        assert.equal(await page.ev(focused), `asking:${IDS.master}`);
+    },
+
     'n steps through every chat waiting on you and starts over': async ({ page, open, IDS }) => {
         await open({ project: 'all', chat: IDS.worker });
         await page.waitFor(`document.querySelectorAll('#masters tr[data-key^="asking:"]').length >= 2`, { what: 'two waiting chats' });

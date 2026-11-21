@@ -1,6 +1,6 @@
 // Milestone pill for the header: progress of the chosen milestone, a menu to switch it, and the list filter it drives.
 // Read-only towards GitLab/GitHub: the menu only links out.
-import { api, el, store, link } from './core.js';
+import { api, el, store, link, forgeWords } from './core.js';
 const FETCH_MS = 30_000; // the server caches the glab calls; this only bounds how stale the pill gets
 const POLL_MS = 3000;
 const LOADING_MS = 1000; // while the server is still loading the issues, or refreshing stale ones
@@ -210,7 +210,7 @@ export function milestoneSelector(project, { signal, onChange, onData, onBusy } 
                 const chips = el('div', 'chips');
                 chips.append(...g.closable.map(i => {
                     const a = link('chip', `#${i.iid} ${i.title}`, i.url);
-                    a.title = [i.title, 'Merged, issue still open', ...i.mrs.map(m => `!${m.iid} ${m.state}`)].join('\n');
+                    a.title = [i.title, 'Merged, issue still open', ...i.mrs.map(m => `${forgeWords(m.url).ref}${m.iid} ${m.state}`)].join('\n');
                     return a;
                 }));
                 parts.push(el('h5', 'hot', `Can be closed (${g.closable.length})`), chips);
@@ -223,7 +223,7 @@ export function milestoneSelector(project, { signal, onChange, onData, onBusy } 
             b.dataset.id = String(m.id);
             b.append(el('span', null, m.title), el('small', null, m.total == null ? '' : `${m.closed}/${m.total}`));
             if (data.detected.includes(m.id)) {
-                b.title = 'Your MRs are in this milestone';
+                b.title = `Your ${forgeWords(data.forge).mr}s are in this milestone`;
             }
             b.onclick = () => choose(String(m.id));
             return b;

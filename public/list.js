@@ -1,5 +1,5 @@
 // Left column: work items grouped by what they wait on, and attention transitions.
-import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, touch, seenAt, markSeen, freshComments, authorSummary, updateTitle, setWorkCount, waitsOnYou, markHandled } from './core.js';
+import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, touch, seenAt, markSeen, freshComments, authorSummary, updateTitle, setWorkCount, waitsOnYou, markHandled, forgeWords } from './core.js';
 import { chatSession, bindChat, focusChat, sendText, isMaster } from './chat.js';
 import { milestoneTag } from './milestone.js';
 import { diffIcon } from './diff.js';
@@ -33,15 +33,15 @@ export function ciPill(p) {
 }
 
 // review-gate badge next to the MR chip: ✓ gate (ready), ⚠ gate (fix first), gate stale once the MR head moved; nothing if it never ran.
-/** @param {Gate | null} g @returns {HTMLElement[]} */
-function gateBadge(g) {
+/** @param {Gate | null} g @param {string} mr the forge's word for it @returns {HTMLElement[]} */
+function gateBadge(g, mr) {
     if (!g) {
         return [];
     }
     const [cls, label] = g.stale ? ['stale', 'gate stale'] : g.verdict === 'ready' ? ['ready', '✓ gate'] : ['fix', '⚠ gate'];
     const b = el('span', `gate-badge gate-${cls}`, label);
     const when = g.at && ago(g.at);
-    const tip = [`review-gate: ${g.verdict}${g.stale ? ' (MR changed since)' : ''}`, when && (when === 'now' ? 'just now' : `${when} ago`), plain(g.tldr)].filter(Boolean).join(' · ');
+    const tip = [`review-gate: ${g.verdict}${g.stale ? ` (${mr} changed since)` : ''}`, when && (when === 'now' ? 'just now' : `${when} ago`), plain(g.tldr)].filter(Boolean).join(' · ');
     b.setAttribute('aria-label', tip);
     return [b, tooltip(b, tip)];
 }
@@ -240,13 +240,13 @@ function prParts(x) {
     if (!x.pr) {
         return [];
     }
-    const out = [prChip(x), ...ciPill(x.prState?.pipeline), ...gateBadge(x.gate)];
+    const out = [prChip(x), ...ciPill(x.prState?.pipeline), ...gateBadge(x.gate, forgeWords(x.pr).mr)];
     // the lookup failed but an older answer is shown: say it may be out of date (with no answer, Next already says so)
     if (x.forgeError && x.prState) {
         const w = el('span', 'ci-pill stale', '⚠');
         w.tabIndex = 0;
         w.setAttribute('aria-label', 'May be out of date');
-        out.push(w, tooltip(w, `Couldn't check this MR just now (${x.forgeError}), so this is what it was last time`));
+        out.push(w, tooltip(w, `Couldn't check this ${forgeWords(x.pr).mr} just now (${x.forgeError}), so this is what it was last time`));
     }
     return out;
 }
@@ -366,7 +366,7 @@ function renderItems() {
         groups.splice(groups.findIndex(g => g.classList.contains('g-needs-you')) + 1, 0, sec);
     }
     const hadFocus = $('masters').contains(document.activeElement); // replaceChildren drops it; keys.js puts it back
-    const empty = !groups.some(g => g.localName === 'section' || g.classList.contains('g-review')) && el('div', groups.length ? 'd-empty' : 'welcome', 'No MRs or subagents right now');
+    const empty = !groups.some(g => g.localName === 'section' || g.classList.contains('g-review')) && el('div', groups.length ? 'd-empty' : 'welcome', `No ${forgeWords(visibleSessions().find(s => s.forge)?.forge.name).mr}s or subagents right now`);
     // replaceChildren empties the pane, which scrolls it to the top; a folded group has no height until it has drawn itself
     // (a microtask later), so a position near the end is clamped now and set again then
     const m = $('masters'), top = pendingTop ?? m.scrollTop;

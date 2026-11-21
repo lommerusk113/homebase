@@ -547,6 +547,11 @@ export function updateTitle() {
 
 // A transcript model id (claude-opus-5-5) as its family name for the chat's model chip; null for none or <synthetic>.
 /** @param {string | null | undefined} id @returns {string | null} */
+// The forge's words on the page, from its name (a session's forge, a milestone answer's) or an MR/PR URL: GitLab has MRs
+// written !12, GitHub has PRs written #12. The one place the page picks them; unknown reads as GitLab.
+/** @param {string | null} [at] */
+export const forgeWords = at => (at === 'GitHub' || at?.includes('/pull/') ? { forge: 'GitHub', mr: 'PR', ref: 'PR #' } : { forge: 'GitLab', mr: 'MR', ref: '!' });
+
 export const modelName = id => {
     const m = /opus|sonnet|haiku|fable/i.exec(id ?? '')?.[0].toLowerCase();
 

@@ -4129,3 +4129,22 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.equal(defaultMilestone([ms(1, null), ms(2, null)], [], '2026-06-01'), null);
     console.log('ok milestone defaults');
 }
+
+{
+    // MR/PR and the forge's name are worded by the project's forge, from one place on each side
+    const { forgeWords } = await import('./server/forge.mjs');
+    const { repoPaths } = await import('./server/account.mjs');
+    const core = await import('./public/core.js');
+    repoPaths.set('ghp', { host: 'github.com', path: 'o/ghp' });
+    try {
+        assert.deepEqual([forgeWords('ghp').forge, forgeWords('ghp').mr, forgeWords('nope').mr, forgeWords('nope', 'https://github.com/o/r/pull/1').mr], ['GitHub', 'PR', 'MR', 'PR']);
+        const gh = workItems([{ id: 's', project: 'ghp', prs: [{ url: 'https://github.com/o/ghp/pull/5', at: 1 }], agents: [agent('done', 4, { status: 'done', updated: 0 })] }], () => null, 0, new Map());
+        assert.ok(gh.length && gh.every(i => !/\bMR\b/.test(i.next)), gh.map(i => i.next).join(' | '));
+    } finally {
+        repoPaths.delete('ghp');
+    }
+    assert.deepEqual([core.forgeWords('GitHub').mr, core.forgeWords('https://github.com/o/r/pull/1').forge, core.forgeWords(undefined).mr, core.forgeWords('GitLab').forge], ['PR', 'GitHub', 'MR', 'GitLab']);
+    assert.equal(chatMessage({ iid: 3, st: 'doing', mrs: [{ iid: 7, state: 'open', url: 'https://github.com/o/r/pull/7' }] }), 'Check on #3 and PR #7');
+    assert.equal(chatMessage({ iid: 3, st: 'closable', mrs: [{ iid: 7, state: 'merged', url: 'https://github.com/o/r/pull/7' }] }), 'Close #3, its PR #7 is merged');
+    console.log('ok forge words');
+}

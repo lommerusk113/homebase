@@ -19,7 +19,10 @@ const CANNED = {
     review: { label: 'Request review', text: ref => `Assign a reviewer to ${ref} — suggest who.`, of: mr },
     start: { label: 'Start', text: iid => `Implement #${iid}`, of: issue, arg: '\\d+' },
     close: { label: 'Close', text: (iid, mrIid) => `Close #${iid}, its MR !${mrIid} is merged`, of: issue, arg: '\\d+' },
-    check: { label: 'Check on', text: (iid, mrIid) => `Check on #${iid} and !${mrIid}`, of: issue, arg: '\\d+' }
+    check: { label: 'Check on', text: (iid, mrIid) => `Check on #${iid} and !${mrIid}`, of: issue, arg: '\\d+' },
+    // the same two for a GitHub PR, which is written "PR #12"
+    closePr: { label: 'Close', text: (iid, n) => `Close #${iid}, its PR #${n} is merged`, of: issue, arg: '\\d+' },
+    checkPr: { label: 'Check on', text: (iid, n) => `Check on #${iid} and PR #${n}`, of: issue, arg: '\\d+' }
 };
 
 const named = (c, args) => [c.label, c.of?.(...args)].filter(Boolean).join(' ');

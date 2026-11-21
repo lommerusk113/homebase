@@ -58,6 +58,7 @@ export default {
             [['issue:3', true, true], ['issue:4', false, false]], 'the issue with an open PR is in progress');
         await page.click('#issues .card[data-key="issue:4"]');
         await page.waitFor(`document.querySelector('#issues .card.open .more')`, { what: 'the open card' });
+        assert.doesNotMatch(await page.ev(`document.getElementById('issues').textContent`), /GitLab|\bMRs?\b/, 'a GitHub project never says GitLab or MR');
     },
 
     'Start on a collapsed card sends Implement #N to the chat and marks it starting': async ({ page, open }) => {

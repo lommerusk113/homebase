@@ -1,6 +1,6 @@
 // Work-item rules (pure): one item per MR or loose agent, its column, lifecycle stage, next step, row action, gate badge and milestone.
 import { PR_URL, USAGE_KEYS, formatDuration, formatTokens } from './transcripts.mjs';
-import { mentionsMr, mrRef } from './forge.mjs';
+import { mentionsMr, mrRef, forgeWords } from './forge.mjs';
 import { canned } from '../public/canned.js';
 
 const RECENT_DONE_MS = 2 * 3600_000;
@@ -86,10 +86,10 @@ export function itemColumn(prState, agent, hasPr) {
     return !hasPr && agent?.status === 'done' ? 'finished' : column('idle', prState, hasPr);
 }
 
-const BLOCKED_STEP = { conflict: 'Merge conflicts — rebase it', rebase: 'Needs a rebase onto its target', blocked: 'Blocked by another MR', checks: 'Waiting for external status checks' };
+const BLOCKED_STEP = { conflict: 'Merge conflicts — rebase it', rebase: 'Needs a rebase onto its target', blocked: 'Blocked by another MR', checks: 'Waiting for external status checks' }; // blocked and checks are GitLab's
 
-// What has to happen next for a work item, as one deterministic line.
-export function nextStep(prState, agent) {
+// What has to happen next for a work item, as one deterministic line. mr: the forge's word for it (forgeWords).
+export function nextStep(prState, agent, mr = 'MR') {
 
     if (prState?.state === 'merged') {
         return 'Merged';
@@ -104,7 +104,7 @@ export function nextStep(prState, agent) {
         return agent.stopReason === 'api-error' ? 'Agent hit an API error — continue it' : 'Agent stopped — check the chat';
     }
     if (!prState) {
-        return 'Open the MR to check its state';
+        return `Open the ${mr} to check its state`;
     }
     if (prState.unresolved || prState.unanswered) {
         const u = prState.unresolved ?? 0, g = prState.unanswered ?? 0;
@@ -335,6 +335,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             ? requestFor(sessions, it.project, it.pr, prState) : null;
         const col = requested ? 'doing' : itemColumn(prState, agent, !!it.pr);
         const title = prState?.title ?? agent?.description ?? it.pr;
+        const w = forgeWords(it.project, it.pr);
 
         return {
             key: it.key,
@@ -358,7 +359,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             agentLinks: agents.filter(a => a.status === 'done').map(a => ({ id: a.id, description: a.description, finished: a.updated })), // for the store; dropped before the response
             activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
-            next: requested ? 'Claude is on it…' : col === 'finished' ? 'Finished without an MR' : nextStep(prState, agent),
+            next: requested ? 'Claude is on it…' : col === 'finished' ? `Finished without ${w.aMr}` : nextStep(prState, agent, w.mr),
             action: requested ? null : rowAction(it.pr, prState, agent, title),
             gate: it.pr ? toGate(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
             ...agentUsage(agents, now)

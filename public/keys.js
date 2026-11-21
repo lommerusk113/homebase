@@ -10,7 +10,7 @@ import { openLog } from './log.js';
 const SHORTCUTS = [
     ['d', 'Changes (diff) of the open chat; j / k move between its files'],
     ['j / ↓', 'Next item'], ['k / ↑', 'Previous item'], ['Enter / Space', 'Expand or collapse, chat with its session'],
-    ['o', 'Open the MR in a new tab'], ['a', "Run the row's action (asks first)"], ['/ or c', 'Focus the chat input'],
+    ['o', 'Open the MR or PR in a new tab'], ['a', "Run the row's action (asks first)"], ['/ or c', 'Focus the chat input'],
     ['Esc', 'Leave the input, or collapse the row'], ['n', 'Next chat waiting on you'], ['1 – 9', 'Pick that option of the question open in the chat'], ['1 / 2', 'Work / Issues, when no question is open'], ['t', 'Swap Work and Issues'], ['l', 'Activity log'],
     ['[ / ]', 'Previous / next project'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['r', 'Refresh from GitLab/GitHub'], ['?', 'This overlay']
 ];

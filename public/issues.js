@@ -1,6 +1,6 @@
 // Issues tab: the selected milestone's open issues in one lane per person (you first, then A–Z, then Unassigned).
-// Read-only towards GitLab; "Send to chat" only types into the bound chat session. Draws from milestone.js's /api/milestones data.
-import { $, el, link, ago, prChip, tooltip, waButton, state, store, hooks, firstName, visibleSessions } from './core.js';
+// Read-only towards the forge; "Send to chat" only types into the bound chat session. Draws from milestone.js's /api/milestones data.
+import { $, el, link, ago, prChip, tooltip, waButton, state, store, hooks, firstName, visibleSessions, forgeWords } from './core.js';
 import { ciPill, issueWork } from './list.js';
 import { canned, cannedLabel } from './canned.js';
 import { chatSession, sendText, bindChat } from './chat.js';
@@ -70,12 +70,13 @@ export function closedBy(done) {
 // An MR closed without merging is no work on the issue: with only those it starts afresh.
 /** @param {Issue & { st?: string }} card */
 export function chatMessage(card) {
+    const pr = (/** @type {IssueMr} */ m) => forgeWords(m.url).mr === 'PR'; // GitHub writes it "PR #12", GitLab "!12"
     const mr = card.mrs.find(m => m.state === 'open') ?? card.mrs.find(m => m.state !== 'closed');
     if (card.st === 'closable' && mr) {
         const m = card.mrs.find(x => x.state === 'merged') ?? mr;
-        return canned('close', card.iid, m.iid).message;
+        return canned(pr(m) ? 'closePr' : 'close', card.iid, m.iid).message;
     }
-    return (mr ? canned('check', card.iid, mr.iid) : canned('start', card.iid)).message;
+    return (mr ? canned(pr(mr) ? 'checkPr' : 'check', card.iid, mr.iid) : canned('start', card.iid)).message;
 }
 
 // "Supplier automation: undo in the grid" -> "undo in the grid" when the prefix is the milestone's name.
@@ -187,7 +188,7 @@ export function renderIssues(d = data) {
     }
     const cards = issueCards(ms.groups);
     pane.replaceChildren(head(/** @type {SelectedMilestone & { groups: IssueGroups }} */ (ms), d.updating && 'Updating…'), ...buildLanes(cards, ms.groups.done, d.me).map((l, n) => lane(l, n, ms)), closedLine(ms.groups.done),
-        el('div', 'is-note', 'Read-only: Homebase never writes to GitLab. "Send to chat" only types into the chat on the right.'));
+        el('div', 'is-note', `Read-only: Homebase never writes to ${forgeWords(d.forge).forge}. "Send to chat" only types into the chat on the right.`));
     hooks.rendered?.(hadFocus);
 }
 
@@ -207,7 +208,7 @@ export function emptyText(d) {
 /** @param {SelectedMilestone & { groups: IssueGroups }} ms @param {string | false} [hint] */
 function head(ms, hint) {
     const g = ms.groups, open = ms.total - ms.closed, h = el('div', 'is-head');
-    const title = el('div', 'is-title'), gl = link(null, 'GitLab ↗', ms.url);
+    const title = el('div', 'is-title'), gl = link(null, `${forgeWords(data?.forge).forge} ↗`, ms.url);
     title.append(el('b', null, `⚑ ${ms.title}`), gl);
     if (hint) {
         const s = el('span', 'is-hint');
@@ -292,7 +293,7 @@ function card(c, ms) {
         ft.append(prChip({ pr: m.url }), ...ciPill(m.pipeline));
     }
     if (!c.mrs.length) {
-        ft.append(el('span', 'chip', 'no MR'));
+        ft.append(el('span', 'chip', `no ${forgeWords(data?.forge).mr}`));
     }
     if (!open && (c.st === 'todo' || c.st === 'free')) {
         const go = startingNow(c);
@@ -331,7 +332,7 @@ function more(c, work) {
     if (c.desc) {
         box.append(el('div', 'desc', c.desc));
     }
-    const gl = link('gl', 'Open in GitLab ↗', c.url);
+    const gl = link('gl', `Open in ${forgeWords(data?.forge).forge} ↗`, c.url);
     if (work) { // somebody is on it already: show that chat instead of sending Implement again
         const show = waButton('Check on it', 'act-btn', { variant: 'neutral', appearance: 'outlined' });
         show.onclick = e => {

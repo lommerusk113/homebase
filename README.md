@@ -216,7 +216,7 @@ Environment variables of the server:
 
 * `PORT`: the local port (default 4321).
 * `HOMEBASE_DIR`: where Homebase keeps its own files (default `~/.claude/homebase`). The hook and the statusline script are run by Claude Code, not by the server, so they follow it only if the variable is also set where Claude runs (for example in your shell profile).
-* `MAX_AGE_DAYS`: how old a transcript may be and still be listed (default 3).
+* `MAX_AGE_DAYS`: how old a transcript may be and still be listed (default 3). A chat that still waits on your answer stays listed for up to 14 days.
 * `HOMEBASE_CLAUDE_SETTINGS`: the settings file that doctor and setup read and write (default `~/.claude/settings.json`).
 
 Optional settings live in `config.json` in the Homebase dir. Homebase never writes it. Its two keys are `newProject` (see [New project](#new-project)) and `remote` (see [Use from your phone](#use-from-your-phone-tailscale)).

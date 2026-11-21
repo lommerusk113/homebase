@@ -755,7 +755,13 @@ wa-details[open] .g-note { display:none; }
   body { height:100dvh; }
   header.top { gap:8px; padding:max(8px, env(safe-area-inset-top)) 12px 8px; }
   header.top > * { min-width:0; }
-  .brand { font-size:0; } /* the logo only */
+  /* one row: no logo, separator or bell (desktop notifications; a phone's are in the + menu), the milestone as its name only */
+  header.top { flex-wrap:nowrap; }
+  header.top :is(.brand, .sep, #bell, .ms-pick > summary :is(.n, .ms-bar)) { display:none; }
+  .pp { flex-shrink:0; }
+  header.top :is(.updated, .offline, .fmtwarn) { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+  #milestone-slot { display:flex; }
+  #reload { margin-left:auto; }
   .pp-btn { max-width:170px; height:40px; }
   .pp-pop { position:fixed; z-index:900; inset:0; display:flex; align-items:flex-end; background:rgba(0,0,0,.4); animation:pp-fade .18s ease-out; }
   .pp-panel { width:100%; max-height:75dvh; border-width:1px 0 0; border-radius:16px 16px 0 0; padding-bottom:env(safe-area-inset-bottom); animation:pp-up .22s var(--ease); }

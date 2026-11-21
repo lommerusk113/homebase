@@ -16,5 +16,27 @@ export default {
         assert.notEqual(await page.ev(`document.getElementById('offline').textContent`), said, 'the header says which');
         page.route = answerPosts;
         await page.waitFor(`${flags} === 'false,false'`, { what: 'online again' });
+    },
+
+    'a reply that fails to render shows as plain text, and the rest of the feed stays': async ({ page, open, answerPosts }) => {
+        const at = n => new Date(Date.now() - (9 - n) * 60_000).toISOString();
+        const feedOf = items => q => (q.url.includes('/api/transcript') ? { body: JSON.stringify({ items, working: false, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        const texts = `[...document.querySelectorAll('#feed .bubble')].map(b => b.textContent).join('|')`;
+        await open();
+        // an inline SVG link: its <a> has a read-only target
+        page.route = feedOf([
+            { role: 'assistant', id: 'a1', at: at(1), text: 'svg-reply <svg><a href="https://example.com/"><text>svg-link</text></a></svg>' },
+            { role: 'assistant', id: 'a2', at: at(2), text: 'reply after the svg' }
+        ]);
+        await page.waitFor(`${texts}.includes('reply after the svg')`, { what: 'the feed with an SVG link' });
+        assert.ok((await page.ev(texts)).includes('svg-reply'), 'the SVG reply is there too');
+        // an item no renderer expects
+        page.route = feedOf([
+            { role: 'assistant', id: 'b1', at: at(3), text: { odd: 'shape' }, tldr: 7 },
+            { role: 'assistant', id: 'b2', at: at(4), text: 'reply after the odd one' }
+        ]);
+        await page.waitFor(`${texts}.includes('reply after the odd one')`, { what: 'the feed with an odd item' });
+        assert.equal(await page.ev(`document.querySelectorAll('#feed .bubble').length`), 2, 'the odd item keeps its place');
+        assert.ok((await page.ev(texts)).includes('shape'), 'with its text');
     }
 };

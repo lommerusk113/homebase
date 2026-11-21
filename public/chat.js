@@ -1218,7 +1218,13 @@ export async function refreshChat() {
         if (run && run.length !== 1) { // commands in a row: one line where the run starts
             return run.length ? [commandLine(run, s.id)] : [];
         }
-        const b = bubble(i, s.id, prev, { latest: n === latest, unread: unread(i, n), replies: quickReplyRow(s, data, items, n) });
+        let b;
+        try {
+            b = bubble(i, s.id, prev, { latest: n === latest, unread: unread(i, n), replies: quickReplyRow(s, data, items, n) });
+        } catch (e) { // one item that can't be drawn shows as its plain text; the rest of the feed stays
+            console.error(e);
+            b = el('div', `bubble ${i.role}`, typeof i.text === 'string' ? i.text : JSON.stringify(i.text ?? ''));
+        }
         // only a bubble new since the last render rises in; a re-render redraws them all
         if (!first && b.dataset.key && !before.has(b.dataset.key)) {
             b.classList.add('enter');

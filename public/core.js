@@ -348,7 +348,7 @@ export const PR_HREF = /^https:\/\/\S+?\/(?:-\/merge_requests|pull)\/\d+\/?$/;
 const CHIP_OR_PATH = /(^|[\s(\[])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+\/?|[\w.@+-]+(?:\/[\w.@+-]+)+\.[a-z]\w{0,5}|[!#]\d+\b)/gi;
 function enrich(root) {
     for (const a of root.querySelectorAll('a')) {
-        if (PR_HREF.test(a.href) && a.textContent.startsWith('http')) {
+        if (typeof a.href === 'string' && PR_HREF.test(a.href) && a.textContent.startsWith('http')) { // an SVG link's href is no string
             a.textContent = prLabel(a.href);
             a.className = 'chip mono';
             a.title = a.href;

@@ -16,8 +16,10 @@ export const IDS = {
 };
 // what the fake `security` prints for service gh-personal; forge-stub.mjs only serves tracker's PRs to gh with this as GH_TOKEN
 export const PERSONAL_TOKEN = 'ghp_fixture_personal_token';
-export const TRACKER_PR = 'https://github.com/lommerusk113/tracker/pull/32';
-export const OTHER_PR = 'https://github.com/lommerusk113/homebase/pull/2'; // another repo's PR a tracker session merely quoted
+// the personal GitHub account; scripts/demo.mjs shows an invented login instead (the forge stub inherits the variable)
+export const OWNER = process.env.HOMEBASE_FIXTURE_OWNER ?? 'lommerusk113';
+export const TRACKER_PR = `https://github.com/${OWNER}/tracker/pull/32`;
+export const OTHER_PR = `https://github.com/${OWNER}/homebase/pull/2`; // another repo's PR a tracker session merely quoted
 export const MR = n => `https://gitlab.com/acme/alpha/-/merge_requests/${n}`;
 
 const ago = s => new Date(Date.now() - s * 1000).toISOString();
@@ -74,7 +76,7 @@ export function buildFixture(root) {
 
     // Homebase's own record (items.json): !107 is open but in no transcript and not in the forge's open list
     mkdirSync(join(root, 'homebase'), { recursive: true });
-    writeFileSync(join(root, 'homebase', 'config.json'), JSON.stringify({ newProject: { owner: 'lommerusk113', keychainService: 'gh-personal', sshHost: 'github-personal', baseDir: '~/IdeaProjects/Privat' } }));
+    writeFileSync(join(root, 'homebase', 'config.json'), JSON.stringify({ newProject: { owner: OWNER, keychainService: 'gh-personal', sshHost: 'github-personal', baseDir: '~/IdeaProjects/Privat' } }));
     writeFileSync(join(root, 'homebase', 'items.json'), JSON.stringify({ alpha: { [MR(107)]: {
         title: 'Stored-only: scrolled out of every tail', issue: null, branch: 'stored-only', sessionId: IDS.master,
         firstSeen: Date.now() - 86400_000, lastSeen: Date.now() - 3600_000, state: 'open', mergedAt: null,
@@ -82,7 +84,7 @@ export function buildFixture(root) {
     } } }));
 
     // git repos only so the server's `git remote get-url origin` names the project and its forge
-    for (const [name, origin] of [['alpha', 'git@gitlab.com:acme/alpha.git'], ['beta', 'https://github.com/acme/beta.git'], ['gamma', 'git@gitlab.com:acme/gamma.git'], ['tracker', 'git@github-personal:lommerusk113/tracker.git']]) {
+    for (const [name, origin] of [['alpha', 'git@gitlab.com:acme/alpha.git'], ['beta', 'https://github.com/acme/beta.git'], ['gamma', 'git@gitlab.com:acme/gamma.git'], ['tracker', `git@github-personal:${OWNER}/tracker.git`]]) {
         const repo = join(home, 'repos', name);
         mkdirSync(repo, { recursive: true });
         execFileSync('git', ['init', '-q', repo]);
@@ -155,8 +157,8 @@ export function buildFixture(root) {
     ], 1);
 
     session(home, 'tracker', IDS.tracker, [
-        { type: 'pr-link', prUrl: TRACKER_PR, prRepository: 'lommerusk113/tracker', timestamp: ago(800) },
-        { type: 'pr-link', prUrl: OTHER_PR, prRepository: 'lommerusk113/homebase', timestamp: ago(700) },
+        { type: 'pr-link', prUrl: TRACKER_PR, prRepository: `${OWNER}/tracker`, timestamp: ago(800) },
+        { type: 'pr-link', prUrl: OTHER_PR, prRepository: `${OWNER}/homebase`, timestamp: ago(700) },
         prompt('Ship the tracker fix', 600),
         said('Opened the PR.', 590),
         done(580)

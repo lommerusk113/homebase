@@ -1,7 +1,7 @@
 // Stands in for glab and gh: bin/glab and bin/gh in the fixture dir run `node forge-stub.mjs <cli> ...args`.
 // Canned JSON per endpoint; anything unknown fails loudly and is logged, so a new server call shows up in the run.
 import { appendFileSync } from 'node:fs';
-import { PERSONAL_TOKEN, TRACKER_PR, OTHER_PR } from './fixture.mjs';
+import { PERSONAL_TOKEN, TRACKER_PR, OTHER_PR, OWNER } from './fixture.mjs';
 
 const [cli, ...args] = process.argv.slice(2);
 const log = line => process.env.HOMEBASE_STUB_LOG && appendFileSync(process.env.HOMEBASE_STUB_LOG, line + '\n');
@@ -106,7 +106,7 @@ const trackerPr = { state: 'OPEN', title: 'Fix the tracker sync', body: '', revi
 
 function gh(rest) {
 
-    if (rest.some(a => a.includes('lommerusk113/'))) {
+    if (rest.some(a => a.includes(`${OWNER}/`))) {
         if (!personal()) {
             return fail('gh: HTTP 404: Not Found (fixture: personal repo without the personal token)');
         }
@@ -130,15 +130,15 @@ function gh(rest) {
     }
     const [p] = rest[1].split('?');
     if (p === 'user') {
-        return out({ login: personal() ? 'lommerusk113' : 'tester', type: 'User' });
+        return out({ login: personal() ? OWNER : 'tester', type: 'User' });
     }
     if (p === 'search/issues') {
-        return out({ items: rest[1].includes('lommerusk113') ? [] : [{ html_url: 'https://github.com/acme/beta/pull/7' }] });
+        return out({ items: rest[1].includes(OWNER) ? [] : [{ html_url: 'https://github.com/acme/beta/pull/7' }] });
     }
-    if (p === 'repos/acme/beta/milestones' || (p === 'repos/lommerusk113/tracker/milestones' && personal())) {
+    if (p === 'repos/acme/beta/milestones' || (p === `repos/${OWNER}/tracker/milestones` && personal())) {
         return out([]);
     }
-    if (/^repos\/lommerusk113\/tracker\/(issues|pulls)\/32\/(comments|reviews)$/.test(p) && personal()) {
+    if (new RegExp(`^repos/${OWNER}/tracker/(issues|pulls)/32/(comments|reviews)$`).test(p) && personal()) {
         return out([]);
     }
     if (/^repos\/acme\/beta\/(issues|pulls)\/7\/(comments|reviews)$/.test(p)) {

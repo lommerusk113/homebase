@@ -96,12 +96,18 @@ async function fetchPr(url) {
 
     const repo = repoOfUrl(url);
     const view = fields => ghRun(repo, ['pr', 'view', url, '--json', fields], { timeout: apiTimeout() });
-    const fields = 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid,updatedAt';
+    const fields = 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid,updatedAt,mergeable';
     // a token without read:org (the personal one) can't read reviewRequests; the reviewers then come from the reviews alone
     const { stdout } = await view(fields).catch(e => (/required scopes/.test(e.message) ? view(fields.replace('reviewRequests,', '')) : Promise.reject(e)));
-    const pr = JSON.parse(stdout);
+    return ghPr(JSON.parse(stdout), url);
+}
+
+// A `gh pr view --json` answer as the PR state the board reads.
+export function ghPr(pr, url) {
+
     const pipeline = pipelineOf(null, pr.statusCheckRollup, url);
     const reviews = pr.latestReviews ?? [];
+    const conflict = pr.mergeable === 'CONFLICTING';
 
     return {
         state: pr.state.toLowerCase(),
@@ -110,7 +116,8 @@ async function fetchPr(url) {
         updatedAt: Date.parse(pr.updatedAt) || 0,
         reviewers: [...new Set([...(pr.reviewRequests ?? []).map(r => r.login ?? r.name), ...reviews.map(r => r.author?.login)].filter(Boolean))],
         // an empty reviewDecision means the repo requires no review (hobby repos without branch protection)
-        ready: (pr.reviewDecision === 'APPROVED' || !pr.reviewDecision) && !pr.isDraft && !ciOf(pipeline),
+        ready: (pr.reviewDecision === 'APPROVED' || !pr.reviewDecision) && !pr.isDraft && !ciOf(pipeline) && !conflict,
+        blocked: conflict ? 'conflict' : null,
         changes: pr.reviewDecision === 'CHANGES_REQUESTED',
         changesBy: reviews.filter(r => r.state === 'CHANGES_REQUESTED').map(r => r.author?.login).filter(Boolean),
         draft: pr.isDraft,

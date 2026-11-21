@@ -1,5 +1,5 @@
 // Milestones tab: open milestones, their issue groups and linked MRs, cached per project, warmed at start.
-import { api, pages, cached, swrEntry, swr, prs, isGitLab, person, signedIn, excerpt, pipelineOf, problemText, forgeWords } from './forge.mjs';
+import { api, pages, cached, issueOf, swrEntry, swr, prs, isGitLab, person, signedIn, excerpt, pipelineOf, problemText, forgeWords } from './forge.mjs';
 import { sameRepo, milestoneOf } from './items.mjs';
 import { sessions, repoPaths } from './sessions.mjs';
 
@@ -60,7 +60,6 @@ async function fetchMine(repo, me) {
 // related_merge_requests also returns MRs that only mention the issue in a description or comment.
 export const worksOn = (mr, iid) => new RegExp(`(^|\\D)${iid}(\\D|$)`).test(`${mr.title} ${mr.source_branch}`);
 
-// ponytail: GitHub's linked PRs need GraphQL, so GitHub issues are never "in progress" or "can be closed"
 async function fetchLinks(repo, iid) {
 
     const list = await api(repo, `projects/${encodeURIComponent(repo.path)}/issues/${iid}/related_merge_requests`);
@@ -70,6 +69,22 @@ async function fetchLinks(repo, iid) {
         iid: m.iid, url: m.web_url, state: { opened: 'open' }[m.state] ?? m.state,
         author: m.author ? person(m.author) : null, pipeline: pipelineOf(m.head_pipeline ?? m.pipeline)
     }));
+}
+
+// GitHub: a repo's PRs as iid -> linked PRs. A PR works on the issue its title names ("#7 - …"), its description closes
+// ("Fixes #7") or its branch starts with ("7-dark-mode").
+// ponytail: one list call for the 100 most recently updated PRs instead of GraphQL per issue; an older PR's issue shows as not started
+export function ghLinks(pulls) {
+
+    const links = {};
+    for (const p of pulls) {
+        const iid = issueOf(p.title, p.body) ?? p.head?.ref?.match(/^(\d+)-/)?.[1];
+        if (iid) {
+            (links[iid] ??= []).push({ iid: p.number, url: p.html_url, state: p.merged_at ? 'merged' : p.state, author: p.user ? person(p.user) : null, pipeline: null });
+        }
+    }
+
+    return links;
 }
 
 // Issues of a milestone in the order the user acts on them. links: iid -> [{ state: open|merged|closed }] for open issues.
@@ -107,12 +122,14 @@ export function activeMilestones(mrs, list) {
 async function milestoneIssues(project, repo, load) {
 
     const issues = await load();
-    const links = {};
-    if (isGitLab(repo)) {
-        await Promise.all(issues.filter(i => i.state === 'open').map(async ({ iid }) => {
-            links[iid] = await cached(`links:${project}:${iid}`, MS_LINKS_TTL_MS, () => fetchLinks(repo, iid)).catch(() => []);
-        }));
+    if (!isGitLab(repo)) {
+        const pulls = () => api(repo, `repos/${repo.path}/pulls?state=all&sort=updated&direction=desc&per_page=100`).then(ghLinks);
+        return groupIssues(issues, await cached(`links:${project}`, MS_LINKS_TTL_MS, pulls).catch(() => ({})));
     }
+    const links = {};
+    await Promise.all(issues.filter(i => i.state === 'open').map(async ({ iid }) => {
+        links[iid] = await cached(`links:${project}:${iid}`, MS_LINKS_TTL_MS, () => fetchLinks(repo, iid)).catch(() => []);
+    }));
 
     return groupIssues(issues, links);
 }

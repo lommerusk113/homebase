@@ -4080,3 +4080,22 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.equal(problemOf(new Error('glab: 500 Internal Server Error')), 'error');
     console.log('ok forge problems');
 }
+
+{
+    // GitHub: a PR with merge conflicts is blocked, never "Approved — merge it"; PRs link to issues by title, closing keyword or branch
+    const { ghPr } = await import('./server/forge.mjs');
+    const { ghLinks } = await import('./server/milestones.mjs');
+    const pr = { state: 'OPEN', title: 'T', body: '', reviewDecision: 'APPROVED', isDraft: false, headRefName: 'b', baseRefName: 'main', statusCheckRollup: [], mergeable: 'MERGEABLE' };
+    const url = 'https://github.com/o/r/pull/3';
+    assert.deepEqual([ghPr(pr, url).ready, ghPr(pr, url).blocked], [true, null]);
+    const conflict = ghPr({ ...pr, mergeable: 'CONFLICTING' }, url);
+    assert.deepEqual([conflict.ready, conflict.blocked, column('idle', conflict, true), rowAction(url, conflict, null, 'T').label], [false, 'conflict', 'needs-you', 'Rebase']);
+    assert.doesNotMatch(nextStep(conflict, null), /merge it/);
+
+    const pull = (number, o) => ({ number, html_url: `https://github.com/o/r/pull/${number}`, state: 'open', merged_at: null, title: `PR ${number}`, body: '', head: { ref: 'x' }, user: { login: 'ann' }, ...o });
+    const links = ghLinks([pull(1, { title: '#7 - Dark mode' }), pull(2, { body: 'Fixes #8', state: 'closed', merged_at: '2026-01-01T00:00:00Z' }), pull(3, { head: { ref: '9-export' }, state: 'closed' }), pull(4, { title: 'Bump to v7' })]);
+    assert.deepEqual(Object.keys(links), ['7', '8', '9']);
+    assert.deepEqual([links[7][0].iid, links[7][0].state, links[7][0].author.username, links[8][0].state, links[9][0].state], [1, 'open', 'ann', 'merged', 'closed']);
+    assert.equal(groupIssues([{ iid: 7, state: 'open', assignees: [] }], links).groups.doing.length, 1);
+    console.log('ok github parity');
+}

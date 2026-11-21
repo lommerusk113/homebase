@@ -252,8 +252,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     // a pick also confirms Claude's "Switch model?"; a plain send never answers anything. A slash command's
                     // panel is read and closed (settleCommand), and comes back as JSON for the chat to show
                     const slash = body.trim().startsWith('/');
-                    let result = null;
+                    let result = null, said = 'ok';
                     await send(url.searchParams.get('id'), body, null, {
+                        answered: () => { said = 'answered'; }, // typed into the open question's text box
                         typed: !url.searchParams.has('canned'), // a button's message never declines an open question
                         after: pick || slash ? async name => {
                             if (pick) {
@@ -267,7 +268,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     if (result) {
                         return json({ ...result, warning });
                     }
-                    return res.end(warning ?? 'ok'); // sent; the text is a warning
+                    return res.end(warning ?? said); // sent; any other text is a warning
                 }
                 return res.end('ok');
             }

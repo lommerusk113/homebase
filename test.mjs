@@ -3041,6 +3041,27 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     f = fake({ panes: calls => (calls.some(c => c.includes('Escape')) ? '❯ ' : q) });
     await send(sid, 'hi', { ...session, asking: true }, { ...f.opts(new Map()), typed: true });
     assert.deepEqual(f.keys().slice(1), [['send-keys', '-t', '=cc-dddddddd:', 'Escape'], ...typed('cc-dddddddd', 'hi')]);
+    // a question with Claude's own text box ("Type something."): typed text answers it there, the ❯ moved onto the box
+    // first, no Esc. A slash command or several lines still decline and go in as a message
+    const free = at => ['│ Which one?', '  1. Red', '  2. Blue', '  3. Type something.', '  4. Chat about this', 'Enter to select · Esc to cancel', '']
+        .map((l, i) => (i === at + 1 ? l.replace('  ', '❯ ') : l)).join('\n');
+    const freePanes = calls => (calls.some(c => c.at(-1) === 'Enter' || c.includes('Escape')) ? '❯ ' : free(calls.some(c => c.includes('Down')) ? 2 : 0));
+    f = fake({ panes: freePanes });
+    let how = null;
+    await send(sid, 'Green', { ...session, asking: true }, { ...f.opts(new Map()), typed: true, answered: () => { how = 'answered'; } });
+    assert.deepEqual(f.keys().slice(1), [['send-keys', '-t', '=cc-dddddddd:', 'Down', 'Down'], ...typed('cc-dddddddd', 'Green')]);
+    assert.equal(how, 'answered');
+    for (const text of ['/context', 'two\nlines']) {
+        f = fake({ panes: freePanes });
+        await send(sid, text, { ...session, asking: true }, { ...f.opts(new Map()), typed: true });
+        assert.deepEqual(f.keys()[1], ['send-keys', '-t', '=cc-dddddddd:', 'Escape'], text);
+    }
+    // the box never takes the ❯, or the question stays up after Enter: an error, never typed blind
+    f = fake({ panes: () => free(0) });
+    assert.equal((await send(sid, 'Green', session, { ...f.opts(new Map()), typed: true }).catch(e => e)).status, 502);
+    assert.ok(!f.keys().some(k => k.includes('-l')));
+    f = fake({ panes: calls => free(calls.some(c => c.includes('Down')) ? 2 : 0) });
+    assert.equal((await send(sid, 'Green', session, { ...f.opts(new Map()), typed: true }).catch(e => e)).status, 502);
     // only what the user typed declines a question: a button's canned message (row action, Load rules) is refused, nothing pressed
     for (const asking of [true, false]) {
         f = fake({ panes: () => q });

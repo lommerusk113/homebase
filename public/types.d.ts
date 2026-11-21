@@ -205,6 +205,8 @@ interface OutboxItem extends ChatItem {
     answerTo?: string;
     /** sent after the text but not shown, kept for Retry */
     note?: string;
+    /** typed into an open question's text box: the transcript has it as that question's answer, if at all */
+    answered?: boolean;
     /** a button's message (row action, Load rules), not typed by the user */
     canned?: boolean;
     okAt?: number;

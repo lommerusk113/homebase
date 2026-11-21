@@ -795,9 +795,10 @@ function feedItems(s, data) {
         || (i.role === 'command' && sameSend(i.cmd, i.at, o)) // a slash command whose output the transcript now holds
         || (i.answer && sameSend(i.answer.text, i.answer.at, o)));
     state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !landed(o));
-    // a slash command with no output in the transcript never shows there: once sent it stays, with its result
+    // a slash command with no output in the transcript never shows there: once sent it stays, with its result; so does an
+    // answer typed into a question's text box, unless the transcript shows it as that question's answer
     for (const o of state.outbox) {
-        o.unconfirmed ||= o.sid === s.id && !o.text.startsWith('/') && Date.now() - o.okAt > OUTBOX_TTL_MS;
+        o.unconfirmed ||= o.sid === s.id && !o.text.startsWith('/') && !o.answered && Date.now() - o.okAt > OUTBOX_TTL_MS;
     }
 
     // a queued item whose Send now was clicked shows "sending…" until the queue entry resolves
@@ -1341,8 +1342,9 @@ export async function sendText(sid, text, answerTo, note, canned) {
             out.result = result;
         }
         const said = result ? result.warning ?? 'ok' : await r.text();
+        out.answered = said === 'answered'; // it went into the open question's text box (control.mjs send)
         if ((draftSid ?? startingTarget()) === sid) {
-            $('c-err').textContent = said === 'ok' ? '' : said; // sent, with a warning (running twice)
+            $('c-err').textContent = said === 'ok' || out.answered ? '' : said; // sent, with a warning (running twice)
         }
         answered(sid);
         setTimeout(refreshChat, 1000);

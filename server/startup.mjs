@@ -89,8 +89,21 @@ export async function answerStartup(name, index, label, { tm = tmux, nap = sleep
         throw Object.assign(new Error('The question changed, check it and try again'), { status: 409 });
     }
 
-    // Enter only once the ❯ is seen on the chosen option: a just-drawn dialog can drop the arrow keys, and Enter then
-    // confirms the default ("No, exit" quits Claude)
+    await moveTo(name, dialog, index, { tm, nap, parse });
+    await tm(selectSteps(name, index, index)[0]);
+
+    await nap(700);
+    const after = parse(await capture(name, tm));
+    cache.delete(name);
+    if (after && after.question === dialog.question && after.detail === dialog.detail && after.options.join('|') === dialog.options.join('|')) {
+        throw Object.assign(new Error('The question is still showing, answer it in the terminal'), { status: 502 });
+    }
+}
+
+// Moves the ❯ onto option `index`. Callers press Enter (or type) only once it is seen there: a just-drawn dialog can drop
+// the arrow keys, and Enter then confirms the default ("No, exit" quits Claude)
+async function moveTo(name, dialog, index, { tm, nap, parse }) {
+
     let on = dialog.selected;
     for (let tries = 0; on !== index; tries++) {
         if (tries === 5) {
@@ -106,17 +119,9 @@ export async function answerStartup(name, index, label, { tm = tmux, nap = sleep
         }
         on = now.selected;
     }
-    await tm(selectSteps(name, index, index)[0]);
-
-    await nap(700);
-    const after = parse(await capture(name, tm));
-    cache.delete(name);
-    if (after && after.question === dialog.question && after.detail === dialog.detail && after.options.join('|') === dialog.options.join('|')) {
-        throw Object.assign(new Error('The question is still showing, answer it in the terminal'), { status: 502 });
-    }
 }
 
-// Claude's own text-box entry under an AskUserQuestion, never answered from here (the chat input declines and types instead).
+// Claude's own text-box entry under an AskUserQuestion: never clicked, as it needs text; a line typed in the chat input goes into it (typeAnswer).
 // "Chat about this" is answerable: it declines the question as "the user wants to clarify" and Claude asks what to talk about.
 const FREE_FORM = /^type something\.?$/i;
 const OPTION = /^(?: {0,3}|\s*❯\s+)(\d+)\.\s+(.+)$/;
@@ -235,6 +240,34 @@ export async function answerQuestion(name, index, label, { tm = tmux, nap = slee
         throw Object.assign(new Error('Answer that one in the terminal'), { status: 400 });
     }
     await answerStartup(name, index, label, { tm, nap, parse: parseQuestion, seen });
+}
+
+// The index of the text-box option of the question on screen, or -1
+export const freeTextOption = pane => parseQuestion(pane)?.options.findIndex(o => FREE_FORM.test(o)) ?? -1;
+
+// Answers the question on screen in its own text box: the ❯ goes onto it, `steps` (sendSteps) type the text there and
+// press Enter. Fails if the same question is still up afterwards.
+// ponytail: one line of text only (send declines for more), and with several questions it answers the one showing
+export async function typeAnswer(name, steps, { tm = tmux, nap = sleep } = {}) {
+
+    check(name);
+    const pane = await capture(name, tm);
+    const dialog = parseQuestion(pane), index = freeTextOption(pane);
+    if (index < 0) {
+        throw Object.assign(new Error('No question is showing any more'), { status: 409 });
+    }
+
+    await moveTo(name, dialog, index, { tm, nap, parse: parseQuestion });
+    for (const args of steps) {
+        await tm(args);
+        await nap(300); // Enter apart from the text, as in a plain send
+    }
+
+    await nap(700);
+    cache.delete(name);
+    if (parseQuestion(await capture(name, tm))?.question === dialog.question) {
+        throw Object.assign(new Error('The question is still showing, answer it in the terminal'), { status: 502 });
+    }
 }
 
 // The folder a workspace trust dialog names: the lines after "Accessing workspace:" up to a blank line, joined (a narrow pane wraps the path)

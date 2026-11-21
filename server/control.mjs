@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { sessions } from './sessions.mjs';
 import { liveSessions } from './transcripts.mjs';
-import { refuseIfTrustDialog, cancelQuestion, parseDialog, parseQuestion, questionOpen, capture, inputLine, promptBack } from './startup.mjs';
+import { refuseIfTrustDialog, cancelQuestion, parseDialog, parseQuestion, questionOpen, capture, inputLine, promptBack, freeTextOption, typeAnswer } from './startup.mjs';
 import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, ELSEWHERE, sleep, NEW_TMUX, OUR_TMUX, withLock } from './tmux.mjs';
 
 // Only known sessions, only their recorded cwd.
@@ -77,7 +77,8 @@ export const ANSWER_FIRST = 'Claude is asking a question: answer it in the chat 
 // which tmux a live session is in; without a registry, a dead tmux plus a fresh transcript write means another terminal.
 // typed: the user wrote this text, so an open question or permission prompt is declined (Esc) for it; a button's canned
 // message is refused instead, as declining would reject the tool and interrupt the turn behind the user's back.
-export async function send(id, text, session = null, { tm = tmux, nap = sleep, reg = liveSessions, waitMs = BOOT_MS, after = null, typed = false } = {}) {
+// A question with a text box ("Type something.") is answered there by one typed line; answered() tells the caller so.
+export async function send(id, text, session = null, { tm = tmux, nap = sleep, reg = liveSessions, waitMs = BOOT_MS, after = null, typed = false, answered = null } = {}) {
 
     session ??= await resumable(id);
     const live = await reg();
@@ -130,8 +131,14 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
         if (!typed && questionOpen(pane)) {
             throw conflict(ANSWER_FIRST);
         }
-        await cancelQuestion(name, { tm, nap });
-        await typeSteps(name, sendSteps(name, text), { tm, nap });
+        const steps = sendSteps(name, text);
+        if (questionOpen(pane) && freeTextOption(pane) >= 0 && steps.length === 2 && !steps[0].at(-1).startsWith('/')) {
+            await typeAnswer(name, steps, { tm, nap });
+            answered?.();
+        } else {
+            await cancelQuestion(name, { tm, nap });
+            await typeSteps(name, steps, { tm, nap });
+        }
         await after?.(name); // still under the lock
 
         return name;

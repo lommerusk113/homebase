@@ -37,6 +37,10 @@ export default {
         await page.waitFor(`document.querySelector('#masters tr[data-key]')`, { what: 'the Mac\'s projects on the paired phone' });
         assert.equal(await page.ev(`document.querySelector('#masters .welcome')`), null);
         assert.equal(await page.ev(`document.cookie`), '', 'the device cookie is HttpOnly');
+        // pairing is done from the Mac: the phone's menu does not offer it
+        await page.click('#manage');
+        await page.waitFor(`document.querySelector('.d-log-btn')`, { what: 'the projects dialog on the phone' });
+        assert.equal(await page.ev(`document.querySelector('.d-pair-btn')`), null);
         // opened from another app or the home screen (a cross-site top-level navigation): still paired, no new pair page
         await page.goto(base.replace('localhost', '127.0.0.1'));
         await page.ev(`location.assign(${JSON.stringify(remoteBase)})`);

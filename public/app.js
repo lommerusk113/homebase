@@ -143,7 +143,8 @@ function renderDialog() {
         openLog();
     };
     const top = el('div', 'd-new');
-    top.append(add, existing, pairBtn, logBtn);
+    // a paired device (data-remote from the server) cannot pair others: the server answers 403 there
+    top.append(add, existing, ...('remote' in document.documentElement.dataset ? [] : [pairBtn]), logBtn);
     body.replaceChildren(
         top,
         el('h4', null, 'On board'),

@@ -1,9 +1,9 @@
 // Issues tab: the selected milestone's open issues in one lane per person (you first, then A–Z, then Unassigned).
 // Read-only towards GitLab; "Send to chat" only types into the bound chat session. Draws from milestone.js's /api/milestones data.
-import { $, el, link, ago, prChip, tooltip, waButton, store, hooks, firstName, visibleSessions } from './core.js';
-import { ciPill, startingIssues } from './list.js';
+import { $, el, link, ago, prChip, tooltip, waButton, state, store, hooks, firstName, visibleSessions } from './core.js';
+import { ciPill, issueWork } from './list.js';
 import { canned, cannedLabel } from './canned.js';
-import { chatSession, sendText } from './chat.js';
+import { chatSession, sendText, bindChat } from './chat.js';
 
 const STATES = { doing: 'in progress', closable: 'can be closed', todo: 'not started', free: 'unassigned' };
 
@@ -92,30 +92,42 @@ const initials = n => n.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpper
 let data;
 let openIid = null, closedOpen = false;
 const sentAt = new Map(); // iid -> last send, so a re-render keeps the button showing it
-const SENT_SHOWN_MS = 3000; // after a send, until the chat's running prompt names the issue (startingIssues): "Starting…" shows and further sends of that issue are ignored
+const SENT_SHOWN_MS = 3000; // after a send, until the outbox or a chat's prompt names the issue: "Starting…" shows and further sends of that issue are ignored
 
-// The bound chat was just sent this issue, or is running or has queued a prompt naming it that no work item covers yet.
+const names = (text, iid) => new RegExp(`#${iid}(?!\\d)`).test(text ?? '');
+
+// This issue was just sent to a chat and has not landed in its transcript yet.
 /** @param {Card} c */
 function startingNow(c) {
-    const s = chatSession();
-    if (!s) {
-        return false;
-    }
+    return Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_SHOWN_MS || state.outbox.some(o => o.canned && !o.error && names(o.text, c.iid));
+}
 
-    return Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_SHOWN_MS
-        || startingIssues(s, visibleSessions().filter(o => o.project === s.project).flatMap(o => o.items || [])).includes(String(c.iid));
+// Who already works on the issue in any chat of the project (list.js issueWork), so Start never sends a second Implement.
+/** @param {Card} c */
+const workOn = c => (c.st === 'todo' || c.st === 'free' ? issueWork(String(c.iid), visibleSessions().filter(s => s.project === data?.project)) : null);
+
+// Shows the chat that works on the issue, with its work item open on the Work tab.
+/** @param {NonNullable<ReturnType<typeof issueWork>>} work */
+function showWork(work) {
+    state.selected = work.key ?? state.selected;
+    if (work.sessionId) {
+        bindChat(work.sessionId);
+    }
 }
 
 /** @param {Card} c */
-function sendIssue(c) {
+async function sendIssue(c) {
     const s = chatSession();
-    if (!s || startingNow(c)) {
+    if (!s || startingNow(c) || workOn(c)) {
         return;
     }
     sentAt.set(c.iid, Date.now());
     renderIssues();
     setTimeout(() => renderIssues(), SENT_SHOWN_MS);
-    sendText(s.id, chatMessage(c), undefined, undefined, true);
+    if (!await sendText(s.id, chatMessage(c), undefined, undefined, true)) {
+        sentAt.delete(c.iid); // refused or failed: the chat says why, and the card offers Start again
+    }
+    renderIssues();
 }
 
 // The board's two views: Work (the item list) and Issues, switched by the header's segmented control (#tabs).
@@ -264,11 +276,14 @@ function card(c, ms) {
     const open = openIid === c.iid, a = el('article', `card ${c.st}${open ? ' open' : ''}`);
     a.dataset.key = `issue:${c.iid}`;
     a.dataset.url = c.url;
-    a.dataset.msg = chatMessage(c); // what the a key confirms and sends, through the card's .act-btn
-    a.dataset.label = cannedLabel(a.dataset.msg);
+    const work = workOn(c);
+    if (!work) {
+        a.dataset.msg = chatMessage(c); // what the a key confirms and sends, through the card's .act-btn
+        a.dataset.label = cannedLabel(a.dataset.msg);
+    }
     a.setAttribute('aria-expanded', open);
     const top = el('div', 'top');
-    top.append(el('span', 'mono', `#${c.iid}`), el('span', 'st', startingNow(c) ? 'starting…' : STATES[c.st]), el('span', 'age', c.updated ? ago(Date.parse(c.updated)) : ''));
+    top.append(el('span', 'mono', `#${c.iid}`), el('span', 'st', work ? STATES.doing : startingNow(c) ? 'starting…' : STATES[c.st]), el('span', 'age', c.updated ? ago(Date.parse(c.updated)) : ''));
     if (c.updated) {
         /** @type {HTMLElement} */ (top.lastChild).title = `Updated ${new Date(c.updated).toLocaleString()}`;
     }
@@ -281,10 +296,15 @@ function card(c, ms) {
     }
     if (!open && (c.st === 'todo' || c.st === 'free')) {
         const go = startingNow(c);
-        const start = waButton(go ? 'Starting…' : 'Start', 'act-btn', { variant: 'brand', appearance: 'filled', ...(go || !chatSession() ? { disabled: true } : {}) });
+        const start = work ? waButton('Check on it', 'act-btn', { variant: 'neutral', appearance: 'outlined' })
+            : waButton(go ? 'Starting…' : 'Start', 'act-btn', { variant: 'brand', appearance: 'filled', ...(go || !chatSession() ? { disabled: true } : {}) });
         start.onclick = e => {
             e.stopPropagation();
-            sendIssue(c);
+            if (work) {
+                showWork(work);
+            } else {
+                sendIssue(c);
+            }
         };
         ft.append(start);
     }
@@ -294,7 +314,7 @@ function card(c, ms) {
     }
     a.append(ft);
     if (open) {
-        a.append(more(c));
+        a.append(more(c, work));
     } else {
         a.title = c.title;
     }
@@ -305,22 +325,31 @@ function card(c, ms) {
     return a;
 }
 
-/** @param {Card} c */
-function more(c) {
+/** @param {Card} c @param {ReturnType<typeof issueWork>} work */
+function more(c, work) {
     const box = el('div', 'more'), msg = chatMessage(c), acts = el('div', 'acts');
     if (c.desc) {
         box.append(el('div', 'desc', c.desc));
     }
-    const sent = startingNow(c);
-    const send = waButton(sent ? 'Starting…' : 'Send to chat', 'act-btn', { variant: 'brand', appearance: 'filled', ...(sent || !chatSession() ? { disabled: true } : {}) });
-    send.onclick = e => {
-        e.stopPropagation();
-        sendIssue(c);
-    };
-    const note = el('span', 'msg', 'sends ');
-    note.append(el('code', null, msg));
     const gl = link('gl', 'Open in GitLab ↗', c.url);
-    acts.append(send, tooltip(send, chatSession() ? `Types "${msg}" into the chat on the right` : 'No chat session to send to'), note, gl);
+    if (work) { // somebody is on it already: show that chat instead of sending Implement again
+        const show = waButton('Check on it', 'act-btn', { variant: 'neutral', appearance: 'outlined' });
+        show.onclick = e => {
+            e.stopPropagation();
+            showWork(work);
+        };
+        acts.append(show, tooltip(show, 'Already being worked on: shows the chat that has it'), gl);
+    } else {
+        const sent = startingNow(c);
+        const send = waButton(sent ? 'Starting…' : 'Send to chat', 'act-btn', { variant: 'brand', appearance: 'filled', ...(sent || !chatSession() ? { disabled: true } : {}) });
+        send.onclick = e => {
+            e.stopPropagation();
+            sendIssue(c);
+        };
+        const note = el('span', 'msg', 'sends ');
+        note.append(el('code', null, msg));
+        acts.append(send, tooltip(send, chatSession() ? `Types "${msg}" into the chat on the right` : 'No chat session to send to'), note, gl);
+    }
     box.append(acts);
     box.onclick = e => e.stopPropagation();
     return box;

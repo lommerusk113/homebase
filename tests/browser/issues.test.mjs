@@ -62,6 +62,20 @@ export default {
         assert.equal(await page.ev(`document.querySelector('#issues .card[data-key="issue:6"]').classList.contains('open')`), false, 'the click did not expand the card');
     },
 
+    'an issue another chat of the project already took on offers that chat, never a second Implement': async ({ page, open }) => {
+        await open({ tab: 'issues' });
+        const btn = `document.querySelector('#issues .card[data-key="issue:7"] .act-btn')`;
+        await page.waitFor(`document.querySelector('#issues .card[data-key="issue:6"] .act-btn:not([disabled])')`, { what: 'the cards' });
+        assert.equal(await page.ev(`document.querySelector('#issues .card[data-key="issue:7"]').dataset.msg ?? null`), null, 'the a key has nothing to send');
+        await page.click('#issues .card[data-key="issue:7"] .act-btn');
+        await page.waitFor(`localStorage.getItem('chat') === '${IDS.worker}'`, { what: 'the chat that queued #7' });
+        await page.click('#issues .card[data-key="issue:7"] .tt');
+        await page.waitFor(`document.querySelector('#issues .card.open[data-key="issue:7"] .act-btn')`, { what: 'the open card' });
+        await page.click('#issues .card.open[data-key="issue:7"] .act-btn');
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')), []);
+        assert.ok(await page.ev(`!!${btn}`));
+    },
+
     'a on an issue card asks first, and only the dialog button sends': async ({ page, open }) => {
         await open({ tab: 'issues' });
         await page.waitFor(`document.querySelector('#issues .card[data-key="issue:6"] .act-btn:not([disabled])')`, { what: 'the card' });

@@ -4042,3 +4042,16 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.equal(chatMessage({ iid: 10, st: 'doing', mrs: [{ iid: 150, state: 'closed' }, { iid: 151, state: 'open' }] }), 'Check on #10 and !151');
     console.log('ok closed MRs');
 }
+
+{
+    // an issue somebody already works on is found in any chat of the project: by a work item (branch, title, MR issue) or a running or queued prompt
+    const { issueWork } = await import('./public/list.js');
+    const sub = { key: 'agent-1', sessionId: 'a', title: 'Dark mode', branch: '7-dark-mode', column: 'doing' };
+    const a = { id: 'a', status: 'idle', items: [sub] }, b = { id: 'b', status: 'working', now: 'refactor', queued: ['then take on #8'] };
+    assert.deepEqual(issueWork('7', [b, a]), { sessionId: 'a', key: 'agent-1' });
+    assert.deepEqual(issueWork('8', [a, b]), { sessionId: 'b', key: null });
+    assert.equal(issueWork('70', [a, b]), null);
+    assert.equal(issueWork('9', [a, b]), null);
+    assert.equal(issueWork('7', [{ id: 'a', items: [{ ...sub, column: 'closed' }] }]), null, 'an MR closed without merging is no work on it');
+    console.log('ok issue work');
+}

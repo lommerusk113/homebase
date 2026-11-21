@@ -59,12 +59,27 @@ const excerpt = (t, n = 80) => {
     const p = (t || '').replace(/[*_`>]+|^\s*#+\s+/g, '').replace(/\s+/g, ' ').trim();
     return p.length > n ? p.slice(0, n).replace(/\s+\S*$/, '') + '…' : p;
 };
+// The issues (#N) a chat's running or queued prompts name.
+/** @param {Session} s @returns {string[]} */
+const askedIssues = s => [...new Set([s.status === 'working' ? s.now : null, ...(s.queued ?? [])].flatMap(t => [...(t ?? '').matchAll(/(?<![\w&!#])#(\d+)\b/g)].map(m => m[1])))];
+// A work item is on issue n: its MR's issue, "#n" in its title, or a branch named "n-…".
+/** @param {WorkItem} x @param {string} n */
+const covers = (x, n) => String(x.prState?.issue ?? '') === n || new RegExp(`#${n}(?!\\d)`).test(x.title ?? '') || !!x.branch?.startsWith(`${n}-`);
 // Issues (#N) the session's running or queued prompts name that no work item covers yet: placeholder rows in Doing.
 /** @param {Session} s @param {WorkItem[]} items the project's items @returns {string[]} */
 export function startingIssues(s, items) {
-    const asked = [s.status === 'working' ? s.now : null, ...(s.queued ?? [])].flatMap(t => [...(t ?? '').matchAll(/(?<![\w&!#])#(\d+)\b/g)].map(m => m[1]));
-    const covered = n => items.some(x => String(x.prState?.issue ?? '') === n || new RegExp(`#${n}(?!\\d)`).test(x.title ?? '') || x.branch?.startsWith(`${n}-`));
-    return [...new Set(asked)].filter(n => !covered(n));
+    return askedIssues(s).filter(n => !items.some(x => covers(x, n)));
+}
+// Who already works on issue n in these sessions (one project's): the work item on it (not one whose MR is merged or was closed),
+// else the chat whose running or queued prompt names it. null when nobody does.
+/** @param {string} n @param {Session[]} sessions @returns {{ sessionId: string | null, key: string | null } | null} */
+export function issueWork(n, sessions) {
+    const item = sessions.flatMap(s => s.items || []).find(x => x.column !== 'done' && x.column !== 'closed' && covers(x, n));
+    if (item) {
+        return { sessionId: item.sessionId, key: item.key };
+    }
+    const s = sessions.find(s => askedIssues(s).includes(n));
+    return s ? { sessionId: s.id, key: null } : null;
 }
 // "#2225 · starting…": the master took the issue on, but no subagent or MR shows it yet. Click chats with that session.
 /** @param {Session} s @param {string} n */

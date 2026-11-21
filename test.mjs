@@ -4148,3 +4148,33 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.equal(chatMessage({ iid: 3, st: 'closable', mrs: [{ iid: 7, state: 'merged', url: 'https://github.com/o/r/pull/7' }] }), 'Close #3, its PR #7 is merged');
     console.log('ok forge words');
 }
+
+{
+    // an issue description's HTML is dropped from the card's excerpt, not half-stripped into noise
+    assert.equal(excerpt('<p>Hello <b>you</b></p>\n<img src="x.png" <script>alert(1)</script> there'), 'Hello you alert(1) there');
+    assert.equal(excerpt('<details><summary>Steps</summary>\n\n1. Open it\n</details>'), 'Steps 1. Open it');
+    console.log('ok excerpt html');
+}
+{
+    // a conflict is not hidden behind a review comment or a failing pipeline
+    const base = { state: 'open', blocked: 'conflict' };
+    assert.match(nextStep({ ...base, changes: true, unanswered: 1, unansweredBy: ['Ann'] }, null), /^Reply to Ann's comment.*conflict/);
+    assert.match(nextStep({ ...base, changes: true }, null), /^Address review comments.*conflict/);
+    assert.match(nextStep({ ...base, ci: 'failing' }, null), /^Pipeline failing.*conflict/);
+    assert.equal(nextStep({ state: 'open', changes: true }, null), 'Address review comments');
+    assert.equal(nextStep(base, null), 'Merge conflicts — rebase it');
+    console.log('ok conflict beside comments');
+}
+{
+    // approved with its pipeline still running is at the Approved stage, though not ready to merge yet
+    const running = await glabMr({ head_pipeline: { status: 'running' } }, 131);
+    assert.deepEqual([running.ready, running.approved], [false, true]);
+    assert.equal((await glabMr({ detailed_merge_status: 'not_approved' }, 132)).approved, false);
+    const url = 'https://gitlab.com/g/p/-/merge_requests/5';
+    const row = st => workItems([{ id: 's', project: 'p', prs: [{ url, at: 1 }], agents: [] }], () => st, 0, new Map())[0];
+    assert.deepEqual([row(running).stageLabel, row(running).column, row({ state: 'open' }).stageLabel], ['Approved', 'review', 'Review']);
+    const { ghPr } = await import('./server/forge.mjs');
+    const gh = { state: 'OPEN', title: 'T', isDraft: false, statusCheckRollup: [{ status: 'IN_PROGRESS' }] };
+    assert.deepEqual([ghPr({ ...gh, reviewDecision: 'APPROVED' }, 'https://github.com/o/r/pull/1').approved, ghPr({ ...gh, reviewDecision: '' }, 'https://github.com/o/r/pull/1').approved], [true, false]);
+    console.log('ok approved stage');
+}

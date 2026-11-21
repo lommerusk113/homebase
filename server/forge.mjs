@@ -80,6 +80,8 @@ async function fetchPr(url) {
             reviewers: (mr.reviewers ?? []).map(r => r.name),
             // ready means merge now, so a failing or running pipeline (GitLab allows it when CI isn't required) is not ready
             ready: (status === 'mergeable' || !!prev?.ready) && !ci,
+            // approved although its pipeline may still run or fail: the stage says Approved, the column waits for CI
+            approved: status === 'mergeable' || !!prev?.approved,
             blocked: BLOCKED[status] ?? prev?.blocked ?? null,
             // ponytail: the MR payload doesn't say which reviewer blocked; the /reviewers endpoint would
             changes: status === 'requested_changes' || status === 'discussions_not_resolved' || mr.blocking_discussions_resolved === false,
@@ -99,6 +101,7 @@ async function fetchPr(url) {
     const fields = 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid,updatedAt,mergeable';
     // a token without read:org (the personal one) can't read reviewRequests; the reviewers then come from the reviews alone
     const { stdout } = await view(fields).catch(e => (/required scopes/.test(e.message) ? view(fields.replace('reviewRequests,', '')) : Promise.reject(e)));
+
     return ghPr(JSON.parse(stdout), url);
 }
 
@@ -117,6 +120,7 @@ export function ghPr(pr, url) {
         reviewers: [...new Set([...(pr.reviewRequests ?? []).map(r => r.login ?? r.name), ...reviews.map(r => r.author?.login)].filter(Boolean))],
         // an empty reviewDecision means the repo requires no review (hobby repos without branch protection)
         ready: (pr.reviewDecision === 'APPROVED' || !pr.reviewDecision) && !pr.isDraft && !ciOf(pipeline) && !conflict,
+        approved: pr.reviewDecision === 'APPROVED',
         blocked: conflict ? 'conflict' : null,
         changes: pr.reviewDecision === 'CHANGES_REQUESTED',
         changesBy: reviews.filter(r => r.state === 'CHANGES_REQUESTED').map(r => r.author?.login).filter(Boolean),
@@ -388,10 +392,10 @@ export async function whoAmI(repo) {
 }
 export const signedIn = repo => whoAmI(repo).catch(() => null);
 
-// Plain-text start of an issue description, about max chars, for the expanded card: markdown marks, links and headings dropped.
+// Plain-text start of an issue description, about max chars, for the expanded card: HTML tags, markdown marks, links and headings dropped.
 export function excerpt(md, max = 300) {
 
-    const t = (md || '').replace(/<!--[\s\S]*?-->/g, '').replace(/```[\s\S]*?```/g, ' ').replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    const t = (md || '').replace(/<!--[\s\S]*?-->/g, '').replace(/```[\s\S]*?```/g, ' ').replace(/<\/?[a-z][^>]*>/gi, ' ').replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
         .replace(/^(#+\s|\|).*$/gm, ' ').replace(/[*`>#]+|__/g, '').replace(/\s+/g, ' ').trim();
     if (t.length <= max) {
         return t;

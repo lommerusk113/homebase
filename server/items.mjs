@@ -61,7 +61,7 @@ function lifecycle(pr, prState, agent) {
     if (prState?.state === 'merged' || prState?.state === 'closed') {
         return 4;
     }
-    if (prState?.ready) {
+    if (prState?.ready || prState?.approved) {
         return 3;
     }
 
@@ -106,6 +106,35 @@ export function nextStep(prState, agent, mr = 'MR') {
     if (!prState) {
         return `Open the ${mr} to check its state`;
     }
+    // review comments and a failing pipeline come first, but a conflict beside them is said too
+    const first = reviewOrCi(prState);
+    if (first) {
+        return first + (prState.blocked === 'conflict' || prState.blocked === 'rebase' ? ' · has merge conflicts' : '');
+    }
+    if (prState.blocked) {
+        return BLOCKED_STEP[prState.blocked];
+    }
+    if (prState.replied && !prState.ready) {
+        const n = prState.replied;
+        return `Replied to ${n} thread${n === 1 ? '' : 's'} — waiting for ${prState.repliedTo?.join(', ') || 'the reviewer'} to resolve`;
+    }
+    if (prState.ci === 'running') {
+        return 'Pipeline running';
+    }
+    if (prState.draft) {
+        return 'Draft — mark it ready for review';
+    }
+    if (prState.ready) {
+        const n = prState.replied;
+        return `Approved — merge it${n ? ` · ${n} replied thread${n === 1 ? '' : 's'} still open` : ''}`;
+    }
+
+    return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
+}
+
+// The step review comments or a failing pipeline ask for, or null when neither does.
+function reviewOrCi(prState) {
+
     if (prState.unresolved || prState.unanswered) {
         const u = prState.unresolved ?? 0, g = prState.unanswered ?? 0;
         const by = [...new Set([...prState.unresolvedBy ?? [], ...prState.unansweredBy ?? []])];
@@ -128,28 +157,8 @@ export function nextStep(prState, agent, mr = 'MR') {
         const by = prState.changesBy?.length ? prState.changesBy : prState.reviewers ?? [];
         return by.length ? `Address review comments from ${by.join(', ')}` : 'Address review comments';
     }
-    if (prState.ci === 'failing') {
-        return 'Pipeline failing';
-    }
-    if (prState.blocked) {
-        return BLOCKED_STEP[prState.blocked];
-    }
-    if (prState.replied && !prState.ready) {
-        const n = prState.replied;
-        return `Replied to ${n} thread${n === 1 ? '' : 's'} — waiting for ${prState.repliedTo?.join(', ') || 'the reviewer'} to resolve`;
-    }
-    if (prState.ci === 'running') {
-        return 'Pipeline running';
-    }
-    if (prState.draft) {
-        return 'Draft — mark it ready for review';
-    }
-    if (prState.ready) {
-        const n = prState.replied;
-        return `Approved — merge it${n ? ` · ${n} replied thread${n === 1 ? '' : 's'} still open` : ''}`;
-    }
 
-    return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
+    return prState.ci === 'failing' ? 'Pipeline failing' : null;
 }
 
 // The one-click command for a work item's row, as { label, message } typed into its session (the texts: public/canned.js), or null when nothing is on you.

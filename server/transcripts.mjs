@@ -2,7 +2,8 @@
 import { open, stat, readFile, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { OUR_TMUX } from './tmux.mjs';
+import { OUR_TMUX, tmux, tmuxFor, aliases } from './tmux.mjs';
+import { capture, promptBack } from './startup.mjs';
 
 export const ROOT = join(homedir(), '.claude', 'projects');
 // ponytail: only the tail is parsed (transcripts reach 70+ MB); subagent token totals use the offset reader below
@@ -958,7 +959,18 @@ const markers = new Map(); // session id -> { mtimeMs, marker }
 // The marker hooks/asking.mjs keeps while a session waits on an AskUserQuestion ({ questions, toolUseId, at }) or a
 // permission prompt ({ permission, at }), else null. Claude Code can write the AskUserQuestion entry only once it is
 // answered (when the same message started background agents), so the transcript alone misses that wait.
-export async function askMarker(id) {
+// A permission marker stays until the approved tool finishes (no hook fires on the answer): it is over as soon as the
+// chat's pane shows Claude's input box again. live: liveSessions(), for the tmux a /clear'd chat runs in.
+export async function askMarker(id, { live = null, tm = tmux } = {}) {
+
+    const marker = await readMarker(id);
+
+    const fresh = marker?.permission && Date.now() - Date.parse(marker.at) < MARKER_MAX_MS; // a stale one is ignored anyway (markerAsk)
+
+    return fresh && promptBack(await capture(tmuxFor(id, aliases, live), tm)) ? null : marker;
+}
+
+async function readMarker(id) {
 
     if (!SESSION_ID.test(id ?? '')) {
         return null;
@@ -1234,8 +1246,9 @@ export async function transcript(dir, id, max) {
     const st = await stat(path);
     const { items, more, entries } = await feedTail(path, st, Math.min(Math.max(Math.trunc(Number(max)) || FEED_ITEMS, 1), 10_000));
 
-    const marker = await askMarker(id);
-    const turn = turnState(entries, Date.now() - st.mtimeMs, marker, await liveSessions());
+    const live = await liveSessions();
+    const marker = await askMarker(id, { live });
+    const turn = turnState(entries, Date.now() - st.mtimeMs, marker, live);
 
     return { items, more, asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', stuck: turn.state === 'stuck', since: turn.since };
 }

@@ -261,6 +261,12 @@ export function questionOpen(pane) {
     return hint >= lines.length - 3 && lines.slice(Math.max(0, hint - 40), hint).some(l => /^\s*❯\s+\S/.test(l)) && !/Accessing workspace:/.test(pane);
 }
 
+// Claude Code's input box: a ❯ or > line right under a ─ rule (a picker's ❯ selection has none). -> its line index, or -1
+export const inputLine = lines => lines.findLastIndex((l, i) => i > 0 && /^[│\s]*[❯>]/.test(l) && /^\s*[╭─]─{2,}/.test(lines[i - 1]));
+
+// Nothing is being asked: the input box is on screen (a question or permission prompt takes its place) and no question is open.
+export const promptBack = pane => inputLine(String(pane ?? '').split('\n')) >= 0 && !questionOpen(pane);
+
 // A typed message instead of a click: Esc cancels the open question first, so the text arrives as a new message (Claude sees
 // the question declined, then the message) instead of being typed into the options. -> true if one was cancelled
 export async function cancelQuestion(name, { tm = tmux, nap = sleep } = {}) {

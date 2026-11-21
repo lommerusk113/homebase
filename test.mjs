@@ -1309,7 +1309,16 @@ import { askMarker, markerAsk } from './server.mjs';
     hook({ hook_event_name: 'PostToolUse', tool_name: 'AskUserQuestion' });
     assert.equal(await askMarker(id), null);
     hook({ hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'Claude needs your permission to use Bash' });
-    assert.equal((await askMarker(id)).permission, 'Claude needs your permission to use Bash');
+    // a permission prompt is over once it is answered: Claude's input box is back on the pane, though the hook only clears
+    // the marker when the approved tool finishes. Still asking with the prompt up, or with no pane to look at
+    const permPane = readFileSync(new URL('./tests/fixtures/permission-bash.txt', import.meta.url), 'utf8');
+    const running = '⏺ Bash(sleep 600)\n  ⎿  Running…\n\n✻ Working… (12s)\n\n──────────\n❯ \n──────────\n  ? for shortcuts\n';
+    const seen = [];
+    const shows = pane => ({ tm: async a => { seen.push(a); return { stdout: pane }; } });
+    assert.equal((await askMarker(id, shows(permPane))).permission, 'Claude needs your permission to use Bash');
+    assert.equal((await askMarker(id, shows(''))).permission, 'Claude needs your permission to use Bash');
+    assert.equal(await askMarker(id, shows(running)), null, 'approved: the tool runs, nothing is asked');
+    assert.deepEqual(seen[0], ['capture-pane', '-p', '-t', '=cc-5010a555:']);
     hook({ hook_event_name: 'PostToolUse', tool_name: 'Bash' });
     assert.equal(await askMarker(id), null, 'the next tool ends a permission prompt');
     for (const ev of ['Stop', 'UserPromptSubmit']) {
@@ -3032,6 +3041,10 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     f = fake({ panes: calls => (calls.some(c => c.includes('Escape')) ? '❯ ' : q) });
     await send(sid, 'hi', { ...session, asking: true }, f.opts(new Map()));
     assert.deepEqual(f.keys().slice(1), [['send-keys', '-t', '=cc-dddddddd:', 'Escape'], ...typed('cc-dddddddd', 'hi')]);
+    // asking by a stale marker (a permission prompt approved, its tool still running): the input box is back, so it is typed
+    f = fake({ panes: () => '✻ Working… (12s)\n\n──────────\n❯ \n──────────\n' });
+    await send(sid, 'hi', { ...session, asking: true }, f.opts(new Map()));
+    assert.deepEqual(f.keys().slice(1), typed('cc-dddddddd', 'hi'));
     // a question shows up between typing and Enter: no Enter
     f = fake({ panes: calls => (calls.some(c => c.includes('-l')) ? q : '❯ ') });
     assert.equal((await send(sid, 'hi', session, f.opts(new Map())).catch(e => e)).status, 409);

@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { sessions } from './sessions.mjs';
 import { liveSessions } from './transcripts.mjs';
-import { refuseIfTrustDialog, cancelQuestion, parseDialog, parseQuestion, questionOpen, capture } from './startup.mjs';
+import { refuseIfTrustDialog, cancelQuestion, parseDialog, parseQuestion, questionOpen, capture, inputLine, promptBack } from './startup.mjs';
 import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, ELSEWHERE, sleep, NEW_TMUX, OUR_TMUX, withLock } from './tmux.mjs';
 
 // Only known sessions, only their recorded cwd.
@@ -119,7 +119,8 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
         if (COMPACTING.test(pane)) {
             throw conflict('Claude is compacting the conversation: send again when it\'s done');
         }
-        if (!started && session.asking && !questionOpen(pane)) {
+        // (asking with the input box back is a stale marker: a permission prompt answered, its tool still running)
+        if (!started && session.asking && !questionOpen(pane) && !promptBack(pane)) {
             throw conflict("Claude is asking something Homebase can't see: answer it in the terminal");
         }
         await cancelQuestion(name, { tm, nap });
@@ -250,9 +251,6 @@ export async function clearChat(id) {
         throw e;
     }
 }
-
-// Claude Code's input box: a ❯ or > line right under a ─ rule (a picker's ❯ selection has none). -> its line index, or -1
-const inputLine = lines => lines.findLastIndex((l, i) => i > 0 && /^[│\s]*[❯>]/.test(l) && /^\s*[╭─]─{2,}/.test(lines[i - 1]));
 
 // Lines as a chat bubble shows them: no right-edge ↓ scroll marker, no "Esc to close" footer, dedented. -> text or null
 function tidy(lines) {

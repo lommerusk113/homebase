@@ -509,7 +509,7 @@ async function sessionOf({ dir, file, path, st }, now, live) {
         return null; // deleted between stat and read
     }
 
-    const s = summarize(entries, now - st.mtimeMs, await askMarker(file.replace('.jsonl', '')), live);
+    const s = summarize(entries, now - st.mtimeMs, await askMarker(file.replace('.jsonl', ''), { live }), live);
     const id = s.id ?? file.replace('.jsonl', '');
 
     // subagents run inside their session's process, so they end with it

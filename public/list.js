@@ -105,13 +105,25 @@ export function workingLine(s) {
 export function workingTitle(s) {
     return excerpt((s.now ?? '').replace(/\[Image: [^\]]*\]/g, ''), 100) || s.topic || s.title || sessionTopic(s);
 }
+// Text from a chat (a title, a project name, a question) in its own <bdi>, so a right-to-left one doesn't reorder the
+// labels and ages around it.
+/** @param {string} text */
+const bdi = text => el('bdi', null, text);
+// A row's title as one element: "<project> · <chat title> <what>", the project only on the all-projects board.
+/** @param {Session} s @param {string} what */
+function chatName(s, what) {
+    const span = el('span');
+    span.append(...(state.project === 'all' ? [bdi(s.project), ' · '] : []), bdi(s.title || sessionTopic(s)), ` ${what}`);
+    return span;
+}
+
 // The project's main chat while it works: "<request>" with "project · Now: <step> · for 2m". Click chats with it. Leaves with the status.
 /** @param {Session} s */
 function workingRow(s) {
     const tr = el('tr', 'starting working'), what = el('td', 'what'), b = el('b');
     tr.dataset.key = `working:${s.id}`;
     tr.setAttribute('role', 'button');
-    b.append(el('span', 'pulse'), ` ${workingTitle(s)} `, el('span', 'chip', 'main chat'));
+    b.append(el('span', 'pulse'), ' ', bdi(workingTitle(s)), ' ', el('span', 'chip', 'main chat'));
     what.append(b, el('small', 'next', workingLine(s)));
     what.colSpan = 6;
     tr.append(what);
@@ -128,10 +140,12 @@ function askingRow(s) {
     // an idle chat with a reply for you: the title is what the reply asks, the subtitle where it comes from
     if (!s.asking && s.needsText) {
         const since = ago(s.lastActivity ?? s.updated);
-        b.append(el('span', 'pulse'), ` ${excerpt(s.needsText, 140)}`);
-        what.append(b, el('small', 'next', [s.project, s.title || sessionTopic(s), since === 'now' ? 'now' : `${since} ago`].join(' · ')));
+        b.append(el('span', 'pulse'), ' ', bdi(excerpt(s.needsText, 140)));
+        const sub = el('small', 'next');
+        sub.append(bdi(s.project), ' · ', bdi(s.title || sessionTopic(s)), ` · ${since === 'now' ? 'now' : `${since} ago`}`);
+        what.append(b, sub);
     } else {
-        b.append(el('span', 'pulse'), ` ${state.project === 'all' ? `${s.project} · ` : ''}${s.title || sessionTopic(s)} ${s.asking ? 'is asking' : 'needs you'}`);
+        b.append(el('span', 'pulse'), ' ', chatName(s, s.asking ? 'is asking' : 'needs you'));
         what.append(b, el('small', 'next', `${s.asking ? s.question || 'Claude asked a question.' : 'Claude’s last reply wants your decision'}${touch() ? '' : ' · click to answer in the chat'}`)); // a phone's line is too short for the hint, and the row is plainly a button there
     }
     tr.setAttribute('aria-label', what.textContent.trim()); // the row's own text: the button below is not part of its name
@@ -165,7 +179,7 @@ function diedRow(s) {
     const tr = el('tr', 'asking died'), what = el('td', 'what'), b = el('b'), since = ago(s.lastActivity ?? s.updated);
     tr.dataset.key = `died:${s.id}`;
     tr.setAttribute('role', 'button');
-    b.append(el('span', 'pulse'), ` ${state.project === 'all' ? `${s.project} · ` : ''}${s.title || sessionTopic(s)} stopped mid-turn`);
+    b.append(el('span', 'pulse'), ' ', chatName(s, 'stopped mid-turn'));
     what.append(b, el('small', 'next', `No activity for ${since === 'now' ? 'a moment' : since} — Claude may be stuck or closed${touch() ? '' : ' · click to look'}`));
     what.colSpan = 6;
     tr.append(what);

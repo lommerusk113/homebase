@@ -45,8 +45,9 @@ export default {
         await page.waitFor(`document.querySelector('#masters tr')`, { what: 'the board' });
         const row = `document.querySelector('#masters tr[data-key="died:${IDS.other}"]')`;
         assert.equal(await page.ev(`!!${row}`), false, 'no row while nothing died');
-        await page.ev(`(() => { const f = window.fetch; window.fetch = async (u, o) => { const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const list = await r.json(); for (const s of list) { if (s.id === ${JSON.stringify(IDS.other)}) { s.died = true; s.status = 'idle'; } } return new Response(JSON.stringify(list), { status: 200 }); }; })()`);
+        await page.ev(`(() => { const f = window.fetch; window.fetch = async (u, o) => { const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const list = await r.json(); for (const s of list) { if (s.id === ${JSON.stringify(IDS.other)}) { s.died = true; s.status = 'idle'; s.title = 'مرحبا שלום'; } } return new Response(JSON.stringify(list), { status: 200 }); }; })()`);
         await page.waitFor(`!!${row}`, { what: 'the row of the died turn' });
+        assert.equal(await page.ev(`${row}.querySelector('b bdi')?.textContent`), 'مرحبا שלום', 'a right-to-left title is isolated from the labels around it');
         await page.clickOn(row);
         await page.waitFor(`!${row}`, { what: 'the row gone once looked at' });
         assert.equal(await page.ev(`document.getElementById('feed').textContent.includes('The cache is fine')`), true, 'and its chat open');

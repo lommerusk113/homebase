@@ -1,7 +1,7 @@
 /* Design tokens. Everything below draws from these: one accent, one loud colour (needs-you), red for errors only. */
 :root { --bar-h:39.5px; /* chat header: 9+19.5(13px*1.5)+8+2, plus 1px border */
   /* type scale */
-  --fs-xs:11px; --fs-s:12px; --fs-m:13px; --fs-l:14px; --fs-xl:15px;
+  --fs-xs:12px; --fs-s:12px; --fs-m:13px; --fs-l:14px; --fs-xl:15px;
   /* spacing scale (4px grid) */
   --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:24px;
   /* radii: inline code, controls, cards, pills */
@@ -11,12 +11,13 @@
   /* surfaces and lines: cards are flat (a hairline, no shadow); only things that float get --shadow */
   --bg:#ffffff; --canvas:#f6f7f9; --fg:#1f2328; --muted:#59636e; --line:#dce1e6; --line-soft:#e9edf1;
   --hover:#f2f4f7; --chip:#eef1f4; --strong:#000; --box-bg:color-mix(in srgb, var(--canvas) 50%, var(--bg));
-  --accent:#0969da; --accent-bg:color-mix(in srgb, var(--accent) 9%, var(--bg));
-  --c-doing:#0969da; --c-needs:#bc4c00; --c-review:#8250df; --c-ready:#1a7f37; --c-done:#59636e; --c-idle:#8c959f;
-  --c-warn:#9a6700; --c-danger:#d1242f; --c-interrupted:var(--c-warn);
+  /* status and topic colours are also text on their own 9-16% tint (pills, badges): each keeps 4.5:1 there, in both themes */
+  --accent:#0964cf; --accent-bg:color-mix(in srgb, var(--accent) 9%, var(--bg));
+  --c-doing:#0964cf; --c-needs:#a44200; --c-review:#7a4bd2; --c-ready:#166d2f; --c-done:#59636e; --c-idle:#5a5f66;
+  --c-warn:#805500; --c-danger:#b41f28; --c-interrupted:var(--c-warn);
   --shadow:0 8px 24px rgba(31,35,40,.12);
   /* topic hues (chat.js topicHue): no amber/red, those mean needs-you and errors */
-  --t0:var(--c-doing); --t1:var(--c-review); --t2:var(--c-ready); --t3:#bf3989; --t4:#0f766e; --t5:#4d7c0f; --t6:#4338ca; --t7:#0e7490;
+  --t0:var(--c-doing); --t1:var(--c-review); --t2:var(--c-ready); --t3:#b43681; --t4:#0f756d; --t5:#48730e; --t6:#4338ca; --t7:#0e718c;
   --ease:cubic-bezier(.2,.8,.2,1);
   /* needs-you: a tint and a strip, the one loud colour */
   --needs-bg:color-mix(in srgb, var(--c-needs) 5%, var(--bg)); --needs-line:color-mix(in srgb, var(--c-needs) 22%, var(--line));
@@ -26,10 +27,10 @@
     --bg:#14171c; --canvas:#0d0f13; --fg:#e4e8ed; --muted:#959ca6; --line:#2b3038; --line-soft:#22262d;
     --hover:#1b1f25; --chip:#23282f; --strong:#fff;
     --accent:#4493f8; --accent-bg:color-mix(in srgb, var(--accent) 15%, var(--bg));
-    --c-doing:#4493f8; --c-needs:#db6d28; --c-review:#ab7df8; --c-ready:#3fb950; --c-done:#959ca6; --c-idle:#656c76;
-    --c-warn:#d29922; --c-danger:#f85149;
+    --c-doing:#4493f8; --c-needs:#df7c3e; --c-review:#ab7df8; --c-ready:#45bb55; --c-done:#959ca6; --c-idle:#a3a7ad;
+    --c-warn:#d29a24; --c-danger:#fa7e78;
     --shadow:0 8px 24px rgba(0,0,0,.5);
-    --t3:#db61a2; --t4:#2dd4bf; --t5:#a3e635; --t6:#b08968; --t7:#22d3ee;
+    --t3:#dd69a7; --t4:#2dd4bf; --t5:#a3e635; --t6:#b18a6a; --t7:#22d3ee;
     --needs-bg:color-mix(in srgb, var(--c-needs) 8%, var(--bg));
   }
 }
@@ -469,7 +470,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .dv-note { padding:var(--sp-5) var(--sp-4); color:var(--muted); }
 .dv-lines { width:max-content; min-width:100%; line-height:1.5; padding-bottom:var(--sp-3); }
 .dv-l { display:flex; white-space:pre; }
-.dv-n { flex:0 0 5ch; padding-right:1ch; text-align:right; color:var(--muted); opacity:.75; user-select:none; }
+.dv-n { flex:0 0 5ch; padding-right:1ch; text-align:right; color:var(--muted); user-select:none; }
 .dv-t { flex:1; padding:0 var(--sp-3) 0 var(--sp-1); tab-size:4; }
 .dv-l.add { background:var(--dv-add); }
 .dv-l.del { background:var(--dv-del); }

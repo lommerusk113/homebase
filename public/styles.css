@@ -181,6 +181,12 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 /* menus use the page's type scale, not the library's 16px */
 wa-dropdown-item { font-size:var(--fs-m); }
 wa-dropdown-item [slot="details"] { font-size:var(--fs-s); color:var(--muted); }
+/* phones: a menu no wider than the screen, so an item's explanation goes under its label instead of off the edge; a full tap height */
+@media (max-width: 700px) {
+  wa-dropdown-item { flex-wrap:wrap; min-height:44px; max-width:calc(100vw - 32px); }
+  wa-dropdown-item::part(details) { flex-basis:100%; justify-content:flex-start; }
+  wa-dropdown-item [slot="details"] { position:relative; left:-2em; } /* takes back the library's 2em gap to the label, now above it */
+}
 wa-button[size="s"] { --wa-form-control-height:26px; --wa-form-control-padding-inline:10px; font-size:var(--fs-s); }
 wa-button.act-btn::part(base) { color:var(--muted); }
 wa-button.act-btn:hover:not([disabled])::part(base) { color:var(--fg); }

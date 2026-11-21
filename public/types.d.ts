@@ -4,8 +4,12 @@
 
 // ---- /api/sessions: Session[] ----
 
+// A project's forge: its name, why it can't be reached (null when it can) with what to do, and when the oldest open MR state shown was read.
+interface ForgeStatus { name: 'GitLab' | 'GitHub'; problem: 'missing' | 'auth' | 'rate' | 'timeout' | 'error' | null; help: string | null; checkedAt: number | null }
+
 interface Session {
     id: string;
+    forge?: ForgeStatus | null;
     cwd: string;
     dir: string;
     project: string;
@@ -72,7 +76,7 @@ interface Session {
     clearedFrom?: string;
 }
 
-type Column = 'needs-you' | 'doing' | 'review' | 'ready' | 'finished' | 'done' | 'closed' | 'idle';
+type Column = 'needs-you' | 'doing' | 'unknown' | 'review' | 'ready' | 'finished' | 'done' | 'closed' | 'idle';
 
 interface Pipeline { status: string; url?: string; at?: string }
 
@@ -126,7 +130,7 @@ interface WorkItem {
     title: string;
     firstTitle?: string | null; // the agent's spawn description, when a later SendMessage renamed the row
     pr: string | null;
-    forgeError?: string | null; // why the last MR/PR lookup (or its comments, "comments: …") failed; the last good data is kept
+    forgeError?: string | null; // why the last MR/PR lookup (or its comments, "comments: …") failed, in plain words; the last good data is kept
     prState: PrState | null;
     column: Column;
     /** index into LIFECYCLE */
@@ -269,6 +273,7 @@ interface SelectedMilestone extends Omit<MilestoneSummary, 'id' | 'total'> {
 
 interface Milestones {
     project: string;
+    forge?: 'GitLab' | 'GitHub';
     milestones: MilestoneSummary[];
     detected: number[];
     me: Person | null;

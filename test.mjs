@@ -11,7 +11,7 @@ assert.equal(column('idle', { state: 'open', ready: true }, true), 'ready');
 assert.equal(column('idle', { state: 'open', changes: true }, true), 'needs-you');
 assert.equal(column('idle', { state: 'open', blocked: 'conflict' }, true), 'needs-you');
 assert.equal(column('idle', { state: 'open', blocked: 'checks' }, true), 'review'); // nothing to type for an external check
-assert.equal(column('waiting', null, true), 'review');
+assert.equal(column('waiting', null, true), 'unknown'); // an MR whose lookup gave nothing is not "in review"
 assert.equal(column('waiting', null, false), 'needs-you');
 assert.equal(column('idle', null, false), 'idle');
 
@@ -1154,6 +1154,7 @@ assert.equal(inMilestone(row('u', null), null), true); // no milestone selected
     // fast polling stops on a final state, even while a refresh of the list runs in the background
     assert.equal(isLoading({ ...err, updating: true }), false);
     assert.equal(isLoading({ reason: null, selected: { loading: true }, updating: false }), true);
+    assert.equal(isLoading({ reason: null, loading: true, selected: null, updating: false }), true, 'a slow first milestone list keeps the fast poll');
     assert.equal(isLoading({ reason: null, selected: { groups: {} }, updating: false }), false);
     assert.deepEqual(emptyPill(none), { text: 'No milestones', tip: 'No open milestones in p', err: false });
     assert.deepEqual(emptyPill(err), { text: 'Milestones unavailable', tip: 'gh: Not Found (HTTP 404)\nRefresh (r) to retry', err: true });
@@ -2841,10 +2842,20 @@ const glabMr = (fields, n) => withFakeGlab(`echo '${JSON.stringify({ state: 'ope
     mkdirSync(dir, { recursive: true });
     const at = new Date().toISOString(), url = 'https://gitlab.example.com/g/p/-/merge_requests/9';
     writeFileSync(join(dir, 's1.jsonl'), [{ type: 'user', sessionId: 's1', cwd: join(home, 'p'), message: { content: 'hi' }, timestamp: at }, { type: 'pr-link', prUrl: url, timestamp: at }].map(l => JSON.stringify(l)).join('\n') + '\n');
-    writeFileSync(join(fakeBin, 'glab'), '#!/bin/sh\necho "glab: 404 Not Found" >&2\nexit 1\n', { mode: 0o755 });
-    const code = "import { sessions } from './server/sessions.mjs'; console.log(JSON.stringify((await sessions()).flatMap(s => s.items.map(i => [i.next, i.forgeError]))));";
-    const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home, PATH: `${fakeBin}:${process.env.PATH}` }, cwd: import.meta.dirname, encoding: 'utf8' });
-    assert.deepEqual(JSON.parse(out.trim().split('\n').at(-1)), [["Couldn't check the MR: glab: 404 Not Found", 'glab: 404 Not Found']]);
+    // the page gets the failure as a kind and plain words, never the CLI's own text; one MR's 404 is no forge outage, a 401 is
+    const code = "import { sessions } from './server/sessions.mjs'; console.log(JSON.stringify((await sessions()).flatMap(s => s.items.map(i => [i.column, i.next, i.forgeError, s.forge?.name, s.forge?.problem]))));";
+    const boardWith = stderr => {
+        writeFileSync(join(fakeBin, 'glab'), `#!/bin/sh\necho "${stderr}" >&2\nexit 1\n`, { mode: 0o755 });
+        const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home, HOMEBASE_DIR: join(home, 'hb'), PATH: `${fakeBin}:${process.env.PATH}` }, cwd: import.meta.dirname, encoding: 'utf8' });
+        return JSON.parse(out.trim().split('\n').at(-1))[0];
+    };
+    const [col, next, rowError, name, problem] = boardWith('glab: 404 Not Found');
+    assert.deepEqual([col, name, problem], ['unknown', 'GitLab', null]);
+    assert.doesNotMatch(`${next} ${rowError}`, /404|glab:/);
+    assert.ok(rowError);
+    const denied = boardWith('glab: 401 Unauthorized. try authenticating with glab auth login');
+    assert.deepEqual([denied[0], denied[4]], ['unknown', 'auth']);
+    assert.doesNotMatch(`${denied[1]} ${denied[2]}`, /401|Unauthorized/);
     rmSync(home, { recursive: true, force: true });
     console.log('ok forge error shown');
 
@@ -2856,7 +2867,7 @@ const glabMr = (fields, n) => withFakeGlab(`echo '${JSON.stringify({ state: 'ope
     writeFileSync(join(fakeBin, 'glab'), `#!/bin/sh\ncase "$2" in\n*discussions*) echo "glab: 403 Forbidden" >&2; exit 1;;\n*user) echo '{"username":"me"}';;\n*) echo '${JSON.stringify({ state: 'opened', title: 't', source_branch: 'b', detailed_merge_status: 'not_approved' })}';;\nesac\n`, { mode: 0o755 });
     const code2 = "import { sessions } from './server/sessions.mjs'; await sessions(); await new Promise(r => setTimeout(r, 1500)); console.log(JSON.stringify((await sessions()).flatMap(s => s.items.map(i => i.forgeError))));";
     const out2 = execFileSync(process.execPath, ['--input-type=module', '-e', code2], { env: { ...process.env, HOME: home2, PATH: `${fakeBin}:${process.env.PATH}` }, cwd: import.meta.dirname, encoding: 'utf8' });
-    assert.deepEqual(JSON.parse(out2.trim().split('\n').at(-1)), ['comments: glab: 403 Forbidden']);
+    assert.deepEqual(JSON.parse(out2.trim().split('\n').at(-1)), ['comments: the lookup failed']);
     rmSync(home2, { recursive: true, force: true });
     console.log('ok comment error shown');
 }
@@ -4054,4 +4065,18 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.equal(issueWork('9', [a, b]), null);
     assert.equal(issueWork('7', [{ id: 'a', items: [{ ...sub, column: 'closed' }] }]), null, 'an MR closed without merging is no work on it');
     console.log('ok issue work');
+}
+
+{
+    // a glab/gh failure as the kind the page words
+    const { problemOf } = await import('./server/forge.mjs');
+    assert.equal(problemOf(null), null);
+    assert.equal(problemOf(Object.assign(new Error('spawn glab ENOENT'), { code: 'ENOENT' })), 'missing');
+    assert.equal(problemOf(Object.assign(new Error('Command failed'), { killed: true })), 'timeout');
+    assert.equal(problemOf({ stderr: 'glab: 401 Unauthorized' }), 'auth');
+    assert.equal(problemOf({ stderr: 'To get started with GitHub CLI, please run:  gh auth login' }), 'auth');
+    assert.equal(problemOf({ stderr: 'glab: 429 {"message":{"error":"Too many requests"}}' }), 'rate');
+    assert.equal(problemOf({ stderr: 'gh: API rate limit exceeded (HTTP 403)' }), 'rate');
+    assert.equal(problemOf(new Error('glab: 500 Internal Server Error')), 'error');
+    console.log('ok forge problems');
 }

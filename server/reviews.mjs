@@ -1,5 +1,5 @@
 // Open GitLab MRs by others that ask the signed-in user for a review: read-only GETs, one list call per GitLab host Homebase knows.
-import { api, isGitLab, signedIn, swrEntry, prState, pipelineOf } from './forge.mjs';
+import { api, isGitLab, whoAmI, swrEntry, prState, pipelineOf } from './forge.mjs';
 import { repoPaths } from './account.mjs';
 
 export const REVIEWS_TTL_MS = 120_000;
@@ -23,10 +23,7 @@ export function reviewRows(list, me, pipelines = new Map()) {
 
 async function fetchReviews(repo) {
 
-    const me = await signedIn(repo);
-    if (!me) {
-        throw new Error('could not tell who you are on GitLab');
-    }
+    const me = await whoAmI(repo);
     const list = await api(repo, `merge_requests?reviewer_username=${encodeURIComponent(me.username)}&state=opened&scope=all&per_page=100`);
     // the pipeline is not in the list payload: the cached single-MR lookup has it
     const states = await Promise.all(list.map(async m => [m.web_url, (await prState(m.web_url).catch(() => null))?.pipeline]));
@@ -37,7 +34,7 @@ async function fetchReviews(repo) {
 const warned = new Set();
 
 // The cached rows; never waits, so the first call after start is empty. A failed refresh keeps serving the last good
-// rows and logs once per outage per host.
+// rows and logs once per outage per host; the board's forge state (forge.mjs forgeStatus) reads the entry's error.
 export function reviewRequests() {
 
     const hosts = new Map([...repoPaths.values()].filter(isGitLab).map(r => [r.host, r]));

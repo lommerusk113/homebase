@@ -1,5 +1,5 @@
 // Milestones tab: open milestones, their issue groups and linked MRs, cached per project, warmed at start.
-import { api, pages, cached, swrEntry, swr, prs, isGitLab, person, signedIn, excerpt, pipelineOf } from './forge.mjs';
+import { api, pages, cached, swrEntry, swr, prs, isGitLab, person, signedIn, excerpt, pipelineOf, problemText, forgeWords } from './forge.mjs';
 import { sameRepo, milestoneOf } from './items.mjs';
 import { sessions, repoPaths } from './sessions.mjs';
 
@@ -7,7 +7,7 @@ import { sessions, repoPaths } from './sessions.mjs';
 const MS_LIST_TTL_MS = 5 * 60_000;
 const MS_ISSUES_TTL_MS = 90_000;
 const MS_LINKS_TTL_MS = 5 * 60_000;
-const MS_FIRST_LOAD_MS = 15_000; // a project's first milestone list answers by then, as an error if it is not in yet
+const MS_FIRST_LOAD_MS = 15_000; // a project's first milestone list answers by then, as still loading if it is not in yet
 
 // Open milestones with their issue counts (closed/total) for the selector menu.
 async function fetchMilestones(repo) {
@@ -132,7 +132,8 @@ export async function milestones(project, pick) {
     }
 
     // the signed-in user, for the Issues tab's "you" lane; a failed lookup only loses the mark
-    const late = new Promise((_, fail) => setTimeout(() => fail(new Error('timed out loading the milestones')), MS_FIRST_LOAD_MS).unref());
+    const late = new Promise((_, fail) => setTimeout(() => fail(STILL_LOADING), MS_FIRST_LOAD_MS).unref());
+    const w = forgeWords(project);
     let list, me;
     try {
         [list, me] = await Promise.race([late, Promise.all([
@@ -140,7 +141,8 @@ export async function milestones(project, pick) {
             signedIn(repo)
         ])]);
     } catch (e) {
-        return noMilestones(project, repo, 'error', e.stderr?.trim() || e.message);
+        // a slow forge is no error: the calls go on in the background and the page keeps asking (the CLI's own timeout ends a hung one)
+        return e === STILL_LOADING ? { ...noMilestones(project, repo, null), loading: true } : noMilestones(project, repo, 'error', problemText(e, w.cli));
     }
     if (pick === 'mine') {
         return mineView(project, repo, list, me);
@@ -154,35 +156,38 @@ export async function milestones(project, pick) {
 
     // the issue groups never wait: until the first load is in, selected has the list's counts and loading: true
     const issues = ms && swrEntry(`issues:${project}:${ms.id}`, MS_ISSUES_TTL_MS, () => milestoneIssues(project, repo, () => fetchIssues(repo, ms)));
-    const selected = !ms ? null : issues.value ? { ...ms, ...issues.value } : { ...ms, loading: !!issues.pending, error: issues.error?.message ?? null };
+    const selected = !ms ? null : issues.value ? { ...ms, ...issues.value } : { ...ms, loading: !!issues.pending, error: problemText(issues.error, w.cli) };
     const updating = !!(issues?.pending || swr.get(`ms:${project}`).pending);
 
-    return { project, milestones: list, detected, me, selected, updating, loading: false, reason: null, url: milestonesPage(repo) };
+    return { project, forge: w.forge, milestones: list, detected, me, selected, updating, loading: false, reason: null, url: milestonesPage(repo) };
 }
 
 // The "Assigned to me" pseudo-milestone: id "mine", no due date, the user's open issues from every milestone.
 export function mineView(project, repo, list, me) {
 
+    const w = forgeWords(project);
     const base = { id: 'mine', title: 'Assigned to me', due: null, url: milestonesPage(repo).replace(/milestones$/, 'issues'), group: false, closed: 0, total: null, mine: true };
     if (!me) {
-        return { project, milestones: list, detected: [], me, selected: { ...base, error: 'could not tell who you are on this forge' }, updating: false, loading: false, reason: null, url: milestonesPage(repo) };
+        return { project, forge: w.forge, milestones: list, detected: [], me, selected: { ...base, error: 'could not tell who you are on this forge' }, updating: false, loading: false, reason: null, url: milestonesPage(repo) };
     }
     const issues = swrEntry(`issues:${project}:mine`, MS_ISSUES_TTL_MS, () => milestoneIssues(project, repo, () => fetchMine(repo, me)));
-    const selected = issues.value ? { ...base, ...issues.value } : { ...base, loading: !!issues.pending, error: issues.error?.message ?? null };
+    const selected = issues.value ? { ...base, ...issues.value } : { ...base, loading: !!issues.pending, error: problemText(issues.error, w.cli) };
 
-    return { project, milestones: list, detected: [], me, selected, updating: !!(issues.pending || swr.get(`ms:${project}`).pending), loading: false, reason: null, url: milestonesPage(repo) };
+    return { project, forge: w.forge, milestones: list, detected: [], me, selected, updating: !!(issues.pending || swr.get(`ms:${project}`).pending), loading: false, reason: null, url: milestonesPage(repo) };
 }
 
 const milestonesPage = repo => (isGitLab(repo) ? `https://${repo.host}/${repo.path}/-/milestones` : `https://github.com/${repo.path}/milestones`);
 
 // The terminal answer for a project without milestones to show. reason: none (it has no open ones), error (glab/gh
-// failed or timed out; error says why), unsupported (a project the session scan does not know).
+// failed; error says why in plain words), unsupported (a project the session scan does not know).
 export function noMilestones(project, repo, reason, error = null) {
     return {
-        project, milestones: [], detected: [], me: null, selected: null, updating: false, loading: false, reason, error,
+        project, forge: forgeWords(project).forge, milestones: [], detected: [], me: null, selected: null, updating: false, loading: false, reason, error,
         url: reason !== 'unsupported' && repo ? milestonesPage(repo) : null
     };
 }
+
+const STILL_LOADING = new Error('still loading the milestones');
 
 // Session scan at start, so /api/milestones knows the projects and the board's MRs before the page asks.
 let scanned = Promise.resolve();

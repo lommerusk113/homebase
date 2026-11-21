@@ -166,7 +166,7 @@ export function renderIssues(d = data) {
     data = d;
     const pane = $('issues'), hadFocus = pane.contains(document.activeElement);
     const ms = d?.selected;
-    if (d === undefined || ms?.loading) {
+    if (d === undefined || d?.loading || ms?.loading) {
         pane.replaceChildren(...(ms ? [head({ ...ms, groups: NO_GROUPS }, 'Loading issues…')] : []), ...skeleton());
         pane.setAttribute('aria-busy', 'true');
         return;

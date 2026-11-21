@@ -22,7 +22,7 @@ export function column(status, prState, hasPr) {
         return 'ready';
     }
     if (hasPr) {
-        return 'review';
+        return prState ? 'review' : 'unknown'; // no answer from the forge at all: not known to be in review
     }
 
     return status === 'waiting' ? 'needs-you' : 'idle';

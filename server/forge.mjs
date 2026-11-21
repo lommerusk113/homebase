@@ -166,17 +166,61 @@ export async function prState(url) {
     return hit.value;
 }
 
-// Why the last MR/PR lookup failed, in a few words, or null when it worked: the old state keeps being served meanwhile.
-export const prError = url => errorText(prs.get(url)?.error);
-
-// A glab/gh failure in a few words, or null for none.
-export function errorText(e) {
+// Why a glab/gh call failed, as the kind the page words: missing (the CLI is not installed), auth, rate, timeout or
+// error (anything else, one MR's 404 too). null for no failure.
+export function problemOf(e) {
 
     if (!e) {
         return null;
     }
+    const text = String(e.stderr || e.message);
 
-    return (e.killed ? 'timed out' : String(e.stderr || e.message).trim().split('\n')[0]).slice(0, 120);
+    return e.code === 'ENOENT' ? 'missing'
+        : e.killed ? 'timeout'
+        : /\b429\b|rate limit|too many requests/i.test(text) ? 'rate'
+        : /\b401\b|unauthorized|auth login|not logged in|authentication|bad credentials/i.test(text) ? 'auth' : 'error';
+}
+
+// The forge's words for a project (or, without a known repo, an MR/PR URL): GitLab has MRs and glab, GitHub PRs and gh.
+// The one place the wording is picked; the page gets the name with each session and milestone answer.
+export function forgeWords(project, url) {
+
+    const repo = repoPaths.get(project);
+    const github = repo ? !isGitLab(repo) : !!url?.includes('/pull/');
+
+    return github ? { forge: 'GitHub', mr: 'PR', aMr: 'a PR', cli: 'gh' } : { forge: 'GitLab', mr: 'MR', aMr: 'an MR', cli: 'glab' };
+}
+
+// A failure kind in a few plain words for a row, and as one line saying what to do for the board; the CLI's own text never reaches the page.
+const SHORT = { missing: cli => `${cli} is not installed`, auth: () => 'not logged in', rate: () => 'rate limited', timeout: () => 'timed out', error: () => 'the lookup failed' };
+const HELP = {
+    missing: cli => `${cli} is not installed. Install it, then run "npm run doctor" to check the setup.`,
+    auth: cli => `not logged in. Run "${cli} auth login" in a terminal, then refresh (r).`,
+    rate: () => 'too many requests. It retries by itself; refresh (r) in a few minutes.',
+    timeout: () => 'no answer in time. Check the network, then refresh (r).',
+    error: cli => `${cli} failed. Run "npm run doctor" to check the setup, then refresh (r).`
+};
+export const problemText = (e, cli) => (e ? SHORT[problemOf(e)](cli) : null);
+
+// Why the last MR/PR lookup failed, in a few plain words, or null when it worked: the old state keeps being served meanwhile.
+export const prError = url => problemText(prs.get(url)?.error, forgeWords(null, url).cli);
+
+// A project's forge for the page: { name, problem, help, checkedAt }. problem is set when a call for the whole project
+// failed (its open-MR list, the review requests) or an MR lookup failed for a reason that hits them all; one MR's own
+// error is only that row's. checkedAt: when the oldest still-open MR state shown was last read, null without one.
+export function forgeStatus(project, urls) {
+
+    const repo = repoPaths.get(project);
+    if (!repo && !urls.length) {
+        return null;
+    }
+    const w = forgeWords(project, urls[0]);
+    const lookups = urls.map(u => prs.get(u)).filter(Boolean);
+    const wide = [swr.get(`open:${project}`), repo && swr.get(`reviews:${repo.host}`)].find(h => h?.error)?.error
+        ?? lookups.map(h => h.error).find(e => e && problemOf(e) !== 'error');
+    const live = lookups.filter(h => h.okAt && !['merged', 'closed'].includes(h.value?.state));
+
+    return { name: w.forge, problem: problemOf(wide), help: wide ? HELP[problemOf(wide)](w.cli) : null, checkedAt: live.length ? Math.min(...live.map(h => h.okAt)) : null };
 }
 
 export const swr = new Map(); // key -> { at, value, pending, error }
@@ -239,7 +283,7 @@ export function swrEntry(key, ttl, fn) {
 export function refetch(hit, fn) {
 
     hit.pending ??= fn()
-        .then(v => { hit.value = v; hit.error = null; })
+        .then(v => { hit.value = v; hit.error = null; hit.okAt = Date.now(); })
         .catch(e => { hit.error = e; })
         .finally(() => { hit.at = Date.now(); hit.pending = null; });
 
@@ -319,27 +363,23 @@ export async function pages(repo, path) {
 
 // { name, username } of a GitLab user or a GitHub login (GitHub's issue payload has no display name).
 export const person = u => ({ name: u.name ?? u.login, username: u.username ?? u.login });
-// The signed-in user of a repo's forge account, or null when the lookup fails. Cached 24 h per account and host; a failure
-// is never cached, so the next call asks again.
+// The signed-in user of a repo's forge account: whoAmI throws when the lookup fails, signedIn answers null then. Cached
+// 24 h per account and host; a failure is never cached, so the next call asks again.
 const ME_TTL_MS = 24 * 3600_000;
 export const me = new Map(); // account:host -> { at, value }
-export async function signedIn(repo) {
+export async function whoAmI(repo) {
 
     const key = `${accountOf(repo)}:${repo.host}`;
     const hit = me.get(key);
     if (hit && Date.now() - hit.at < ME_TTL_MS) {
         return hit.value;
     }
+    const value = person(await api(repo, 'user'));
+    me.set(key, { at: Date.now(), value });
 
-    try {
-        const value = person(await api(repo, 'user'));
-        me.set(key, { at: Date.now(), value });
-
-        return value;
-    } catch {
-        return null;
-    }
+    return value;
 }
+export const signedIn = repo => whoAmI(repo).catch(() => null);
 
 // Plain-text start of an issue description, about max chars, for the expanded card: markdown marks, links and headings dropped.
 export function excerpt(md, max = 300) {
@@ -452,10 +492,7 @@ export const OPEN_MRS_TTL_MS = 120_000;
 // ponytail: first 100 of each list, no paging
 export async function openMrs(repo) {
 
-    const me = await signedIn(repo);
-    if (!me) {
-        return [];
-    }
+    const me = await whoAmI(repo); // a failure is the entry's error (the board says so), never an empty list
     if (!isGitLab(repo)) {
         const q = encodeURIComponent(`repo:${repo.path} is:pr is:open author:${me.username}`);
 

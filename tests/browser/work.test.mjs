@@ -8,6 +8,15 @@ const row = key => `document.querySelector('#masters tr[data-key="${key}"]')`;
 const groups = `Object.fromEntries([...document.querySelectorAll('#masters .group')].map(g => [g.className.match(/g-([\\w-]+)/)[1], [...g.querySelectorAll('tr[data-key]')].map(r => r.dataset.key)]))`;
 
 export default {
+    'a forge that cannot be reached says so once on the board, in plain words': async ({ page, open }) => {
+        await open({ project: 'gamma' });
+        await page.waitFor(`document.querySelector('#masters .forge-note.err')`, { what: 'the forge line for gamma' });
+        assert.equal(await page.ev(`document.querySelectorAll('#masters .forge-note.err').length`), 1);
+        assert.doesNotMatch(await page.ev(`document.getElementById('masters').textContent`), /401|Unauthorized|fixture/, 'no CLI text in the page');
+        await open();
+        assert.equal(await page.ev(`document.querySelector('#masters .forge-note.err')`), null, 'alpha is reachable');
+    },
+
     'closing a row\'s detail leaves the chat where it is': async ({ page, open }) => {
         await open();
         await page.waitFor(`${row(MR(102))} && ${row(MR(106))}`, { what: 'the rows' });

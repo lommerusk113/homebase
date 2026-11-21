@@ -294,6 +294,33 @@ function foldGroup(c, list, isOpen, setOpen, note) {
     return f;
 }
 
+// One line per forge the board can't reach: what is wrong and what to do, with the last good data kept below it. Else,
+// once the MR states shown are older than a minute, how old they are.
+const STALE_MS = 75_000; // ponytail: the server rereads an MR after 60 s, so a minute plus a few polls is what "old" starts at
+/** @returns {HTMLElement[]} */
+function forgeNotes() {
+    /** @type {Map<string, { f: ForgeStatus, projects: string[], oldest: number | null }>} */
+    const by = new Map();
+    for (const [project, f] of new Map(visibleSessions().filter(s => s.forge).map(s => [s.project, s.forge]))) {
+        const key = `${f.name}:${f.problem ?? ''}`, g = by.get(key) ?? { f, projects: [], oldest: null };
+        g.projects.push(project);
+        g.oldest = Math.min(g.oldest ?? Infinity, f.checkedAt ?? Infinity);
+        by.set(key, g);
+    }
+    return [...by.values()].flatMap(({ f, projects, oldest }) => {
+        const old = Number.isFinite(oldest) && Date.now() - oldest > STALE_MS ? ago(oldest) : null;
+        if (!f.problem && !old) {
+            return [];
+        }
+        const where = state.project === 'all' ? ` (${projects.join(', ')})` : '';
+        const n = el('div', f.problem ? 'forge-note err' : 'forge-note', f.problem
+            ? `Can't reach ${f.name}${where}: ${f.help}${old ? ` Showing what it was ${old} ago.` : ''}`
+            : `${f.name} data${where} is from ${old} ago`);
+        n.setAttribute('role', 'status');
+        return [n];
+    });
+}
+
 /** @type {number | null} */
 let pendingTop = null; // the board's scroll offset a redraw still has to put back
 
@@ -343,7 +370,7 @@ function renderItems() {
     // replaceChildren empties the pane, which scrolls it to the top; a folded group has no height until it has drawn itself
     // (a microtask later), so a position near the end is clamped now and set again then
     const m = $('masters'), top = pendingTop ?? m.scrollTop;
-    m.replaceChildren(...[empty, ...groups].filter(Boolean));
+    m.replaceChildren(...[...forgeNotes(), empty, ...groups].filter(Boolean));
     m.scrollTop = top;
     if (m.scrollTop !== top) {
         pendingTop = top;

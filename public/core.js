@@ -5,6 +5,7 @@
 export const COLUMNS = [
     { key: 'needs-you', label: 'Needs you', color: '--c-needs' },
     { key: 'doing', label: 'Doing', color: '--c-doing' },
+    { key: 'unknown', label: 'Not checked', color: '--c-idle' },
     { key: 'review', label: 'In review', color: '--c-review' },
     { key: 'ready', label: 'Ready to merge', color: '--c-ready' },
     { key: 'finished', label: 'Recently finished', color: '--c-done' },

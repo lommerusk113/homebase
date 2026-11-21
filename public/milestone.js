@@ -56,9 +56,9 @@ export function toData(status, text, project = '') {
     return { project, milestones: [], detected: [], me: null, selected: null, updating: false, loading: false, reason: 'error', error: text.trim() || `HTTP ${status}`, url: null };
 }
 
-// Whether to poll fast: the issues still load or a refresh runs. A reason (none, error, unsupported) is final.
+// Whether to poll fast: the milestone list or the issues still load, or a refresh runs. A reason (none, error, unsupported) is final.
 /** @param {Milestones} d */
-export const isLoading = d => !d.reason && !!(d.selected?.loading || d.updating);
+export const isLoading = d => !d.reason && !!(d.loading || d.selected?.loading || d.updating);
 
 // Pill text and tooltip for a project without milestones to show (data.reason), null otherwise.
 /** @param {Milestones} d @returns {{ text: string, tip: string, err: boolean } | null} */
@@ -144,6 +144,12 @@ export function milestoneSelector(project, { signal, onChange, onData, onBusy } 
         pick.classList.toggle('err', !!empty?.err);
         if (pick.parentElement) {
             pick.parentElement.hidden = data.reason === 'none' || data.reason === 'unsupported'; // no milestones: no pill, no gap in the header
+        }
+        if (data.loading) { // a slow forge: the list is not in yet
+            summary.replaceChildren(el('span', null, '⚑'), el('span', 'ld', 'Loading…'), el('wa-spinner'));
+            summary.title = 'Loading milestones…';
+            menu.replaceChildren();
+            return;
         }
         if (empty) {
             summary.replaceChildren(el('span', null, '⚑'), el('span', null, empty.text));

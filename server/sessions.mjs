@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ROOT, WORKING_MS, cache, liveSessions, closedSession, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, hasTurnMarkers, turnPrompts, pendingQuestion, askMarker, readUsage, usageCache, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
 import { loadStore, record, seeds, flush } from './store.mjs';
-import { PR_TTL_MS, openMrUrls, prState, prError, errorText, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
+import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { repoPaths, accountOf } from './account.mjs';
 import { contextOf } from './limits.mjs';
 import { workItems, milestoneOf, sameRepo } from './items.mjs';
@@ -550,11 +550,17 @@ async function itemsOf(out) {
         it.milestone = milestoneOf(it.prState, swr.get(`ms:${it.project}`)?.value ?? []);
         it.comments = comments.get(it.pr) ?? null;
         // a failed lookup: without any state the row says why; with an older one it is flagged stale
-        const commentsError = it.pr && errorText(swr.get(`comments:${it.pr}`)?.error);
+        const w = forgeWords(it.project, it.pr);
+        const commentsError = it.pr && problemText(swr.get(`comments:${it.pr}`)?.error, w.cli);
         it.forgeError = it.pr ? prError(it.pr) ?? (commentsError && `comments: ${commentsError}`) : null;
-        if (it.forgeError && !it.prState && it.next === 'Open the MR to check its state') {
-            it.next = `Couldn't check the MR: ${it.forgeError}`;
+        if (it.forgeError && !it.prState && it.column === 'unknown') {
+            it.next = `Couldn't check the ${w.mr}: ${it.forgeError}`;
         }
+    }
+    // each project's forge state, on its sessions: the page says once when the forge can't be reached, and how old its data is
+    for (const project of new Set(out.map(s => s.project))) {
+        const status = forgeStatus(project, items.filter(i => i.project === project && i.pr).map(i => i.pr));
+        out.filter(s => s.project === project).forEach(s => { s.forge = status; });
     }
     record(store, items);
     flush(store);

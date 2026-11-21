@@ -553,12 +553,39 @@ function addShowMore(feed) {
     }
 }
 
+// Text that is rewritten on every poll: an unchanged node is left alone, so a live region does not repeat itself.
+/** @param {HTMLElement} node @param {string} text */
+const setText = (node, text) => {
+    if (node.textContent !== text) {
+        node.textContent = text;
+    }
+};
+
+// Screen readers hear a reply of the open chat once, when its turn ends: its topic, its TLDR (or first line) and whether
+// it waits on the user. Not on opening a chat, and a question is announced by its card.
+/** @type {{ sid: string, id?: string }} */
+let heard = { sid: '' };
+/** @param {Session} s @param {Transcript} data @param {ChatItem[]} items */
+function announceReply(s, data, items) {
+    const last = data.working || data.asking ? null : items.findLast(i => i.role === 'assistant'), id = last && `${last.id ?? last.at}:${last.text.length}`;
+    if (last && heard.sid === s.id && heard.id !== id) {
+        const say = (last.tldr || last.text.split('\n').find(l => l.trim()) || '').trim().slice(0, 220);
+        $('announce').textContent = [`Claude replied${last.topic ? `, ${last.topic}` : ''}`, say, last.needsYou || last.waiting ? 'Needs you' : ''].filter(Boolean).join('. ');
+    }
+    heard = { sid: s.id, id: last ? id : heard.sid === s.id ? heard.id : undefined };
+}
+
 // Fixed-height line at the top of the composer, with the context window use on the right.
 /** @param {Parameters<typeof chatStatus>[0]} data */
 function setStatus(data) {
     const s = chatSession(), { kind, text } = chatStatus(data, Date.now(), s);
+    if (!$('status').classList.contains(kind) && (kind === 'error' || kind === 'stuck')) {
+        setText($('announce'), text); // the line itself is no live region: a working chat's step changes would be read out all day
+    }
     $('status').className = `c-status ${kind}`;
-    if (kind === 'idle' && text.startsWith(NEEDS_ANSWER)) {
+    if ($('status-text').textContent === text) {
+        // unchanged: not rewritten, so the nodes (and a focused "needs your answer" button) stay
+    } else if (kind === 'idle' && text.startsWith(NEEDS_ANSWER)) {
         const go = el('button', 'show', NEEDS_ANSWER);
         go.type = 'button';
         go.onclick = jumpToNeeds;
@@ -568,7 +595,10 @@ function setStatus(data) {
     }
     $('status-restart').hidden = kind !== 'stuck';
     $('status-ctx').className = `c-ctx ${ctxLevel(s?.context ?? 0)}`;
-    $('status-ctx').replaceChildren(...(s?.context != null ? [el('span', 'w', 'context '), `${Math.round(s.context)}%`] : [])); // phones hide the word
+    const ctx = s?.context != null ? `${Math.round(s.context)}%` : '';
+    if ($('status-ctx').textContent !== (ctx && `context ${ctx}`)) {
+        $('status-ctx').replaceChildren(...(ctx ? [el('span', 'w', 'context '), ctx] : [])); // phones hide the word
+    }
 }
 
 // Scrolls to and focuses what needs the user: the ask card when it shows, else the reply the pinned strip is about,
@@ -595,7 +625,7 @@ function showNewer(s) {
     const newer = newerSession(visibleSessions(), s);
     $('newer').hidden = !newer;
     if (newer) {
-        $('newer-text').textContent = `New session started in ${newer.project} · `;
+        setText($('newer-text'), `New session started in ${newer.project} · `);
         $('newer-go').onclick = () => bindChat(newer.id);
     }
 }
@@ -655,7 +685,7 @@ function showModel(s) {
 
     const btn = $('c-model-btn');
     $('c-model').hidden = !s || s.id.startsWith('cc-new-') || !(name || pickedModel);
-    btn.textContent = pickedModel ? `${pickedModel.name}…` : `${name ?? ''} ▾`;
+    setText(btn, pickedModel ? `${pickedModel.name}…` : `${name ?? ''} ▾`);
     btn.classList.toggle('pending', !!pickedModel);
     for (const it of /** @type {NodeListOf<HTMLElement & { value: string, checked: boolean }>} */ ($('c-model').querySelectorAll('wa-dropdown-item'))) {
         it.checked = modelName(it.value) === (pickedModel?.name ?? name); // from our state, not the item's own toggle
@@ -698,7 +728,7 @@ function fillCard(id, tmux, question, options, answer, { detail = '', risky = fa
             term.hidden = !term.hidden;
             toggle.setAttribute('aria-expanded', String(!term.hidden));
         };
-        $('announce').textContent = `Claude is asking: ${question}`;
+        setText($('announce'), `Claude is asking: ${question}`);
 
         const pre = $('ask-detail'), more = $('ask-more'), lines = detail ? detail.split('\n') : [], rest = lines.length - DETAIL_LINES;
         pre.hidden = !detail;
@@ -1144,6 +1174,7 @@ export async function refreshChat() {
     compactUi(s, data);
 
     const { items, hidden, cut } = feedItems(s, data);
+    announceReply(s, data, items);
     showWait(s, data, items);
     showFocus(s, items);
     const fresh = cut.fresh || !!s.clearedFrom; // a New conversation, before or after the successor is bound

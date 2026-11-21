@@ -7,6 +7,18 @@ import { sleep } from './cdp.mjs';
 const status = `document.getElementById('status').className + ' | ' + document.getElementById('status-text').textContent`;
 
 export default {
+    'a reply that lands in the open chat is announced once, and an unchanged status line is not rewritten': async ({ page, open, IDS, touchSession }) => {
+        await open({ chat: IDS.other });
+        await page.waitFor(`document.getElementById('status-text').textContent.startsWith('Claude')`, { what: 'the status line' });
+        await page.ev(`window.__writes = 0; new MutationObserver(m => { window.__writes += m.length; }).observe(document.getElementById('status'), { childList: true, characterData: true, subtree: true })`);
+        assert.equal(await page.ev(`document.getElementById('announce').textContent.includes('Claude replied')`), false, 'opening a chat announces nothing');
+        touchSession('alpha', IDS.other, 'ANNOUNCED-REPLY-A1');
+        await page.waitFor(`document.getElementById('announce').textContent.startsWith('Claude replied')`, { what: 'the announcement' }); // the fixture's reply joins the turn before it
+        await page.ev(`window.__writes = 0`);
+        await sleep(3500); // chat polls pass
+        assert.equal(await page.ev(`window.__writes`), 0, 'the status line was left alone');
+    },
+
     'the chat card shows the branch chip with the unpushed count': async ({ page, open }) => {
         await open();
         await page.waitFor(`document.getElementById('c-branch').textContent === 'main'`, { what: 'the branch chip' });

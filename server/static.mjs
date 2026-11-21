@@ -14,6 +14,7 @@ export const STATIC = {
     '/styles.css': ['styles.css', 'text/css; charset=utf-8'],
     '/app.js': ['app.js', JS],
     '/core.js': ['core.js', JS],
+    '/canned.js': ['canned.js', JS],
     '/list.js': ['list.js', JS],
     '/chat.js': ['chat.js', JS],
     '/milestone.js': ['milestone.js', JS],

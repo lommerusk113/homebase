@@ -1,6 +1,7 @@
 // Work-item rules (pure): one item per MR or loose agent, its column, lifecycle stage, next step, row action, gate badge and milestone.
 import { PR_URL, USAGE_KEYS, formatDuration, formatTokens } from './transcripts.mjs';
 import { mentionsMr, mrRef } from './forge.mjs';
+import { canned } from '../public/canned.js';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
@@ -151,7 +152,7 @@ export function nextStep(prState, agent) {
     return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
 }
 
-// The one-click command for a work item's row, as { label, message } typed into its session, or null when nothing is on you.
+// The one-click command for a work item's row, as { label, message } typed into its session (the texts: public/canned.js), or null when nothing is on you.
 export function rowAction(pr, prState, agent, title) {
 
     // same order as nextStep: a merged/closed MR, then a running or stopped agent, then what the MR asks for
@@ -159,7 +160,7 @@ export function rowAction(pr, prState, agent, title) {
         return null;
     }
     if (agent?.status === 'stopped') {
-        return { label: 'Continue', message: `The subagent '${title}' stopped — check why and continue it.` };
+        return canned('continue', title);
     }
     if (!pr || prState?.state !== 'open') {
         return null;
@@ -167,13 +168,13 @@ export function rowAction(pr, prState, agent, title) {
 
     const ref = `${mrRef(pr)} (${pr})`;
     if (prState.changes) {
-        return { label: 'Fix & reply', message: `Address the review comments on ${ref}, push, and reply in each thread.` };
+        return canned('fix', ref);
     }
     if (prState.ci === 'failing') {
-        return { label: 'Fix pipeline', message: `The pipeline on ${ref} is failing — find out why and fix it.` };
+        return canned('pipeline', ref);
     }
     if (prState.blocked === 'conflict' || prState.blocked === 'rebase') {
-        return { label: 'Rebase', message: `Rebase ${ref} onto its target branch, resolve any conflicts and push.` };
+        return canned('rebase', ref);
     }
     if (prState.blocked) {
         return null; // another MR or an external check, nothing to type
@@ -185,13 +186,13 @@ export function rowAction(pr, prState, agent, title) {
         return null;
     }
     if (prState.draft) {
-        return { label: 'Mark ready', message: `Run review-gate on ${ref}. If the verdict is ready, mark it ready for review. If it's fix first, show me the findings and leave it a draft.` };
+        return canned('ready', ref);
     }
     if (prState.ready) {
-        return { label: 'Merge + close issue', message: `Run review-gate on ${ref}. If the verdict is ready, merge it and close its issue. If it's fix first, show me the findings and don't merge.` };
+        return canned('merge', ref);
     }
     if (!prState.reviewers?.length && !prState.draft) {
-        return { label: 'Request review', message: `Assign a reviewer to ${ref} — suggest who.` };
+        return canned('review', ref);
     }
 
     return null;

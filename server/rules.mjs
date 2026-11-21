@@ -3,6 +3,7 @@ import { stat, readFile, writeFile, rename, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { RULES_FILE } from './tmux.mjs';
+import { canned } from '../public/canned.js';
 
 const TTL_MS = 10_000;
 const mtimes = new Map(); // path -> { at, mtime }
@@ -52,7 +53,7 @@ export async function rulesStale(startedAt, cwd, now = Date.now(), home = homedi
 }
 
 // What "Load new rules" types into the chat: re-read the global rules, plus the project's own files that changed.
-export const reloadMessage = (project = []) => `The rules changed. Re-read ${[RULES_FILE, '~/.claude/CLAUDE.md', ...project].join(' and ').replace(/ and (?=.* and )/g, ', ')} now and follow them from here on (they override your earlier instructions where they differ).`;
+export const reloadMessage = (project = []) => canned('rules', [RULES_FILE, '~/.claude/CLAUDE.md', ...project].join(' and ').replace(/ and (?=.* and )/g, ', ')).message;
 
 // Which rules a chat has been told about (loaded or dismissed) is a fact about the chat, so it lives here (rules-seen.json: id -> newest mtime), not in each browser.
 const SEEN_DIR = () => process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase');

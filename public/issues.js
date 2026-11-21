@@ -2,6 +2,7 @@
 // Read-only towards GitLab; "Send to chat" only types into the bound chat session. Draws from milestone.js's /api/milestones data.
 import { $, el, link, ago, prChip, tooltip, waButton, store, hooks, firstName, visibleSessions } from './core.js';
 import { ciPill, startingIssues } from './list.js';
+import { canned, cannedLabel } from './canned.js';
 import { chatSession, sendText } from './chat.js';
 
 const STATES = { doing: 'in progress', closable: 'can be closed', todo: 'not started', free: 'unassigned' };
@@ -71,9 +72,9 @@ export function chatMessage(card) {
     const mr = card.mrs.find(m => m.state === 'open') ?? card.mrs[0];
     if (card.st === 'closable' && mr) {
         const m = card.mrs.find(x => x.state === 'merged') ?? mr;
-        return `Close #${card.iid}, its MR !${m.iid} is merged`;
+        return canned('close', card.iid, m.iid).message;
     }
-    return mr ? `Check on #${card.iid} and !${mr.iid}` : `Implement #${card.iid}`;
+    return (mr ? canned('check', card.iid, mr.iid) : canned('start', card.iid)).message;
 }
 
 // "Supplier automation: undo in the grid" -> "undo in the grid" when the prefix is the milestone's name.
@@ -263,7 +264,7 @@ function card(c, ms) {
     a.dataset.key = `issue:${c.iid}`;
     a.dataset.url = c.url;
     a.dataset.msg = chatMessage(c); // what the a key confirms and sends, through the card's .act-btn
-    a.dataset.label = `${c.mrs.length ? (c.st === 'closable' ? 'Close' : 'Check on') : 'Start'} #${c.iid}`;
+    a.dataset.label = cannedLabel(a.dataset.msg);
     a.setAttribute('aria-expanded', open);
     const top = el('div', 'top');
     top.append(el('span', 'mono', `#${c.iid}`), el('span', 'st', startingNow(c) ? 'starting…' : STATES[c.st]), el('span', 'age', c.updated ? ago(Date.parse(c.updated)) : ''));

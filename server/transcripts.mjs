@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { OUR_TMUX, tmux, tmuxFor, aliases } from './tmux.mjs';
 import { capture, promptBack } from './startup.mjs';
+import { cannedLabel } from '../public/canned.js';
 
 export const ROOT = join(homedir(), '.claude', 'projects');
 // ponytail: only the tail is parsed (transcripts reach 70+ MB); subagent token totals use the offset reader below
@@ -609,7 +610,7 @@ function rawItems(entries) {
                 } else if (RISKY.test(cmd)) {
                     // a push, merge or force on its own visible line, never folded into the hidden "Ran N commands"
                     flush();
-                    items.push({ role: 'tools', text: `Ran: ${cmd.length > 160 ? `${cmd.slice(0, 159)}…` : cmd}`, risky: true, at: e.timestamp });
+                    items.push({ role: 'tools', text: `Ran: ${clip(cmd)}`, risky: true, at: e.timestamp });
                     lines.set(u.id, items.at(-1));
                 } else {
                     uses.push(u);
@@ -688,7 +689,11 @@ function dedupePrompts(items) {
         seen.push({ norm, t, srcs: new Set([i.src]) });
 
         return true;
-    }).map(({ src, ...i }) => i);
+    }).map(({ src, ...i }) => {
+        const label = i.role === 'user' && cannedLabel(i.text); // a button's message: the feed shows this line, the text behind it
+
+        return label ? { ...i, label } : i;
+    });
 }
 
 function topicAndTldr(i) {

@@ -5,7 +5,7 @@ Each Claude runs in its own tmux session on your Mac; Homebase reads their trans
 You answer questions with a click, send messages from the page, and look at diffs without opening an editor.
 It is one Node process with no npm dependencies and no build step; the few browser libraries it uses are checked in under `public/vendor`.
 
-![The work page of a project on the left, the chat with its Claude on the right](docs/img/board.png)
+![The work page of a project on the left, the chat with its Claude on the right](docs/screenshots/board.png)
 
 All screenshots show invented fixture data; `node scripts/screenshots.mjs` retakes them.
 
@@ -28,21 +28,21 @@ Ctrl+C stops it and removes the temp folder.
 * **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested", "Doing" and "In review", and the Issues tab shows the milestone's issues. Merge requests and pull requests come from `glab` and `gh`.
 * **A chat view.** The transcript of one session, with each reply collapsed to its `TLDR:` line; "Show more" opens the full reply.
 
-  ![A chat with one reply opened and one collapsed](docs/img/chat.png)
+  ![A chat with one reply opened and one collapsed](docs/screenshots/chat.png)
 * **Questions as buttons.** When Claude asks (AskUserQuestion) or waits on a permission prompt, the options show as buttons and the chat is listed under "Needs you". A short question at the end of a reply gets reply buttons too. A reply that says "needs you" when nothing does can be marked as handled with the ✓ beside its pill or on its "Needs you" row.
 
-  ![A question from Claude with one button per option](docs/img/question.png)
+  ![A question from Claude with one button per option](docs/screenshots/question.png)
 * **Subagent rows.** Each subagent a chat starts is a row on the Work tab with what it is doing now, the MR it belongs to and that MR's pipeline.
 * **A diff viewer.** "Changes" lists the uncommitted and committed files of a chat's folder, or of a subagent's worktree, and shows each file's diff. It is read-only.
 
-  ![The Changes view: file list on the left, one file's diff on the right](docs/img/diff.png)
+  ![The Changes view: file list on the left, one file's diff on the right](docs/screenshots/diff.png)
 * **A composer with a menu.** Type a message, paste or drop images, or run a slash command. The + menu adds files, hides earlier messages, starts a fresh conversation, compacts, restarts the chat and switches notifications on.
 
-  ![The + menu above the message box](docs/img/composer.png)
+  ![The + menu above the message box](docs/screenshots/composer.png)
 * **Auto-compact.** A chat that has been idle for 2 minutes with more than 100k tokens of context, and no subagent running, gets `/compact` typed for it, at most once an hour. From 70k the chat offers "Compact?". It is on by default, the + menu switches it off, and it only happens while a Homebase page is open.
 * **Remote access.** The same page on your phone through Tailscale, with every device paired by a one-time code, and Web Push when a chat needs you. See [Security](#security) and [Use from your phone](#use-from-your-phone-tailscale).
 
-  <img src="docs/img/phone.png" width="300" alt="The chat at phone width">
+  <img src="docs/screenshots/phone.png" width="300" alt="The chat at phone width">
 
 Words used below:
 

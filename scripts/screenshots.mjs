@@ -1,4 +1,4 @@
-// Takes the README screenshots: `node scripts/screenshots.mjs [outDir]` (default docs/img). The demo's setup (demo.mjs):
+// Takes the README screenshots: `node scripts/screenshots.mjs [outDir]` (default docs/screenshots). The demo's setup (demo.mjs):
 // fixture HOME with invented transcripts, stub glab/gh, a tmux socket that never exists, plus headless Chrome that may
 // only reach localhost. It never sees your sessions or the real server.
 import { spawn } from 'node:child_process';
@@ -10,7 +10,7 @@ import { launchChrome, connect, sleep } from '../tests/browser/cdp.mjs';
 import { buildDemo, freePort, IDS } from './demo.mjs';
 
 const REPO = join(fileURLToPath(new URL('.', import.meta.url)), '..');
-const OUT = process.argv[2] ?? join(REPO, 'docs', 'img');
+const OUT = process.argv[2] ?? join(REPO, 'docs', 'screenshots');
 const CHROME = process.env.CHROME ?? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(existsSync);
 
 const tmp = mkdtempSync(join(tmpdir(), 'homebase-shots-'));

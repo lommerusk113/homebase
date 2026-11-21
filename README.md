@@ -44,11 +44,22 @@ Ctrl+C stops it and removes the temp folder.
 
   <img src="docs/img/phone.png" width="300" alt="The chat at phone width">
 
+Words used below:
+
+* **Hook**: a command Claude Code runs at fixed moments (before a tool, when a turn ends). Homebase adds five, all running `hooks/asking.mjs`.
+* **Statusline**: the command Claude Code runs to fill the line under its input box. Homebase's also saves the numbers it is given, which is where the rate limits in the page header come from.
+* **☰ dialog**: the menu behind the ☰ button in the page header: your projects, new project, open folder, pair a device.
+* **Homebase dir**: `~/.claude/homebase`, where Homebase keeps its own files.
+* **`TLDR:` line**: a one-line summary Claude puts in each reply, because the rules file asks for it.
+* **Needs you**: a chat that waits on your answer, a permission or a decision.
+* **MR, PR, pipeline, milestone, forge**: a merge request (GitLab) is a pull request (GitHub); a pipeline is its CI run; a milestone is a named set of issues; a forge is GitLab or GitHub.
+* **Subagent** (also "helper"): a second Claude that a chat starts for a part of the work. A **worktree** is the separate checkout of the repo it may work in. A **work item** is one row on the Work tab.
+
 ## How it works
 
 * One tmux session per Claude, named `cc-<id8>` (the first 8 characters of the session id). tmux keeps Claude running between messages, and `tmux attach -t cc-<id8>` reaches it from any terminal.
 * The server reads the transcripts Claude Code writes under `~/.claude/projects`. It keeps no copy of them. The page asks the server for the current state every 1.5 seconds.
-* A message you send is typed into the tmux session with `tmux send-keys` (several lines go in as one paste), then Enter. A chat with no tmux session gets one started with `claude --resume <id>`.
+* A message you send is typed into the tmux session with `tmux send-keys` (several lines go in as one paste), then Enter. A chat with no tmux session gets one started with `claude --resume <id>`. A session that is still open in a terminal outside Homebase shows on the page, but a send is refused with "Quit it there (/exit), then send again", so Homebase does not start a second Claude on it.
 * `hooks/asking.mjs` is a Claude Code hook. It writes a small marker file while a session waits on a question or a permission prompt, because Claude Code writes some questions to the transcript only once they are answered. The options are also read from the tmux pane, and a click selects one there.
 * `homebase-rules.md` is appended to the system prompt of every Claude that Homebase starts or resumes (`--append-system-prompt-file`). It tells Claude how replies, subagents and questions fit Homebase.
 
@@ -66,13 +77,13 @@ flowchart LR
 
 ## Requirements
 
-* macOS (the keychain and `/usr/bin` tools are macOS ones).
+* macOS. Linux is untested: the demo needs only Node, the keychain token for [New project](#new-project) is macOS only, and doctor prints a warning.
 * Node.js 20 or newer, `tmux`, and the `claude` CLI on the PATH of your login shell (`$SHELL -lic`).
 * Optional: `gh` and `glab`, signed in, for GitHub PRs and GitLab MRs.
 
 ## Setup
 
-1. Get the code. There is nothing to install or build.
+1. Get the code. There is nothing to install or build. If you did the demo you already have it; skip this step.
 
    ```sh
    git clone https://github.com/lommerusk113/homebase.git
@@ -84,46 +95,87 @@ flowchart LR
    npm run doctor           # the same as: node server.mjs --doctor
    ```
 
-   It checks Node, tmux, claude and the five hooks (required), and `gh` and the statusline (optional). It prints one line per check and changes nothing.
+   It checks Node, tmux, claude and the five hooks (required), and `gh`, `glab` and the statusline (optional). It prints one line per check, starting with `ok`, `missing`, `optional` or `warning`, and changes nothing. Only a `missing` line has to be fixed.
 3. Add the hooks and the statusline to Claude Code's settings.
 
    ```sh
    npm run setup            # the same as: node server.mjs --setup
    ```
 
-   It shows the entries it will add to `~/.claude/settings.json` and asks y/N before it writes. It copies the file to `settings.json.<timestamp>.bak` first. Hooks and keys you already have stay as they are. If you already have a different statusline, it asks separately before replacing it.
+   It shows the entries it will add to `~/.claude/settings.json` and asks y/N before it writes. It copies the file to `settings.json.<timestamp>.bak` first. Hooks and keys you already have stay as they are. If you already have a different statusline, it asks separately before replacing it. That file is Claude Code's user settings, so the hooks run in every Claude Code session on this Mac, not only the ones Homebase starts; see [What Homebase reads, changes and sends](#what-homebase-reads-changes-and-sends) and [Uninstall](#uninstall).
 4. Start the server and open the page.
 
    ```sh
    npm start                # the same as: node server.mjs; http://localhost:4321 (set PORT to change)
    ```
-5. Pick your projects in the ☰ dialog ("Projects on your board"). Homebase lists sessions whose transcript was written in the last 3 days.
-6. Optional: phone access, see [Use from your phone](#use-from-your-phone-tailscale).
+5. Pick your projects in the ☰ dialog ("Projects on your board"). Homebase lists sessions whose transcript was written in the last 3 days, so the page is empty if you have not used Claude Code in that time.
+6. Start your first chat: ☰ → "Open existing folder…", pick a repo, and type a message in the box at the bottom. The list holds the git repos directly under `~/Projects`; if your code is somewhere else, set `baseDir` (see [New project](#new-project)).
+7. Optional: phone access, see [Use from your phone](#use-from-your-phone-tailscale).
 
 What setup adds, with `<homebase-dir>` as the absolute path of this checkout:
 
 ```json
 {
   "hooks": {
-    "PreToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs" }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs", "async": true }] }],
-    "Notification": [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs" }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs" }] }],
-    "Stop": [{ "hooks": [{ "type": "command", "command": "node <homebase-dir>/hooks/asking.mjs" }] }]
+    "PreToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "node '<homebase-dir>/hooks/asking.mjs'" }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node '<homebase-dir>/hooks/asking.mjs'", "async": true }] }],
+    "Notification": [{ "matcher": "permission_prompt", "hooks": [{ "type": "command", "command": "node '<homebase-dir>/hooks/asking.mjs'" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node '<homebase-dir>/hooks/asking.mjs'" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node '<homebase-dir>/hooks/asking.mjs'" }] }]
   },
-  "statusLine": { "type": "command", "command": "<homebase-dir>/scripts/statusline.sh" }
+  "statusLine": { "type": "command", "command": "'<homebase-dir>/scripts/statusline.sh'" }
 }
 ```
 
 The hook never blocks or changes anything in Claude Code and prints nothing. Without it, only questions already in the transcript show.
 The statusline script saves Claude Code's status JSON, which is where the rate limits in the header come from.
+The path is in quotes so a checkout under a folder with a space works; entries an earlier setup wrote without quotes still count.
+The entries hold the absolute path of the checkout. To move it, run `npm run unsetup` before the move and `npm run setup` after it; doctor warns about entries that point at another checkout.
+
+## What Homebase reads, changes and sends
+
+* **Reads**: the transcripts under `~/.claude/projects` and the list of running sessions under `~/.claude/sessions`, the screen of its tmux sessions, and git state (status, diffs, branches) in the folders of the sessions it shows. It keeps no copy of the transcripts.
+* **Changes in Claude Code's settings**: setup adds the hooks and the statusline to `~/.claude/settings.json`, which applies to every Claude Code session on this Mac. The hook only writes and removes a marker file in the Homebase dir. Picking a model in a chat makes Claude Code save it as your default, so Homebase puts the `model` key in that file back to what it was.
+* **Changes in your chats**: `homebase-rules.md` is appended to the system prompt of every chat Homebase starts or resumes; it asks for a topic line, a `TLDR:` line, short replies and a certain use of subagents and questions. A chat you start yourself in a terminal gets it only once Homebase resumes it. [Auto-compact](#what-you-get) is on by default.
+* **Writes**: its own files in the Homebase dir (see [Configuration](#configuration)). "New project" creates a GitHub repo and clones it.
+* **Sends**: Homebase has no telemetry and calls no server of its own. What leaves the Mac is what Claude Code sends, what `gh` and `glab` send when Homebase asks them for your MRs, PRs, pipelines and issues, and, only after you enable notifications on a device, an encrypted Web Push through that browser's push service with the project name and up to 300 characters of the question or last reply.
+
+## Update
+
+```sh
+git pull
+npm run doctor
+```
+
+A running server notices the new code: the page header offers "Reload server". Otherwise restart `npm start`.
+Run `npm run setup` again when doctor reports something missing. Your own `homebase-rules.local.md` and the Homebase dir are not touched by a pull.
+
+## Uninstall
+
+```sh
+npm run unsetup          # the same as: node server.mjs --unsetup
+```
+
+It removes the hook entries and the statusline that point at this checkout from `~/.claude/settings.json`, and nothing else: your own hooks, a statusline of your own and entries of another checkout stay. Like setup it shows what it will remove, asks y/N and saves a `.bak` copy first.
+Then stop the server, end the chats you no longer want (`tmux ls` lists them as `cc-…`, `tmux kill-session -t <name>` ends one), and delete the checkout and `~/.claude/homebase`. If you use phone access, also stop `tailscale serve`.
+
+## Troubleshooting
+
+* **Doctor says `missing`**: each line ends with what to run. `tmux`: `brew install tmux`. `claude`: it must be found by your login shell (`$SHELL -lic 'command -v claude'`). A hook: `npm run setup`.
+* **Doctor warns about another checkout**: the settings hold Homebase entries with a different path, from a checkout you moved, deleted or have twice. Run `npm run unsetup` in that checkout if it still exists, else delete those entries from `~/.claude/settings.json` by hand.
+* **"Port 4321 is already in use"**: another Homebase or another program has the port. Stop it, or start with `PORT=4400 npm start`.
+* **The page is empty**: no session was written in the last 3 days, or no project is picked. Do steps 5 and 6 of [Setup](#setup), or raise `MAX_AGE_DAYS`.
+* **"Open existing folder…" lists nothing**: it only looks directly under `~/Projects`; set `baseDir` (see [New project](#new-project)).
+* **A question shows without buttons, or a chat never shows under "Needs you"**: the hooks are not firing. Run `npm run doctor`. A session that was already running when you ran setup may need a restart ("Restart chat" in the + menu). The hook command is plain `node`, so `node` must be on the PATH Claude Code runs hooks with; a version manager that only sets it in an interactive shell may leave it out. A failing hook shows nothing in Homebase.
+* **No rate limits in the header**: the statusline is optional and not set, or you kept your own; `npm run setup` offers Homebase's.
+* **"Claude for this chat is running in a terminal outside Homebase"**: quit it there with `/exit`, then send again.
 
 ## Configuration
 
 Environment variables of the server:
 
 * `PORT`: the local port (default 4321).
-* `HOMEBASE_DIR`: where Homebase keeps its own files (default `~/.claude/homebase`).
+* `HOMEBASE_DIR`: where Homebase keeps its own files (default `~/.claude/homebase`). The hook and the statusline script are run by Claude Code, not by the server, so they follow it only if the variable is also set where Claude runs (for example in your shell profile).
 * `MAX_AGE_DAYS`: how old a transcript may be and still be listed (default 3).
 * `HOMEBASE_CLAUDE_SETTINGS`: the settings file that doctor and setup read and write (default `~/.claude/settings.json`).
 
@@ -151,8 +203,7 @@ The ☰ dialog's "New project…" button asks for a name, creates a GitHub repo 
 It runs `gh` as you are signed in (`gh auth login`); to use a separate token instead, put it in the macOS keychain (`security add-generic-password -s <service> -a "$USER" -w`, a fine-grained token that may create repositories) and name the item as `keychainService` below.
 A keychain token is read when you press Create, kept in memory, handed only to `gh` as `GH_TOKEN` (with `GITHUB_TOKEN` removed), and scrubbed from any error shown.
 Claude Code's workspace trust dialog for the new folder is answered "Yes" for you, but only when the dialog names exactly the folder Homebase just cloned; nothing else is ever auto-answered.
-Any other blocking startup dialog in a `cc-*` tmux session shows in the chat with its options as buttons (and the `tmux attach` hint); clicking one selects it in the terminal, and the message box refuses to send while it is up.
-A slash command typed in the chat that opens a Claude Code panel (`/usage`, `/status`, `/config`, `/help`, `/model` with no argument…) has its panel read and closed with Esc, and the panel's text shows under the command; a picker's choice is made in the terminal or by typing the command with its argument. What a command prints (`/context`, `/model opus`) shows the same way. `/exit`, `/quit`, `/login` and `/logout` are refused, and a panel Esc won't close refuses sends until you close it (Stop, or the terminal).
+How other startup dialogs and slash-command panels are handled is in [`docs/internals.md`](docs/internals.md).
 If creating the repo fails nothing else happens; if cloning or starting the chat fails, the error says what already exists.
 
 To chat in a project that is already on disk, use "Open existing folder…" in the ☰ dialog (or "Open" on an already cloned repo under "From my GitHub").
@@ -191,6 +242,8 @@ node test.mjs                  # unit tests (also: npm test)
 node tests/browser/run.mjs     # headless browser tests (about 30 s)
 ./check-types.sh               # type-checks public/*.js, no build
 ```
+
+Running Homebase downloads nothing, but two of these checks need more: `./check-types.sh` fetches TypeScript with `npx` (network on first use), and the browser tests need a local Chrome.
 
 The browser tests need only Node and a local Chrome (set `CHROME=/path/to/chrome` if it isn't in the usual place).
 They start their own server on a free port over a throwaway HOME with fixture transcripts, and put stub `glab`/`gh` executables first on PATH, so they never touch your sessions, tmux, GitLab, GitHub or a running Homebase.

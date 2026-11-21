@@ -18,6 +18,7 @@ export default {
         assert.equal(await page.ev(`${nudge}.textContent`), 'Compact?');
         await page.click('#compact-nudge');
         await page.waitFor(`document.getElementById('compact-dlg').open`, { what: 'the confirm' });
+        await page.waitFor(`document.activeElement?.id === 'compact-go'`, { what: 'focus on Compact, so Enter confirms', timeout: 3000 });
         await page.ev(`document.getElementById('compact-dlg').open = false`);
         await sleep(300);
         assert.deepEqual(compactPosts(page), [], 'cancelling sends nothing');

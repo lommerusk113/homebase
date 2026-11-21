@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { transcript } from './server/transcripts.mjs';
-import { sessions, startingChats } from './server/sessions.mjs';
+import { polledSessions, startingChats } from './server/sessions.mjs';
 import { refreshAll, refreshInfo } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
 import { reviewRequests } from './server/reviews.mjs';
@@ -206,7 +206,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 if (url.searchParams.has('focused')) {
                     pageFocused();
                 }
-                const list = await sessions();
+                const list = await polledSessions();
                 watchSessions(DATA_DIR, list).catch(e => console.error(`push: ${e.message}`));
                 return json(list);
             }
@@ -416,7 +416,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             return;
         }
         try {
-            await watchSessions(DATA_DIR, await sessions());
+            await watchSessions(DATA_DIR, await polledSessions());
         } catch (e) {
             console.error(`push: ${e.message}`);
         }

@@ -3810,6 +3810,40 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.ok(!doctor('/opt/hb', file, VERIFIED_CLAUDE).lines.some(l => l.startsWith('warning ')));
     console.log('ok claude version');
 }
+{
+    // polls share one in-flight build and reuse a result younger than the ttl
+    const { shared } = await import('./server/sessions.mjs');
+    let builds = 0, clock = 0, release, fail = false;
+    const build = () => new Promise((resolve, reject) => {
+        const n = ++builds;
+        release = () => (fail ? reject(new Error('boom')) : resolve(n));
+    });
+    const get = shared(build, 1000, () => clock);
+    const [a, b] = [get(), get()];
+    release();
+    assert.deepEqual(await Promise.all([a, b]), [1, 1], 'concurrent callers share one build');
+    clock = 999;
+    assert.equal(await get(), 1, 'a fresh result is reused');
+    assert.equal(builds, 1);
+    clock = 1000;
+    const c = get();
+    clock = 5000; // a slow build: its age counts from when it finished
+    release();
+    assert.equal(await c, 2);
+    clock = 5999;
+    assert.equal(await get(), 2);
+    clock = 6000;
+    fail = true;
+    const [d, e] = [get(), get()];
+    release();
+    await assert.rejects(d, /boom/);
+    await assert.rejects(e, /boom/);
+    fail = false;
+    const f = get();
+    release();
+    assert.equal(await f, 4, 'a failed build is not kept');
+    console.log('ok shared sessions build');
+}
 
 // The quoted path, the older unquoted form, and --unsetup
 {

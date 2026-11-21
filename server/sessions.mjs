@@ -653,3 +653,29 @@ export async function sessions() {
 
     return out.sort(byActivity);
 }
+
+// One build shared by the callers that arrive while it runs, its result reused for ttlMs: a failed build is not kept.
+export function shared(build, ttlMs = 1000, now = Date.now) {
+
+    let flight = null, at = -Infinity, last;
+
+    return () => {
+        if (now() - at < ttlMs) {
+            return Promise.resolve(last);
+        }
+        flight ??= build().then(value => {
+            last = value;
+            at = now();
+
+            return value;
+        }).finally(() => {
+            flight = null;
+        });
+
+        return flight;
+    };
+}
+
+// sessions() for the polls (every open page asks every 1.5s, the push watcher every 5s): at most one build at a time, about one a second.
+// ponytail: the actions (send, new project) still build their own fresh list
+export const polledSessions = shared(sessions);

@@ -5,7 +5,7 @@
 | Module | What lives there |
 |---|---|
 | `transcripts.mjs` | Tail reading and its mtime cache, chat bubbles, TLDR/topic, turn state (with the `hooks/asking.mjs` marker), review-gate runs, token usage, `transcript()` for `/api/transcript` |
-| `sessions.mjs` | Repo names, subagent summaries and status, session summaries, `sessions()` for `/api/sessions` |
+| `sessions.mjs` | Repo names, subagent summaries and status, session summaries, `sessions()`, and `polledSessions()` (one shared build, reused for a second) for `/api/sessions` |
 | `items.mjs` | Work-item rules (pure): columns, lifecycle, next step, row action, gate badge, milestone of an MR |
 | `forge.mjs` | glab/gh calls: PR/MR state, comments and threads, limiter, dedupe, the `prs` and `swr` caches, refresh button |
 | `reviews.mjs` | MRs by others that ask me for a review (`/api/reviews`), read-only, cached |

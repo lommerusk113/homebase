@@ -4340,3 +4340,39 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.deepEqual([all.items[0].text, all.more, !!all.capped], ['ask 0', false, false], 'a chat read to its start is not capped');
     console.log('ok show earlier at the read limit');
 }
+
+// Broken data files: a truncated handled.json or tracked.json is set aside with a log line (not silently reset), and
+// an items.json with odd entries loads without them instead of leaving data that fails every later poll.
+{
+    const { loadStore, record, seeds } = await import('./server/store.mjs');
+    const { loadHandled } = await import('./server/handled.mjs');
+    const { readTracked } = await import('./server/tracked.mjs');
+    const { handled } = await import('./server/transcripts.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'hb-broken-'));
+    const logged = [], error = console.error;
+    console.error = m => logged.push(m);
+    try {
+        const url = 'https://gitlab.com/x/beta/-/merge_requests/1';
+        writeFileSync(join(dir, 'items.json'), JSON.stringify({ alpha: null, gamma: 7, beta: { [url]: { state: 'open', lastSeen: Date.now(), sessionId: 's' }, 'https://gitlab.com/x/beta/-/merge_requests/2': null } }));
+        const st = loadStore(join(dir, 'items.json'));
+        assert.deepEqual(seeds(st, Date.now(), 864e5).map(s => s.url), [url], 'the good entry survives');
+        record(st, []);
+        assert.deepEqual(Object.keys(st.data), ['beta']);
+
+        writeFileSync(join(dir, 'handled.json'), '["aaaaaaaa-0000-4000-8000-000000000001/aaaaaaaa-0000-4000-8000-0000000');
+        loadHandled(dir);
+        assert.equal(handled.size, 0);
+        assert.ok(readFileSync(join(dir, 'handled.json.bak'), 'utf8').startsWith('["aaaa'), 'the broken file is kept aside');
+        writeFileSync(join(dir, 'tracked.json'), '["alpha", "be');
+        assert.equal(await readTracked(dir), null);
+        assert.ok(readFileSync(join(dir, 'tracked.json.bak'), 'utf8').startsWith('["alpha'));
+        assert.deepEqual(['handled.json', 'tracked.json'].map(f => logged.filter(l => l.includes(f)).length), [1, 1], 'one log line each');
+        loadHandled(dir);
+        assert.equal(await readTracked(dir), null);
+        assert.equal(logged.filter(l => /handled|tracked/.test(l)).length, 2, 'a missing file is not an error');
+    } finally {
+        console.error = error;
+    }
+    rmSync(dir, { recursive: true, force: true });
+    console.log('ok broken data files');
+}

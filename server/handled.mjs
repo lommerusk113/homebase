@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { writeFile, rename, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { SESSION_ID, handled } from './transcripts.mjs';
+import { keepAside } from './account.mjs';
 
 const MAX = 500;
 let list = []; // "sessionId/replyId", oldest first
@@ -17,13 +18,17 @@ function keep(next) {
     }
 }
 
-// At server start: what was saved, or nothing when the file is missing or broken.
+// At server start: what was saved, or nothing when the file is missing or broken (a broken one is logged and set aside).
 export function loadHandled(dir) {
 
     let saved;
     try {
         saved = JSON.parse(readFileSync(join(dir, 'handled.json'), 'utf8'));
-    } catch {}
+    } catch (e) {
+        if (e.code !== 'ENOENT') {
+            keepAside(join(dir, 'handled.json'), e.message, 'replies marked as handled may show as needing you again');
+        }
+    }
     const ok = key => typeof key === 'string' && key.split('/').length === 2 && key.split('/').every(id => SESSION_ID.test(id));
     keep(Array.isArray(saved) ? saved.filter(ok).slice(-MAX) : []);
 }

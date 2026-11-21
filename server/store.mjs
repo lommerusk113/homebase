@@ -25,16 +25,22 @@ export function loadStore(file = STORE_FILE) {
         if (!data || typeof data !== 'object' || Array.isArray(data)) {
             throw new Error('not an object');
         }
-        store.data = data;
-        // entries filed under another repo's project (an MR a session only quoted) don't belong
+        // entries filed under another repo's project (an MR a session only quoted) don't belong; nor does anything that is no object
+        const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
         for (const [project, urls] of Object.entries(data)) {
-            for (const url of Object.keys(urls ?? {})) {
-                if (!sameRepo(url, project)) {
+            if (!isObj(urls)) {
+                delete data[project];
+                store.dirty = true;
+                continue;
+            }
+            for (const url of Object.keys(urls)) {
+                if (!isObj(urls[url]) || !sameRepo(url, project)) {
                     delete urls[url];
                     store.dirty = true;
                 }
             }
         }
+        store.data = data; // only once it is known good: a half-checked file must not stay in memory
     } catch (e) {
         keepAside(file, e.message, 'starting empty');
     }

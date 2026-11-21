@@ -2,6 +2,7 @@
 // each browser's localStorage, so a paired phone (another origin, so other storage) shows the same projects as the Mac.
 import { readFile, writeFile, rename, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { keepAside } from './account.mjs';
 
 const MAX = 500;
 
@@ -11,7 +12,10 @@ export async function readTracked(dir) {
     try {
         const list = JSON.parse(await readFile(join(dir, 'tracked.json'), 'utf8'));
         return validTracked(list) ? list : null;
-    } catch {
+    } catch (e) {
+        if (e.code !== 'ENOENT') { // broken: set aside, so the next browser's list is not taken silently
+            keepAside(join(dir, 'tracked.json'), e.message, 'the board takes the next browser\'s project list');
+        }
         return null;
     }
 }

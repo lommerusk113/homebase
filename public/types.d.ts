@@ -212,7 +212,7 @@ interface OutboxItem extends ChatItem {
 
 interface Transcript {
     items: ChatItem[];
-    earlier?: number; // older items the `max` cut left out
+    more?: boolean; // older messages exist that are not in items
     asking: string | null;
     questions: { question: string; options: string[]; descriptions?: string[] }[] | null;
     working: boolean;

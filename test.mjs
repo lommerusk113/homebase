@@ -2040,6 +2040,32 @@ import { readTail } from './server.mjs';
     assert.deepEqual(turnState(await readTail(g, statSync(g).size), 60_000), { state: 'working', since: Date.parse(t('01:00')) });
     console.log('ok long turn tail');
 }
+{
+    // a transcript longer than the parsed tail: the feed says there is more, and a larger `max` ("Show earlier") reads further back
+    const { feedTail } = await import('./server/transcripts.mjs');
+    const f = join(mkdtempSync(join(tmpdir(), 'hb-')), 'long.jsonl');
+    const pad = 'x'.repeat(4000);
+    const rows = Array.from({ length: 400 }, (_, n) => [
+        { type: 'user', timestamp: new Date(1e12 + n * 120_000).toISOString(), message: { content: `ask ${n}` } },
+        { type: 'assistant', timestamp: new Date(1e12 + n * 120_000 + 1000).toISOString(), pad, message: { content: [{ type: 'text', text: `reply ${n}` }] } },
+        { type: 'system', subtype: 'turn_duration', turnPosition: { n } }
+    ]).flat();
+    writeFileSync(f, rows.map(l => JSON.stringify(l)).join('\n') + '\n');
+    const st = statSync(f);
+    const short = await feedTail(f, st, 60);
+    assert.equal(short.items.length, 60);
+    assert.equal(short.more, true);
+    assert.ok(short.entries.length < rows.length, 'the default poll parses only the tail');
+    const deep = await feedTail(f, st, 600);
+    assert.deepEqual([deep.items.length, deep.items[0].text, deep.more], [600, 'ask 100', true]);
+    const all = await feedTail(f, st, 10_000);
+    assert.deepEqual([all.items.length, all.items[0].text, all.more], [800, 'ask 0', false]);
+    // a short transcript has nothing earlier
+    const g = join(mkdtempSync(join(tmpdir(), 'hb-')), 'short.jsonl');
+    writeFileSync(g, rows.slice(0, 9).map(l => JSON.stringify(l)).join('\n') + '\n');
+    assert.equal((await feedTail(g, statSync(g), 60)).more, false);
+    console.log('ok show earlier past the tail');
+}
 
 // A half-written agent .meta.json or a transcript deleted mid-poll skips that one entry, not the whole /api/sessions
 import { fetchComments } from './server.mjs';

@@ -1037,7 +1037,7 @@ export async function refreshChat() {
     showFocus(s, items);
     const fresh = cut.fresh || !!s.clearedFrom; // a New conversation, before or after the successor is bound
     const lastSeen = Number(store.get(`last-seen:${s.id}`)) || Infinity;
-    const key = s.id + JSON.stringify([items, data.asking, data.working, hidden, data.earlier, lastSeen]);
+    const key = s.id + JSON.stringify([items, data.asking, data.working, hidden, data.more, lastSeen]);
     if (key === chatKey) {
         return;
     }
@@ -1083,8 +1083,8 @@ export async function refreshChat() {
         };
         line.append(btn);
         feed.prepend(line);
-    } else if (data.earlier && !hidden) {
-        const line = el('div', 'c-hidden c-earlier'), btn = el('button', 'show', 'Show earlier');
+    } else if (data.more && !hidden) {
+        const line = el('div', 'c-hidden c-earlier', 'Earlier messages not shown · '), btn = el('button', 'show', 'Show earlier');
         btn.onclick = () => {
             feedMax.max += FEED_STEP;
             keepFromBottom = feed.scrollHeight - feed.scrollTop;

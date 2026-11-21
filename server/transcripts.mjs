@@ -9,6 +9,7 @@ export const ROOT = join(homedir(), '.claude', 'projects');
 const TAIL_BYTES = 512 * 1024;
 const TAIL_MIN_LINES = 200;
 const TAIL_MAX_BYTES = 16 * 1024 * 1024;
+const FEED_ITEMS = 60; // chat items per load; the page's "Show earlier" asks for more
 export const WORKING_MS = 10_000;
 const TURN_STALE_MS = 30 * 60_000; // an open turn with no transcript write this long is treated as dead
 
@@ -75,7 +76,10 @@ function alive(pid) {
 // A few huge lines (tool results, api-request blobs of ~1 MB) can fill the byte tail on their own, and one long turn
 // can outrun it, so it grows until it holds TAIL_MIN_LINES lines and a turn start, the whole file or `cap` bytes.
 // ponytail: a transcript with no turn markers (older Claude Code) is read up to `cap` on every change
-export async function readTail(path, size, max = TAIL_BYTES, cap = TAIL_MAX_BYTES) {
+export const readTail = async (path, size, max, cap) => (await readTailInfo(path, size, max, cap)).entries;
+
+// readTail plus bytes (how far back it read) and cut (the file starts before that).
+async function readTailInfo(path, size, max = TAIL_BYTES, cap = TAIL_MAX_BYTES) {
 
     const fh = await open(path, 'r');
     try {
@@ -94,13 +98,15 @@ export async function readTail(path, size, max = TAIL_BYTES, cap = TAIL_MAX_BYTE
             len = Math.min(size, len * 2);
         }
 
-        return lines.flatMap(l => {
+        const entries = lines.flatMap(l => {
             try {
                 return l ? [JSON.parse(l)] : [];
             } catch {
                 return [];
             }
         });
+
+        return { entries, bytes: len, cut: len < size };
     } finally {
         await fh.close();
     }
@@ -110,11 +116,37 @@ export async function tailOf(path, st) {
 
     let hit = cache.get(path);
     if (!hit || hit.mtimeMs !== st.mtimeMs) {
-        hit = { mtimeMs: st.mtimeMs, entries: await readTail(path, st.size) };
+        hit = { mtimeMs: st.mtimeMs, ...await readTailInfo(path, st.size) };
         cache.set(path, hit);
     }
 
     return hit.entries;
+}
+
+// The chat feed of a transcript: the cached tail's, or, when "Show earlier" asks for more items (max) than that tail
+// holds, a tail read further back. more: older messages exist that are not in items.
+// ponytail: one deeper tail is kept (the chat being scrolled back), re-read at its size on each transcript write and
+// never past TAIL_MAX_BYTES; page by byte offset if scrolling far back in a 20+ MB transcript gets slow
+let deep = null; // { path, mtimeMs, entries, bytes, cut }
+export async function feedTail(path, st, max = FEED_ITEMS) {
+
+    const entries = await tailOf(path, st);
+    let tail = cache.get(path), feed = chatFeed(entries, max);
+    const short = () => max > FEED_ITEMS && !feed.earlier && tail.cut && tail.bytes < TAIL_MAX_BYTES;
+    if (short()) {
+        const kept = deep?.path === path ? deep : null;
+        tail = kept?.mtimeMs === st.mtimeMs ? kept : await readTailInfo(path, st.size, kept?.bytes ?? tail.bytes * 2);
+        for (;;) {
+            feed = chatFeed(tail.entries, max);
+            if (!short()) {
+                break;
+            }
+            tail = await readTailInfo(path, st.size, Math.min(tail.bytes * 2, TAIL_MAX_BYTES));
+        }
+        deep = { path, mtimeMs: st.mtimeMs, entries: tail.entries, bytes: tail.bytes, cut: tail.cut };
+    }
+
+    return { ...feed, entries, more: feed.earlier > 0 || (tail.cut && tail.bytes < TAIL_MAX_BYTES) };
 }
 
 export function textOf(entry) {
@@ -1119,12 +1151,10 @@ export async function transcript(dir, id, max) {
     }
 
     const st = await stat(path);
-    const entries = await tailOf(path, st);
+    const { items, more, entries } = await feedTail(path, st, Math.min(Math.max(Math.trunc(Number(max)) || FEED_ITEMS, 1), 10_000));
 
     const marker = await askMarker(id);
     const turn = turnState(entries, Date.now() - st.mtimeMs, marker, await liveSessions());
 
-    const { items, earlier } = chatFeed(entries, Math.min(Math.max(Math.trunc(Number(max)) || 60, 1), 10_000));
-
-    return { items, earlier, asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', stuck: turn.state === 'stuck', since: turn.since };
+    return { items, more, asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', stuck: turn.state === 'stuck', since: turn.since };
 }

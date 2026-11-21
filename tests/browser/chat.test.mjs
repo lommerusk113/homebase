@@ -222,7 +222,7 @@ export default {
             const max = Number(new URL(q.url).searchParams.get('max'));
             asked.push(max);
             const { items, earlier } = chatFeed(entries, max);
-            return { status: 200, body: JSON.stringify({ items, earlier, working: false, asking: null }), headers: { 'content-type': 'application/json' } };
+            return { status: 200, body: JSON.stringify({ items, more: earlier > 0, working: false, asking: null }), headers: { 'content-type': 'application/json' } };
         };
         await page.waitFor(`${bubble('message 69')} && document.querySelector('#feed').firstElementChild.matches('.c-earlier')`, { what: 'the newest 60 under a Show earlier line' });
         assert.equal(await page.ev(`!!${bubble('message 9')}`), false, 'the 61st newest is not loaded');

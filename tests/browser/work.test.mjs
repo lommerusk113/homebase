@@ -135,12 +135,21 @@ export default {
         await open();
         await page.waitFor(`${row(MR(101))}?.querySelector('.cm-badge')`, { what: 'the comment badge on !101' });
         assert.equal(await page.ev(`${row(MR(101))}.querySelector('.cm-badge').textContent`), '💬 1');
-        const ci = key => page.ev(`[...${row(key)}.querySelectorAll('.ci-pill')].map(p => p.className + ' ' + p.textContent).join()`);
+        const ci = key => page.ev(`[...${row(key)}.querySelectorAll('.pr .ci-pill')].map(p => p.className + ' ' + p.textContent).join()`);
         assert.equal(await ci(MR(101)), 'ci-pill ci-failed ✗');
         assert.equal(await ci(MR(102)), 'ci-pill ci-success ✓');
         assert.equal(await ci(MR(103)), 'ci-pill ci-running ●');
         assert.equal(await page.ev(`${row(MR(102))}.querySelector('.gate-badge').className + ' ' + ${row(MR(102))}.querySelector('.gate-badge').textContent`), 'gate-badge gate-ready ✓ gate');
         assert.equal(await page.ev(`${row(MR(101))}.querySelector('.gate-badge')`), null, 'no gate where none ran');
+        // a window too narrow for the MR column keeps the pipeline mark, beside the title
+        const beside = `${row(MR(101))}.querySelector('.what .ci-pill.ci-failed').checkVisibility()`;
+        assert.equal(await page.ev(beside), false, 'not twice on a wide board');
+        await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1100, height: 900, deviceScaleFactor: 1, mobile: false });
+        try {
+            await page.waitFor(beside, { what: 'the pipeline mark beside the title', timeout: 3000 });
+        } finally {
+            await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+        }
     },
 
     'a chat only the hook marker says is asking gets a Needs you row that opens it': async ({ page, open, homebase }) => {

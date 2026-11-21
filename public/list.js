@@ -174,7 +174,9 @@ function itemRows(x) {
     if (x.firstTitle) {
         name.title = `Started as: ${x.firstTitle}`;
     }
-    what.append(name, next);
+    const ci = ciPill(x.prState?.pipeline); // shown only where the board is too narrow for the MR column (styles.css)
+    ci[0]?.classList.add('ci-narrow');
+    what.append(...ci, name, next);
     // with a milestone picked every row is in it, so the tag would only repeat the header pill
     if (x.milestone && !hooks.milestoneId()) {
         name.prepend(milestoneTag(x));

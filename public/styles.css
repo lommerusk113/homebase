@@ -549,7 +549,8 @@ ul.comments a { color:var(--fg); }
 .activity b { font-weight:500; color:var(--fg); }
 /* zero width, not display:none, so the detail row's colspan still matches the columns */
 @container (max-width: 1200px) { .rows .br { width:0; padding:0; } }
-@container (max-width: 700px) { .rows .pr { width:0; padding:0; } }
+.rows .ci-narrow { display:none; float:left; margin:0 6px 0 0; }
+@container (max-width: 700px) { .rows .pr { width:0; padding:0; } .rows .ci-narrow { display:inline-flex; } }
 @media (max-width: 900px) {
   .main { flex-direction:column; overflow:auto; }
   .left { flex:none; min-height:60vh; }

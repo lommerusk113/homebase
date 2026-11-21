@@ -499,7 +499,8 @@ assert.equal(rowAction(null, null, { status: 'running' }, 'x'), null); // doing
 assert.equal(act(open({ ready: true }), { status: 'running' }), null); // doing
 assert.equal(act(open({ reviewers: ['Ann'] }), null), null); // waiting on review
 assert.equal(act({ state: 'merged' }, null), null);
-assert.equal(act(open({ draft: true }), null), null);
+assert.equal(act(open({ draft: true }), null)?.label, 'Mark ready', 'a draft in Needs you has its button');
+assert.equal(act(open({ draft: true, ci: 'running' }), null), null);
 assert.equal(act(null, null), null); // state unknown
 
 import { gateRuns, gateFor, toGate } from './server.mjs';
@@ -659,6 +660,7 @@ assert.equal(itemColumn(open({ ready: true }), { status: 'stopped' }, true), 'ne
 assert.equal(itemColumn(null, { status: 'stopped' }, false), 'needs-you');
 assert.equal(itemColumn(null, { status: 'done' }, false), 'finished');
 assert.equal(itemColumn(open({ draft: true }), null, true), 'needs-you'); // a draft can't be reviewed: marking it ready is on you
+assert.equal(itemColumn(open({ draft: true, ci: 'running' }), null, true), 'review', 'not while its pipeline runs: nothing to do yet');
 assert.equal(withThreads({ state: 'merged' }, thr(2)).changes, undefined);
 // the comment that moves an item into needs-you notifies once
 const nc = { ...cm('a', CT(2)), column: 'needs-you' };

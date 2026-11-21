@@ -12,8 +12,9 @@ export function column(status, prState, hasPr) {
     if (prState?.state === 'merged' || prState?.state === 'closed') {
         return 'done';
     }
-    // review comments, a failing pipeline, a needed rebase or a draft (not reviewable yet) wait on you (they get a Fix/Rebase button), not on a reviewer
-    if (prState?.changes || prState?.ci === 'failing' || prState?.blocked === 'conflict' || prState?.blocked === 'rebase' || prState?.draft) {
+    // review comments, a failing pipeline, a needed rebase or a draft (not reviewable yet; once its pipeline is through) wait on
+    // you (each gets its rowAction button), not on a reviewer
+    if (prState?.changes || prState?.ci === 'failing' || prState?.blocked === 'conflict' || prState?.blocked === 'rebase' || (prState?.draft && prState.ci !== 'running')) {
         return 'needs-you';
     }
     if (prState?.ready) {
@@ -182,6 +183,9 @@ export function rowAction(pr, prState, agent, title) {
     }
     if (prState.ci === 'running') {
         return null;
+    }
+    if (prState.draft) {
+        return { label: 'Mark ready', message: `Run review-gate on ${ref}. If the verdict is ready, mark it ready for review. If it's fix first, show me the findings and leave it a draft.` };
     }
     if (prState.ready) {
         return { label: 'Merge + close issue', message: `Run review-gate on ${ref}. If the verdict is ready, merge it and close its issue. If it's fix first, show me the findings and don't merge.` };

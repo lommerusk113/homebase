@@ -89,6 +89,23 @@ What it costs: Claude Code offers no interface for this, so Homebase reads its s
 
 How that is contained: `VERIFIED_CLAUDE` in `server/setup.mjs` names the newest Claude Code the parsing was checked with (2.1.330 now). When the installed one is newer, the page header, `node server.mjs --doctor` and the server's start-up output say so. The header also warns when a transcript has no turn markers or a question is asked that the screen parser cannot read. `tests/fixtures/` holds screens captured from a real Claude Code, which the unit tests parse.
 
+## The rules file changes how Claude replies
+
+Every chat Homebase starts or resumes gets `homebase-rules.md` added to its system prompt, so Claude answers differently there than in a plain terminal chat.
+Read the file before you start: it is short.
+
+What it asks of Claude, and what the page does with it:
+
+* A first line `**▸ <Topic>**`. The page shows it as the reply's header and as what the chat is working on.
+* A last line `**TLDR:** …`. The page shows only that line until you open the reply; a reply without one is cut to its first sentence.
+* Questions asked with the AskUserQuestion tool. The page shows the options as buttons, and a click selects one in the terminal.
+
+It also holds advice on formatting, searching and images.
+A chat started in a terminal without Homebase does not get the file, and its replies still show, only without a topic and folded to their first sentence.
+
+To use your own rules, put them in `homebase-rules.local.md` next to it: that file is gitignored and replaces the tracked one (see Configuration).
+Keep the three points above if you want the header, the fold and the buttons to work.
+
 ## What Homebase writes to Claude's settings file
 
 Homebase changes `~/.claude/settings.json` in these cases only.

@@ -1,0 +1,15 @@
+{
+  "name": "homebase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A no-dependency dashboard that drives Claude Code chats through tmux",
+  "license": "MIT",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test.mjs",
+    "doctor": "node server.mjs --doctor",
+    "setup": "node server.mjs --setup"
+  }
+}

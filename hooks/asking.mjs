@@ -7,6 +7,7 @@ import { join } from 'node:path';
 
 const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+process.umask(0o077); // the markers hold question text and permission messages: owner-only, like the rest of the Homebase dir
 try {
     const h = JSON.parse(readFileSync(0, 'utf8'));
     if (SESSION_ID.test(h.session_id ?? '')) {

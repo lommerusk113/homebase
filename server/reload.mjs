@@ -43,8 +43,8 @@ const listening = port => new Promise(ok => {
 // code), listen again and keep running. Never touches any other process.
 export function replaceSelf(servers, port, logFile) {
 
-    mkdirSync(dirname(logFile), { recursive: true });
-    const out = openSync(logFile, 'a');
+    mkdirSync(dirname(logFile), { recursive: true, mode: 0o700 });
+    const out = openSync(logFile, 'a', 0o600);
     const child = spawn(process.execPath, [...process.execArgv, ...process.argv.slice(1)], { cwd: process.cwd(), env: process.env, detached: true, stdio: ['ignore', out, out] });
     child.unref();
     let failed = false;

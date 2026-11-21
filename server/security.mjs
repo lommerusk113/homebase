@@ -1,4 +1,6 @@
-// Request checks (pure): allowed Host/Origin and the API token. Pairing for remote devices is in pairing.mjs.
+// Request checks (pure): allowed Host/Origin and the API token; plus owner-only modes for the data dir. Pairing for remote devices is in pairing.mjs.
+import { chmodSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 
 // Who may talk to the server. POSTs type into sessions that run shell commands, so every request must come from our own page:
@@ -17,4 +19,30 @@ export function tokenOk(given, expected) {
     const a = Buffer.from(given), b = Buffer.from(expected);
 
     return a.length === b.length && timingSafeEqual(a, b);
+}
+
+// Called once at start: the Homebase dir, the hook's markers, the statusline dumps and server.log become owner-only.
+// New ones are created that way (hooks/asking.mjs, scripts/statusline.sh, reload.mjs); this tightens what an earlier
+// version left 0755/0644. Missing files and folders are skipped.
+export function ownerOnly(dataDir) {
+
+    const chmod = (path, mode) => {
+        try {
+            chmodSync(path, mode);
+        } catch {}
+    };
+
+    chmod(dataDir, 0o700);
+    chmod(join(dataDir, 'server.log'), 0o600);
+    for (const sub of ['asking', 'statusline']) {
+        const dir = join(dataDir, sub);
+        chmod(dir, 0o700);
+        let names = [];
+        try {
+            names = readdirSync(dir);
+        } catch {}
+        for (const n of names) {
+            chmod(join(dir, n), 0o600);
+        }
+    }
 }

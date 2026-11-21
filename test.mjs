@@ -3988,3 +3988,29 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     }
     console.log('ok demo mode');
 }
+
+// Marker, statusline and log files hold question text and status JSON: owner-only, like the rest of the Homebase dir.
+{
+    const { ownerOnly } = await import('./server/security.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'hb-modes-')), mode = p => (statSync(join(dir, p)).mode & 0o777).toString(8);
+    const env = { ...process.env, HOMEBASE_DIR: join(dir, 'new') }, id = '5010a555-e1b1-4472-afa4-c92b1b2f1882';
+    execFileSync(process.execPath, ['hooks/asking.mjs'], { input: JSON.stringify({ session_id: id, hook_event_name: 'Notification', notification_type: 'permission_prompt', message: 'm' }), env });
+    execFileSync('scripts/statusline.sh', { input: JSON.stringify({ session_id: id }), env });
+    assert.deepEqual(
+        ['new', 'new/asking', `new/asking/${id}.json`, 'new/statusline', `new/statusline/${id}.json`].map(mode),
+        ['700', '700', '600', '700', '600'], 'the hook and the statusline script create owner-only');
+
+    // what an earlier version left behind is tightened at start
+    for (const sub of ['asking', 'statusline']) {
+        mkdirSync(join(dir, 'old', sub), { recursive: true, mode: 0o755 });
+        writeFileSync(join(dir, 'old', sub, 'a.json'), '{}', { mode: 0o644 });
+    }
+    writeFileSync(join(dir, 'old', 'server.log'), '', { mode: 0o644 });
+    ownerOnly(join(dir, 'old'));
+    assert.deepEqual(
+        ['old', 'old/asking', 'old/asking/a.json', 'old/statusline', 'old/statusline/a.json', 'old/server.log'].map(mode),
+        ['700', '700', '600', '700', '600', '600']);
+    ownerOnly(join(dir, 'missing')); // first start: nothing there yet
+    rmSync(dir, { recursive: true });
+    console.log('ok file modes');
+}

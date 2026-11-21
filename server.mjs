@@ -16,7 +16,7 @@ import { MAX_SEND, withLock } from './server/tmux.mjs';
 import { createProject, cloneProject, openProject, githubProjects, localProjects, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion, confirmModelSwitch } from './server/startup.mjs';
 import { send, runningTwice, keepModelSetting, sendToNew, interrupt, clearChat, compactChat, restartChat, settleCommand } from './server/control.mjs';
-import { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
+import { localHosts, allowedHost, allowedOrigin, tokenOk, ownerOnly } from './server/security.mjs';
 import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedRequest, pair, deviceOf, cookieOf, deviceCookie, pairPage, newCode, pairedDevices, revoke } from './server/pairing.mjs';
 import { readConfigFile } from './server/account.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
@@ -106,6 +106,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     const REMOTE = remoteFrom(readConfigFile(), PORT);
     setupPairing(join(DATA_DIR, 'devices.json'), REMOTE);
+    ownerOnly(DATA_DIR);
     loadHandled(DATA_DIR);
     warmMilestones();
     const handler = async (req, res) => {

@@ -1,6 +1,7 @@
 #!/bin/sh
 # Claude Code statusLine command: saves the status JSON for Homebase (rate limits) and prints "5h 34% · 7d 12% · ctx 41%".
 # Writes ~/.claude/homebase/statusline/<session_id>.json atomically (temp file + rename); HOMEBASE_DIR moves it, as it does for the server.
+umask 077 # the status JSON is owner-only, like the rest of the Homebase dir
 dir="${HOMEBASE_DIR:-$HOME/.claude/homebase}/statusline"
 mkdir -p "$dir" || exit 0
 exec node -e '

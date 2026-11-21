@@ -3741,7 +3741,7 @@ import { parseDiff, addedRows, diffTotals } from './public/diff.js';
     console.log('ok diff');
 }
 
-import { merge, setup, settingsPath, wanted } from './server/setup.mjs';
+import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from './server/setup.mjs';
 {
     const root = '/opt/hb';
     const mine = { type: 'command', command: 'echo mine' };
@@ -3776,7 +3776,7 @@ import { merge, setup, settingsPath, wanted } from './server/setup.mjs';
         assert.equal(readFileSync(join(dir, backups[0]), 'utf8'), JSON.stringify(existing), 'backup is the old file');
         assert.match(await setup(root, file, async () => false), /Nothing to do/, 'idempotent');
         assert.match(await setup(root, file, async () => true), /Done/, 'replacing the statusline when asked');
-        assert.equal(JSON.parse(readFileSync(file, 'utf8')).statusLine.command, '/opt/hb/scripts/statusline.sh');
+        assert.equal(JSON.parse(readFileSync(file, 'utf8')).statusLine.command, wanted(root).statusLine.command);
     } finally {
         console.log = quiet;
         if (old === undefined) {
@@ -3786,6 +3786,62 @@ import { merge, setup, settingsPath, wanted } from './server/setup.mjs';
         }
     }
     console.log('ok setup merge');
+}
+
+// The quoted path, the older unquoted form, and --unsetup
+{
+    const root = '/opt/hb', spaced = '/opt/my hb';
+    const mine = { type: 'command', command: 'echo mine' };
+    const old = r => ({
+        hooks: Object.fromEntries(Object.entries(wanted(r).hooks).map(([event, e]) => [event, [{ ...e, hooks: [{ ...e.hooks[0], command: `node ${r}/hooks/asking.mjs` }] }]])),
+        statusLine: { type: 'command', command: `${r}/scripts/statusline.sh` }
+    });
+    assert.notEqual(wanted(spaced).hooks.Stop.hooks[0].command, `node ${spaced}/hooks/asking.mjs`, 'the path is quoted');
+    assert.deepEqual(merge(old(root), root).added, [], 'the unquoted form of an earlier setup counts as present');
+    assert.equal(merge(old(root), root).conflict, null);
+    assert.deepEqual(merge(merge({}, spaced).settings, spaced).added, [], 'quoted form is recognised, also with a space');
+    const fixed = merge(old(spaced), spaced);
+    assert.equal(fixed.added.length, 6, 'unquoted under a path with a space does not work, so it is replaced');
+    assert.deepEqual(fixed.settings, merge({}, spaced).settings, 'replaced, not doubled');
+    const quoteInPath = '/opt/it\'s';
+    assert.deepEqual(unmerge(merge({}, quoteInPath).settings, quoteInPath).settings, {}, 'a quote in the path round-trips');
+
+    const theirs = { model: 'opus', hooks: { Stop: [{ hooks: [mine] }], SessionStart: [{ hooks: [mine] }] } };
+    const both = merge(theirs, root).settings;
+    const un = unmerge(both, root);
+    assert.deepEqual(un.settings, theirs, 'unmerge is the reverse of merge: only its own entries go');
+    assert.equal(un.removed.length, 6);
+    assert.deepEqual(unmerge(old(root), root).settings, {}, 'the unquoted form is removed too, and empty hooks leave no key');
+    assert.deepEqual(unmerge(un.settings, root).removed, [], 'idempotent');
+    assert.deepEqual(unmerge(merge({}, '/other/hb').settings, root).removed, [], 'another checkout\'s entries stay');
+    const shared = { hooks: { Stop: [{ hooks: [mine, wanted(root).hooks.Stop.hooks[0]] }] }, statusLine: { type: 'command', command: '/my/line.sh' } };
+    assert.deepEqual(unmerge(shared, root).settings, { hooks: { Stop: [{ hooks: [mine] }] }, statusLine: shared.statusLine }, 'a shared entry keeps the other hook; a foreign statusline stays');
+    assert.deepEqual(otherRoots(merge(merge(theirs, root).settings, '/other/hb').settings, root), ['/other/hb']);
+    assert.deepEqual(otherRoots(both, root), []);
+
+    const dir = mkdtempSync(join(tmpdir(), 'unsetup-'));
+    const file = join(dir, 'settings.json');
+    const quiet = console.log;
+    console.log = () => {};
+    try {
+        const before = JSON.stringify(both);
+        writeFileSync(file, before);
+        await unsetup(root, file, async () => false);
+        assert.equal(readFileSync(file, 'utf8'), before, 'declining writes nothing');
+        await unsetup(root, file, async () => true);
+        assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), theirs);
+        const backups = readdirSync(dir).filter(f => f.endsWith('.bak'));
+        assert.equal(backups.length, 1);
+        assert.equal(readFileSync(join(dir, backups[0]), 'utf8'), before, 'backup is the old file');
+        await unsetup(root, file, async () => assert.fail('nothing to ask the second time'));
+        assert.equal(readdirSync(dir).length, 2, 'idempotent: no second write or backup');
+        await unsetup(root, join(dir, 'none.json'), async () => assert.fail('no file, nothing to ask'));
+        assert.equal(readdirSync(dir).length, 2, 'a missing file is not created');
+    } finally {
+        console.log = quiet;
+        rmSync(dir, { recursive: true, force: true });
+    }
+    console.log('ok unsetup');
 }
 
 // `node server.mjs --demo`: its own server on a free port over fixture data, refusing sends, gone with its temp dir on exit

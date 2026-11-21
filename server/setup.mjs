@@ -1,4 +1,4 @@
-// `node server.mjs --doctor` checks the install; `--setup` adds Homebase's hooks and statusline to Claude's settings file.
+// `node server.mjs --doctor` checks the install; `--setup` adds Homebase's hooks and statusline to Claude's settings file, `--unsetup` removes them.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -24,9 +24,25 @@ const onPath = cmd => runs('sh', ['-c', `command -v ${cmd}`]);
 const hasClaude = () => onPath('claude') || runs(loginShell(), ['-lic', 'command -v claude']);
 export const missingTools = () => [!onPath('tmux') && 'tmux', !hasClaude() && 'claude'].filter(Boolean);
 
+const HOOK = '/hooks/asking.mjs', LINE = '/scripts/statusline.sh';
+// Claude Code runs both commands through a shell, so the path is quoted: a checkout under "My Projects" works too
+const quote = s => `'${s.replace(/'/g, `'\\''`)}'`;
+// The checkout a command points at, or null when it is not a Homebase command. Setup wrote the path unquoted before, so both forms count.
+const rootOf = (command, prefix, tail) => {
+    const c = String(command ?? '');
+    if (!c.startsWith(prefix)) {
+        return null;
+    }
+    const m = /^'(.*)'$/s.exec(c.slice(prefix.length));
+    const path = m ? m[1].replaceAll(`'\\''`, '\'') : c.slice(prefix.length);
+    return path.endsWith(tail) ? path.slice(0, -tail.length) : null;
+};
+const hookRoot = h => rootOf(h?.command, 'node ', HOOK);
+const lineRoot = line => rootOf(line?.command, '', LINE);
+
 // The five hook entries and the statusline for this checkout (same as the README)
 export const wanted = (root = ROOT) => {
-    const hook = extra => ({ type: 'command', command: `node ${root}/hooks/asking.mjs`, ...extra });
+    const hook = extra => ({ type: 'command', command: `node ${quote(root + HOOK)}`, ...extra });
     return {
         hooks: {
             PreToolUse: { matcher: 'AskUserQuestion', hooks: [hook()] },
@@ -35,20 +51,32 @@ export const wanted = (root = ROOT) => {
             UserPromptSubmit: { hooks: [hook()] },
             Stop: { hooks: [hook()] }
         },
-        statusLine: { type: 'command', command: `${root}/scripts/statusline.sh` }
+        statusLine: { type: 'command', command: quote(root + LINE) }
     };
 };
 
 const isObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
-const hasHook = (settings, event, root) => (settings.hooks?.[event] ?? []).some(e => (e.hooks ?? []).some(h => h.command === `node ${root}/hooks/asking.mjs`));
+const hasHook = (settings, event, root, is = h => hookRoot(h) === root) => (settings.hooks?.[event] ?? []).some(e => (e.hooks ?? []).some(is));
+// Drops this checkout's hook from an event; an entry that also holds someone else's hook keeps that one
+const dropHook = (out, event, root) => {
+    out.hooks[event] = out.hooks[event]
+        .map(e => (Array.isArray(e.hooks) ? { ...e, hooks: e.hooks.filter(h => hookRoot(h) !== root) } : e))
+        .filter(e => !Array.isArray(e.hooks) || e.hooks.length);
+};
+// The older unquoted form only works while the path needs no quoting
+const SAFE = /^[\w@%+=:,./-]+$/;
 
 // Returns { settings, added: [names], conflict } without mutating the input; existing keys and hooks stay as they are
 export function merge(settings, root = ROOT) {
     const want = wanted(root);
     const out = structuredClone(settings);
     const added = [];
+    const works = (cur, wantCommand) => cur?.command === wantCommand || SAFE.test(root);
     for (const [event, entry] of Object.entries(want.hooks)) {
-        if (!hasHook(out, event, root)) {
+        if (!hasHook(out, event, root, h => hookRoot(h) === root && works(h, entry.hooks[0].command))) {
+            if (hasHook(out, event, root)) {
+                dropHook(out, event, root); // unquoted under a path with a space: replaced
+            }
             out.hooks ??= {};
             (out.hooks[event] ??= []).push(entry);
             added.push(`hook ${event}`);
@@ -56,69 +84,99 @@ export function merge(settings, root = ROOT) {
     }
     let conflict = null;
     const cur = out.statusLine;
-    if (!cur) {
+    if (!cur || (lineRoot(cur) === root && !works(cur, want.statusLine.command))) {
         out.statusLine = want.statusLine;
         added.push('statusLine');
-    } else if (cur.command !== want.statusLine.command) {
+    } else if (lineRoot(cur) !== root) {
         conflict = cur;
     }
     return { settings: out, added, conflict };
 }
 
+// The reverse of merge: drops exactly this checkout's hooks and statusline. Returns { settings, removed: [names] } without mutating the input.
+export function unmerge(settings, root = ROOT) {
+    const out = structuredClone(settings);
+    const removed = [];
+    for (const event of Object.keys(wanted(root).hooks)) {
+        if (!hasHook(out, event, root)) {
+            continue;
+        }
+        dropHook(out, event, root);
+        if (!out.hooks[event].length) {
+            delete out.hooks[event];
+        }
+        removed.push(`hook ${event}`);
+    }
+    if (removed.length && !Object.keys(out.hooks).length) {
+        delete out.hooks;
+    }
+    if (lineRoot(out.statusLine) === root) {
+        delete out.statusLine;
+        removed.push('statusLine');
+    }
+    return { settings: out, removed };
+}
+
+// Checkouts other than `root` that Homebase entries in the settings point at (a moved, deleted or second checkout)
+export function otherRoots(settings, root = ROOT) {
+    const hooks = Object.values(isObject(settings.hooks) ? settings.hooks : {}).flatMap(list => (Array.isArray(list) ? list : []).flatMap(e => e?.hooks ?? []));
+    const roots = [...hooks.map(hookRoot), lineRoot(settings.statusLine)];
+    return [...new Set(roots.filter(r => r !== null && r !== root))];
+}
+
 export function doctor(root = ROOT, path = settingsPath()) {
     const rows = [];
-    const row = (name, ok, fix, required = true) => rows.push({ name, ok, fix, required });
+    // kind: what a failed row is called; only 'missing' fails the run
+    const row = (name, ok, fix, kind = 'missing') => rows.push({ name, ok, fix, kind });
     const major = Number(process.versions.node.split('.')[0]);
     row(`node ${process.versions.node}`, major >= 20, 'install Node 20 or newer');
+    row('macOS', process.platform === 'darwin', 'other systems are untested', 'warning');
     row('tmux', onPath('tmux'), 'install tmux (brew install tmux)');
     row('claude', hasClaude(), 'install the Claude Code CLI and sign in');
-    row('gh', onPath('gh'), 'optional: install gh to see GitHub PRs', false);
+    row('gh', onPath('gh'), 'install gh and run gh auth login to see GitHub PRs', 'optional');
+    row('glab', onPath('glab'), 'install glab and run glab auth login to see GitLab MRs', 'optional');
     let settings = {};
     try {
         const parsed = JSON.parse(readFileSync(path, 'utf8'));
         settings = isObject(parsed) ? parsed : {};
     } catch { /* missing or unreadable: every entry reads as missing */ }
     const m = merge(settings, root);
+    rows.push({ heading: `Claude settings: ${path}` });
     for (const event of Object.keys(wanted(root).hooks)) {
-        row(`hook ${event} in ${path}`, !m.added.includes(`hook ${event}`), 'run: node server.mjs --setup');
+        row(`hook ${event}`, !m.added.includes(`hook ${event}`), 'run: node server.mjs --setup');
     }
-    row(`statusline in ${path}`, !m.added.includes('statusLine') && !m.conflict, 'run: node server.mjs --setup', false);
-    const lines = rows.map(r => `${r.ok ? 'ok     ' : 'missing'} ${r.name}${r.ok ? '' : ` -- ${r.fix}`}`);
-    return { lines, failed: rows.some(r => !r.ok && r.required) };
+    if (m.conflict) {
+        row('statusline', false, 'you use your own; node server.mjs --setup offers Homebase\'s, which feeds the rate limits in the header', 'optional');
+    } else {
+        row('statusline', !m.added.includes('statusLine'), 'run: node server.mjs --setup (it feeds the rate limits in the header)', 'optional');
+    }
+    for (const other of otherRoots(settings, root)) {
+        const gone = existsSync(other + HOOK) ? '' : ', which no longer exists';
+        row(`entries for another checkout: ${other}${gone}`, false, `run node server.mjs --unsetup there${gone ? ' if you still have it' : ''}, or remove them from the file by hand`, 'warning');
+    }
+    const lines = rows.map(r => r.heading ?? `${(r.ok ? 'ok' : r.kind).padEnd(8)} ${r.name}${r.ok ? '' : ` -- ${r.fix}`}`);
+    const missing = rows.filter(r => r.ok === false && r.kind === 'missing').length;
+    lines.push(missing ? `${missing} required ${missing === 1 ? 'check is' : 'checks are'} missing; fix the lines above, then run doctor again` : 'All required checks pass: npm start');
+    return { lines, failed: missing > 0 };
 }
 
-// ask(question) -> boolean; returns the message to print
-export async function setup(root = ROOT, path = settingsPath(), ask = defaultAsk) {
-    let raw = null;
-    let settings = {};
-    if (existsSync(path)) {
-        raw = readFileSync(path, 'utf8');
-        try {
-            settings = JSON.parse(raw);
-        } catch (e) {
-            return `${path} is not valid JSON (${e.message}); fix it first, nothing changed`;
-        }
-        if (!isObject(settings)) {
-            return `${path} does not hold a JSON object; fix it first, nothing changed`;
-        }
+// Reads the settings file: { raw, settings } or { error }; a missing file is an empty object with raw null
+function load(path) {
+    if (!existsSync(path)) {
+        return { raw: null, settings: {} };
     }
-    const { settings: next, added, conflict } = merge(settings, root);
-    if (conflict) {
-        console.log(`Your statusLine is already ${JSON.stringify(conflict)}, not Homebase's ${root}/scripts/statusline.sh.`);
-        if (await ask('Replace it with Homebase\'s? [y/N] ')) {
-            next.statusLine = wanted(root).statusLine;
-            added.push('statusLine (replaces yours)');
-        }
+    const raw = readFileSync(path, 'utf8');
+    let settings;
+    try {
+        settings = JSON.parse(raw);
+    } catch (e) {
+        return { error: `${path} is not valid JSON (${e.message}); fix it first, nothing changed` };
     }
-    if (!added.length) {
-        return 'Nothing to do: nothing missing, or you kept your statusline';
-    }
-    const want = wanted(root);
-    const entry = name => (name.startsWith('hook ') ? want.hooks[name.slice(5)] : want.statusLine);
-    console.log(`Will add to ${path}:\n${added.map(a => `  + ${a}: ${JSON.stringify(entry(a))}`).join('\n')}`);
-    if (!(await ask('Write it (a backup is saved first)? [y/N] '))) {
-        return 'Aborted, nothing changed';
-    }
+    return isObject(settings) ? { raw, settings } : { error: `${path} does not hold a JSON object; fix it first, nothing changed` };
+}
+
+// Writes the new settings, after copying the old file to a timestamped .bak; returns the message to print
+function save(path, raw, next) {
     mkdirSync(dirname(path), { recursive: true });
     let backup = '';
     if (raw !== null) {
@@ -129,10 +187,67 @@ export async function setup(root = ROOT, path = settingsPath(), ask = defaultAsk
     return `Done${backup ? `, backup at ${backup}` : ''}`;
 }
 
+const preview = (name, want) => {
+    if (!name.startsWith('hook ')) {
+        return `${name}: ${want.statusLine.command}`;
+    }
+    const entry = want.hooks[name.slice(5)];
+    return `${name}${entry.matcher ? ` (${entry.matcher})` : ''}: ${entry.hooks[0].command}`;
+};
+
+// ask(question) -> boolean; returns the message to print
+export async function setup(root = ROOT, path = settingsPath(), ask = defaultAsk) {
+    const { raw, settings, error } = load(path);
+    if (error) {
+        return error;
+    }
+    const { settings: next, added, conflict } = merge(settings, root);
+    const want = wanted(root);
+    if (conflict) {
+        console.log(`Your statusLine is already ${JSON.stringify(conflict)}, not Homebase's ${want.statusLine.command}.`);
+        if (await ask('Replace it with Homebase\'s? [y/N] ')) {
+            next.statusLine = want.statusLine;
+            added.push('statusLine (replaces yours)');
+        }
+    }
+    if (!added.length) {
+        return 'Nothing to do: nothing missing, or you kept your statusline';
+    }
+    console.log(`Will add to ${path}:\n${added.map(a => `  + ${preview(a, want)}`).join('\n')}`);
+    console.log('This file is Claude Code\'s user settings, so the hooks run in every Claude session on this machine, not only the ones Homebase starts. `node server.mjs --unsetup` removes them again.');
+    if (!(await ask('Write it (a backup is saved first)? [y/N] '))) {
+        return 'Aborted, nothing changed';
+    }
+    return save(path, raw, next);
+}
+
+// Removes what setup added for this checkout, with the same preview, question and backup
+export async function unsetup(root = ROOT, path = settingsPath(), ask = defaultAsk) {
+    const { raw, settings, error } = load(path);
+    if (error) {
+        return error;
+    }
+    const { settings: next, removed } = unmerge(settings, root);
+    if (!removed.length) {
+        return `Nothing to do: ${path} has no entries for ${root}`;
+    }
+    const want = wanted(root);
+    console.log(`Will remove from ${path}:\n${removed.map(r => `  - ${preview(r, want)}`).join('\n')}`);
+    if (!(await ask('Write it (a backup is saved first)? [y/N] '))) {
+        return 'Aborted, nothing changed';
+    }
+    return save(path, raw, next);
+}
+
+// A closed stdin (piped, CI) counts as "no"
 async function defaultAsk(q) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     try {
-        return /^y(es)?$/i.test((await rl.question(q)).trim());
+        const answer = await new Promise(ok => {
+            rl.once('close', () => ok(''));
+            rl.question(q).then(ok, () => ok(''));
+        });
+        return /^y(es)?$/i.test(answer.trim());
     } finally {
         rl.close();
     }

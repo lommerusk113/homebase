@@ -26,7 +26,7 @@ import { readTracked, saveTracked } from './server/tracked.mjs';
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 import { diff } from './server/diff.mjs';
-import { doctor, setup, missingTools } from './server/setup.mjs';
+import { doctor, setup, unsetup, missingTools } from './server/setup.mjs';
 
 export {
     readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, chatFeed, quickReplies, askList, optionLabels, waitingOn, waitingAsk, namedChoices,
@@ -84,6 +84,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     if (process.argv.includes('--setup')) {
         console.log(await setup());
+        process.exit(0);
+    }
+    if (process.argv.includes('--unsetup')) {
+        console.log(await unsetup());
         process.exit(0);
     }
     if (process.argv.includes('--demo')) {

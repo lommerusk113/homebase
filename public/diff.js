@@ -313,6 +313,11 @@ async function load() {
     return pick(b.dataset.group, b.dataset.path);
 }
 
+// The panel is modal: the page behind it takes no focus and is not read while it is open. The dialogs and the
+// live region (#announce) stay as they are.
+/** @param {boolean} inert */
+const behind = inert => document.querySelectorAll('header.top, .main, #ptabs').forEach(n => { /** @type {HTMLElement} */ (n).inert = inert; });
+
 // Opens the panel for a session's folder, or with item (a work item's key) for that item's worktree.
 /** @param {string} sid @param {string | null} [item] */
 export function openDiff(sid, item = null) {
@@ -328,6 +333,7 @@ export function openDiff(sid, item = null) {
     part('dv-phead').hidden = true;
     note(part('dv-code'), 'Loading…');
     document.body.append(panel);
+    behind(true);
     panel.focus();
     load();
 }
@@ -339,6 +345,7 @@ export function closeDiff() {
     const back = open.back;
     open = null;
     panel.remove();
+    behind(false);
     if (back instanceof HTMLElement && back.isConnected) {
         back.focus({ preventScroll: true });
     } else {

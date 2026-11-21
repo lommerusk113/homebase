@@ -276,6 +276,9 @@ function foldGroup(c, list, isOpen, setOpen, note) {
     return f;
 }
 
+/** @type {number | null} */
+let pendingTop = null; // the board's scroll offset a redraw still has to put back
+
 // Work items (one per MR, plus running/stopped agents without one), grouped by what they wait on; recently finished and merged ones folded at the bottom.
 function renderItems() {
     const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).map(x => optimistic(x)).sort((a, b) => b.updated - a.updated);
@@ -319,7 +322,20 @@ function renderItems() {
     }
     const hadFocus = $('masters').contains(document.activeElement); // replaceChildren drops it; keys.js puts it back
     const empty = !groups.some(g => g.localName === 'section' || g.classList.contains('g-review')) && el('div', groups.length ? 'd-empty' : 'welcome', 'No MRs or subagents right now');
-    $('masters').replaceChildren(...[empty, ...groups].filter(Boolean));
+    // replaceChildren empties the pane, which scrolls it to the top; a folded group has no height until it has drawn itself
+    // (a microtask later), so a position near the end is clamped now and set again then
+    const m = $('masters'), top = pendingTop ?? m.scrollTop;
+    m.replaceChildren(...[empty, ...groups].filter(Boolean));
+    m.scrollTop = top;
+    if (m.scrollTop !== top) {
+        pendingTop = top;
+        Promise.all([...m.querySelectorAll('wa-details')].map(d => /** @type {any} */ (d).updateComplete)).then(() => {
+            if (pendingTop !== null) {
+                m.scrollTop = pendingTop;
+                pendingTop = null;
+            }
+        });
+    }
     hooks.rendered?.(hadFocus);
 }
 

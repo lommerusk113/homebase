@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { MR, IDS } from './fixture.mjs';
+import { sleep } from './cdp.mjs';
 
 const row = key => `document.querySelector('#masters tr[data-key="${key}"]')`;
 const groups = `Object.fromEntries([...document.querySelectorAll('#masters .group')].map(g => [g.className.match(/g-([\\w-]+)/)[1], [...g.querySelectorAll('tr[data-key]')].map(r => r.dataset.key)]))`;
@@ -26,6 +27,32 @@ export default {
         await page.ev(`${row(key)}.click()`);
         await page.waitFor(`import('/core.js').then(m => m.state.selected === null)`, { what: 'the detail to close' });
         assert.equal(await page.ev(chat), mine);
+    },
+
+    'a scrolled board stays where it is when a row is opened and across its own redraws': async ({ page, open }) => {
+        await open();
+        await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 420, deviceScaleFactor: 1, mobile: false });
+        try {
+            const m = `document.getElementById('masters')`, last = `[...document.querySelectorAll('#masters tr[data-key]')].filter(r => r.checkVisibility()).at(-1)`;
+            await page.waitFor(`${m}.scrollHeight > ${m}.clientHeight + 50`, { what: 'a board taller than its pane' });
+            await page.ev(`${m}.scrollTop = ${m}.scrollHeight`);
+            const key = await page.ev(`(${last}.focus({ preventScroll: true }), ${last}.dataset.key)`);
+            const before = await page.ev(`${m}.scrollTop`);
+            assert.ok(before > 50, 'scrolled down');
+            await page.key('Enter', 'Enter');
+            await sleep(300);
+            assert.ok(await page.ev(`${m}.scrollTop`) >= before, 'opening the last row does not jump to the top');
+            assert.equal(await page.ev(`document.activeElement?.dataset?.key ?? null`), key, 'the row keeps focus');
+            await page.key('Enter', 'Enter');
+            await sleep(300);
+            await page.ev(`${m}.scrollTop = ${m}.scrollHeight`);
+            const at = await page.ev(`${m}.scrollTop`);
+            await sleep(4000); // past a poll redraw
+            assert.equal(await page.ev(`${m}.scrollTop`), at, 'a poll redraw keeps the position');
+            assert.equal(await page.ev(`document.activeElement?.dataset?.key ?? null`), key, 'and the focused row');
+        } finally {
+            await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+        }
     },
 
     'work rows land in the right groups': async ({ page, open }) => {

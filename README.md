@@ -350,6 +350,25 @@ When Homebase's own code changes on disk the header says "Homebase was updated �
 The chat menu's "Restart chat" (`POST /api/restart?id=`) kills the chat's Homebase tmux session and resumes it so Claude reloads (e.g. an edited `homebase-rules.md`); refused while Claude is working or asking, or when the chat doesn't run in Homebase's tmux.
 Once the transcript exists, Homebase maps it to that tmux session on every poll (same start folder, no tmux of its own), so no second Claude is started.
 
+## On the phone: Home Screen, notifications, a lost phone
+
+Home Screen: pair in the phone's browser first, then add Homebase to the Home Screen (iPhone: Share → Add to Home Screen; Android Chrome: ⋮ → Add to Home screen).
+If it shows "Pair this device" when opened from there, pair once more: the Home Screen app can keep its own cookie.
+
+Notifications: in a chat, + → "Enable notifications on this device".
+On an iPhone the menu says "Add Homebase to your Home Screen first" until Homebase is opened from the Home Screen; iOS (16.4+) allows web notifications only there.
+Android Chrome allows them in the browser too.
+A notification is titled "<project> needs you" and carries the question or the start of Claude's last reply (up to 300 characters), which the lock screen may show.
+[Configuration](#configuration) says when one is sent.
+
+If you lose the phone:
+
+1. In the Tailscale admin console (Machines), remove the phone. It can no longer reach the Mac; this works from any browser, away from the Mac too.
+2. On the Mac, ☰ → Pair a device… → Revoke next to the phone. It is logged out at once and gets no more notifications. Revoking works from the Mac only.
+
+Homebase has no lock of its own.
+Until one of the two is done, whoever holds the unlocked phone can read the chats and answer Claude's permission prompts, which approves shell commands on the Mac, so keep a screen lock on the phone.
+
 ## Licence
 
 MIT, see [`LICENSE`](LICENSE).

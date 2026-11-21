@@ -26,7 +26,7 @@ import { readTracked, saveTracked } from './server/tracked.mjs';
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 import { diff } from './server/diff.mjs';
-import { doctor, setup, unsetup, missingTools } from './server/setup.mjs';
+import { doctor, setup, unsetup, missingTools, readClaudeVersion, versionWarning } from './server/setup.mjs';
 
 export {
     readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, chatFeed, quickReplies, askList, optionLabels, waitingOn, waitingAsk, namedChoices,
@@ -96,6 +96,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     const missing = DEMO ? [] : missingTools(); // the demo starts no chats
     if (missing.length) {
         console.warn(`Warning: ${missing.join(' and ')} not found on PATH, so Homebase cannot start chats (run: node server.mjs --doctor)`);
+    }
+    if (!DEMO && readClaudeVersion() && versionWarning()) {
+        console.warn(`Warning: ${versionWarning()}`);
     }
     if (process.env.HOMEBASE_LAN) {
         throw new Error('HOMEBASE_LAN is gone: use Homebase from another device through Tailscale and pairing (README, "Use from your phone")');
@@ -171,7 +174,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 // The token reaches only a page served to a request that passed the Host and Origin checks above.
                 res.setHeader('content-security-policy', CSP);
                 res.setHeader('cache-control', 'no-store');
-                return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN).replace('__HOMEBASE_BUILD__', BUILD).replace('data-demo hidden', DEMO ? 'data-demo' : 'data-demo hidden'));
+                return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN).replace('__HOMEBASE_BUILD__', BUILD).replace('__HOMEBASE_CLAUDE_WARN__', versionWarning()).replace('data-demo hidden', DEMO ? 'data-demo' : 'data-demo hidden'));
             }
             const vendored = vendorPath(url.pathname);
             if (vendored && await serveVendor(vendored, req, res)) {

@@ -3787,6 +3787,25 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     }
     console.log('ok setup merge');
 }
+{
+    // the installed Claude Code against the version the parsing was checked with
+    const { VERIFIED_CLAUDE, readClaudeVersion, versionWarning, doctor } = await import('./server/setup.mjs');
+    const [major, minor, patch] = VERIFIED_CLAUDE.split('.').map(Number);
+    const newer = `${major}.${minor}.${patch + 1}`;
+    assert.equal(versionWarning(), '', 'nothing read yet: no warning');
+    assert.equal(readClaudeVersion(() => `rc file noise 9.9.9\n${newer} (Claude Code)\n`), newer, 'only the Claude Code line counts');
+    assert.match(versionWarning(), new RegExp(`${newer} is newer than ${VERIFIED_CLAUDE}`), 'the read version is cached');
+    assert.equal(readClaudeVersion(() => { throw new Error('no claude'); }), null);
+    assert.equal(versionWarning(), '');
+    assert.equal(versionWarning(VERIFIED_CLAUDE), '');
+    assert.equal(versionWarning(`${major}.${minor}.${patch - 1}`), '', 'older is fine');
+    assert.equal(versionWarning(`${major}.${minor - 1}.${patch * 10}`), '', 'compared as numbers, part by part');
+    assert.notEqual(versionWarning(`${major}.${minor + 9}.0`), '');
+    const file = join(mkdtempSync(join(tmpdir(), 'doctor-')), 'settings.json');
+    assert.ok(doctor('/opt/hb', file, newer).lines.some(l => l.startsWith('warning ') && l.includes(newer)), '--doctor prints it');
+    assert.ok(!doctor('/opt/hb', file, VERIFIED_CLAUDE).lines.some(l => l.startsWith('warning ')));
+    console.log('ok claude version');
+}
 
 // The quoted path, the older unquoted form, and --unsetup
 {

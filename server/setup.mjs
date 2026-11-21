@@ -22,6 +22,24 @@ const runs = (file, args) => {
 const onPath = cmd => runs('sh', ['-c', `command -v ${cmd}`]);
 // Chats start claude through the login shell, so one that only its rc file puts on the PATH counts too
 const hasClaude = () => onPath('claude') || runs(loginShell(), ['-lic', 'command -v claude']);
+
+// The newest Claude Code whose screen (server/startup.mjs) and transcript (server/transcripts.mjs) Homebase's parsing was
+// checked against: the suites pass and a real chat was driven with it. Bump it after checking a newer one (CONTRIBUTING.md).
+export const VERIFIED_CLAUDE = '2.1.330';
+let installed = null;
+// Read once (server start, --doctor), through the login shell chats start claude with. -> '2.1.330', or null when it can't be read
+export function readClaudeVersion(read = () => execFileSync(loginShell(), ['-lic', 'claude --version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 10_000 })) {
+    try {
+        installed = /(\d+\.\d+\.\d+) \(Claude Code\)/.exec(read())?.[1] ?? null;
+    } catch {
+        installed = null;
+    }
+    return installed;
+}
+// '' unless the Claude Code read is newer than the verified one
+export const versionWarning = (version = installed) => (version && version.localeCompare(VERIFIED_CLAUDE, undefined, { numeric: true }) > 0
+    ? `Claude Code ${version} is newer than ${VERIFIED_CLAUDE}, the last version Homebase was checked with: status, questions and sends may be wrong`
+    : '');
 export const missingTools = () => [!onPath('tmux') && 'tmux', !hasClaude() && 'claude'].filter(Boolean);
 
 const HOOK = '/hooks/asking.mjs', LINE = '/scripts/statusline.sh';
@@ -124,7 +142,7 @@ export function otherRoots(settings, root = ROOT) {
     return [...new Set(roots.filter(r => r !== null && r !== root))];
 }
 
-export function doctor(root = ROOT, path = settingsPath()) {
+export function doctor(root = ROOT, path = settingsPath(), version = readClaudeVersion()) {
     const rows = [];
     // kind: what a failed row is called; only 'missing' fails the run
     const row = (name, ok, fix, kind = 'missing') => rows.push({ name, ok, fix, kind });
@@ -132,7 +150,7 @@ export function doctor(root = ROOT, path = settingsPath()) {
     row(`node ${process.versions.node}`, major >= 20, 'install Node 20 or newer');
     row('macOS', process.platform === 'darwin', 'other systems are untested', 'warning');
     row('tmux', onPath('tmux'), 'install tmux (brew install tmux)');
-    row('claude', hasClaude(), 'install the Claude Code CLI and sign in');
+    row(`claude${version ? ` ${version} (checked with ${VERIFIED_CLAUDE})` : ''}`, hasClaude(), 'install the Claude Code CLI and sign in');
     row('gh', onPath('gh'), 'install gh and run gh auth login to see GitHub PRs', 'optional');
     row('glab', onPath('glab'), 'install glab and run glab auth login to see GitLab MRs', 'optional');
     let settings = {};
@@ -153,6 +171,9 @@ export function doctor(root = ROOT, path = settingsPath()) {
     for (const other of otherRoots(settings, root)) {
         const gone = existsSync(other + HOOK) ? '' : ', which no longer exists';
         row(`entries for another checkout: ${other}${gone}`, false, `run node server.mjs --unsetup there${gone ? ' if you still have it' : ''}, or remove them from the file by hand`, 'warning');
+    }
+    if (versionWarning(version)) {
+        row(versionWarning(version), false, 'if something looks wrong, check for a newer Homebase (README, "Why tmux, not the Agent SDK")', 'warning');
     }
     const lines = rows.map(r => r.heading ?? `${(r.ok ? 'ok' : r.kind).padEnd(8)} ${r.name}${r.ok ? '' : ` -- ${r.fix}`}`);
     const missing = rows.filter(r => r.ok === false && r.kind === 'missing').length;

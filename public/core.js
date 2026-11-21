@@ -129,13 +129,16 @@ export const setOffline = off => {
     $('offline').hidden = !off;
     document.body.classList.toggle('disconnected', off);
 };
-// Header warning when Claude Code's transcript or screen no longer parses: any reason shown keeps it up.
+// Header warning when Claude Code's transcript or screen no longer parses: any reason shown keeps it up. The server puts
+// its "Claude Code is newer than the checked version" message in data-version; that alone shows it too, from the first poll on.
 /** @type {Set<string>} */
 const formatReasons = new Set();
 /** @param {string} reason @param {boolean} on */
 export const setFormatWarn = (reason, on) => {
     formatReasons[on ? 'add' : 'delete'](reason);
-    $('format-warn').hidden = !formatReasons.size;
+    const warn = $('format-warn'), version = warn.dataset.version ?? '';
+    warn.hidden = !formatReasons.size && !version;
+    warn.textContent = [formatReasons.size ? 'Claude Code\'s format changed — status may be wrong' : '', version].filter(Boolean).join(' · ');
 };
 /**
  * @template {string} K

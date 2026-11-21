@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { sessions } from './sessions.mjs';
 import { liveSessions } from './transcripts.mjs';
+import { versionWarning } from './setup.mjs';
 import { refuseIfTrustDialog, cancelQuestion, parseDialog, parseQuestion, questionOpen, capture, inputLine, promptBack, freeTextOption, typeAnswer } from './startup.mjs';
 import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, ELSEWHERE, sleep, NEW_TMUX, OUR_TMUX, withLock } from './tmux.mjs';
 
@@ -57,6 +58,8 @@ export async function keepModelSetting(path = SETTINGS(), { waitMs = 5000, nap =
     };
 }
 
+// Appended where the screen didn't parse (no input box, a question we can't read): a newer Claude Code is the likely cause
+const versionNote = () => (versionWarning() ? ` (${versionWarning()})` : '');
 const conflict = msg => Object.assign(new Error(msg), { status: 409 });
 // The tmux a chat types into. Refused when the registry shows another chat in it: a /clear made that tmux the other chat's,
 // and keys meant for this one would land there. ponytail: never redirected; the page already follows clearedFrom to the successor
@@ -126,7 +129,7 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
         }
         // (asking with the input box back is a stale marker: a permission prompt answered, its tool still running)
         if (!started && session.asking && !questionOpen(pane) && !promptBack(pane)) {
-            throw conflict("Claude is asking something Homebase can't see: answer it in the terminal");
+            throw conflict(`Claude is asking something Homebase can't see: answer it in the terminal${versionNote()}`);
         }
         if (!typed && questionOpen(pane)) {
             throw conflict(ANSWER_FIRST);
@@ -192,7 +195,7 @@ async function waitForPrompt(name, { tm = tmux, nap = sleep, waitMs = BOOT_MS } 
         }
     }
 
-    throw Object.assign(new Error(`Claude started but its prompt didn't show within ${waitMs / 1000}s`), { status: 504 });
+    throw Object.assign(new Error(`Claude started but its prompt didn't show within ${waitMs / 1000}s${versionNote()}`), { status: 504 });
 }
 
 // A new project's chat before its transcript exists: typed into its cc-new-<name> tmux session, if that is running.

@@ -177,8 +177,6 @@ export default {
             if (w === 390) {
                 await page.ev(`document.querySelector('#feed .bubble.user:last-of-type .b-images img').click()`);
                 await page.waitFor(`document.querySelector('.lightbox img')?.src.startsWith('data:image/png')`, { what: 'the lightbox' });
-                const shot = await page.cmd('Page.captureScreenshot', { format: 'png' });
-                (await import('node:fs')).writeFileSync('/private/tmp/claude-501/-Users-bruinen-IdeaProjects-Privat-codetool/a0da2e79-0e88-4132-aa8a-4f82c6fe07ad/scratchpad/image-bubble.png', Buffer.from(shot.data, 'base64'));
                 await page.key('Escape');
                 await page.waitFor(`!document.querySelector('.lightbox')`, { what: 'the lightbox closed' });
             }
@@ -199,8 +197,6 @@ export default {
             const r = await page.ev(`(() => { const R = s => document.querySelector(s).getBoundingClientRect(), items = document.getElementById('feed').children, last = items[items.length - 1].getBoundingClientRect(), th = R('#attached'), st = R('#status'), row = R('.c-row'), f = R('#feed');
                 return { statusBelowFeedItem: st.top >= last.bottom - 1, thumbsBelowStatus: th.top >= st.bottom - 1, rowBelowThumbs: row.top >= th.bottom - 1, feedAboveDock: f.bottom <= st.top + 1, sideScroll: document.documentElement.scrollWidth > innerWidth }; })()`);
             assert.deepEqual(r, { statusBelowFeedItem: true, thumbsBelowStatus: true, rowBelowThumbs: true, feedAboveDock: true, sideScroll: false }, `at ${w}px`);
-            const shot = await page.cmd('Page.captureScreenshot', { format: 'png' });
-            (await import('node:fs')).writeFileSync(`/private/tmp/claude-501/-Users-bruinen-IdeaProjects-Privat-codetool/a0da2e79-0e88-4132-aa8a-4f82c6fe07ad/scratchpad/paste-${w}.png`, Buffer.from(shot.data, 'base64'));
         }
         await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
     },

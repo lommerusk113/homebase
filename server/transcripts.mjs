@@ -372,6 +372,7 @@ export function chatFeed(entries, max = 60) {
         if (i.needsYou && (replied || i.answer)) {
             i.needsYou = false;
         }
+        replied ||= !!i.answer; // an answer given in the ask card also settles what was asked before it
     }
     // the newest reply's open decision stays pinned too, however far back it is
     const pinned = all.findLast(i => i.role === 'assistant');
@@ -482,13 +483,15 @@ function rawItems(entries) {
 
     let newTurn = false;
     let worked = false; // tool calls since your last prompt
-    const asks = new Set(); // AskUserQuestion tool_use ids
+    const asks = new Map(); // AskUserQuestion tool_use id -> { text: its questions, at }
     for (const e of entries) {
         const entry = entryKind(e);
         const reply = !e.isSidechain && e.type === 'user' && Array.isArray(e.message?.content)
             && e.message.content.find(b => b.type === 'tool_result' && asks.has(b.tool_use_id));
         if (reply) {
-            answerAsk(items, e, reply);
+            flush();
+            answerAsk(items, e, reply, asks.get(reply.tool_use_id), !newTurn);
+            newTurn = true; // what Claude says after the answer is its own bubble
         }
     if (entry?.kind === 'interrupt') {
             // a turn that ran tools but wrote nothing yet gets its own line: the reply before your prompt was not cut
@@ -528,7 +531,11 @@ function rawItems(entries) {
             worked ||= entry.uses.length > 0;
             for (const u of entry.uses) {
                 const cmd = u.name === 'Bash' ? String(u.input?.command ?? '').replace(/\s+/g, ' ').trim() : '';
-                if (RISKY.test(cmd)) {
+                if (u.name === 'AskUserQuestion') {
+                    // shown with its answer (answerAsk); until then it is the ask card's
+                    const qs = Array.isArray(u.input?.questions) ? u.input.questions : [];
+                    asks.set(u.id, { text: qs.map(q => q?.question).filter(Boolean).join('\n\n'), at: e.timestamp });
+                } else if (RISKY.test(cmd)) {
                     // a push, merge or force on its own visible line, never folded into the hidden "Ran N commands"
                     flush();
                     items.push({ role: 'tools', text: `Ran: ${cmd.length > 160 ? `${cmd.slice(0, 159)}…` : cmd}`, risky: true, at: e.timestamp });
@@ -536,7 +543,6 @@ function rawItems(entries) {
                     uses.push(u);
                 }
             }
-            entry.uses.filter(u => u.name === 'AskUserQuestion').forEach(u => asks.add(u.id));
         }
     }
     flush();
@@ -544,17 +550,22 @@ function rawItems(entries) {
     return items;
 }
 
-// An AskUserQuestion answered in the card or terminal is a reply like a typed one: it becomes the answer tag of the
-// Claude message that asked, so that message stops needing you and offers no chips. Not past a later prompt of yours.
-function answerAsk(items, e, result) {
-
-    const q = items.findLastIndex(i => i.role === 'assistant');
-    if (q < 0 || q < items.findLastIndex(i => i.role === 'user') || items[q].answer) {
-        return;
-    }
+// An AskUserQuestion answered in the card or terminal is a reply like a typed one: its questions join the Claude
+// message that asked (adjacent: the bubble right before, same turn), else get a bubble of their own, with the answer
+// as that bubble's tag, so it stops needing you and offers no chips.
+function answerAsk(items, e, result, ask, adjacent) {
 
     const picked = Object.values(e.toolUseResult?.answers ?? {}).join(' · ');
-    items[q].answer = { text: result.is_error ? 'No answer' : picked || 'Answered', at: e.timestamp };
+    const answer = { text: result.is_error ? 'No answer' : picked || 'Answered', at: e.timestamp };
+    const prev = adjacent ? items.at(-1) : null;
+    if (prev?.role === 'assistant' && !prev.answer) {
+        if (!prev.text.includes(ask.text)) {
+            prev.text += `\n\n${ask.text}`;
+        }
+        prev.answer = answer;
+    } else if (ask.text) {
+        items.push({ role: 'assistant', text: ask.text, at: ask.at ?? e.timestamp, answer });
+    }
 }
 
 // Joins a `continues` chunk into the Claude bubble right before it, so two replies of separate turns stay separate.

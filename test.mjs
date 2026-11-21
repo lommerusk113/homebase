@@ -914,6 +914,22 @@ console.log('ok interrupted');
     assert.deepEqual(esc.map(i => [i.role, !!i.interrupted]), [['user', false], ['assistant', false], ['user', false], ['tools', false], ['tools', true]]);
     assert.equal(chatItems([u('go'), tu('Bash', { id: 'b0' }), stop]).at(-1).interrupted, true); // no reply at all yet
     console.log('ok interrupted turn without text');
+
+    // an answered AskUserQuestion shows its questions with the answer; a reply from before other work is not tagged
+    const askQ = tu('AskUserQuestion', { id: 'a1', input: { questions: [{ question: 'Which cache?' }, { question: 'Which port?' }] } });
+    const picked = { ...res('a1'), toolUseResult: { answers: { 'Which cache?': 'Redis', 'Which port?': '8080' } } };
+    const shown = i => `${i.tldr ?? ''}\n${i.text}`;
+    const alone = chatItems([u('go'), askQ, picked]);
+    assert.deepEqual(alone.map(i => [i.role, i.answer?.text]), [['user', undefined], ['assistant', 'Redis · 8080']]);
+    assert.ok(shown(alone[1]).includes('Which cache?') && shown(alone[1]).includes('Which port?'));
+    const later = chatItems([u('go'), say('Should I read the config first?'), tu('Read', { id: 'r1' }), res('r1'), askQ, picked, say('Using Redis.')]);
+    assert.deepEqual(later.map(i => [i.role, i.answer?.text, !!i.needsYou]), [['user', undefined, false], ['assistant', undefined, false], ['tools', undefined, false], ['assistant', 'Redis · 8080', false], ['assistant', undefined, false]]);
+    assert.ok(shown(later[3]).includes('Which cache?') && !shown(later[3]).includes('Using Redis'));
+    // asked right after its own text: one bubble, question included
+    const own = chatItems([u('go'), say('Two things to settle.'), askQ, picked]);
+    assert.deepEqual(own.map(i => [i.role, i.answer?.text]), [['user', undefined], ['assistant', 'Redis · 8080']]);
+    assert.ok(shown(own[1]).includes('Two things to settle.') && shown(own[1]).includes('Which cache?'));
+    console.log('ok answered question in the feed');
 }
 
 import { peakLimits } from './server.mjs';

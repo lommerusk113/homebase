@@ -93,7 +93,7 @@ export function sendSteps(name, text) {
 
     const clean = text.replace(/\r\n?/g, '\n').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '').trim();
     if (!clean) {
-        throw new Error('empty message');
+        throw Object.assign(new Error('empty message'), { status: 400 });
     }
     // these would end or log out the chat's Claude
     if (/^\/(exit|quit|login|logout)\b/i.test(clean)) {

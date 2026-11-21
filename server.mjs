@@ -16,7 +16,7 @@ import { MAX_SEND, withLock } from './server/tmux.mjs';
 import { createProject, cloneProject, openProject, githubProjects, localProjects, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion, confirmModelSwitch } from './server/startup.mjs';
 import { send, runningTwice, keepModelSetting, sendToNew, interrupt, clearChat, compactChat, restartChat, settleCommand } from './server/control.mjs';
-import { localHosts, allowedHost, allowedOrigin, tokenOk, ownerOnly } from './server/security.mjs';
+import { localHosts, allowedHost, allowedOrigin, tokenOk, ownerOnly, errorReply } from './server/security.mjs';
 import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedRequest, pair, deviceOf, cookieOf, deviceCookie, pairPage, newCode, pairedDevices, revoke } from './server/pairing.mjs';
 import { readConfigFile } from './server/account.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
@@ -66,7 +66,7 @@ async function readBody(req, max) {
     for await (const chunk of req) {
         data += chunk;
         if (data.length > max) {
-            throw new Error('message too long');
+            throw Object.assign(new Error('message too long'), { status: 413 });
         }
     }
 
@@ -397,11 +397,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             res.statusCode = 404;
             res.end('not found');
         } catch (e) {
-            res.statusCode = e.status ?? 500;
-            if (e.body) {
+            const [status, text] = errorReply(e);
+            res.statusCode = status;
+            if (e?.body) {
                 return json(e.body);
             }
-            res.end(String(e.message));
+            res.end(text);
         }
     };
     const listeners = []; // [server, port], for replaceSelf

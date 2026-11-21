@@ -1812,7 +1812,7 @@ import { createServer as netServer } from 'node:net';
             assert.deepEqual((({ status, body }) => [status, body])(await call(s.port, { path: `/api/transcript?dir=${dir}&id=x`, headers: authed })), [400, 'bad path'], dir);
         }
         const sent = await call(s.port, { path: '/api/send?id=..%2Fx', method: 'POST', headers: { ...authed, 'x-codetool': '1' }, body: 'hi' });
-        assert.deepEqual([sent.status, sent.body], [500, 'bad id']);
+        assert.deepEqual([sent.status, sent.body], [400, 'bad id']);
         for (const [tmux, want] of [['cc-abcdef01', [400, 'bad tmux name']], ['cc-new-x;y', [400, 'bad tmux name']], ['cc-new-nosuch', [409, "cc-new-nosuch isn't running"]]]) {
             const r = await call(s.port, { path: `/api/send?tmux=${encodeURIComponent(tmux)}`, method: 'POST', headers: { ...authed, 'x-codetool': '1' }, body: 'hi' });
             assert.deepEqual([r.status, r.body], want, tmux);
@@ -4013,4 +4013,23 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     ownerOnly(join(dir, 'missing')); // first start: nothing there yet
     rmSync(dir, { recursive: true });
     console.log('ok file modes');
+}
+
+// An error nobody gave a status is ours: the caller gets a fixed text, the detail (absolute paths) goes to the server's output.
+{
+    const { errorReply } = await import('./server/security.mjs');
+    const logged = [];
+    const raw = Object.assign(new Error("ENOENT: no such file or directory, open '/Users/someone/.claude/projects/x/y.jsonl'"), { code: 'ENOENT' });
+    const [status, text] = errorReply(raw, e => logged.push(e));
+    assert.equal(status, 500);
+    assert.ok(!/\/|ENOENT|someone/.test(text), text);
+    assert.deepEqual(logged, [raw]);
+    assert.deepEqual(errorReply(Object.assign(new Error('busy'), { status: 409 }), e => logged.push(e)), [409, 'busy'], 'deliberate refusals keep their text');
+    assert.equal(logged.length, 1);
+
+    // refusals that used to fall through with no status
+    const { sendSteps, interrupt } = await import('./server.mjs');
+    assert.throws(() => sendSteps('s', ' \n'), e => e.status === 400 && e.message === 'empty message');
+    await assert.rejects(interrupt('nope'), e => e.status === 400 && e.message === 'bad id');
+    console.log('ok error replies');
 }

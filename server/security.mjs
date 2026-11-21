@@ -46,3 +46,15 @@ export function ownerOnly(dataDir) {
         }
     }
 }
+
+// What an API caller is told about a thrown error -> [status, text]. An error with a status is a deliberate refusal and
+// keeps its message. Any other is a raw Node error, whose message can hold absolute paths: fixed text, detail logged here.
+export function errorReply(e, log = console.error) {
+
+    if (e?.status) {
+        return [e.status, String(e.message)];
+    }
+    log(e);
+
+    return [500, 'Internal error: the detail is in the server output'];
+}

@@ -10,17 +10,17 @@ import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refus
 async function resumable(id) {
 
     if (!/^[0-9a-f-]{36}$/.test(id ?? '')) {
-        throw new Error('bad id');
+        throw Object.assign(new Error('bad id'), { status: 400 });
     }
 
     const s = (await sessions()).find(x => x.id === id);
     if (!s?.cwd) {
-        throw new Error('unknown session');
+        throw Object.assign(new Error('unknown session'), { status: 404 });
     }
     try {
         await stat(s.cwd);
     } catch {
-        throw new Error(`folder is gone: ${s.cwd}`);
+        throw Object.assign(new Error(`folder is gone: ${s.cwd}`), { status: 409 });
     }
 
     return s;

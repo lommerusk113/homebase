@@ -579,7 +579,8 @@ ul.comments li.seen a { color:var(--muted); }
 .keys-help { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; margin:0; font-size:var(--fs-m); }
 .keys-help dt { font-family:'JetBrains Mono', monospace; font-weight:500; white-space:nowrap; }
 .keys-help dd { margin:0; color:var(--muted); }
-.keys-msg { white-space:pre-wrap; font-size:var(--fs-m); background:var(--chip); padding:8px; border-radius:var(--r-s); }
+.keys-msg { white-space:pre-wrap; overflow-wrap:anywhere; font-size:var(--fs-m); background:var(--chip); padding:8px; border-radius:var(--r-s); }
+@media (max-width: 700px) { wa-dialog wa-button[slot="footer"] { --wa-form-control-height:44px; font-size:var(--fs-m); } }
 
 @media (max-width: 640px) {
   header.top { padding-left:16px; padding-right:16px; }

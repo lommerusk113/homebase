@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 
-// iPhone-sized viewport for one test, the suite's desktop size again afterwards (the page is shared)
+import { MR } from './fixture.mjs';
+
+// iPhone-sized viewport with a touch screen for one test, the suite's desktop size and mouse again afterwards (the page is shared)
 async function asPhone(page, fn) {
     await page.cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    await page.cmd('Emulation.setTouchEmulationEnabled', { enabled: true });
     try {
         await fn();
     } finally {
+        await page.cmd('Emulation.setTouchEmulationEnabled', { enabled: false });
         await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
     }
 }
@@ -60,6 +64,32 @@ export default {
             assert.equal(await page.ev(inView), true, 'composer in view while typing');
             await page.key('n'); // a shortcut key while typing is just text
             assert.equal(await page.ev(`document.getElementById('msg').value`), 'n');
+        });
+    },
+
+    'a tap on a row\'s action shows what it will send first, and sends only on Send': async ({ page, open }) => {
+        await asPhone(page, async () => {
+            await open();
+            await pane(page, 'work');
+            const btn = `#masters tr[data-key="${MR(104)}"] .act-btn`, sends = () => page.posts.filter(p => p.url.includes('/api/send'));
+            const foot = n => `[...document.querySelectorAll('wa-dialog[open] wa-button[slot="footer"]')].at(${n})`;
+            // the dialog animates in: a button is tapped once it has stopped moving (two polls at the same place)
+            const tap = async (n, what) => {
+                await page.waitFor(`(() => { const r = JSON.stringify(${foot(n)}?.getBoundingClientRect()), still = r && r === window.__at; window.__at = r; return still; })()`, { what: `${what} at rest` });
+                await page.clickOn(foot(n), what);
+            };
+            await page.waitFor(`document.querySelector('${btn}')`, { what: 'the action button' });
+            await page.click(btn);
+            const shown = await page.waitFor(`document.querySelector('wa-dialog[open] pre')?.textContent`, { what: 'the message, shown before it is sent' });
+            assert.equal(sends().length, 0, 'nothing sent on the first tap');
+            await tap(0, 'Cancel');
+            await page.waitFor(`!document.querySelector('wa-dialog[open]')`, { what: 'the dialog to close' });
+            assert.equal(sends().length, 0, 'nothing sent on Cancel');
+            await page.click(btn);
+            await page.waitFor(`document.querySelector('wa-dialog[open] pre')`, { what: 'the dialog again' });
+            await tap(-1, 'Send');
+            await page.waitFor(`!document.querySelector('${btn}')`, { what: 'the row to turn into a sent one' });
+            assert.deepEqual(sends().map(p => p.body), [shown], 'exactly what was shown');
         });
     }
 };

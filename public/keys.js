@@ -119,7 +119,7 @@ function help() {
 // The action types into the user's Claude session, so it asks first, showing the message; the dialog itself has focus,
 // so a stray Enter or a second a does nothing, and only a click (or Tab to Send) sends.
 /** @param {{ key: string, action: { label: string, message: string } }} x */
-function confirmAction(x) {
+export function confirmAction(x) {
     const cancel = waButton('Cancel'), go = waButton(`Send "${x.action.label}"`, null, { variant: 'brand', appearance: 'accent' });
     cancel.slot = go.slot = 'footer';
     const body = el('div');

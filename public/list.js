@@ -1,8 +1,9 @@
 // Left column: work items grouped by what they wait on, and attention transitions.
-import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, seenAt, markSeen, freshComments, authorSummary, updateTitle, setWorkCount, waitsOnYou, markHandled } from './core.js';
+import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, touch, seenAt, markSeen, freshComments, authorSummary, updateTitle, setWorkCount, waitsOnYou, markHandled } from './core.js';
 import { chatSession, bindChat, focusChat, sendText, isMaster } from './chat.js';
 import { milestoneTag } from './milestone.js';
 import { diffIcon } from './diff.js';
+import { confirmAction } from './keys.js';
 
 
 /** @param {Column} key */
@@ -400,11 +401,17 @@ function sentPill(x) {
 
 // The row's one-click command (label and message from the server's rowAction): binds the chat to the item's session and sends
 // there; the row turns into an in-progress one at once, without the button, so it can't be sent twice.
+// On a touch screen the tooltip with the message never shows and a thumb can miss the row, so a tap asks first
+// (the dialog of the a key); its Send clicks this button from script, which is not a tap.
 /** @param {WorkItem} x */
 function actionButton(x) {
     const b = waButton(x.action.label, 'act-btn');
     b.onclick = async e => {
         e.stopPropagation();
+        if (e.isTrusted && touch()) {
+            confirmAction(x);
+            return;
+        }
         if (sent.has(x.key)) {
             return;
         }

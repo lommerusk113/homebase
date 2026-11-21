@@ -166,6 +166,8 @@ export const waButton = (text, cls, attrs = {}) => {
     }
     return b;
 };
+// A touch screen (phone, tablet): no hover, so no tooltips, and a thumb is less exact than a mouse.
+export const touch = () => matchMedia('(hover: none), (pointer: coarse)').matches;
 // A <wa-tooltip> for target (given an id if it has none); the caller places it next to the target.
 let tipCount = 0;
 /** @param {HTMLElement} target @param {string} text */

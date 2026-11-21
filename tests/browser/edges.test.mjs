@@ -98,5 +98,20 @@ export default {
         items.push({ role: 'assistant', id: 'next', at: new Date().toISOString(), text: 'a later reply' });
         await page.waitFor(`document.getElementById('feed').textContent.includes('a later reply')`, { what: 'the redraw' });
         assert.equal((await page.ev(counts))[0], 1500, 'still all rows');
+    },
+
+    'the draft is dropped when a send starts, so a reload during a slow send does not put the sent text back': async ({ page, open, IDS }) => {
+        await open();
+        await page.waitFor(loaded, { what: 'the chat' });
+        const draft = `sessionStorage.getItem('draft:${IDS.master}')`;
+        await page.ev(`(() => { const f = window.fetch; window.fetch = (u, o) => (String(u).startsWith('/api/send') ? new Promise(ok => { window.answer = () => ok(new Response('nope', { status: 500 })); }) : f(u, o)); })()`);
+        await page.click('#msg');
+        await page.type('sent slowly');
+        await page.waitFor(`${draft}?.includes('sent slowly')`, { what: 'the draft of the typed text' });
+        await page.key('Enter');
+        await page.waitFor(`typeof window.answer === 'function'`, { what: 'the send in flight' });
+        assert.equal(await page.ev(draft), null, 'no draft while it is being sent');
+        await page.ev(`window.answer()`);
+        await page.waitFor(`document.getElementById('msg').value === 'sent slowly' && ${draft}?.includes('sent slowly')`, { what: 'a failed send hands the text back, as a draft again' });
     }
 };

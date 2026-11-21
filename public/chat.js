@@ -1614,6 +1614,7 @@ export function initChat() {
         }
         // clear at once; the "sending…" bubble shows progress
         ta.value = '';
+        saveDraft(draftStorage(), target, ta); // the draft goes when the send starts: a reload during a slow send must not bring the sent text back
         const ok = await sendText(target, text);
         if (draftSid !== (s?.id ?? null)) {
             // switched chats meanwhile: the box is the other chat's now, so a failed text goes back into its own chat's draft
@@ -1623,8 +1624,9 @@ export function initChat() {
         } else if (!ok && !ta.value) {
             // give the text back so it isn't lost
             ta.value = text;
+            saveDraft(draftStorage(), target, ta);
         } else {
-            saveDraft(draftStorage(), target, ta); // sent: drops the draft, or keeps whatever was typed meanwhile
+            saveDraft(draftStorage(), target, ta); // keeps whatever was typed meanwhile
         }
     };
     $('plus-menu').addEventListener('wa-select', e => e.detail.item.value === 'files' && $('attach-input').click());

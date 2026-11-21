@@ -790,7 +790,8 @@ function feedItems(s, data) {
     // Optimistic bubbles go once any user/queued/pending item (or answer) has the same text, sent no earlier than
     // LANDED_SLACK_MS before: the transcript is the source of truth. OUTBOX_TTL_MS after the send succeeded with no
     // match, it stays marked not confirmed (Retry / Dismiss) rather than vanishing.
-    const sameSend = (text, at, o) => norm(text) === norm(o.text) && !(Date.parse(at) < Date.parse(o.at) - LANDED_SLACK_MS);
+    // (compared with what was sent: the text, or the text plus its unshown note, as the transcript has the two together)
+    const sameSend = (text, at, o) => [o.text, o.note && `${o.text}\n\n${o.note}`].some(t => t && norm(text) === norm(t)) && !(Date.parse(at) < Date.parse(o.at) - LANDED_SLACK_MS);
     const landed = /** @param {OutboxItem} o */ o => data.items.some(i => (i.role === 'user' && sameSend(i.text, i.at, o))
         || (i.role === 'command' && sameSend(i.cmd, i.at, o)) // a slash command whose output the transcript now holds
         || (i.answer && sameSend(i.answer.text, i.answer.at, o)));

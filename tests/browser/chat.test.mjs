@@ -186,6 +186,19 @@ export default {
         assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [[`/api/send?id=${IDS.master}`, 'SQLite']]);
     },
 
+    'an option answer sent with its "(Answering your question…)" note is one bubble once the transcript has it': async ({ page, open, answerPosts, IDS }) => {
+        await open();
+        await ready(page);
+        // what the ask card's fallback sends: the label shown, the note appended to what Claude gets
+        await page.ev(`import('/chat.js').then(m => m.sendText(${JSON.stringify(IDS.master)}, 'Fix both', undefined, '(Answering your question: "Which?")'))`);
+        const items = chatItems([{ type: 'user', timestamp: new Date().toISOString(), message: { content: 'Fix both\n\n(Answering your question: "Which?")' } }]);
+        page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: true, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        await page.ev(`(() => { const now = Date.now; Date.now = () => now() + 31_000; })()`); // past OUTBOX_TTL_MS
+        await page.waitFor(`document.getElementById('feed').textContent.includes('Answering your question')`, { what: 'the transcript message' });
+        await new Promise(r => setTimeout(r, 1500));
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#feed .bubble.user')].map(b => [b.textContent.includes('Fix both'), b.classList.contains('failed')])`), [[true, false]]);
+    },
+
     'an AskUserQuestion answered in the card leaves no chips on the message that asked': async ({ page, open, answerPosts }) => {
         const items = chatItems([
             { type: 'assistant', timestamp: '2026-11-14T10:00:00.000Z', message: { content: [{ type: 'text', text: '**▸ Database · needs you**\n\n**TLDR:** Which database should be the default?' }] } },

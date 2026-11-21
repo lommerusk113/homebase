@@ -627,6 +627,9 @@ function showModel(s) {
     $('c-model').hidden = !s || s.id.startsWith('cc-new-') || !(name || pickedModel);
     btn.textContent = pickedModel ? `${pickedModel.name}…` : `${name ?? ''} ▾`;
     btn.classList.toggle('pending', !!pickedModel);
+    for (const it of /** @type {NodeListOf<HTMLElement & { value: string, checked: boolean }>} */ ($('c-model').querySelectorAll('wa-dropdown-item'))) {
+        it.checked = modelName(it.value) === (pickedModel?.name ?? name); // from our state, not the item's own toggle
+    }
 }
 
 // Above a focused (not main) chat's question: what it is about, its title and linked MR, then its last reply's TLDR.

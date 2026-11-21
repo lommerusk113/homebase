@@ -8,10 +8,13 @@ export default {
         await page.waitFor(`${btn}?.textContent === 'Opus ▾' && !document.getElementById('c-model').hidden`, { what: 'the Opus chip' });
         assert.equal(await page.ev(`getComputedStyle(${btn}).borderTopWidth`), '0px', 'no border');
         assert.ok(await page.ev(`${btn}.getBoundingClientRect().height <= document.getElementById('status').getBoundingClientRect().height`), 'fits the status row');
+        const marked = `[...document.querySelectorAll('#c-model wa-dropdown-item')].filter(i => i.checked).map(i => i.value).join()`;
+        assert.equal(await page.ev(marked), 'opus', 'the menu marks the chat model');
         await page.click('#c-model-btn');
         await page.clickOn(`document.querySelector('#c-model wa-dropdown-item[value="sonnet"]')`);
         await page.waitFor(`${btn}.textContent === 'Sonnet…' && ${btn}.classList.contains('pending')`, { what: 'the pending chip' });
         assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [[`/api/send?id=${IDS.master}`, '/model sonnet']]);
+        await page.waitFor(`${marked} === 'sonnet'`, { what: 'the mark on the picked model', timeout: 5000 });
         await page.cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 800, deviceScaleFactor: 1, mobile: true });
         await page.waitFor(`${btn}.getBoundingClientRect().width > 0`, { what: 'the chip at phone width' });
         for (let i = 0; i < 10 && !(await page.ev(`document.getElementById('c-model').open`)); i++) { // a click while the pick's close animation runs is dropped

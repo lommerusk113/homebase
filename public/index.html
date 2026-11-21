@@ -77,11 +77,11 @@
       <div class="composer">
       <div class="c-status idle" id="status" role="status"><span class="pulse"></span><span id="status-text">Connecting…</span><button class="c-compact" id="status-restart" type="button" hidden>Restart chat</button><wa-dropdown class="c-model" id="c-model" hidden placement="top-end">
       <button class="c-chip" type="button" slot="trigger" id="c-model-btn" title="Model for this chat" aria-label="Model for this chat"></button>
-      <wa-dropdown-item value="opus">Opus</wa-dropdown-item>
-      <wa-dropdown-item value="sonnet">Sonnet</wa-dropdown-item>
-      <wa-dropdown-item value="haiku">Haiku</wa-dropdown-item>
-      <wa-dropdown-item value="fable">Fable</wa-dropdown-item>
-      <wa-dropdown-item value="default">Default<span slot="details">your account's default</span></wa-dropdown-item>
+      <wa-dropdown-item type="checkbox" value="opus">Opus</wa-dropdown-item>
+      <wa-dropdown-item type="checkbox" value="sonnet">Sonnet</wa-dropdown-item>
+      <wa-dropdown-item type="checkbox" value="haiku">Haiku</wa-dropdown-item>
+      <wa-dropdown-item type="checkbox" value="fable">Fable</wa-dropdown-item>
+      <wa-dropdown-item type="checkbox" value="default">Default<span slot="details">your account's default</span></wa-dropdown-item>
     </wa-dropdown><span class="c-ctx" id="status-ctx"></span><button class="c-compact" id="compact-nudge" type="button" hidden>Compact?</button></div>
       <div class="c-attached" id="attached" hidden></div>
       <div class="c-row"><wa-dropdown class="c-plus" id="plus-menu" placement="top-start"><button class="c-attach" id="attach-btn" type="button" slot="trigger" aria-label="Add files and chat options" title="Add files and chat options"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button><wa-dropdown-item value="files">Add files…</wa-dropdown-item><hr class="c-sep">

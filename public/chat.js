@@ -276,27 +276,31 @@ function optButton(label, n, { desc, ro, quiet } = {}) {
 export const openOptions = () => [.../** @type {NodeListOf<HTMLElement>} */ ([$('boot-opts'), $('ask-opts'), $('wait-opts'), [...document.querySelectorAll('#feed .replies')].at(-1)]
     .find(c => c?.checkVisibility() && c.querySelector('wa-button.c-opt .k'))?.querySelectorAll('wa-button.c-opt') ?? [])];
 
-// Enter on a waiting row (keys.js): once that chat's question is drawn, its first option takes the focus.
+// Enter on a waiting row (keys.js): once that chat's question is drawn, the question takes the focus: its card, strip
+// or bubble, never an option, so a second Enter answers nothing. Tab or a digit reaches the options from there.
 /** @type {{ sid: string, until: number } | null} */
-let wantOption = null;
+let wantQuestion = null;
 /** @param {string} sid */
-export function focusOptionOf(sid) {
-    wantOption = { sid, until: Date.now() + 5000 }; // ponytail: a chat that takes longer to load keeps focus on its row
+export function focusQuestionOf(sid) {
+    wantQuestion = { sid, until: Date.now() + 5000 }; // ponytail: a chat that takes longer to load keeps focus on its row
     if (chatKey?.startsWith(sid)) { // already on screen
         focusWanted(sid);
     }
 }
 /** @param {string} sid */
 function focusWanted(sid) {
-    if (wantOption?.sid !== sid) {
+    if (wantQuestion?.sid !== sid) {
         return;
     }
-    const b = Date.now() < wantOption.until && openOptions()[0];
-    if (b || Date.now() >= wantOption.until) {
-        wantOption = null;
+    const q = Date.now() < wantQuestion.until && /** @type {HTMLElement | null | undefined} */ (openOptions()[0]?.closest('.c-note, .bubble'));
+    if (q || Date.now() >= wantQuestion.until) {
+        wantQuestion = null;
     }
-    if (b) {
-        /** @type {any} */ (b).updateComplete.then(() => b.focus({ preventScroll: true })); // a button drawn just now has nothing to focus yet
+    if (q) {
+        if (!q.hasAttribute('tabindex')) {
+            q.tabIndex = -1;
+        }
+        q.focus({ preventScroll: true });
     }
 }
 

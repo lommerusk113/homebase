@@ -39,18 +39,38 @@ export default {
         assert.equal(page.posts.length, 1, 'typed, not sent');
     },
 
-    'Enter on a waiting row puts focus on the first option of its question, and answering there moves it to the composer': async ({ page, open, IDS }) => {
+    'Enter on a waiting row puts focus on its question, never on an option: a second Enter sends nothing, Tab reaches the options': async ({ page, open, IDS }) => {
         await open({ chat: IDS.worker });
         const row = `document.querySelector('#masters tr[data-key="asking:${IDS.master}"]')`;
         await page.waitFor(row, { what: 'the needs-you row' });
         await page.ev(`${row}.focus()`);
         await page.key('Enter', 'Enter');
-        await page.waitFor(`document.activeElement?.matches('wa-button.c-opt')`, { what: 'focus on an option' });
-        assert.equal(await page.ev(`document.activeElement.querySelector('.k').textContent`), '1', 'the first one');
-        const label = await page.ev(`document.activeElement.firstChild.textContent`);
+        await page.waitFor(`document.activeElement?.querySelector('wa-button.c-opt')`, { what: 'focus on the question' });
         await page.key('Enter', 'Enter');
-        await page.waitFor(`document.activeElement?.id === 'msg'`, { what: 'focus on the composer' });
-        assert.deepEqual(page.posts.map(p => p.body), [label]);
+        await sleep(300);
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')), [], 'Enter, Enter sends nothing');
+        await page.key('Tab', 'Tab');
+        await page.waitFor(`document.activeElement?.closest('wa-button.c-opt, .c-note, .bubble')`, { what: 'Tab to stay in the question' });
+        const label = await page.ev(`document.querySelector('wa-button.c-opt').firstChild.textContent`);
+        await page.key('1', 'Digit1');
+        for (let i = 0; i < 20 && !page.posts.length; i++) {
+            await sleep(100);
+        }
+        assert.deepEqual(page.posts.map(p => p.body), [label], 'a digit still answers');
+    },
+
+    'Enter, Enter on a board row of the session that asks sends nothing': async ({ page, open }) => {
+        await open();
+        await page.waitFor(`document.querySelectorAll('#feed .replies wa-button').length === 3`, { what: 'the numbered options' });
+        const row = `[...document.querySelectorAll('#masters tr[data-key]')].find(r => r.textContent.includes('Investigate flaky test'))`;
+        await page.waitFor(row, { what: 'the unrelated row' });
+        await page.ev(`${row}.focus()`);
+        await page.key('Enter', 'Enter');
+        await sleep(400);
+        assert.ok(!await page.ev(`!!document.activeElement?.closest('wa-button.c-opt')`), 'focus is not on an option');
+        await page.key('Enter', 'Enter');
+        await sleep(300);
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')), [], 'nothing sent');
     },
 
     'n steps through every chat waiting on you and starts over': async ({ page, open, IDS }) => {

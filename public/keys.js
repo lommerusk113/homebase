@@ -3,7 +3,7 @@
 // The focused row is tracked by item key, so it survives the 3s re-renders; list.js and issues.js call hooks.rendered after each one.
 import { $, el, waButton, state, hooks } from './core.js';
 import { select, renderBoard } from './list.js';
-import { openOptions, focusOptionOf } from './chat.js';
+import { openOptions, focusQuestionOf } from './chat.js';
 import { showTab, activeTab, collapseIssue } from './issues.js';
 import { openLog } from './log.js';
 
@@ -170,10 +170,10 @@ function onKey(e) {
         next: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, 1)),
         prev: () => focusRow(stepKey(rows().map(r => r.dataset.key), focusKey, -1)),
         toggle: () => {
-            // opening a waiting chat by keyboard: its first option takes the focus once the question is drawn
-            const waiting = focusKey?.startsWith('asking:') ? focusKey.slice(7) : x?.column === 'needs-you' && state.selected !== x.key ? x.sessionId : null;
-            if (waiting) {
-                focusOptionOf(waiting);
+            // opening a waiting chat by keyboard: its question takes the focus once it is drawn. Only the chat's own
+            // row: an item row of the same session may be about something else than the question on screen.
+            if (focusKey?.startsWith('asking:')) {
+                focusQuestionOf(focusKey.slice(7));
             }
             return card ? card.click() : x && rowOf(x.key) && select(x);
         },

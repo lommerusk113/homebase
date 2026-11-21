@@ -533,6 +533,7 @@ wa-details.group::part(icon) { color:var(--muted); font-size:var(--fs-s); }
 ul.comments { margin:0; padding:0; list-style:none; font-size:var(--fs-m); }
 ul.comments li { margin:3px 0; }
 ul.comments a { color:var(--fg); }
+ul.comments li.seen a { color:var(--muted); }
 .rows .pr { width:170px; } .rows .br { width:16%; } .rows .act { width:186px; white-space:nowrap; text-align:right; padding-right:0; }
 .ci-pill { --c:var(--c-idle); display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; margin-left:4px; border-radius:var(--r-pill); font-size:var(--fs-xs); font-weight:700; line-height:1; text-decoration:none; vertical-align:middle; color:var(--c); background:color-mix(in srgb, var(--c) 15%, transparent); }
 .ci-pill.stale { --c:var(--c-warn); }

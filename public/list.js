@@ -460,10 +460,11 @@ function detail(x) {
         all.onclick = markAllSeen;
         h.append(all);
         d.append(h);
-        if (fresh.length) {
+        const every = freshComments(x.comments, 0); // the seen ones too, muted: the badge counts them
+        if (every.length) {
             const ul = el('ul', 'comments');
-            ul.append(...fresh.map(c => {
-                const li = el('li'), a = el('a', null, c.excerpt || '(no text)');
+            ul.append(...every.map(c => {
+                const li = el('li', fresh.includes(c) ? null : 'seen'), a = el('a', null, c.excerpt || '(no text)');
                 a.href = c.url;
                 a.target = '_blank';
                 li.append(el('b', null, c.author), el('span', 'muted', ` · ${ago(Date.parse(c.at))}${c.resolved === false ? ' · unresolved' : ''} · `), a);

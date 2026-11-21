@@ -91,5 +91,17 @@ export default {
             await page.waitFor(`!document.querySelector('${btn}')`, { what: 'the row to turn into a sent one' });
             assert.deepEqual(sends().map(p => p.body), [shown], 'exactly what was shown');
         });
+    },
+
+    'a wide table in a reply scrolls sideways inside its bubble, with whole words': async ({ page, open }) => {
+        await asPhone(page, async () => {
+            await open();
+            await page.waitFor(`document.querySelector('#feed .bubble .body')`, { what: 'a reply' });
+            const md = '| File | Lines added | Lines removed | Parameter | Description of the change |\n|---|---|---|---|---|\n| src/cart.js | 12 | 4 | discountPercentage | Applies the discount before tax is calculated |';
+            await page.ev(`import('/core.js').then(m => { document.querySelector('#feed .bubble .body').append(m.rich(${JSON.stringify(md)})); })`);
+            const r = await page.ev(`(() => { const t = document.querySelector('#feed .body table'), b = t.closest('.bubble').getBoundingClientRect();
+                return { scrolls: t.scrollWidth > t.clientWidth, inside: t.getBoundingClientRect().right <= b.right, page: document.documentElement.scrollWidth <= innerWidth }; })()`);
+            assert.deepEqual(r, { scrolls: true, inside: true, page: true });
+        });
     }
 };

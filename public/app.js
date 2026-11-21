@@ -348,8 +348,14 @@ const renderBell = () => {
 };
 bell.hidden = !window.Notification;
 // permission is only ever requested from this click
+let blocked = null;
 bell.onclick = async () => {
     const on = !notifyOn() && await Notification.requestPermission() === 'granted';
+    if (!on && Notification.permission === 'denied') { // the browser asks nothing then: say why nothing happened
+        blocked ??= tooltip(bell, 'Blocked in browser settings');
+        bell.after(blocked);
+        blocked.open = true;
+    }
     store.set('notify', on ? '1' : '0');
     renderBell();
 };

@@ -4178,3 +4178,50 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.deepEqual([ghPr({ ...gh, reviewDecision: 'APPROVED' }, 'https://github.com/o/r/pull/1').approved, ghPr({ ...gh, reviewDecision: '' }, 'https://github.com/o/r/pull/1').approved], [true, false]);
     console.log('ok approved stage');
 }
+
+// One odd entry in one transcript never takes /api/sessions or that chat's feed down: the entry is skipped, and a
+// session that still can't be read is left out and logged once per file and size, not per poll.
+{
+    const home = mkdtempSync(join(tmpdir(), 'hb-odd-'));
+    const dir = join(home, '.claude', 'projects', 'p');
+    mkdirSync(dir, { recursive: true });
+    const at = new Date().toISOString();
+    const line = e => JSON.stringify({ timestamp: at, ...e }) + '\n';
+    const tool = (name, input) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't', name, input }] } });
+    writeFileSync(join(dir, 'good.jsonl'), line({ type: 'user', sessionId: 'good', message: { content: 'hi' } }));
+    writeFileSync(join(dir, 'odd.jsonl'), ['null\n', '7\n', '[1]\n',
+        line({ type: 'user', sessionId: 'odd', cwd: 42, message: { content: [null, { type: 'text', text: 'hello' }] } }),
+        line({ type: 'user', sessionId: { a: 1 }, message: { content: 'x' } }),
+        line({ type: 'pr-link', prUrl: 7 }),
+        line(tool('Edit', { file_path: 7 })),
+        line(tool('Bash', { command: 7 })),
+        line(tool('AskUserQuestion', { questions: 'which?' })),
+        line(tool('AskUserQuestion', { questions: [null, { question: 7, options: 'a' }] })),
+        line({ type: 'assistant', message: { content: [null, { type: 'text', text: 'answer' }] } })
+    ].join(''));
+    const code = `import { sessions } from './server/sessions.mjs'; import { feedTail } from './server/transcripts.mjs'; import { statSync } from 'node:fs';
+        const ids = (await sessions()).map(s => s.id).sort(); await sessions();
+        const path = ${JSON.stringify(join(dir, 'odd.jsonl'))};
+        const feed = await feedTail(path, statSync(path));
+        console.log(JSON.stringify({ ids, texts: feed.items.map(i => i.text) }));`;
+    const out = JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home }, cwd: import.meta.dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }));
+    assert.deepEqual(out.ids, ['good', 'odd'], 'both sessions are listed');
+    assert.ok(out.texts.includes('answer'), 'the odd chat still shows its replies');
+    rmSync(home, { recursive: true, force: true });
+
+    // a session that fails anyway is left out, the rest listed, and the file logged once per size
+    const { tolerant } = await import('./server/sessions.mjs');
+    const logged = [];
+    const read = tolerant(async t => {
+        if (t.path === 'bad') {
+            throw new Error('boom');
+        }
+        return { id: t.path };
+    }, m => logged.push(m));
+    assert.deepEqual([await read({ path: 'ok', st: { size: 1 } }), await read({ path: 'bad', st: { size: 1 } }), await read({ path: 'bad', st: { size: 1 } })], [{ id: 'ok' }, null, null]);
+    assert.equal(logged.length, 1);
+    assert.match(logged[0], /bad.*boom/);
+    await read({ path: 'bad', st: { size: 2 } });
+    assert.equal(logged.length, 2, 'logged again once the file changed size');
+    console.log('ok odd transcript entries');
+}

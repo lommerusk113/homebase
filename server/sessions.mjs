@@ -500,8 +500,29 @@ export function sentSummaries(entries) {
     return out;
 }
 
+// read(transcript, ...), but a transcript it throws on gives null, so one unreadable chat never fails the whole list.
+// Logged once per file and size, not on every poll.
+export function tolerant(read, log = console.error) {
+
+    const logged = new Map(); // path -> the size it was logged at
+
+    return async (t, ...rest) => {
+        try {
+            return await read(t, ...rest);
+        } catch (e) {
+            if (logged.get(t.path) !== t.st.size) {
+                logged.set(t.path, t.st.size);
+                log(`skipped a transcript Homebase can't read: ${t.path}: ${e.message}`);
+            }
+
+            return null;
+        }
+    };
+}
+
 // One session from its cached tail, with its subagents; null when the transcript vanished before it was read.
-async function sessionOf({ dir, file, path, st }, now, live) {
+const sessionOf = tolerant(readSession);
+async function readSession({ dir, file, path, st }, now, live) {
 
     let entries;
     try {

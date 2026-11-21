@@ -75,6 +75,38 @@ function alive(pid) {
     }
 }
 
+const isObj = v => !!v && typeof v === 'object' && !Array.isArray(v);
+const isString = v => typeof v === 'string';
+const dropUnless = (o, keys, ok) => keys.forEach(k => {
+    if (k in o && !ok(o[k])) {
+        delete o[k];
+    }
+});
+
+// A parsed transcript line in the shape every reader here assumes, so one odd line never throws in them: an object,
+// its ids and paths strings, its content blocks objects, a tool call's input an object with string paths and commands
+// and well-formed questions. A field of another type is dropped; null for a line that is no object.
+export function cleanEntry(e) {
+
+    if (!isObj(e)) {
+        return null;
+    }
+    dropUnless(e, ['cwd', 'sessionId', 'gitBranch', 'prUrl', 'aiTitle'], isString);
+    dropUnless(e, ['message', 'attachment'], isObj);
+    if (Array.isArray(e.message?.content)) {
+        e.message.content = e.message.content.filter(isObj);
+        for (const b of e.message.content.filter(b => b.type === 'tool_use')) {
+            b.input = isObj(b.input) ? b.input : {};
+            dropUnless(b.input, ['file_path', 'command', 'description', 'prompt'], isString);
+            dropUnless(b.input, ['questions'], Array.isArray);
+            b.input.questions &&= b.input.questions.filter(isObj)
+                .map(q => ({ ...q, question: String(q.question ?? ''), options: Array.isArray(q.options) ? q.options.filter(isObj) : [] }));
+        }
+    }
+
+    return e;
+}
+
 // A few huge lines (tool results, api-request blobs of ~1 MB) can fill the byte tail on their own, and one long turn
 // can outrun it, so it grows until it holds TAIL_MIN_LINES lines and a turn start, the whole file or `cap` bytes.
 // ponytail: a transcript with no turn markers (older Claude Code) is read up to `cap` on every change
@@ -102,7 +134,7 @@ async function readTailInfo(path, size, max = TAIL_BYTES, cap = TAIL_MAX_BYTES) 
 
         const entries = lines.flatMap(l => {
             try {
-                return l ? [JSON.parse(l)] : [];
+                return l ? [cleanEntry(JSON.parse(l))].filter(Boolean) : [];
             } catch {
                 return [];
             }

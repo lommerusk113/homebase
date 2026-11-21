@@ -1161,11 +1161,11 @@ export async function refreshChat() {
     try {
         const r = await api(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}&max=${feedMax.max}`);
         if (!r.ok) {
-            throw new Error(await r.text());
+            throw Object.assign(new Error(await r.text()), { status: r.status });
         }
         data = await r.json();
-    } catch {
-        setOffline(true);
+    } catch (e) {
+        setOffline(true, e.status);
         return setStatus({ error: true });
     }
     if (chatSession()?.id !== s.id || seq !== refreshSeq) {

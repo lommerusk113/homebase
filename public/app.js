@@ -483,7 +483,7 @@ async function pollOnce() {
     try {
         const r = await api(`/api/sessions${document.hasFocus() ? '?focused=1' : ''}`); // a focused page holds back phone pushes
         if (!r.ok) {
-            throw new Error(String(r.status));
+            throw Object.assign(new Error(String(r.status)), { status: r.status });
         }
         const text = await r.text();
         // ponytail: skip identical re-renders so text in an open detail stays selectable; re-render each minute for the ages
@@ -522,8 +522,8 @@ async function pollOnce() {
         setOffline(false);
         setFormatWarn('transcript', state.sessions.some(s => s.known === false));
         updateTitle();
-    } catch {
-        setOffline(true);
+    } catch (e) {
+        setOffline(true, e.status);
     }
     await findStarting();
     refreshChat();

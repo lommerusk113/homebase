@@ -43,7 +43,7 @@ const parse = v => {
 // The tracked list is the server's (tracked.json, shared with paired phones); localStorage keeps this browser's copy for a fast first paint.
 /**
  * @type {{ sessions: Session[], tracked: string[], project: string, selected: string | null, chat: string | null, unfold: Set<string>,
- *   outbox: OutboxItem[], nudged: Set<string>, offline?: boolean, limits?: Limits | null, asking?: string | null, reviews?: ReviewRequest[], items?: WorkItem[],
+ *   outbox: OutboxItem[], nudged: Set<string>, offline?: boolean, serverError?: boolean,limits?: Limits | null, asking?: string | null, reviews?: ReviewRequest[], items?: WorkItem[],
  *   opened?: { key: string, since: number }, showMerged?: boolean, starting?: string | null, startingTmux?: string | null, focus?: string | null, boot?: { question: string, options: string[], selected: number } | null }}
  */
 export const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [], nudged: new Set(), limits: null };
@@ -130,10 +130,17 @@ export const friendly = msg => FRIENDLY.find(([re]) => re.test(msg))?.[1] ?? msg
  */
 export const $ = id => /** @type {any} */ (document.getElementById(id));
 // Failed poll (network, 401, non-OK): header "Offline", list dimmed with its "Disconnected" note. The next good poll clears it.
-export const setOffline = off => {
+// status: the HTTP status of the answer, if one came. A 5xx is Homebase failing, not the connection, and is named so.
+/** @param {boolean} off @param {number} [status] */
+export const setOffline = (off, status) => {
+    const failed = off && status >= 500;
     state.offline = off;
+    state.serverError = failed;
     $('offline').hidden = !off;
+    $('offline').textContent = failed ? 'Server error' : 'Offline';
     document.body.classList.toggle('disconnected', off);
+    document.body.classList.toggle('server-error', failed);
+    document.querySelector('.stale-note').textContent = `${failed ? 'Homebase hit an error (see its log)' : 'Disconnected'} — showing the last known data`;
 };
 // Header warning when Claude Code's transcript or screen no longer parses: any reason shown keeps it up. The server puts
 // its "Claude Code is newer than the checked version" message in data-version; that alone shows it too, from the first poll on.
@@ -274,7 +281,7 @@ export async function markHandled(sid, reply) {
 /** @param {(Partial<Transcript> & { error?: boolean }) | null} d @param {Pick<Session, 'needsYou' | 'step'> | null} [s] */
 export const chatStatus = (d, now = Date.now(), s = null) => {
     if (d?.error) {
-        return { kind: 'error', text: 'Can’t reach Homebase — reconnecting…' };
+        return { kind: 'error', text: state.serverError ? 'Homebase hit an error (see its log) — retrying…' : 'Can’t reach Homebase — reconnecting…' };
     }
     if (d?.asking) {
         return { kind: 'asking', text: 'Claude is asking — see the question above' };

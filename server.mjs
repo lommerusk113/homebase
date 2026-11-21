@@ -254,6 +254,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     const slash = body.trim().startsWith('/');
                     let result = null;
                     await send(url.searchParams.get('id'), body, null, {
+                        typed: !url.searchParams.has('canned'), // a button's message never declines an open question
                         after: pick || slash ? async name => {
                             if (pick) {
                                 await confirmModelSwitch(name).catch(() => false);

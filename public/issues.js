@@ -113,7 +113,7 @@ function sendIssue(c) {
     sentAt.set(c.iid, Date.now());
     renderIssues();
     setTimeout(() => renderIssues(), SENT_SHOWN_MS);
-    sendText(s.id, chatMessage(c));
+    sendText(s.id, chatMessage(c), undefined, undefined, true);
 }
 
 // The board's two views: Work (the item list) and Issues, switched by the header's segmented control (#tabs).

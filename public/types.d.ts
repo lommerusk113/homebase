@@ -205,6 +205,8 @@ interface OutboxItem extends ChatItem {
     answerTo?: string;
     /** sent after the text but not shown, kept for Retry */
     note?: string;
+    /** a button's message (row action, Load rules), not typed by the user */
+    canned?: boolean;
     okAt?: number;
     /** the server refused it (409): its error says why, and there is no Retry */
     refused?: boolean;

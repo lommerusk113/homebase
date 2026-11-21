@@ -3039,8 +3039,16 @@ import { parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup }
     assert.equal((await send(sid, 'hi', { ...session, asking: true }, f.opts(new Map())).catch(e => e)).status, 409);
     assert.deepEqual(f.keys(), [['has-session', '-t', '=cc-dddddddd']]);
     f = fake({ panes: calls => (calls.some(c => c.includes('Escape')) ? '❯ ' : q) });
-    await send(sid, 'hi', { ...session, asking: true }, f.opts(new Map()));
+    await send(sid, 'hi', { ...session, asking: true }, { ...f.opts(new Map()), typed: true });
     assert.deepEqual(f.keys().slice(1), [['send-keys', '-t', '=cc-dddddddd:', 'Escape'], ...typed('cc-dddddddd', 'hi')]);
+    // only what the user typed declines a question: a button's canned message (row action, Load rules) is refused, nothing pressed
+    for (const asking of [true, false]) {
+        f = fake({ panes: () => q });
+        const refused = await send(sid, 'Fix the pipeline', { ...session, asking }, f.opts(new Map())).catch(e => e);
+        assert.equal(refused.status, 409);
+        assert.match(refused.message, /answer/i);
+        assert.deepEqual(f.keys().slice(1), []);
+    }
     // asking by a stale marker (a permission prompt approved, its tool still running): the input box is back, so it is typed
     f = fake({ panes: () => '✻ Working… (12s)\n\n──────────\n❯ \n──────────\n' });
     await send(sid, 'hi', { ...session, asking: true }, f.opts(new Map()));

@@ -58,7 +58,7 @@ export default {
         assert.equal(await page.ev(`document.querySelector('#issues .card[data-key="issue:6"] .act-btn').textContent`), 'Start');
         await page.click('#issues .card[data-key="issue:6"] .act-btn');
         await page.waitFor(`document.querySelector('#issues .card[data-key="issue:6"] .st').textContent === 'starting…'`, { what: 'the card to say starting' });
-        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')).map(p => [new URL(p.url).search, p.body]), [[`?id=${IDS.master}`, 'Implement #6']]);
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')).map(p => [new URL(p.url).search, p.body]), [[`?id=${IDS.master}&canned=1`, 'Implement #6']]);
         assert.equal(await page.ev(`document.querySelector('#issues .card[data-key="issue:6"]').classList.contains('open')`), false, 'the click did not expand the card');
     },
 

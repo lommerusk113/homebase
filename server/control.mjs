@@ -71,9 +71,13 @@ const BOOT_MS = 30_000;
 const COMPACTING = /^\S Compacting conversation…/m; // its spinner line, tests/fixtures/pane-compacting.txt
 export const NEEDS_CLICK = 'Claude is showing a question that typing can\'t answer: pick one of its options on the card above';
 
+export const ANSWER_FIRST = 'Claude is asking a question: answer it in the chat first';
+
 // Types `text` into the session's tmux, starting one (claude --resume) when none runs. Claude Code's registry (reg) says
 // which tmux a live session is in; without a registry, a dead tmux plus a fresh transcript write means another terminal.
-export async function send(id, text, session = null, { tm = tmux, nap = sleep, reg = liveSessions, waitMs = BOOT_MS, after = null } = {}) {
+// typed: the user wrote this text, so an open question or permission prompt is declined (Esc) for it; a button's canned
+// message is refused instead, as declining would reject the tool and interrupt the turn behind the user's back.
+export async function send(id, text, session = null, { tm = tmux, nap = sleep, reg = liveSessions, waitMs = BOOT_MS, after = null, typed = false } = {}) {
 
     session ??= await resumable(id);
     const live = await reg();
@@ -122,6 +126,9 @@ export async function send(id, text, session = null, { tm = tmux, nap = sleep, r
         // (asking with the input box back is a stale marker: a permission prompt answered, its tool still running)
         if (!started && session.asking && !questionOpen(pane) && !promptBack(pane)) {
             throw conflict("Claude is asking something Homebase can't see: answer it in the terminal");
+        }
+        if (!typed && questionOpen(pane)) {
+            throw conflict(ANSWER_FIRST);
         }
         await cancelQuestion(name, { tm, nap });
         await typeSteps(name, sendSteps(name, text), { tm, nap });
@@ -245,7 +252,7 @@ export async function clearChat(id) {
     const c = { from: id, tmux: targetOf(id, await liveSessions()), cwd: s.cwd, clearedAt: Date.now() };
     clears.push(c);
     try {
-        c.tmux = await send(id, '/clear', s); // send may have replaced a dead aliased tmux session
+        c.tmux = await send(id, '/clear', s, { typed: true }); // send may have replaced a dead aliased tmux session
     } catch (e) {
         clears.splice(clears.indexOf(c), 1);
         throw e;

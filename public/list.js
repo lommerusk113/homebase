@@ -387,7 +387,7 @@ function actionButton(x) {
         }
         setTimeout(renderBoard, SENT_MS + 500);
         // a failed send drops the sent mark; sendText shows the error
-        if (!await sendText(x.sessionId, x.action.message)) {
+        if (!await sendText(x.sessionId, x.action.message, undefined, undefined, true)) {
             sent.delete(x.key);
             saveSent();
             renderBoard();

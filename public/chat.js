@@ -411,7 +411,7 @@ function noteRow(i, sid, key) {
         const retry = waButton('Retry', 'retry', { pill: true }), dismiss = waButton('Dismiss', 'dismiss', { pill: true, appearance: 'plain' });
         retry.onclick = () => {
             drop();
-            sendText(lost.sid, lost.text, lost.answerTo, lost.note);
+            sendText(lost.sid, lost.text, lost.answerTo, lost.note, lost.canned);
         };
         dismiss.onclick = () => {
             drop();
@@ -528,7 +528,7 @@ function showRules(s) {
         $('rules-dismiss').onclick = dismiss;
         // Claude re-reads the files itself: no restart, so running agents keep going
         $('rules-load').onclick = async () => {
-            if (await sendText(s.id, s.rulesReload)) {
+            if (await sendText(s.id, s.rulesReload, undefined, undefined, true)) {
                 dismiss();
             }
         };
@@ -1319,16 +1319,17 @@ async function upload(files) {
 
 // Types text into a session as an outbox bubble ("sending…", then gone once the transcript has it); false if it failed.
 // note: appended to what is sent but not shown, so the chat shows just the label.
-/** @param {string} sid @param {string} text @param {string} [answerTo] @param {string} [note] @returns {Promise<boolean>} */
-export async function sendText(sid, text, answerTo, note) {
+// canned: a button's message, not typed by the user: the server refuses it while Claude asks, instead of declining the question.
+/** @param {string} sid @param {string} text @param {string} [answerTo] @param {string} [note] @param {boolean} [canned] @returns {Promise<boolean>} */
+export async function sendText(sid, text, answerTo, note, canned) {
     $('c-err').textContent = '';
     /** @type {OutboxItem} */
-    const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo, note };
+    const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo, note, canned };
     state.outbox = [...state.outbox.filter(o => !(o.error && o.sid === sid) && !(answerTo && o.answerTo === answerTo)), out];
     stick = true;
     refreshChat();
     try {
-        const r = await api(`/api/send?${sid.startsWith('cc-new-') ? 'tmux' : 'id'}=${encodeURIComponent(sid)}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: note ? `${text}\n\n${note}` : text, signal: AbortSignal.timeout(45_000) }); // past control.mjs BOOT_MS: a chat that has to start first isn't "Not sent" while it still goes through
+        const r = await api(`/api/send?${sid.startsWith('cc-new-') ? 'tmux' : 'id'}=${encodeURIComponent(sid)}${canned ? '&canned=1' : ''}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: note ? `${text}\n\n${note}` : text, signal: AbortSignal.timeout(45_000) }); // past control.mjs BOOT_MS: a chat that has to start first isn't "Not sent" while it still goes through
         if (!r.ok) {
             out.refused = r.status === 409;
             throw new Error(await r.text());

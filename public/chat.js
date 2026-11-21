@@ -1343,6 +1343,7 @@ export async function sendText(sid, text, answerTo, note, canned) {
         }
         const said = result ? result.warning ?? 'ok' : await r.text();
         out.answered = said === 'answered'; // it went into the open question's text box (control.mjs send)
+        out.sending = !(out.answered || text.startsWith('/')); // those never land in the transcript as the user's: done once sent
         if ((draftSid ?? startingTarget()) === sid) {
             $('c-err').textContent = said === 'ok' || out.answered ? '' : said; // sent, with a warning (running twice)
         }

@@ -261,6 +261,7 @@ export default {
         const usage = await page.ev(`(() => { const b = ${panel('/usage')}, pre = b.querySelector('pre'); return { text: pre.textContent, ws: getComputedStyle(pre).whiteSpace, font: getComputedStyle(pre).fontFamily, note: b.querySelector('.b-note')?.textContent ?? null, after: b.previousElementSibling.textContent.includes('/usage') }; })()`);
         assert.deepEqual({ ...usage, font: /Mono|monospace/.test(usage.font) }, { text: panels['/usage'].text, ws: 'pre', font: true, note: null, after: true });
         assert.equal(await page.ev(`${panel('/model')}.querySelector('.b-note').textContent`), 'Pick this in the terminal, or type the command with its argument (e.g. /model opus)');
+        assert.equal(await page.ev(`!!${panel('/usage')}.previousElementSibling.querySelector('.b-note')`), false, 'a sent command is done: no pending note on its bubble');
         await page.ev(`(() => { const now = Date.now; Date.now = () => now() + 31_000; })()`); // past OUTBOX_TTL_MS
         await page.click('#msg');
         await page.type('x');

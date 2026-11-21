@@ -126,6 +126,7 @@ for (const line of ['**▸ Pick a port · needs you**', '**▸ Pick a port · Ne
 }
 assert.equal(splitTopic('**▸ What needs you to know**\nx').needsYou, false);
 assert.equal(splitTopic('**▸ Colon topic:**\nx').topic, 'Colon topic');
+assert.deepEqual(splitTopic('**▸ Bold closed early** · needs you\nx'), { topic: 'Bold closed early', needsYou: true, text: 'x' });
 assert.equal(splitTopic('**▸ Colon outside**:\nx').topic, 'Colon outside');
 assert.deepEqual(splitTopic('Body first\n**▸ Not a topic**'), { topic: null, needsYou: false, text: 'Body first\n**▸ Not a topic**' });
 assert.deepEqual(splitTopic('**▸ Only topic**'), { topic: 'Only topic', needsYou: false, text: '' });

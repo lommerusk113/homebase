@@ -199,7 +199,7 @@ export function splitTopic(text) {
         return { topic: null, needsYou: false, text };
     }
 
-    const raw = m[1].replace(/\*\*$/, '').replace(/:$/, '').trim(), needsYou = NEEDS_YOU.test(raw);
+    const raw = m[1].replace(/\*\*/g, '').replace(/:$/, '').trim(), needsYou = NEEDS_YOU.test(raw);
 
     return { topic: raw.replace(NEEDS_YOU, '').trim() || null, needsYou, text: text.slice(m[0].length).trim() };
 }

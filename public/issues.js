@@ -267,7 +267,7 @@ function lane({ who, me, list, closed }, n, ms) {
         : list.length ? [`${list.length} up for grabs`] : [];
     side.append(name, el('small', null, parts.join(' · ') || 'nothing open'), el('small', null, `${closed} closed`));
     const strip = el('div', 'strip');
-    strip.append(...(list.length ? list.map(c => card(c, ms)) : [el('span', 'empty', 'Every open issue has an owner.')]));
+    strip.append(...(list.length ? list.map(c => card(c, ms)) : [el('span', 'empty', ms.total === 0 ? 'No issues here.' : 'Every open issue has an owner.')]));
     sec.append(side, strip);
     return sec;
 }
@@ -307,6 +307,10 @@ function card(c, ms) {
                 sendIssue(c);
             }
         };
+        // somebody else's issue: say so before it is started
+        if (!work && c.assignees.length && !c.assignees.some(p => p.username === data?.me?.username)) {
+            start.title = `Assigned to ${c.assignees.map(p => firstName(p.name)).join(', ')}`;
+        }
         ft.append(start);
     }
     a.append(top, el('div', 'tt', open ? c.title : shortTitle(c.title, ms.title)));
@@ -329,9 +333,7 @@ function card(c, ms) {
 /** @param {Card} c @param {ReturnType<typeof issueWork>} work */
 function more(c, work) {
     const box = el('div', 'more'), msg = chatMessage(c), acts = el('div', 'acts');
-    if (c.desc) {
-        box.append(el('div', 'desc', c.desc));
-    }
+    box.append(el('div', 'desc', c.desc || 'No description.'));
     const gl = link('gl', `Open in ${forgeWords(data?.forge).forge} ↗`, c.url);
     if (work) { // somebody is on it already: show that chat instead of sending Implement again
         const show = waButton('Check on it', 'act-btn', { variant: 'neutral', appearance: 'outlined' });

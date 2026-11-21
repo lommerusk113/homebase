@@ -131,7 +131,13 @@ export async function openNewProject(mode = 'new') {
 /** @param {(p: { name: string, dir: string, sessionId: string | null, tmux?: string }) => void} onCreated */
 export function initNewProject(onCreated) {
 
-    $('np-name').addEventListener('input', validate);
+    $('np-name').addEventListener('input', () => {
+        if (!busy) { // a refused name's error and steps go once the name is edited
+            $('np-err').textContent = '';
+            $('np-steps').hidden = true;
+        }
+        validate();
+    });
     $('np-form').addEventListener('submit', e => {
         e.preventDefault();
         if (!$('np-go').disabled) {

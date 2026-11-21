@@ -27,7 +27,7 @@ interface Session {
     known: boolean;
     /** a question (AskUserQuestion) or a permission prompt waits on the user */
     asking: boolean;
-    /** its turn never ended and nothing works on it any more (process gone, or silent for 30 min) */
+    /** its turn never ended and has been silent for 30 min, since died rows first ran here (never a closed chat) */
     died?: boolean;
     /** the text of that question or prompt; null when not asking */
     question: string | null;

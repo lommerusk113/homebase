@@ -4282,7 +4282,7 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     for (const age of [31 * min, 61 * min, 9 * 60 * min]) {
         assert.equal(turnState(open, age).died, true);
         assert.equal(turnState(open, age, null, running).died, true, 'the process lives but wrote nothing');
-        assert.equal(turnState(open, age, null, gone).died, true, 'the process is gone');
+        assert.equal(!!turnState(open, age, null, gone).died, false, 'the process is gone: closed on purpose or not, it cannot be told, so no row');
         assert.equal(summarize(open, age).died, true, 'the session says so');
         assert.equal(!!turnState(ended, age).died, false);
         assert.equal(!!turnState(ended, age, null, gone).died, false, 'closed after its turn ended');
@@ -4394,4 +4394,37 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     syncClock(null);
     assert.match(ago(Date.now() - 125_000), /^2/, 'no Date header: the page clock');
     console.log('ok clock skew');
+}
+
+// Died rows have a baseline: the first run with the feature notes "died rows start at" in the Homebase dir, and only a
+// turn whose last activity is later is flagged, so chats that died before never flood the board.
+{
+    const { diedSince } = await import('./server/sessions.mjs');
+    const hb = mkdtempSync(join(tmpdir(), 'hb-died-')), file = join(hb, 'sub', 'died-since.json');
+    assert.equal(diedSince(file, 1000), 1000, 'first run: now, written');
+    assert.equal(JSON.parse(readFileSync(file, 'utf8')), 1000);
+    assert.equal(statSync(file).mode & 0o777, 0o600);
+    assert.equal(diedSince(file, 5000), 1000, 'later runs keep the first');
+    writeFileSync(file, '{"trunc');
+    assert.equal(diedSince(file, 7000), 7000, 'an unreadable note starts over rather than flag old turns');
+    assert.equal(diedSince(file, 9000), 7000);
+
+    // through the session list: the same 40-minute-silent open turn is flagged only when it is newer than the baseline
+    const home = mkdtempSync(join(tmpdir(), 'hb-died-home-')), dir = join(home, '.claude', 'projects', 'p');
+    mkdirSync(dir, { recursive: true });
+    const min = 60_000, then = Date.now() - 40 * min, at = s => new Date(then + s * 1000).toISOString();
+    writeFileSync(join(dir, 'silent.jsonl'), [
+        { type: 'user', sessionId: 'silent', cwd: '/r', uuid: 'p', timestamp: at(0), turnPosition: { promptIndex: 1, turnIndex: 1 }, message: { role: 'user', content: 'go' } },
+        { type: 'assistant', sessionId: 'silent', uuid: 'a', timestamp: at(1), message: { content: [{ type: 'tool_use', id: 't', name: 'Bash', input: { command: 'npm test' } }] } }
+    ].map(e => JSON.stringify(e)).join('\n') + '\n');
+    utimesSync(join(dir, 'silent.jsonl'), new Date(then), new Date(then));
+    const code = "import { sessions } from './server/sessions.mjs'; console.log(JSON.stringify((await sessions()).map(s => [s.id, s.died])));";
+    const run = () => JSON.parse(execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home, HOMEBASE_DIR: hb, HOMEBASE_TMUX_SOCKET: 'homebase-test-none' }, cwd: import.meta.dirname, encoding: 'utf8' }));
+    assert.deepEqual(run(), [['silent', false]], 'it died before the feature first ran');
+    assert.ok(JSON.parse(readFileSync(join(hb, 'died-since.json'), 'utf8')) > then, 'that run wrote the baseline');
+    writeFileSync(join(hb, 'died-since.json'), JSON.stringify(then - 60 * min));
+    assert.deepEqual(run(), [['silent', true]], 'it died after the baseline');
+    rmSync(hb, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+    console.log('ok died baseline');
 }

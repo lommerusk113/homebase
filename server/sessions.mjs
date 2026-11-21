@@ -1,11 +1,12 @@
 // The session list: repo names, subagent summaries and status, session summaries, and sessions(), which joins them with
 // PR/MR state, work items and /clear aliases for GET /api/sessions.
 import { readdir, stat, open, readFile } from 'node:fs/promises';
+import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ROOT, projectDirs, WORKING_MS, cache, liveSessions, closedSession, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, splitTldr, gateRuns, turnState, hasTurnMarkers, turnPrompts, pendingQuestion, askMarker, readUsage, usageCache, latestTopic, queuedPrompts, spawnPrompts, chatItems } from './transcripts.mjs';
-import { loadStore, record, seeds, flush } from './store.mjs';
+import { loadStore, record, seeds, flush, STORE_FILE } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { repoPaths, accountOf } from './account.mjs';
 import { contextOf } from './limits.mjs';
@@ -539,6 +540,29 @@ export function tolerant(read, log = console.error) {
     };
 }
 
+// When "died" rows start: noted in the Homebase dir the first time a server with them runs, so the turns that died
+// before (every chat of the last days that ended mid-turn) never show up at once. An unreadable note starts over.
+// Written like items.json (temp file + rename, 0600); if that fails, this process still keeps its own start.
+let diedFrom;
+export function diedSince(file = join(dirname(STORE_FILE), 'died-since.json'), now = Date.now()) {
+
+    try {
+        const at = JSON.parse(readFileSync(file, 'utf8'));
+        if (Number.isFinite(at)) {
+            return at;
+        }
+    } catch {}
+    try {
+        mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+        writeFileSync(`${file}.${process.pid}.tmp`, JSON.stringify(now), { mode: 0o600 });
+        renameSync(`${file}.${process.pid}.tmp`, file);
+    } catch (e) {
+        console.error(`could not write ${file}: ${e.message}`);
+    }
+
+    return now;
+}
+
 // One session from its cached tail, with its subagents; null when the transcript vanished before it was read.
 const sessionOf = tolerant(readSession);
 async function readSession({ dir, file, path, st }, now, live) {
@@ -566,6 +590,9 @@ async function readSession({ dir, file, path, st }, now, live) {
         }));
 
     const ctx = await contextOf(id);
+
+    diedFrom ??= diedSince();
+    s.died &&= (s.lastActivity ?? st.mtimeMs) > diedFrom; // only turns that died since the feature first ran here
 
     return { ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, context: ctx?.percent ?? null, contextSize: ctx?.size ?? null, contextAt: ctx?.at ?? null, agents: subagents };
 }

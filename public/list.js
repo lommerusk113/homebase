@@ -168,7 +168,7 @@ function askingRow(s) {
     return tr;
 }
 
-// A main chat whose turn never ended and that nothing works on (the laptop slept, the process died): without a row it
+// A main chat whose turn never ended and went silent for 30 minutes (the laptop slept, Claude hangs): without a row it
 // would only vanish from Doing. It stays under Needs you until the user opens it, per turn (lastActivity).
 /** @param {Session} s */
 const diedMark = s => String(s.lastActivity ?? s.updated);

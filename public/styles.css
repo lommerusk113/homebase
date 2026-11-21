@@ -598,7 +598,14 @@ ul.comments li.seen a { color:var(--muted); }
 .keys-help dt { font-family:'JetBrains Mono', monospace; font-weight:500; white-space:nowrap; }
 .keys-help dd { margin:0; color:var(--muted); }
 .keys-msg { white-space:pre-wrap; overflow-wrap:anywhere; font-size:var(--fs-m); background:var(--chip); padding:8px; border-radius:var(--r-s); }
-@media (max-width: 700px) { wa-dialog wa-button[slot="footer"] { --wa-form-control-height:44px; font-size:var(--fs-m); } }
+/* phones: small controls keep their look and get a 44px tap height (the ::before), as the milestone pill has; dialog buttons grow to it */
+@media (max-width: 700px) {
+  :is(.c-back, .show, .need-pill, a.ci-pill, a.chip, .ms-menu .info a) { position:relative; }
+  :is(.c-back, .show, .need-pill, a.ci-pill, a.chip, .ms-menu .info a)::before { content:''; position:absolute; inset:50% 0 auto; height:44px; transform:translateY(-50%); }
+  a.ci-pill::before { inset-inline:-10px; }
+  a.chip { overflow:visible; } /* a clipped chip would clip its tap area too */
+  wa-dialog wa-button[size], .c-ask-more { --wa-form-control-height:44px; font-size:var(--fs-m); }
+}
 
 @media (max-width: 640px) {
   header.top { padding-left:16px; padding-right:16px; }
@@ -822,7 +829,7 @@ wa-details[open] .g-note { display:none; }
   /* chat header: the title keeps some room; with a newer session the chips make way and Switch never truncates */
 
   .c-head { height:44px; padding-top:0; }
-  header.top .quiet, .c-head .quiet { min-width:40px; min-height:40px; }
+  header.top .quiet, .c-head .quiet { min-width:44px; min-height:44px; }
 
 
   .c-newer .show { min-height:44px; }

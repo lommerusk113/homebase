@@ -279,7 +279,12 @@ function shortTime(at) {
 /** @param {ChatItem} i @param {string} sid @param {string | null} prevTopic @param {{ latest?: boolean, unread?: boolean, replies?: HTMLElement | null }} [look] */
 function bubble(i, sid, prevTopic, look = {}) {
     if (i.role === 'tools') {
-        return el('div', `tools${i.quiet ? ' quiet' : ''}${i.risky ? ' risky' : ''}`, i.text);
+        const line = el('div', `tools${i.quiet ? ' quiet' : ''}${i.risky ? ' risky' : ''}`, i.detail ? undefined : i.text);
+        if (i.detail) { // a finished agent's result, folded under its line
+            line.classList.add('detail');
+            line.append(...foldable(i.text, i.detail, `${sid}:${i.at}:detail`));
+        }
+        return line;
     }
     if (i.role === 'error') {
         return el('div', 'tools api-error', i.text);
@@ -787,9 +792,10 @@ function feedItems(s, data) {
     // match, it stays marked not confirmed (Retry / Dismiss) rather than vanishing.
     const sameSend = (text, at, o) => norm(text) === norm(o.text) && !(Date.parse(at) < Date.parse(o.at) - LANDED_SLACK_MS);
     const landed = /** @param {OutboxItem} o */ o => data.items.some(i => (i.role === 'user' && sameSend(i.text, i.at, o))
+        || (i.role === 'command' && sameSend(i.cmd, i.at, o)) // a slash command whose output the transcript now holds
         || (i.answer && sameSend(i.answer.text, i.answer.at, o)));
     state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !landed(o));
-    // a slash command never shows in the transcript as the user's: once sent it stays, with its result
+    // a slash command with no output in the transcript never shows there: once sent it stays, with its result
     for (const o of state.outbox) {
         o.unconfirmed ||= o.sid === s.id && !o.text.startsWith('/') && Date.now() - o.okAt > OUTBOX_TTL_MS;
     }

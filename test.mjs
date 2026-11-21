@@ -298,7 +298,7 @@ assert.deepEqual(twice.map(i => i.text), ['continue', 'ok', 'continue', 'yes', '
     const typed = text => ({ type: 'user', message: { content: text }, timestamp: T('40.000') });
     const lines = ['<div> overflows on mobile', `${paste('p', 'pasted')}`, '<task-notification>\n<task-id>x</task-id>', '<command-name>/clear</command-name>', '<bash-input>ls</bash-input>', '<local-command-stdout>ok</local-command-stdout>', '<artifact-content-authored-by-others/> x'];
     assert.deepEqual(lines.map(t => isHumanPrompt(typed(t))), [true, true, false, false, false, false, false]);
-    assert.deepEqual(chatItems(lines.map(typed)).map(i => i.text), ['<div> overflows on mobile', 'pasted']);
+    assert.deepEqual(chatItems(lines.map(typed)).filter(i => i.role === 'user').map(i => i.text), ['<div> overflows on mobile', 'pasted']);
     assert.deepEqual(queuedPrompts([{ type: 'queue-operation', operation: 'enqueue', content: '<b>bold</b> please', timestamp: T('41.000') }]).map(q => q.text), ['<b>bold</b> please']);
 }
 console.log('ok pasted + dedupe');
@@ -944,6 +944,24 @@ console.log('ok interrupted');
     assert.deepEqual(plan.map(i => i.role), ['user', 'assistant']);
     assert.ok(shown(plan[1]).includes('Rename the widget'));
     console.log('ok plan in the feed');
+
+    // slash-command and bash-mode output in the transcript are command items
+    const sys = content => ({ type: 'system', subtype: 'local_command', timestamp: 't5', content });
+    const cmds = chatItems([
+        u('<command-name>/context</command-name>\n<command-message>context</command-message>\n<command-args></command-args>'),
+        u('<local-command-stdout>\x1b[1mTokens: 12k\x1b[22m</local-command-stdout>'),
+        sys('<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args>opus</command-args>'), sys('<local-command-stdout>Set</local-command-stdout>'),
+        u('<bash-input>ls</bash-input>'), u('<bash-stdout>a.txt</bash-stdout><bash-stderr>no such dir</bash-stderr>'),
+        u('<command-name>/clear</command-name>'), u('<local-command-stdout></local-command-stdout>')
+    ]);
+    assert.deepEqual(cmds.map(i => [i.role, i.cmd, i.text]), [['command', '/context', 'Tokens: 12k'], ['command', '/model opus', 'Set'], ['command', '! ls', 'a.txt\nno such dir']]);
+    console.log('ok command output in the feed');
+
+    // a subagent's result rides along on its "Agent finished" line
+    const note = (status, extra) => u(`<task-notification>\n<task-id>x</task-id>\n<status>${status}</status>\n<summary>Agent "Fix login" ${status}</summary>\n${extra}</task-notification>`);
+    const fin = chatItems([u('go'), note('completed', '<result>Fixed the redirect.\n\nTwo files.</result>\n<usage>1</usage>\n'), note('failed', '')]);
+    assert.deepEqual(fin.map(i => [i.role, i.detail]), [['user', undefined], ['tools', 'Fixed the redirect.\n\nTwo files.'], ['error', undefined]]);
+    console.log('ok agent result in the feed');
 }
 
 import { peakLimits } from './server.mjs';

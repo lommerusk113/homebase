@@ -201,6 +201,25 @@ export default {
         assert.equal(await page.ev(`!!${b}.querySelector('.need-pill')`), false, 'no longer needs you');
     },
 
+    'an agent result folds under its line and transcript command output is a command bubble': async ({ page, open, answerPosts }) => {
+        const at = n => `2026-11-14T10:0${n}:00.000Z`;
+        const items = chatItems([
+            { type: 'user', timestamp: at(0), message: { content: 'go' } },
+            { type: 'user', timestamp: at(1), message: { content: '<task-notification>\n<task-id>x</task-id>\n<status>completed</status>\n<summary>Agent "Tidy imports" completed</summary>\n<result>Sorted the imports in nine files.</result>\n</task-notification>' } },
+            { type: 'user', timestamp: at(2), message: { content: '<bash-input>ls</bash-input>' } },
+            { type: 'user', timestamp: at(3), message: { content: '<bash-stdout>notes.txt</bash-stdout><bash-stderr></bash-stderr>' } }
+        ]);
+        await open();
+        await ready(page);
+        page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: false, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        await page.waitFor(`document.querySelector('#feed .tools.detail button')`, { what: 'the agent line with its fold' });
+        const result = `[...document.querySelectorAll('#feed .tools.detail *')].find(n => n.textContent === 'Sorted the imports in nine files.')`;
+        assert.equal(await page.ev(`${result}.closest('[hidden]') !== null`), true, 'folded by default');
+        await page.click('#feed .tools.detail button');
+        assert.equal(await page.ev(`${result}.closest('[hidden]') !== null`), false, 'shown on demand');
+        assert.equal(await page.ev(`document.querySelector('#feed .bubble.command .c-panel').textContent`), 'notes.txt');
+    },
+
     'a short reply becomes the answer tag of the question before it': async ({ page, open }) => {
         await open();
         await ready(page);

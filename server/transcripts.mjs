@@ -419,8 +419,31 @@ function agentDone(text) {
     }
 
     const done = m[1] === 'completed';
+    const detail = text.match(/<result>([\s\S]*)<\/result>/)?.[1].trim(); // what the agent handed back, folded under its line
 
-    return { text: `Agent ${done ? 'finished' : m[1] === 'failed' ? 'failed' : 'stopped'}: ${m[2]}`, failed: !done };
+    return { text: `Agent ${done ? 'finished' : m[1] === 'failed' ? 'failed' : 'stopped'}: ${m[2]}`, failed: !done, ...(detail && { detail: clip(detail) }) };
+}
+
+// ponytail: command output and agent results are cut at OUTPUT_MAX chars, so one huge dump can't bloat every poll
+const OUTPUT_MAX = 8000;
+const clip = t => (t.length > OUTPUT_MAX ? `${t.slice(0, OUTPUT_MAX)}\n…` : t);
+const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g;
+const tagged = (text, name) => text.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`))?.[1];
+
+// A slash command or `!` bash line run in the chat or the terminal, as Claude Code logs it (a user line, or a
+// system/local_command line in newer versions): { kind: 'local', cmd } for the command, { kind: 'local', out } for its output.
+function localCommand(e) {
+
+    const t = e.type === 'system' && e.subtype === 'local_command' ? String(e.content ?? '') : e.type === 'user' ? textOf(e) : '';
+    if (!/^\s*<(?:command-name|bash-input|local-command-stdout|bash-stdout)>/.test(t)) {
+        return null;
+    }
+
+    const bash = tagged(t, 'bash-input'), name = tagged(t, 'command-name');
+    const cmd = name ? `${name} ${tagged(t, 'command-args') ?? ''}`.trim() : bash === undefined ? undefined : `! ${bash.trim()}`;
+    const out = ['local-command-stdout', 'bash-stdout', 'bash-stderr'].map(n => tagged(t, n)?.replace(ANSI, '').trim()).filter(Boolean).join('\n');
+
+    return { kind: 'local', cmd, out: clip(out) };
 }
 
 function entryKind(e) {
@@ -434,6 +457,11 @@ function entryKind(e) {
     }
     if (e.isCompactSummary) {
         return null; // the summary text Claude Code writes after the boundary
+    }
+
+    const local = localCommand(e);
+    if (local) {
+        return local;
     }
 
     const human = e.type === 'user' && !e.isMeta ? unwrapPasted(textOf(e)) : '';
@@ -498,6 +526,7 @@ function rawItems(entries) {
 
     let newTurn = false;
     let worked = false; // tool calls since your last prompt
+    let ran; // the last slash command or bash line, whose output follows as its own entry
     const asks = new Map(); // AskUserQuestion tool_use id -> { text: its questions, at }
     for (const e of entries) {
         const entry = entryKind(e);
@@ -527,6 +556,13 @@ function rawItems(entries) {
             flush();
             worked = false;
             items.push({ role: 'user', text: entry.text, at: e.timestamp, src: entry.src });
+        } else if (entry?.kind === 'local') {
+            ran = entry.cmd ?? ran;
+            if (entry.out) {
+                flush();
+                items.push({ role: 'command', cmd: ran ?? '', text: entry.out, at: e.timestamp });
+            }
+            newTurn = true;
         } else if (entry?.kind === 'compact') {
             flush();
             items.push({ role: 'compact', text: 'Conversation compacted', at: e.timestamp });
@@ -536,7 +572,7 @@ function rawItems(entries) {
             const a = entry.agent;
             if (a && !items.slice(items.findLastIndex(i => i.role === 'user') + 1).some(i => i.text === a.text)) {
                 flush();
-                items.push({ role: a.failed ? 'error' : 'tools', text: a.text, at: e.timestamp });
+                items.push({ role: a.failed ? 'error' : 'tools', text: a.text, at: e.timestamp, ...(a.detail && { detail: a.detail }) });
             }
             newTurn ||= entry.kind === 'turn';
         } else if (entry?.kind === 'error') {

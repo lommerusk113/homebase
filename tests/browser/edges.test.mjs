@@ -38,5 +38,17 @@ export default {
         await page.waitFor(`${texts}.includes('reply after the odd one')`, { what: 'the feed with an odd item' });
         assert.equal(await page.ev(`document.querySelectorAll('#feed .bubble').length`), 2, 'the odd item keeps its place');
         assert.ok((await page.ev(texts)).includes('shape'), 'with its text');
+    },
+
+    'a chat whose turn died keeps a row on the board until it is opened': async ({ page, open, IDS }) => {
+        await open({ chat: IDS.worker });
+        await page.waitFor(`document.querySelector('#masters tr')`, { what: 'the board' });
+        const row = `document.querySelector('#masters tr[data-key="died:${IDS.other}"]')`;
+        assert.equal(await page.ev(`!!${row}`), false, 'no row while nothing died');
+        await page.ev(`(() => { const f = window.fetch; window.fetch = async (u, o) => { const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const list = await r.json(); for (const s of list) { if (s.id === ${JSON.stringify(IDS.other)}) { s.died = true; s.status = 'idle'; } } return new Response(JSON.stringify(list), { status: 200 }); }; })()`);
+        await page.waitFor(`!!${row}`, { what: 'the row of the died turn' });
+        await page.clickOn(row);
+        await page.waitFor(`!${row}`, { what: 'the row gone once looked at' });
+        assert.equal(await page.ev(`document.getElementById('feed').textContent.includes('The cache is fine')`), true, 'and its chat open');
     }
 };

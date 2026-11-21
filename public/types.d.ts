@@ -27,6 +27,8 @@ interface Session {
     known: boolean;
     /** a question (AskUserQuestion) or a permission prompt waits on the user */
     asking: boolean;
+    /** its turn never ended and nothing works on it any more (process gone, or silent for 30 min) */
+    died?: boolean;
     /** the text of that question or prompt; null when not asking */
     question: string | null;
     /** idle, and Claude's newest reply asks for the user's decision, answer or action (as the chat's needs-you bubble) */

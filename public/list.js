@@ -154,6 +154,28 @@ function askingRow(s) {
     return tr;
 }
 
+// A main chat whose turn never ended and that nothing works on (the laptop slept, the process died): without a row it
+// would only vanish from Doing. It stays under Needs you until the user opens it, per turn (lastActivity).
+/** @param {Session} s */
+const diedMark = s => String(s.lastActivity ?? s.updated);
+/** @param {Session} s */
+const diedUnseen = s => !!s.died && isMaster(s) && s.status !== 'working' && !waitsOnYou(s) && store.get(`died-seen:${s.id}`) !== diedMark(s);
+/** @param {Session} s */
+function diedRow(s) {
+    const tr = el('tr', 'asking died'), what = el('td', 'what'), b = el('b'), since = ago(s.lastActivity ?? s.updated);
+    tr.dataset.key = `died:${s.id}`;
+    tr.setAttribute('role', 'button');
+    b.append(el('span', 'pulse'), ` ${state.project === 'all' ? `${s.project} · ` : ''}${s.title || sessionTopic(s)} stopped mid-turn`);
+    what.append(b, el('small', 'next', `No activity for ${since === 'now' ? 'a moment' : since} — Claude may be stuck or closed${touch() ? '' : ' · click to look'}`));
+    what.colSpan = 6;
+    tr.append(what);
+    tr.onclick = () => {
+        store.set(`died-seen:${s.id}`, diedMark(s));
+        focusChat(s.id);
+    };
+    return tr;
+}
+
 // "Review requested": an open MR by someone else that asks me for a review. Click opens it in GitLab.
 /** @param {ReviewRequest} r */
 function reviewRow(r) {
@@ -332,7 +354,7 @@ let pendingTop = null; // the board's scroll offset a redraw still has to put ba
 function renderItems() {
     const items = visibleSessions().flatMap(s => s.items || []).filter(x => hooks.inMilestone(x)).map(x => optimistic(x)).sort((a, b) => b.updated - a.updated);
     const placeholders = visibleSessions().filter(isMaster).flatMap(s => startingIssues(s, visibleSessions().filter(o => o.project === s.project).flatMap(o => o.items || [])).map(n => starting(s, n)));
-    const asking = visibleSessions().filter(waitsOnYou).map(askingRow);
+    const asking = [...visibleSessions().filter(waitsOnYou).map(askingRow), ...visibleSessions().filter(diedUnseen).map(diedRow)];
     // one row per session: a "starting #N" placeholder already stands for a working chat
     const covered = new Set(placeholders.map(r => r.dataset.key.split(':')[1]));
     const working = visibleSessions().filter(s => isMaster(s) && s.status === 'working' && !waitsOnYou(s) && !covered.has(s.id)).map(workingRow);

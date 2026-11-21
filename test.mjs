@@ -1272,7 +1272,7 @@ import { turnState } from './server.mjs';
     assert.deepEqual(turnState(old, 1_000), { state: 'working', since: null });
     assert.equal(state(old, 60_000), 'idle');
     // an open turn with no write for 30 min is stuck, not working; a closed turn is just idle
-    assert.deepEqual(turnState(turn, 31 * 60_000), { state: 'stuck', since: null });
+    assert.deepEqual(turnState(turn, 31 * 60_000), { state: 'stuck', since: null, died: true });
     assert.equal(state([...turn, td('55:43')], 31 * 60_000), 'idle');
     // the session list uses it too
     assert.equal(status(turn.at(-1), 5 * 60_000, turnState(turn, 5 * 60_000)), 'working');
@@ -4265,4 +4265,29 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     assert.ok(logged.every(l => l.includes(`${file}.bak`)));
     rmSync(dir, { recursive: true, force: true });
     console.log('ok corrupt config.json');
+}
+
+// A turn that never ended and that nothing works on any more (silent past the stale limit, or its process gone) is
+// reported as died, so the board can keep a row for it; a finished or running turn is not.
+{
+    const { turnState } = await import('./server/transcripts.mjs');
+    const at = s => `2026-11-13T09:${s}.000Z`;
+    const open = [
+        { type: 'user', sessionId: 's', entrypoint: 'cli', cwd: '/r', uuid: 'p', timestamp: at('55:20'), origin: { kind: 'human' }, promptSource: 'typed', turnPosition: { promptIndex: 1, turnIndex: 1 }, message: { role: 'user', content: 'fix it' } },
+        { type: 'assistant', sessionId: 's', entrypoint: 'cli', uuid: 'a', timestamp: at('55:30'), message: { content: [{ type: 'tool_use', id: 't', name: 'Bash', input: { command: 'npm test' } }], stop_reason: 'tool_use' } }
+    ];
+    const ended = [...open, { type: 'system', subtype: 'turn_duration', timestamp: at('56:00') }];
+    const min = 60_000, running = new Set(['s']), gone = new Set(['other']);
+    assert.equal(!!turnState(open, 20 * min).died, false, 'still within the limit: working');
+    for (const age of [31 * min, 61 * min, 9 * 60 * min]) {
+        assert.equal(turnState(open, age).died, true);
+        assert.equal(turnState(open, age, null, running).died, true, 'the process lives but wrote nothing');
+        assert.equal(turnState(open, age, null, gone).died, true, 'the process is gone');
+        assert.equal(summarize(open, age).died, true, 'the session says so');
+        assert.equal(!!turnState(ended, age).died, false);
+        assert.equal(!!turnState(ended, age, null, gone).died, false, 'closed after its turn ended');
+        assert.equal(!!summarize(ended, age).died, false);
+    }
+    assert.equal(!!turnState(open, 31 * min, null, Object.assign(new Set(['s']), { busy: new Set(['s']) })).died, false, 'a long tool call of a busy process');
+    console.log('ok died turn');
 }

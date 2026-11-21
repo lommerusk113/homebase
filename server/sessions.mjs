@@ -435,6 +435,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         status: status(lastTurn, ageMs, turn),
         known: hasTurnMarkers(entries), // false: no turn markers in a recent transcript, so the status is only a guess
         asking: turn.state === 'asking',
+        died: !!turn.died, // its turn never ended and nothing works on it: the board keeps a row until the user has looked
         question: turn.state === 'asking' ? pendingQuestion(entries, marker) : null,
         needsYou,
         needsId: needsYou ? lastItem?.id ?? null : null, // that reply's id, to mark it as handled (POST /api/handled)

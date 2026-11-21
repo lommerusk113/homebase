@@ -1087,13 +1087,12 @@ export function closedSession(entries, ageMs, live) {
 }
 
 // live: see closedSession; a closed session's open turn is over.
-// Returns { state: 'working' | 'asking' | 'stuck' | 'idle', since: turn start ms | null }.
+// Returns { state: 'working' | 'asking' | 'stuck' | 'idle', since: turn start ms | null, died?: true }.
+// died: the turn never ended and nothing works on it any more (the process is gone, or silent for TURN_STALE_MS).
 export function turnState(entries, ageMs, marker = null, live = null) {
 
-    if (closedSession(entries, ageMs, live)) {
-        return { state: 'idle', since: null };
-    }
-    if (pendingAsk(entries, marker)) {
+    const closed = closedSession(entries, ageMs, live);
+    if (!closed && pendingAsk(entries, marker)) {
         return { state: 'asking', since: null };
     }
 
@@ -1129,9 +1128,12 @@ export function turnState(entries, ageMs, marker = null, live = null) {
 
     // ponytail: a tail with no turn markers at all (older Claude Code, or one turn longer than the tail) falls back to the mtime
     // a long tool call writes nothing, so a live process the registry calls busy is working however old the transcript
+    if (closed) {
+        return { state: 'idle', since: null, ...(known && open && { died: true }) };
+    }
     const busy = !!live?.busy?.has(entries.findLast(e => e.sessionId)?.sessionId);
     if (known && open && ageMs >= TURN_STALE_MS && !busy) {
-        return { state: 'stuck', since: null }; // idle for everything but the chat status, which says Claude may be stuck
+        return { state: 'stuck', since: null, died: true }; // idle for everything but the chat status, which says Claude may be stuck
     }
     const working = known ? open && (ageMs < TURN_STALE_MS || busy) : ageMs < WORKING_MS;
 

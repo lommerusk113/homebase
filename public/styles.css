@@ -370,6 +370,15 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .tools.compact::after { content:''; flex:1; border-top:1px solid var(--line); }
 .c-feed.needs-only .tools.c-new { display:flex; }
 #status-text { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+/* phones: the status takes a second line instead of being cut, and its controls are 44px to tap (the ::before) in a 44px line */
+@media (max-width: 700px) {
+  .c-status { height:auto; min-height:44px; padding-top:0; overflow:visible; }
+  #status-text { white-space:normal; overflow:visible; line-height:1.3; }
+  #status-text .show { text-align:left; }
+  .c-ctx .w { display:none; } /* the % alone: the room goes to the status */
+  .c-status :is(.show, .c-chip, .c-compact) { position:relative; }
+  .c-status :is(.show, .c-chip, .c-compact)::before { content:''; position:absolute; inset:50% -4px auto; height:44px; transform:translateY(-50%); }
+}
 .c-status .pulse { flex-shrink:0; width:6px; height:6px; background:var(--c); animation:none; }
 .c-status.working { --c:var(--c-doing); color:var(--c-doing); }
 .c-status.asking { --c:var(--c-needs); color:var(--c-needs); }

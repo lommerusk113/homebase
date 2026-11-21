@@ -22,7 +22,7 @@ export default {
             await new Promise(r => setTimeout(r, 200));
         }
         await page.waitFor(`document.getElementById('c-model').open`, { what: 'the picker open' });
-        const fits = `(() => { const r = document.querySelector('#c-model wa-dropdown-item[value="default"]').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= document.getElementById('status').getBoundingClientRect().top + 4; })()`;
+        const fits = `(() => { const r = document.querySelector('#c-model wa-dropdown-item[value="default"]').getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= ${btn}.getBoundingClientRect().top + 4; })()`;
         await page.waitFor(fits, { what: 'the picker on screen, above the chip' });
         await new Promise(r => setTimeout(r, 500)); // the popup's fade-in
         await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false }); // the harness's size (cdp.mjs)

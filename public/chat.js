@@ -538,7 +538,7 @@ function setStatus(data) {
     }
     $('status-restart').hidden = kind !== 'stuck';
     $('status-ctx').className = `c-ctx ${ctxLevel(s?.context ?? 0)}`;
-    $('status-ctx').textContent = s?.context != null ? `context ${Math.round(s.context)}%` : '';
+    $('status-ctx').replaceChildren(...(s?.context != null ? [el('span', 'w', 'context '), `${Math.round(s.context)}%`] : [])); // phones hide the word
 }
 
 // Scrolls to and focuses what needs the user: the ask card when it shows, else the reply the pinned strip is about,

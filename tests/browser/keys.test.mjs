@@ -53,6 +53,19 @@ export default {
         assert.deepEqual(page.posts.map(p => p.body), [label]);
     },
 
+    'n steps through every chat waiting on you and starts over': async ({ page, open, IDS }) => {
+        await open({ project: 'all', chat: IDS.worker });
+        await page.waitFor(`document.querySelectorAll('#masters tr[data-key^="asking:"]').length >= 2`, { what: 'two waiting chats' });
+        const waiting = await page.ev(`[...document.querySelectorAll('#masters tr[data-key^="asking:"]')].map(r => r.dataset.key)`);
+        await page.ev(`document.activeElement?.blur()`);
+        const seen = [];
+        for (let i = 0; i <= waiting.length; i++) {
+            await page.key('n');
+            seen.push(await page.ev(focused));
+        }
+        assert.deepEqual(seen, [...waiting, waiting[0]]);
+    },
+
     'closing help, the changes panel or a row action puts focus back on the row, also when the board was redrawn meanwhile': async ({ page, open }) => {
         await open();
         const redraw = `import('/list.js').then(m => (m.renderBoard(), true))`;

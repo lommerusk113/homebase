@@ -1,5 +1,5 @@
 // Keyboard navigation over work-item rows (after Contado): j/k move, Enter/Space expand, o opens the MR, a runs the row action.
-// The same j/k/Enter/o work on the Issues view's cards; 1 and 2 pick Work or Issues and t swaps them; l opens the activity log; n jumps to a chat waiting on you; a digit picks the numbered option of the question open in the chat; [ and ] cycle projects.
+// The same j/k/Enter/o work on the Issues view's cards; 1 and 2 pick Work or Issues and t swaps them; l opens the activity log; n steps through the chats waiting on you; a digit picks the numbered option of the question open in the chat; [ and ] cycle projects.
 // The focused row is tracked by item key, so it survives the 3s re-renders; list.js and issues.js call hooks.rendered after each one.
 import { $, el, waButton, state, hooks } from './core.js';
 import { select, renderBoard } from './list.js';
@@ -11,7 +11,7 @@ const SHORTCUTS = [
     ['d', 'Changes (diff) of the open chat; j / k move between its files'],
     ['j / ↓', 'Next item'], ['k / ↑', 'Previous item'], ['Enter / Space', 'Expand or collapse, chat with its session'],
     ['o', 'Open the MR in a new tab'], ['a', "Run the row's action (asks first)"], ['/ or c', 'Focus the chat input'],
-    ['Esc', 'Leave the input, or collapse the row'], ['n', 'First chat waiting on you'], ['1 – 9', 'Pick that option of the question open in the chat'], ['1 / 2', 'Work / Issues, when no question is open'], ['t', 'Swap Work and Issues'], ['l', 'Activity log'],
+    ['Esc', 'Leave the input, or collapse the row'], ['n', 'Next chat waiting on you'], ['1 – 9', 'Pick that option of the question open in the chat'], ['1 / 2', 'Work / Issues, when no question is open'], ['t', 'Swap Work and Issues'], ['l', 'Activity log'],
     ['[ / ]', 'Previous / next project'], ['g then p', 'Project selector'], ['m', 'Milestone menu'], ['r', 'Refresh from GitLab/GitHub'], ['?', 'This overlay']
 ];
 const KEYS = { j: 'next', ArrowDown: 'next', k: 'prev', ArrowUp: 'prev', Enter: 'toggle', ' ': 'toggle', o: 'open', a: 'act', '/': 'chat', c: 'chat', Escape: 'escape', '?': 'help', m: 'milestone', r: 'refresh', g: 'g', n: 'needs', '[': 'prevProject', ']': 'nextProject', 1: 'work', 2: 'issues', t: 'swap', l: 'log' };
@@ -210,7 +210,8 @@ function onKey(e) {
             if (activeTab() !== 'work') {
                 showTab('work');
             }
-            focusRow(rows().find(r => r.dataset.key.startsWith('asking:'))?.dataset.key);
+            const waiting = rows().map(r => r.dataset.key).filter(k => k.startsWith('asking:'));
+            focusRow(waiting[(waiting.indexOf(focusKey) + 1) % waiting.length]); // the one after the focused one, around
         },
         prevProject: () => cycle(-1),
         nextProject: () => cycle(1),

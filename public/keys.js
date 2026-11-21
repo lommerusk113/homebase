@@ -131,7 +131,8 @@ function confirmAction(x) {
 
 /** @param {number} dir */
 function cycle(dir) {
-    const next = cycleProject([...state.tracked].sort((a, b) => a.localeCompare(b)), state.project, dir);
+    const list = [...state.tracked].sort((a, b) => a.localeCompare(b));
+    const next = cycleProject(list.length > 1 ? [...list, 'all'] : list, state.project, dir); // "All my projects" is one stop on the way round
     if (next) {
         hooks.setProject(next);
     }

@@ -87,6 +87,18 @@ export default {
         await page.waitFor(`!document.querySelector('wa-dialog .keys-msg') && ${focused} === ${JSON.stringify(key)}`, { what: 'focus back on the row after its action' });
     },
 
+    '] and [ go round the projects with All my projects as one stop': async ({ page, open }) => {
+        await open({ project: 'gamma' });
+        await page.ev(`document.activeElement?.blur()`);
+        const project = `localStorage.getItem('project')`;
+        await page.key(']', 'BracketRight');
+        await page.waitFor(`${project} === 'all'`, { what: 'All after the last project', timeout: 3000 });
+        await page.key(']', 'BracketRight');
+        await page.waitFor(`${project} === 'alpha'`, { what: 'the first project after All', timeout: 3000 });
+        await page.key('[', 'BracketLeft');
+        await page.waitFor(`${project} === 'all'`, { what: 'All before the first project', timeout: 3000 });
+    },
+
     'the Work | Issues switch: a click, 1/2/t and the arrow keys change the view, and the choice survives a reload': async ({ page, open, IDS }) => {
         const view = `(() => { const t = document.getElementById('tabs'); return { sel: [...t.querySelectorAll('[role="tab"]')].filter(b => b.getAttribute('aria-selected') === 'true').map(b => b.dataset.tab).join(),
             tabbable: [...t.querySelectorAll('[role="tab"]')].filter(b => b.tabIndex === 0).map(b => b.dataset.tab).join(), work: !document.getElementById('masters').hidden, issues: !document.getElementById('issues').hidden, saved: localStorage.getItem('tab') }; })()`;

@@ -214,6 +214,24 @@ assert.equal(pendingQuestion([q, { type: 'user', message: { content: [{ type: 't
 assert.deepEqual(sendSteps('cc-1', ' hi\x1b \r\n'), [['send-keys', '-t', 'cc-1', '-l', '--', 'hi'], ['send-keys', '-t', 'cc-1', 'Enter']]);
 assert.equal(sendSteps('cc-1', 'a\r\nb')[0].at(-1), 'a\nb');
 assert.throws(() => sendSteps('cc-1', ' \n '));
+{
+    // a trailing ; would end the tmux command and be dropped: typed into a real pane (a private tmux server running cat), it arrives
+    const { execFileSync } = await import('node:child_process');
+    const socket = `homebase-test-${process.pid}`, t = args => execFileSync('tmux', tmuxArgs(args, socket), { encoding: 'utf8' });
+    t(['-f', '/dev/null', 'new-session', '-d', '-s', 'cc-semi', '-x', '80', '-y', '30', 'cat']);
+    try {
+        for (const text of ['fix this;', 'keep\\;', 'two;;', 'a\nb;']) {
+            sendSteps('cc-semi', text).forEach(t);
+        }
+        await new Promise(r => setTimeout(r, 300));
+        const lines = t(['capture-pane', '-p', '-t', 'cc-semi']).split('\n');
+        for (const want of ['fix this;', 'keep\\;', 'two;;', 'b;']) {
+            assert.ok(lines.includes(want), `${want} arrived whole`);
+        }
+    } finally {
+        t(['kill-server']);
+    }
+}
 console.log('ok chat');
 
 import { agentStage } from './server.mjs';

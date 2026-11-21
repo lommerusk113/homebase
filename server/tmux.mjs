@@ -101,11 +101,13 @@ export function sendSteps(name, text) {
     }
 
     const enter = ['send-keys', '-t', name, 'Enter'];
+    // tmux takes an argument's trailing ; as its command separator and drops it; \; there is a literal one
+    const arg = clean.replace(/;$/, '\\;');
     if (!clean.includes('\n')) {
-        return [['send-keys', '-t', name, '-l', '--', clean], enter];
+        return [['send-keys', '-t', name, '-l', '--', arg], enter];
     }
 
-    return [['set-buffer', '-b', name, '--', clean], ['paste-buffer', '-p', '-d', '-b', name, '-t', name], enter];
+    return [['set-buffer', '-b', name, '--', arg], ['paste-buffer', '-p', '-d', '-b', name, '-t', name], enter];
 }
 
 const LIVE_ELSEWHERE_MS = 2 * 60_000;

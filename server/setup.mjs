@@ -5,20 +5,24 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline/promises';
+import { loginShell } from './tmux.mjs';
 
 export const ROOT = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 // HOMEBASE_CLAUDE_SETTINGS points at another file, so tests never touch the real one
 export const settingsPath = () => process.env.HOMEBASE_CLAUDE_SETTINGS || join(homedir(), '.claude', 'settings.json');
 
-const onPath = cmd => {
+const runs = (file, args) => {
     try {
-        execFileSync('sh', ['-c', `command -v ${cmd}`], { stdio: 'ignore' });
+        execFileSync(file, args, { stdio: 'ignore', timeout: 10_000 });
         return true;
     } catch {
         return false;
     }
 };
-export const missingTools = () => ['tmux', 'claude'].filter(c => !onPath(c));
+const onPath = cmd => runs('sh', ['-c', `command -v ${cmd}`]);
+// Chats start claude through the login shell, so one that only its rc file puts on the PATH counts too
+const hasClaude = () => onPath('claude') || runs(loginShell(), ['-lic', 'command -v claude']);
+export const missingTools = () => [!onPath('tmux') && 'tmux', !hasClaude() && 'claude'].filter(Boolean);
 
 // The five hook entries and the statusline for this checkout (same as the README)
 export const wanted = (root = ROOT) => {
@@ -67,7 +71,7 @@ export function doctor(root = ROOT, path = settingsPath()) {
     const major = Number(process.versions.node.split('.')[0]);
     row(`node ${process.versions.node}`, major >= 20, 'install Node 20 or newer');
     row('tmux', onPath('tmux'), 'install tmux (brew install tmux)');
-    row('claude', onPath('claude'), 'install the Claude Code CLI and sign in');
+    row('claude', hasClaude(), 'install the Claude Code CLI and sign in');
     row('gh', onPath('gh'), 'optional: install gh to see GitHub PRs', false);
     let settings = {};
     try {

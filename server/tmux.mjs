@@ -20,8 +20,10 @@ export const rulesFile = (dir = fileURLToPath(new URL('..', import.meta.url))) =
 export const RULES_FILE = rulesFile();
 export const claudeLine = (extra = '', rules = RULES_FILE) => `claude${existsSync(rules) ? ` --append-system-prompt-file '${rules.replace(/'/g, `'\\''`)}'` : ''}${extra}`;
 
-// ponytail: login+interactive shell (your $SHELL; zsh and bash both take -lic) so PATH matches your terminal; id is validated, cwd is passed as its own arg
-const claudeCmd = id => [process.env.SHELL || ['/bin/zsh', '/bin/bash'].find(existsSync) || '/bin/sh','-lic', claudeLine(` --resume ${id}`)];
+// Your $SHELL; without one the first of zsh, bash and sh that exists (a Linux box may have no zsh)
+export const loginShell = (shell = process.env.SHELL, exists = existsSync) => shell || ['/bin/zsh', '/bin/bash'].find(p => exists(p)) || '/bin/sh';
+// ponytail: login+interactive shell (zsh and bash both take -lic) so PATH matches your terminal; id is validated, cwd is passed as its own arg
+const claudeCmd = id => [loginShell(), '-lic', claudeLine(` --resume ${id}`)];
 
 // tmux keeps Claude running between messages; `tmux attach -t cc-<id8>` reaches it from any terminal.
 export const tmuxName = id => `cc-${id.slice(0, 8)}`;

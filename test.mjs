@@ -3237,8 +3237,11 @@ import { cancelQuestion, questionOpen } from './server.mjs';
     console.log('ok cancel question');
 }
 
-import { claudeLine, rulesFile } from './server/tmux.mjs';
+import { claudeLine, rulesFile, loginShell } from './server/tmux.mjs';
 {
+    assert.equal(loginShell('/usr/bin/fish'), '/usr/bin/fish', '$SHELL wins');
+    assert.equal(loginShell('', p => p === '/bin/bash'), '/bin/bash', 'no $SHELL and no zsh: bash');
+    assert.equal(loginShell('', () => false), '/bin/sh', 'sh as the last resort');
     assert.equal(claudeLine(' --resume x', '/nope/rules.md'), 'claude --resume x', 'no rules file: plain claude');
     assert.match(claudeLine(' --resume x'), /^claude --append-system-prompt-file '.*\/homebase-rules(\.local)?\.md' --resume x$/);
     const d = mkdtempSync(join(tmpdir(), 'rf-'));

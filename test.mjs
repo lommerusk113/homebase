@@ -3237,10 +3237,14 @@ import { cancelQuestion, questionOpen } from './server.mjs';
     console.log('ok cancel question');
 }
 
-import { claudeLine } from './server/tmux.mjs';
+import { claudeLine, rulesFile } from './server/tmux.mjs';
 {
     assert.equal(claudeLine(' --resume x', '/nope/rules.md'), 'claude --resume x', 'no rules file: plain claude');
-    assert.match(claudeLine(' --resume x'), /^claude --append-system-prompt-file '.*\/homebase-rules\.md' --resume x$/);
+    assert.match(claudeLine(' --resume x'), /^claude --append-system-prompt-file '.*\/homebase-rules(\.local)?\.md' --resume x$/);
+    const d = mkdtempSync(join(tmpdir(), 'rf-'));
+    assert.equal(rulesFile(d), join(d, 'homebase-rules.md'), 'tracked file by default');
+    writeFileSync(join(d, 'homebase-rules.local.md'), 'mine');
+    assert.equal(rulesFile(d), join(d, 'homebase-rules.local.md'), 'the local file wins when it exists');
     console.log('ok claude line');
 }
 
@@ -3295,7 +3299,7 @@ import { RULES_FILE } from './server/tmux.mjs';
     assert.equal(await stale(undefined, 1e13), undefined, 'unknown start: nothing inferred');
     const r = await stale(1_500_000, 1e14); // past the 10s cache, so the files are re-read; the real homebase-rules.md is listed too
     assert.ok(r.names.includes('CLAUDE.md') && r.at >= 2_000_000);
-    assert.ok(r.reload.startsWith('The rules changed. Re-read /') && r.reload.includes(`homebase-rules.md, ~/.claude/CLAUDE.md and ${join(cwd, 'CLAUDE.md')} now and follow them`), r.reload);
+    assert.ok(r.reload.startsWith('The rules changed. Re-read /') && r.reload.includes(`${RULES_FILE.split("/").pop()}, ~/.claude/CLAUDE.md and ${join(cwd, 'CLAUDE.md')} now and follow them`), r.reload);
     assert.equal(reloadMessage(), `The rules changed. Re-read ${RULES_FILE} and ~/.claude/CLAUDE.md now and follow them from here on (they override your earlier instructions where they differ).`);
     touch(join(cwd, 'AGENTS.md'), 5_000_000);
     assert.ok(!(await stale(1_500_000, 1e14 + 1000)).names.includes('AGENTS.md'), 'mtimes are cached for 10s');

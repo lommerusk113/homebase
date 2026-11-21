@@ -1,7 +1,7 @@
 // Claude Code reads its instruction files only when a process starts, so a chat started before they changed runs old rules.
 import { stat, readFile, writeFile, rename, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { RULES_FILE } from './tmux.mjs';
 
 const TTL_MS = 10_000;
@@ -9,7 +9,7 @@ const mtimes = new Map(); // path -> { at, mtime }
 
 // [name shown, path] of the files whose change makes a running chat stale
 export const watched = (cwd, home = homedir()) => [
-    ['homebase-rules.md', RULES_FILE],
+    [basename(RULES_FILE), RULES_FILE],
     ['CLAUDE.md', join(home, '.claude', 'CLAUDE.md')],
     ['CLAUDE.md', join(cwd, 'CLAUDE.md')],
     ['AGENTS.md', join(cwd, 'AGENTS.md')]

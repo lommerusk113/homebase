@@ -2,6 +2,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const run = promisify(execFile);
@@ -11,11 +12,16 @@ export const tmuxArgs = (args, socket = process.env.HOMEBASE_TMUX_SOCKET) => (so
 export const tmux = args => run('tmux', tmuxArgs(args), { timeout: 5000 }); // a hung tmux fails instead of freezing the board
 
 // Homebase's own rules (homebase-rules.md: how replies and questions fit its UI), added to every Claude it starts or resumes
-export const RULES_FILE = fileURLToPath(new URL('../homebase-rules.md', import.meta.url));
+// A gitignored homebase-rules.local.md next to it replaces the tracked file, so your own rules survive a git pull.
+export const rulesFile = (dir = fileURLToPath(new URL('..', import.meta.url))) => {
+    const local = join(dir, 'homebase-rules.local.md');
+    return existsSync(local) ? local : join(dir, 'homebase-rules.md');
+};
+export const RULES_FILE = rulesFile();
 export const claudeLine = (extra = '', rules = RULES_FILE) => `claude${existsSync(rules) ? ` --append-system-prompt-file '${rules.replace(/'/g, `'\\''`)}'` : ''}${extra}`;
 
 // ponytail: login+interactive shell (your $SHELL; zsh and bash both take -lic) so PATH matches your terminal; id is validated, cwd is passed as its own arg
-const claudeCmd = id => [process.env.SHELL || '/bin/zsh', '-lic', claudeLine(` --resume ${id}`)];
+const claudeCmd = id => [process.env.SHELL || ['/bin/zsh', '/bin/bash'].find(existsSync) || '/bin/sh','-lic', claudeLine(` --resume ${id}`)];
 
 // tmux keeps Claude running between messages; `tmux attach -t cc-<id8>` reaches it from any terminal.
 export const tmuxName = id => `cc-${id.slice(0, 8)}`;

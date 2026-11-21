@@ -4376,3 +4376,22 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     rmSync(dir, { recursive: true, force: true });
     console.log('ok broken data files');
 }
+
+// A page whose clock is off from the server's (a phone, a manual change) counts ages on the server's clock, taken from
+// the poll's Date header; a difference under a minute is network and rounding, and no header means no correction.
+{
+    const { ago, syncClock, chatStatus } = await import('./public/core.js');
+    const hour = 3600_000, twoMinAgo = off => Date.now() + off - 125_000;
+    for (const off of [-hour, hour]) { // the server an hour behind the page, and an hour ahead
+        syncClock(new Date(Date.now() + off).toUTCString());
+        assert.match(ago(twoMinAgo(off)), /^2/, `2 minutes on the server's clock, with the page ${off < 0 ? 'ahead' : 'behind'}`);
+        assert.match(chatStatus({ working: true, since: twoMinAgo(off), items: [] }).text, /2m/);
+    }
+    syncClock(new Date(Date.now() + 20_000).toUTCString());
+    assert.equal(ago(Date.now() - 30_000), ago(Date.now() - 31_000), 'a few seconds are not skew');
+    assert.doesNotMatch(ago(Date.now() - 50_000), /\d/);
+    syncClock(new Date(Date.now() + hour).toUTCString());
+    syncClock(null);
+    assert.match(ago(Date.now() - 125_000), /^2/, 'no Date header: the page clock');
+    console.log('ok clock skew');
+}

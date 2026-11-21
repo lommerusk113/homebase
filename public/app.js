@@ -1,5 +1,5 @@
 // Entry point: header (project picker, bell, projects dialog), polling, notifications, limits strip.
-import { api, $, el, state, store, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary, waitsOnYou } from './core.js';
+import { api, $, el, state, store, syncClock, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary, waitsOnYou } from './core.js';
 import { renderBoard, select, attentionEvents, askingEvents, sessionTopic } from './list.js';
 import { refreshChat, initChat, bindChat, focusChat, isMaster, chatSession } from './chat.js';
 import { openNewProject, initNewProject } from './newproject.js';
@@ -485,6 +485,7 @@ async function pollOnce() {
         if (!r.ok) {
             throw Object.assign(new Error(String(r.status)), { status: r.status });
         }
+        syncClock(r.headers.get('date'));
         const text = await r.text();
         // ponytail: skip identical re-renders so text in an open detail stays selectable; re-render each minute for the ages
         if (text !== lastSessions || Date.now() - lastRender > 60_000) {

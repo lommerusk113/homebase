@@ -594,7 +594,7 @@ function announceReply(s, data, items) {
 // Fixed-height line at the top of the composer, with the context window use on the right.
 /** @param {Parameters<typeof chatStatus>[0]} data */
 function setStatus(data) {
-    const s = chatSession(), { kind, text } = chatStatus(data, Date.now(), s);
+    const s = chatSession(), { kind, text } = chatStatus(data, undefined, s);
     if (!$('status').classList.contains(kind) && (kind === 'error' || kind === 'stuck')) {
         setText($('announce'), text); // the line itself is no live region: a working chat's step changes would be read out all day
     }

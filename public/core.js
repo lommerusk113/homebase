@@ -130,10 +130,11 @@ export const friendly = msg => FRIENDLY.find(([re]) => re.test(msg))?.[1] ?? msg
  */
 export const $ = id => /** @type {any} */ (document.getElementById(id));
 // Failed poll (network, 401, non-OK): header "Offline", list dimmed with its "Disconnected" note. The next good poll clears it.
-// status: the HTTP status of the answer, if one came. A 5xx is Homebase failing, not the connection, and is named so.
+// status: the HTTP status of the answer, if one came. A 500 is Homebase itself failing, not the connection (a proxy in
+// front answers 502-504 while Homebase is down), and is named so.
 /** @param {boolean} off @param {number} [status] */
 export const setOffline = (off, status) => {
-    const failed = off && status >= 500;
+    const failed = off && status === 500;
     state.offline = off;
     state.serverError = failed;
     $('offline').hidden = !off;
@@ -233,8 +234,17 @@ export function plainCommand(command) {
         : `running ${bin}`;
 }
 export const plain = t => (t || '').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim();
+// The server's clock, for ages of its timestamps: the page's own may be off (a phone, a manual change). syncClock takes
+// each poll's Date header; under a minute apart is network and rounding, not skew, and no header means no correction.
+let skew = 0;
+/** @param {string | null} date */
+export const syncClock = date => {
+    const d = Date.parse(date ?? '') - Date.now();
+    skew = Math.abs(d) > 60_000 ? d : 0;
+};
+export const serverNow = () => Date.now() + skew;
 export const ago = ms => {
-    const s = (Date.now() - ms) / 1000;
+    const s = (serverNow() - ms) / 1000;
     return s < 60 ? 'now' : s < 3600 ? `${s / 60 | 0}m` : s < 86400 ? `${s / 3600 | 0}h` : `${s / 86400 | 0}d`;
 };
 // Whole minutes as "45m" / "1h" / "1h20m".
@@ -279,7 +289,7 @@ export async function markHandled(sid, reply) {
 // Claude's last reply wants you (or its newest reply still waits on you, said since or not) and whether its agents
 // still work, from the session `s`.
 /** @param {(Partial<Transcript> & { error?: boolean }) | null} d @param {Pick<Session, 'needsYou' | 'step'> | null} [s] */
-export const chatStatus = (d, now = Date.now(), s = null) => {
+export const chatStatus = (d, now = serverNow(), s = null) => {
     if (d?.error) {
         return { kind: 'error', text: state.serverError ? 'Homebase hit an error (see its log) — retrying…' : 'Can’t reach Homebase — reconnecting…' };
     }

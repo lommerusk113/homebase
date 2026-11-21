@@ -26,6 +26,7 @@ import { readTracked, saveTracked } from './server/tracked.mjs';
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 import { diff } from './server/diff.mjs';
+import { doctor, setup, missingTools } from './server/setup.mjs';
 
 export {
     readTail, filesTouched, splitTopic, splitTldr, gateRuns, toolSummary, unwrapPasted, chatItems, chatFeed, quickReplies, askList, optionLabels, waitingOn, waitingAsk, namedChoices,
@@ -75,6 +76,19 @@ const UPLOAD_DIR = join(DATA_DIR, 'uploads');
 const TOKEN = randomBytes(32).toString('hex');
 const SECURITY_HEADERS = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY' };
 if (import.meta.url === `file://${process.argv[1]}`) {
+    if (process.argv.includes('--doctor')) {
+        const { lines, failed } = doctor();
+        console.log(lines.join('\n'));
+        process.exit(failed ? 1 : 0);
+    }
+    if (process.argv.includes('--setup')) {
+        console.log(await setup());
+        process.exit(0);
+    }
+    const missing = missingTools();
+    if (missing.length) {
+        console.warn(`Warning: ${missing.join(' and ')} not found on PATH, so Homebase cannot start chats (run: node server.mjs --doctor)`);
+    }
     if (process.env.HOMEBASE_LAN) {
         throw new Error('HOMEBASE_LAN is gone: use Homebase from another device through Tailscale and pairing (README, "Use from your phone")');
     }

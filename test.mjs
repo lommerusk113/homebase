@@ -3560,3 +3560,50 @@ import { parseDiff, addedRows, diffTotals } from './public/diff.js';
         { files: 2, add: 7, del: 1 });
     console.log('ok diff');
 }
+
+import { merge, setup, settingsPath, wanted } from './server/setup.mjs';
+{
+    const root = '/opt/hb';
+    const mine = { type: 'command', command: 'echo mine' };
+    const existing = { model: 'opus', hooks: { Stop: [{ hooks: [mine] }], SessionStart: [{ hooks: [mine] }] }, statusLine: { type: 'command', command: '/my/line.sh' } };
+    const m = merge(existing, root);
+    assert.deepEqual(m.added, ['hook PreToolUse', 'hook PostToolUse', 'hook Notification', 'hook UserPromptSubmit', 'hook Stop'], 'adds all five hooks, no statusline over a different one');
+    assert.deepEqual(m.conflict, existing.statusLine);
+    assert.equal(m.settings.model, 'opus');
+    assert.deepEqual(m.settings.hooks.SessionStart, existing.hooks.SessionStart);
+    assert.deepEqual(m.settings.hooks.Stop, [{ hooks: [mine] }, wanted(root).hooks.Stop], 'existing hook stays, ours is appended');
+    assert.deepEqual(existing.hooks.Stop, [{ hooks: [mine] }], 'input is not mutated');
+    assert.deepEqual(merge(m.settings, root).added, [], 'idempotent');
+    assert.equal(merge({}, root).added.at(-1), 'statusLine');
+
+    const dir = mkdtempSync(join(tmpdir(), 'setup-'));
+    const file = join(dir, 'settings.json');
+    const old = process.env.HOMEBASE_CLAUDE_SETTINGS;
+    process.env.HOMEBASE_CLAUDE_SETTINGS = file;
+    assert.equal(settingsPath(), file, 'env override');
+    const quiet = console.log;
+    console.log = () => {};
+    try {
+        writeFileSync(file, JSON.stringify(existing));
+        assert.match(await setup(root, file, async () => false), /Aborted/);
+        assert.equal(readFileSync(file, 'utf8'), JSON.stringify(existing), 'declining writes nothing');
+        assert.match(await setup(root, file, async q => !/Replace/.test(q)), /^Done, backup at /);
+        const after = JSON.parse(readFileSync(file, 'utf8'));
+        assert.deepEqual(after.statusLine, existing.statusLine, 'different statusline kept unless asked');
+        assert.equal(after.hooks.Stop.length, 2);
+        const backups = readdirSync(dir).filter(f => f.endsWith('.bak'));
+        assert.equal(backups.length, 1);
+        assert.equal(readFileSync(join(dir, backups[0]), 'utf8'), JSON.stringify(existing), 'backup is the old file');
+        assert.match(await setup(root, file, async () => false), /Nothing to do/, 'idempotent');
+        assert.match(await setup(root, file, async () => true), /Done/, 'replacing the statusline when asked');
+        assert.equal(JSON.parse(readFileSync(file, 'utf8')).statusLine.command, '/opt/hb/scripts/statusline.sh');
+    } finally {
+        console.log = quiet;
+        if (old === undefined) {
+            delete process.env.HOMEBASE_CLAUDE_SETTINGS;
+        } else {
+            process.env.HOMEBASE_CLAUDE_SETTINGS = old;
+        }
+    }
+    console.log('ok setup merge');
+}

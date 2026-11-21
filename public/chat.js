@@ -371,6 +371,11 @@ function bubble(i, sid, prevTopic, look = {}) {
     const kind = i.role !== 'assistant' || i.error ? '' : needs ? ' needs' : ` fyi${look.latest ? ' latest' : ''}`;
     const b = el('div', `bubble ${i.role}${kind}${i.error || /** @type {OutboxItem} */ (i).unconfirmed ? ' failed' : ''}${i.interrupted ? ' interrupted' : ''}`);
     const key = `${sid}:${i.at}`;
+    // who speaks, for a screen reader: sides and colours say it to the eye only
+    if (i.role === 'user' || i.role === 'assistant') {
+        b.setAttribute('role', 'group');
+        b.setAttribute('aria-label', i.role === 'user' ? 'You' : needs ? 'Claude, needs you' : 'Claude');
+    }
     // the interrupted mark gets its own tooltip instead of the timestamp
     if (i.at && !i.interrupted) {
         b.title = new Date(i.at).toLocaleString();
@@ -668,6 +673,7 @@ function showHead(s) {
     showModel(s);
     syncDiff(s);
     $('msg').setAttribute('placeholder', s ? `Message Claude in ${s.project}…` : 'Message Claude…');
+    $('msg').setAttribute('label', s ? `Message Claude in ${s.project}` : 'Message Claude');
 }
 
 /** @type {{ sid: string, name: string, at: number } | null} */

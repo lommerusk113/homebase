@@ -78,7 +78,7 @@ export default {
         await page.waitFor(`${btn}.dataset.other && ${titleCount} > 0`, { what: 'the cue on the picker button and the global title count' });
         const other = await page.ev(`Number(${btn}.dataset.other)`);
         assert.ok(other >= 1);
-        assert.equal(await page.ev(`${btn}.getAttribute('aria-label')`), `Project, ${other} waiting on you in other projects`);
+        assert.equal(await page.ev(`${btn}.getAttribute('aria-label')`), `Project: gamma, ${other} waiting on you in other projects`);
         assert.equal(await page.ev(`getComputedStyle(${btn}, '::after').content`), `"${other}"`, 'a bare numeral on the button');
         assert.equal(await page.ev(`!!document.getElementById('proj-chips')`), false, 'no project pills');
         assert.equal(await page.ev(needsRows), 0, 'a quiet project: no Needs you rows');

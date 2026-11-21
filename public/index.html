@@ -28,6 +28,7 @@
 </head>
 <body>
 <div class="sr-only" id="announce" role="status"></div>
+<h1 class="sr-only">Homebase</h1>
 <header class="top">
   <div class="brand"><img src="/icon.svg" width="26" height="26" alt="">Homebase</div>
   <span class="demo" data-demo hidden title="Invented data: nothing is sent to Claude">Demo</span><!-- shown by the server in --demo -->
@@ -50,7 +51,7 @@
   <button class="quiet" id="manage" title="Manage projects" aria-label="Manage projects">☰</button>
 </header>
 <div class="main">
-  <div class="left">
+  <div class="left" role="main">
     <!-- the board's title and view switch (issues.js showTab); phones use the bottom bar instead -->
     <span class="vtitle" id="tabs" role="tablist" aria-label="Board view">
       <button role="tab" id="tab-work" data-tab="work" aria-selected="true" aria-controls="masters" title="Work items (1, or t to swap)"><span class="vt-word">Work</span><span class="count hot work-n" hidden></span></button>
@@ -61,7 +62,7 @@
     <div class="masters issues" id="issues" role="tabpanel" aria-labelledby="tab-issues" hidden></div>
     <div class="limits" id="limits" hidden></div>
   </div>
-  <aside id="chat">
+  <aside id="chat" aria-label="Chat">
     <div class="c-head"><button class="c-back" id="c-back" type="button" hidden>← Main chat</button><button class="c-back c-next" id="c-next" type="button" hidden></button><span class="c-branch" id="c-branch" hidden></span><span class="c-unpushed" id="c-unpushed" hidden></span><span class="c-newer" id="newer" role="status" hidden><span id="newer-text"></span><button class="show" id="newer-go">Switch</button></span></div>
     <div class="c-focus" id="c-focus" hidden></div>
     <div class="c-feed" id="feed"></div>
@@ -92,14 +93,14 @@
       <wa-dropdown-item value="auto-compact" type="checkbox" id="auto-compact">Auto-compact idle chats over 100k context</wa-dropdown-item>
       <wa-dropdown-item value="needs-only" type="checkbox" id="needs-only">Show only messages that need me</wa-dropdown-item>
       <wa-dropdown-item value="push" id="push-item"><span id="push-label">Enable notifications on this device</span><span slot="details" id="push-state"></span></wa-dropdown-item>
-    </wa-dropdown><input type="file" id="attach-input" accept="image/*" multiple hidden><wa-textarea id="msg" rows="1" resize="auto" placeholder="Message Claude…" title="Enter sends, Shift+Enter adds a new line"></wa-textarea><button class="c-attach c-send" id="send-btn" type="submit" aria-label="Send"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div>
+    </wa-dropdown><input type="file" id="attach-input" accept="image/*" multiple hidden><wa-textarea id="msg" label="Message Claude" rows="1" resize="auto" placeholder="Message Claude…" title="Enter sends, Shift+Enter adds a new line"></wa-textarea><button class="c-attach c-send" id="send-btn" type="submit" aria-label="Send"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div>
       </div>
     </form>
   </aside>
 </div>
 <!-- narrow windows only (styles.css ≤ 900px: phones, zoomed desktops): one pane at a time, the chat or one of the board's two views -->
 <nav class="ptabs" id="ptabs" aria-label="Views">
-  <button type="button" data-pane="chat" aria-pressed="true">Chat<span class="pt-dot"></span></button>
+  <button type="button" data-pane="chat" aria-pressed="true">Chat<span class="pt-dot"><span class="sr-only">, a question is waiting</span></span></button>
   <button type="button" data-pane="work" aria-pressed="false">Work<span class="count hot work-n" id="pt-work-n" hidden></span></button>
   <button type="button" data-pane="issues" aria-pressed="false">Issues</button>
 </nav>

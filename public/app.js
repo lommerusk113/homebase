@@ -81,7 +81,8 @@ function renderProjects() {
     const other = state.project === 'all' ? 0 : projectCounts(state.sessions, state.tracked).filter(c => c.project !== state.project).reduce((n, c) => n + c.waiting, 0);
     const pb = $('project');
     pb.dataset.other = other ? String(other) : '';
-    pb.setAttribute('aria-label', other ? `Project, ${other} waiting on you in other projects` : 'Project');
+    const picked = state.project === 'all' ? 'All my projects' : state.project;
+    pb.setAttribute('aria-label', `Project: ${picked}${other ? `, ${other} waiting on you in other projects` : ''}`);
     pb.title = other ? `${other} waiting on you in other projects` : 'Switch project (g then p)';
     renderMilestone();
 }

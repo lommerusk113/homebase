@@ -134,6 +134,7 @@ function askingRow(s) {
         b.append(el('span', 'pulse'), ` ${state.project === 'all' ? `${s.project} · ` : ''}${s.title || sessionTopic(s)} ${s.asking ? 'is asking' : 'needs you'}`);
         what.append(b, el('small', 'next', `${s.asking ? s.question || 'Claude asked a question.' : 'Claude’s last reply wants your decision'}${touch() ? '' : ' · click to answer in the chat'}`)); // a phone's line is too short for the hint, and the row is plainly a button there
     }
+    tr.setAttribute('aria-label', what.textContent.trim()); // the row's own text: the button below is not part of its name
     // a reply that wrongly needs you can be marked as handled; a question or permission prompt is answered in the chat
     const reply = s.asking ? null : s.needsId;
     if (reply) {
@@ -251,10 +252,11 @@ function prParts(x) {
     return out;
 }
 
-/** @param {WorkItem[]} list */
-function itemTable(list) {
+/** @param {WorkItem[]} list @param {string} label the group's name, for screen readers */
+function itemTable(list, label) {
     const t = el('table', 'rows');
     t.setAttribute('role', 'grid');
+    t.setAttribute('aria-label', label);
     t.append(...list.flatMap(x => itemRows(x)));
     return t;
 }
@@ -275,6 +277,8 @@ function foldGroup(c, list, isOpen, setOpen, note) {
     f.setAttribute('appearance', 'plain');
     f.toggleAttribute('open', isOpen);
     sum.slot = 'summary';
+    sum.setAttribute('role', 'heading'); // a heading like the open groups' h2
+    sum.setAttribute('aria-level', '2');
     sum.append(dot(c.key), `${c.label} (${list.length})`);
     if (note) {
         sum.append(el('span', 'g-note', ` · ${note}`));
@@ -290,7 +294,7 @@ function foldGroup(c, list, isOpen, setOpen, note) {
             setOpen(false);
         }
     });
-    f.append(sum, itemTable(list));
+    f.append(sum, itemTable(list, c.label));
     return f;
 }
 
@@ -352,7 +356,7 @@ function renderItems() {
         }
         const h = el('h2', 'g-head');
         h.append(dot(c.key), `${c.label} · ${list.length + extra.length}`);
-        const t = itemTable(list);
+        const t = itemTable(list, c.label);
         t.append(...extra); // after the item rows: a fixed-layout table takes its column widths from the first row, and this one spans them all
         const sec = el('section', `group g-${c.key}`);
         sec.append(h, t);
@@ -360,6 +364,7 @@ function renderItems() {
     }).filter(Boolean);
     if (reviews.length) { // after Needs you, else first
         const h = el('h2', 'g-head'), t = el('table', 'rows'), sec = el('section', 'group g-reviews');
+        t.setAttribute('aria-label', 'Review requested');
         h.append(dot('review'), `Review requested · ${reviews.length}`);
         t.append(...reviews.map(reviewRow));
         sec.append(h, t);

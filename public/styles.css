@@ -400,8 +400,8 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .disconnected .masters { opacity:.5; }
 .c-status:not(.idle) .pulse { animation:pulse 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .pulse, .dot.live, .stage .bar i.now, .bubble.enter, .c-ask, .c-ask-label::before, .need-pill .unread { animation:none !important; }
-  .bubble .show::after, wa-button.c-opt::part(base), .c-row { transition:none; transform:none !important; }
+  .pulse, .dot.live, .stage .bar i.now, .ci-running, .bubble.enter, .c-ask, .c-ask-label::before, .need-pill .unread { animation:none !important; }
+  .bubble .show::after, wa-button.c-opt::part(base), .c-row { transition:none !important; transform:none !important; }
 }
 .c-row { --c-h:32px; position:relative; display:flex; align-items:flex-start; gap:4px; padding:2px 6px; border-radius:var(--r-m); background:var(--bg); border:1px solid var(--line); transition:border-color .15s, box-shadow .15s; }
 /* the field row draws the border and the focus ring, so the textarea has none */
@@ -604,6 +604,7 @@ ul.comments li.seen a { color:var(--muted); }
 .keys-help { display:grid; grid-template-columns:auto 1fr; gap:6px 16px; margin:0; font-size:var(--fs-m); }
 .keys-help dt { font-family:'JetBrains Mono', monospace; font-weight:500; white-space:nowrap; }
 .keys-help dd { margin:0; color:var(--muted); }
+.keys-toggle { display:flex; align-items:flex-start; gap:var(--sp-2); margin-top:var(--sp-4); font-size:var(--fs-m); }
 .keys-msg { white-space:pre-wrap; overflow-wrap:anywhere; font-size:var(--fs-m); background:var(--chip); padding:8px; border-radius:var(--r-s); }
 /* phones: small controls keep their look and get a 44px tap height (the ::before), as the milestone pill has; dialog buttons grow to it */
 @media (max-width: 900px) {
@@ -821,6 +822,7 @@ wa-details[open] .g-note { display:none; }
   .rows .what { padding:10px 14px 2px; }
   .rows .prog { width:auto; padding-left:14px; }
   .rows .pr, .rows .br { display:none; }
+  .rows tr.asking b { white-space:normal; } /* the question wraps: as a flex row it has no ellipsis to end on */
   .d-mr { display:flex; flex-wrap:wrap; align-items:center; gap:6px; }
   .rows .act, .rows .when { width:auto; }
   .rows .act wa-button[size="s"] { --wa-form-control-height:40px; font-size:var(--fs-m); }
@@ -865,4 +867,13 @@ wa-details[open] .g-note { display:none; }
 @media (max-width: 900px) and (max-height: 500px) and (hover: hover) and (pointer: fine) {
   html, body { height:auto; }
   .main { flex:none; height:100dvh; }
+}
+/* more contrast asked for: hairlines become real edges (control and card borders, empty progress segments) */
+@media (prefers-contrast: more) {
+  :root { --line:var(--muted); --line-soft:var(--muted); }
+}
+/* forced colours (Windows high contrast) repaint every background: the marks that are only a background keep one */
+@media (forced-colors: active) {
+  .dot, .pulse, .pt-dot, .stage .bar i.on, .vtitle [aria-selected="true"] .vt-word::after { forced-color-adjust:none; background:CanvasText; }
+  .stage .bar i { border:1px solid CanvasText; }
 }

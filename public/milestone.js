@@ -121,6 +121,12 @@ export function milestoneSelector(project, { signal, onChange, onData, onBusy } 
         }
     };
     document.addEventListener('click', outside);
+    // Tab out of the menu closes it: left open it covers the board, out of Escape's reach
+    pick.addEventListener('focusout', e => {
+        if (e.relatedTarget instanceof Node && !pick.contains(e.relatedTarget)) {
+            pick.open = false;
+        }
+    });
     pick.addEventListener('keydown', e => {
         if (e.key === 'Escape') {
             pick.open = false;

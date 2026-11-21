@@ -103,5 +103,24 @@ export default {
                 return { scrolls: t.scrollWidth > t.clientWidth, inside: t.getBoundingClientRect().right <= b.right, page: document.documentElement.scrollWidth <= innerWidth }; })()`);
             assert.deepEqual(r, { scrolls: true, inside: true, page: true });
         });
+    },
+
+    'on a touch screen Enter adds a line and the send button sends; with a mouse there is no send button': async ({ page, open }) => {
+        const sendBtn = `(document.getElementById('send-btn')?.offsetParent != null)`;
+        await asPhone(page, async () => {
+            await open();
+            assert.equal(await page.ev(sendBtn), true, 'a send button on touch');
+            await page.ev(`document.getElementById('msg').focus()`);
+            await page.type('one');
+            await page.key('Enter');
+            await page.type('two');
+            assert.equal(await page.ev(`document.getElementById('msg').value`), 'one\ntwo');
+            assert.equal(page.posts.filter(p => p.url.includes('/api/send')).length, 0, 'Enter does not send');
+            await page.click('#send-btn');
+            await page.waitFor(`document.getElementById('msg').value === ''`, { what: 'the message to go' });
+            assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')).map(p => p.body), ['one\ntwo']);
+        });
+        await open();
+        assert.equal(await page.ev(sendBtn), false, 'no send button with a mouse');
     }
 };

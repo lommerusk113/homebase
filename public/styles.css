@@ -393,6 +393,9 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .c-attach { background:none; color:var(--muted); }
 .c-attach:hover { color:var(--fg); background:var(--hover); }
 .c-attach:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+/* touch screens only: there Enter adds a line (chat.js), so sending needs a button; with a keyboard Enter sends and there is none */
+.c-send { display:none; }
+@media (hover: none), (pointer: coarse) { .c-send { display:grid; align-self:flex-end; width:44px; height:44px; color:var(--accent); } }
 .c-attached { display:flex; flex-wrap:wrap; gap:6px; padding:6px 12px 0; }
 .c-attached[hidden] { display:none; }
 .c-thumb { position:relative; }

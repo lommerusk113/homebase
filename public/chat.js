@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou, markHandled } from './core.js';
+import { api, $, el, state, store, touch, visibleSessions, updateTitle, rich, foldable, waButton, tooltip, chatStatus, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou, markHandled } from './core.js';
 import { renderBoard, sessionTopic } from './list.js';
 import { syncDiff } from './diff.js';
 
@@ -1545,12 +1545,14 @@ export function initChat() {
             attach(e.dataTransfer?.files ?? []);
         }
     });
+    // On a touch screen Enter adds a line, as its keyboard has no Shift+Enter; the send button (shown there only) sends.
     $('msg').onkeydown = e => {
-        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !touch()) {
             e.preventDefault();
             $('send').requestSubmit();
         }
     };
+    $('send-btn').onmousedown = e => e.preventDefault(); // the tap leaves the focus in the box, so the phone's keyboard stays up
     // Claude Code takes /model <alias> as a normal message and switches at once (it also saves it as the default for new chats)
     $('c-model').addEventListener('wa-select', async e => {
         const s = chatSession(), alias = e.detail.item.value;

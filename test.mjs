@@ -904,6 +904,17 @@ assert.deepEqual(chatItems([say('A.'), toolResult, say('B.'), { type: 'user', me
 // a subagent's queue operations aren't the user's pending prompts
 assert.deepEqual(chatItems([{ type: 'queue-operation', operation: 'enqueue', content: 'side work', isSidechain: true, timestamp: 't1' }]), []);
 console.log('ok interrupted');
+{
+    const u = text => ({ type: 'user', message: { content: text } });
+    const res = (id, extra) => ({ type: 'user', timestamp: 't9', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'r', ...extra }] } });
+    const stop = u('[Request interrupted by user]');
+
+    // Esc on a turn that only ran tools so far marks that turn, not the previous turn's finished reply
+    const esc = chatItems([u('go'), say('All done with A.'), u('now B'), tu('Bash', { id: 'b0' }), res('b0'), stop]);
+    assert.deepEqual(esc.map(i => [i.role, !!i.interrupted]), [['user', false], ['assistant', false], ['user', false], ['tools', false], ['tools', true]]);
+    assert.equal(chatItems([u('go'), tu('Bash', { id: 'b0' }), stop]).at(-1).interrupted, true); // no reply at all yet
+    console.log('ok interrupted turn without text');
+}
 
 import { peakLimits } from './server.mjs';
 const dump = (five, fiveReset, week = 10) => ({ rate_limits: { five_hour: { used_percentage: five, resets_at: fiveReset }, seven_day: { used_percentage: week, resets_at: 1738857600 } } });

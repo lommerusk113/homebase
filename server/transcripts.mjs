@@ -481,6 +481,7 @@ function rawItems(entries) {
     };
 
     let newTurn = false;
+    let worked = false; // tool calls since your last prompt
     const asks = new Set(); // AskUserQuestion tool_use ids
     for (const e of entries) {
         const entry = entryKind(e);
@@ -489,13 +490,18 @@ function rawItems(entries) {
         if (reply) {
             answerAsk(items, e, reply);
         }
-        if (entry?.kind === 'interrupt') {
-            const prev = items.findLast(i => i.role === 'assistant');
-            if (prev) {
-                prev.interrupted = true;
+    if (entry?.kind === 'interrupt') {
+            // a turn that ran tools but wrote nothing yet gets its own line: the reply before your prompt was not cut
+            const prev = items.findLastIndex(i => i.role === 'assistant');
+            if (worked && prev <= items.findLastIndex(i => i.role === 'user')) {
+                flush();
+                items.push({ role: 'tools', text: 'Interrupted', interrupted: true, at: e.timestamp });
+            } else if (prev >= 0) {
+                items[prev].interrupted = true;
             }
         } else if (entry?.kind === 'prompt') {
             flush();
+            worked = false;
             items.push({ role: 'user', text: entry.text, at: e.timestamp, src: entry.src });
         } else if (entry?.kind === 'compact') {
             flush();
@@ -519,6 +525,7 @@ function rawItems(entries) {
                 items.push({ role: 'assistant', text: entry.text, at: e.timestamp, ...(!newTurn && { continues: true }) });
                 newTurn = false;
             }
+            worked ||= entry.uses.length > 0;
             for (const u of entry.uses) {
                 const cmd = u.name === 'Bash' ? String(u.input?.command ?? '').replace(/\s+/g, ' ').trim() : '';
                 if (RISKY.test(cmd)) {

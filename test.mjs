@@ -2695,6 +2695,47 @@ import { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay
     console.log('ok tracked projects');
 }
 
+// a reply marked as handled no longer needs you; a newer needing reply does again; an open question is not dismissed
+{
+    const { loadHandled, markHandled } = await import('./server/handled.mjs');
+    const dir = join(mkdtempSync(join(tmpdir(), 'hb-handled-')), 'homebase');
+    const sid = '11111111-1111-4111-8111-111111111111', r1 = '22222222-2222-4222-8222-222222222222', r2 = '33333333-3333-4333-8333-333333333333';
+    const reply = (uuid, text) => ({ type: 'assistant', uuid, sessionId: sid, cwd: '/r', message: { content: [{ type: 'text', text }] } });
+    const first = [{ type: 'user', message: { content: 'go' } }, reply(r1, '**▸ Deploy · needs you**\n\nTLDR: deploy later\n\n- Waiting on you: deploy when ready')];
+    const before = summarize(first, 60_000);
+    assert.deepEqual([before.needsYou, before.needsId, chatItems(first).at(-1).id], [true, r1, r1]);
+
+    for (const [s, r] of [[sid, 'nope'], ['../x', r1], [sid, null], [null, r1], [sid, `${r1}/x`]]) {
+        await assert.rejects(markHandled(dir, s, r), e => e.status === 400, `${s} ${r}`);
+    }
+    assert.equal(summarize(first, 60_000).needsYou, true, 'a refused id dismisses nothing');
+
+    await markHandled(dir, sid, r1);
+    const after = summarize(first, 60_000), item = chatItems(first).at(-1);
+    assert.deepEqual([after.needsYou, after.needsId, after.needsText], [false, null, null]);
+    assert.deepEqual([item.needsYou, item.waiting], [false, undefined], 'no pill and no pinned decision in the chat');
+
+    const newer = [...first, { type: 'user', message: { content: '<task-notification>x</task-notification>' } }, reply(r2, '**▸ Deploy · needs you**\n\nTLDR: pick a port')];
+    assert.deepEqual([summarize(newer, 60_000).needsYou, summarize(newer, 60_000).needsId], [true, r2], 'a newer reply that needs you shows again');
+
+    const asking = summarize([...first, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'q1', name: 'AskUserQuestion', input: { questions: [{ question: 'Which?' }] } }] } }], 60_000);
+    assert.equal(asking.asking, true, 'an open question still asks');
+
+    // saved: another server start reads it back; a broken file and the cap are handled
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'handled.json'), 'utf8')), [`${sid}/${r1}`]);
+    writeFileSync(join(dir, 'handled.json'), 'nope');
+    loadHandled(dir);
+    assert.equal(summarize(first, 60_000).needsYou, true, 'nothing kept from a broken file');
+    const hex = n => `${String(n).padStart(8, '0')}-2222-4222-8222-222222222222`;
+    for (let n = 0; n < 501; n++) {
+        await markHandled(dir, sid, hex(n));
+    }
+    const saved = JSON.parse(readFileSync(join(dir, 'handled.json'), 'utf8'));
+    assert.deepEqual([saved.length, saved[0], saved.at(-1)], [500, `${sid}/${hex(1)}`, `${sid}/${hex(500)}`], 'the oldest goes first');
+    loadHandled(join(dir, 'none'));
+    console.log('ok handled replies');
+}
+
 // fake glab first on PATH for the forge tests below; each test passes the script body it needs
 const fakeBin = mkdtempSync(join(tmpdir(), 'hb-forge-'));
 const withFakeGlab = async (body, fn) => {
@@ -3919,6 +3960,7 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
         assert.ok(list.some(x => x.project === 'alpha' && x.cwd.startsWith(dir)), 'the board is the fixture\'s');
         const sent = await fetch(`${base}/api/send?id=${list[0].id}`, { method: 'POST', headers, body: 'hi' });
         assert.deepEqual([sent.status, /demo/.test(await sent.text())], [409, true], 'a send is refused with the reason');
+        assert.equal((await fetch(`${base}/api/handled?id=${list[0].id}&reply=${list[0].id}`, { method: 'POST', headers })).status, 409, 'so is marking a reply as handled');
         demo.kill('SIGTERM');
         await new Promise(r => demo.once('exit', r));
         assert.throws(() => statSync(dir), 'the temp dir is removed');

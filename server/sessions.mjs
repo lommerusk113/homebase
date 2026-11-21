@@ -437,6 +437,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         asking: turn.state === 'asking',
         question: turn.state === 'asking' ? pendingQuestion(entries, marker) : null,
         needsYou,
+        needsId: needsYou ? lastItem?.id ?? null : null, // that reply's id, to mark it as handled (POST /api/handled)
         needsText: needsYou ? firstLine(lastItem?.ask?.question ?? lastItem?.waiting ?? lastItem?.tldr, 140) || null : null, // what it asks, for the Needs you row's title
         since: turn.since,
         topic: latestTopic(entries),

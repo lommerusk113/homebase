@@ -23,6 +23,7 @@ import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './
 import { saveUpload, readUpload } from './server/uploads.mjs';
 import { saveSeen } from './server/rules.mjs';
 import { readTracked, saveTracked } from './server/tracked.mjs';
+import { loadHandled, markHandled } from './server/handled.mjs';
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 import { diff } from './server/diff.mjs';
@@ -105,6 +106,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     const REMOTE = remoteFrom(readConfigFile(), PORT);
     setupPairing(join(DATA_DIR, 'devices.json'), REMOTE);
+    loadHandled(DATA_DIR);
     warmMilestones();
     const handler = async (req, res) => {
         const url = new URL(req.url, 'http://x');
@@ -181,7 +183,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return;
             }
             // The demo types nothing anywhere; a 409's text is what the chat shows under the unsent message or answer.
-            if (DEMO && req.method === 'POST' && /^\/api\/(send|startup|question|clear|compact|restart|interrupt|projects\/|server\/reload)/.test(url.pathname)) {
+            if (DEMO && req.method === 'POST' && /^\/api\/(send|startup|question|handled|clear|compact|restart|interrupt|projects\/|server\/reload)/.test(url.pathname)) {
                 throw Object.assign(new Error('This is the demo: nothing is sent to Claude'), { status: 409 });
             }
             // Pairing is managed on the Mac only, never by a remote device.
@@ -216,6 +218,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
             if (isPost('/api/tracked')) {
                 await saveTracked(DATA_DIR, await readBody(req, 64 * 1024));
+                return res.end('ok');
+            }
+            // A reply that wrongly says "needs you", marked as handled; an open question or permission prompt is not one
+            if (isPost('/api/handled')) {
+                await markHandled(DATA_DIR, url.searchParams.get('id'), url.searchParams.get('reply'));
                 return res.end('ok');
             }
             if (isPost('/api/rules/seen')) {

@@ -357,6 +357,9 @@ export const unwrapPasted = s => (typeof s === 'string' ? s.replace(PASTED, '$2'
 const DUP_MS = 60_000;
 const INTERRUPTED = /^\[Request interrupted by user(?: for tool use)?\]$/;
 
+// Ids of the replies the user marked as handled: they no longer need you (server/handled.mjs keeps them on disk).
+export const handled = new Set();
+
 // Master chat as bubbles: human prompts, Claude's text (consecutive chunks merged), and one activity line per run of tool calls.
 export const chatItems = (entries, max = 60) => chatFeed(entries, max).items;
 
@@ -372,6 +375,11 @@ export function chatFeed(entries, max = 60) {
         replied ||= i.role === 'user';
         if (i.needsYou && (replied || i.answer)) {
             i.needsYou = false;
+        }
+        if (handled.has(i.id)) { // marked as handled: no pill, no pinned decision
+            i.needsYou = false;
+            delete i.waiting;
+            delete i.ask;
         }
         replied ||= !!i.answer; // an answer given in the ask card also settles what was asked before it
     }
@@ -583,7 +591,7 @@ function rawItems(entries) {
         } else if (entry?.kind === 'assistant') {
             if (entry.text) {
                 flush();
-                items.push({ role: 'assistant', text: entry.text, at: e.timestamp, ...(!newTurn && { continues: true }) });
+                items.push({ role: 'assistant', ...(e.uuid && { id: e.uuid }), text: entry.text, at: e.timestamp, ...(!newTurn && { continues: true }) });
                 newTurn = false;
             }
             worked ||= entry.uses.length > 0;
@@ -596,7 +604,7 @@ function rawItems(entries) {
                 } else if (u.name === 'ExitPlanMode' && typeof u.input?.plan === 'string' && u.input.plan.trim()) {
                     // the plan you are asked to approve, as part of Claude's reply
                     flush();
-                    items.push({ role: 'assistant', text: u.input.plan, at: e.timestamp, ...(!newTurn && { continues: true }) });
+                    items.push({ role: 'assistant', ...(e.uuid && { id: e.uuid }), text: u.input.plan, at: e.timestamp, ...(!newTurn && { continues: true }) });
                     newTurn = false;
                 } else if (RISKY.test(cmd)) {
                     // a push, merge or force on its own visible line, never folded into the hidden "Ran N commands"
@@ -640,6 +648,9 @@ function mergeChunks(items) {
         const prev = out.at(-1);
         if (continues && prev?.role === 'assistant') {
             prev.text += '\n\n' + item.text;
+            if (item.id) {
+                prev.id = item.id; // the bubble's newest entry: more text makes it a new reply to mark as handled
+            }
             if (item.interrupted) {
                 prev.interrupted = true;
             }
@@ -952,7 +963,7 @@ export function pendingQuestion(entries, marker = null) {
     return questions && (questions[0]?.question || 'Claude asked a question.');
 }
 
-const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MARKER_MAX_MS = 24 * 3600_000;
 const markers = new Map(); // session id -> { mtimeMs, marker }
 

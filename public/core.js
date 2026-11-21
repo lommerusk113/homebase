@@ -346,7 +346,39 @@ export const prChip = s => {
 // backticks) become light accent text: chips for every ref made bold sentences hard to read.
 export const PR_HREF = /^https:\/\/\S+?\/(?:-\/merge_requests|pull)\/\d+\/?$/;
 const CHIP_OR_PATH = /(^|[\s(\[])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+\/?|[\w.@+-]+(?:\/[\w.@+-]+)+\.[a-z]\w{0,5}|[!#]\d+\b)/gi;
+// A huge table or code block shows its first rows or lines with a "Show all" step: thousands laid out at once freeze
+// the page for seconds. Shown in full once asked, over re-renders too (state.unfold, keyed by size and start).
+const MAX_ROWS = 200, MAX_LINES = 500;
+function capBig(root) {
+    /** @param {Element} at @param {string} label @param {string} key @param {() => void} restore */
+    const step = (at, label, key, restore) => {
+        const btn = el('button', 'show show-all', label);
+        btn.onclick = e => {
+            e.stopPropagation();
+            state.unfold.add(key);
+            restore();
+            btn.remove();
+        };
+        at.after(btn);
+    };
+    for (const table of root.querySelectorAll('table')) {
+        const rows = [...table.querySelectorAll('tbody > tr')], key = `all:${rows.length}:${rows[0]?.textContent.slice(0, 80)}`;
+        if (rows.length > MAX_ROWS && !state.unfold.has(key)) {
+            const rest = rows.slice(MAX_ROWS), body = rest[0].parentElement;
+            rest.forEach(r => r.remove());
+            step(table, `Show all ${rows.length} rows`, key, () => body.append(...rest.map(enrich)));
+        }
+    }
+    for (const code of root.querySelectorAll('pre > code')) {
+        const text = code.textContent, lines = text.split('\n'), key = `all:${text.length}:${text.slice(0, 80)}`;
+        if (lines.length > MAX_LINES && !state.unfold.has(key)) {
+            code.textContent = lines.slice(0, MAX_LINES).join('\n');
+            step(code.parentElement, `Show all ${lines.length} lines`, key, () => { code.textContent = text; });
+        }
+    }
+}
 function enrich(root) {
+    capBig(root); // first, so the rows held back are only walked when shown
     for (const a of root.querySelectorAll('a')) {
         if (typeof a.href === 'string' && PR_HREF.test(a.href) && a.textContent.startsWith('http')) { // an SVG link's href is no string
             a.textContent = prLabel(a.href);

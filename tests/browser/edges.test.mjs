@@ -75,5 +75,28 @@ export default {
         await page.ev(`window.landed = true, ${mine}.querySelector('wa-button.retry').click()`);
         await page.waitFor(`document.querySelectorAll('#feed wa-button.retry').length === 0 && !!${mine}`, { what: 'the delivered message without Retry' });
         assert.equal(await page.ev(`window.sends`), 1, 'no second copy');
+    },
+
+    'a huge table and a huge code block render in part, with a step that shows all': async ({ page, open, answerPosts }) => {
+        const table = ['| a | b |', '|---|---|', ...Array.from({ length: 1500 }, (_, n) => `| r${n} | src/file${n}.js |`)].join('\n');
+        const code = ['```', ...Array.from({ length: 5000 }, (_, n) => `line ${n}`), '```'].join('\n');
+        const items = [{ role: 'assistant', id: 'big', at: new Date().toISOString(), tldr: 'big reply', text: `${table}\n\n${code}` }];
+        await open();
+        page.route = q => (q.url.includes('/api/transcript') ? { body: JSON.stringify({ items, working: false, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        const counts = `[document.querySelectorAll('#feed tbody tr').length, document.querySelector('#feed pre code')?.textContent.split('\\n').length ?? 0, document.querySelectorAll('#feed .show-all').length]`;
+        await page.waitFor(`document.getElementById('feed').textContent.includes('big reply') && document.querySelector('#feed .bubble.assistant .show')`, { what: 'the folded reply' });
+        await page.clickOn(`document.querySelector('#feed .bubble.assistant .show:not(.show-all)')`);
+        const [rows, lines, steps] = await page.ev(counts);
+        assert.ok(rows > 0 && rows < 1500, `${rows} of 1500 rows at first`);
+        assert.ok(lines > 0 && lines < 5000, `${lines} of 5000 lines at first`);
+        assert.equal(steps, 2, 'one step per cut block');
+        await page.ev(`document.querySelectorAll('#feed .show-all').forEach(b => b.click())`);
+        const all = await page.ev(counts);
+        assert.deepEqual([all[0], all[1] >= 5000, all[2]], [1500, true, 0], 'everything after the step');
+        assert.ok(await page.ev(`!!document.querySelector('#feed tbody tr:last-child code')`), 'the late rows get the same file-path styling');
+        // it stays shown over the next redraw
+        items.push({ role: 'assistant', id: 'next', at: new Date().toISOString(), text: 'a later reply' });
+        await page.waitFor(`document.getElementById('feed').textContent.includes('a later reply')`, { what: 'the redraw' });
+        assert.equal((await page.ev(counts))[0], 1500, 'still all rows');
     }
 };

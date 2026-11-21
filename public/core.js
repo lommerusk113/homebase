@@ -335,8 +335,6 @@ export const PR_HREF = /^https:\/\/\S+?\/(?:-\/merge_requests|pull)\/\d+\/?$/;
 const CHIP_OR_PATH = /(^|[\s(\[])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+\/?|[\w.@+-]+(?:\/[\w.@+-]+)+\.[a-z]\w{0,5}|[!#]\d+\b)/gi;
 function enrich(root) {
     for (const a of root.querySelectorAll('a')) {
-        a.target = '_blank';
-        a.rel = 'noopener';
         if (PR_HREF.test(a.href) && a.textContent.startsWith('http')) {
             a.textContent = prLabel(a.href);
             a.className = 'chip mono';
@@ -371,10 +369,36 @@ function enrich(root) {
     }
     return root;
 }
+// Reply text is untrusted (Claude repeats files and web pages), and marked passes raw HTML through. Only what marked
+// itself emits survives: no <style>, style/id/class/name, forms or controls, embeds, data-/aria- attributes, so a reply
+// can't restyle, cover or imitate the page where commands are approved. Links: http(s) and mailto only, always in a new
+// tab without opener or referrer. Images: data: only, the one source the CSP lets a reply show.
+const MD = {
+    ALLOWED_TAGS: ['p', 'br', 'hr', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'del', 'code', 'pre', 'blockquote', 'ul', 'ol', 'li', 'a', 'img', 'table', 'thead', 'tbody', 'tr', 'th', 'td'],
+    ALLOWED_ATTR: ['href', 'title', 'src', 'alt', 'align', 'start'],
+    ALLOW_DATA_ATTR: false,
+    ALLOW_ARIA_ATTR: false,
+};
+// rich() is DOMPurify's only caller, so the hook is global. Node imports this file too (tests, the server), without DOMPurify.
+typeof DOMPurify !== 'undefined' && DOMPurify.addHook('afterSanitizeAttributes', n => {
+    if (n.tagName === 'A') {
+        if (/^(https?|mailto):/i.test(n.getAttribute('href') ?? '')) {
+            n.setAttribute('rel', 'noopener noreferrer');
+            n.setAttribute('target', '_blank');
+        } else {
+            n.removeAttribute('href');
+        }
+    } else if (n.tagName === 'IMG' && !/^data:image\//i.test(n.getAttribute('src') ?? '')) {
+        n.removeAttribute('src');
+    }
+});
+// A task list's checkbox, the one form control marked emits, as a character.
+const TASK_BOX = /<input (checked="" )?disabled="" type="checkbox">/g;
 /** @param {string} text @param {boolean} [inline] */
 export const rich = (text, inline) => {
     const d = el('div', inline ? 'lead' : 'body');
-    d.innerHTML = DOMPurify.sanitize(inline ? marked.parseInline(text) : marked.parse(text || ''));
+    const html = inline ? marked.parseInline(text) : marked.parse(text || '');
+    d.innerHTML = DOMPurify.sanitize(html.replace(TASK_BOX, (_, on) => (on ? '☑' : '☐')), MD);
     return enrich(d);
 };
 

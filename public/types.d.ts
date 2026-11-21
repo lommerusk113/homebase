@@ -289,7 +289,7 @@ interface RefreshState { refreshing: boolean; lastRefreshedAt: number }
 // ---- page globals (index.html <script> tags) ----
 
 declare const marked: { parse(md: string): string; parseInline(md: string): string };
-declare const DOMPurify: { sanitize(html: string): string };
+declare const DOMPurify: { sanitize(html: string, config?: object): string; addHook(name: string, hook: (node: Element) => void): void };
 
 // ---- Web Awesome: only what the page touches ----
 

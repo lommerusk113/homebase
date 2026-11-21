@@ -938,6 +938,12 @@ console.log('ok interrupted');
     const pushed = chatItems([u('go'), tu('Bash', { id: 'b3', input: { command: 'git push origin x' } }), res('b3', { is_error: true })]);
     assert.deepEqual([pushed[1].risky, pushed[1].failed], [true, 1]);
     console.log('ok failed tool calls');
+
+    // a plan-mode plan is a Claude bubble, not "used 1 other tool"
+    const plan = chatItems([u('plan it'), tu('ExitPlanMode', { id: 'p1', input: { plan: '1. Rename the widget\n2. Ship it' } })]);
+    assert.deepEqual(plan.map(i => i.role), ['user', 'assistant']);
+    assert.ok(shown(plan[1]).includes('Rename the widget'));
+    console.log('ok plan in the feed');
 }
 
 import { peakLimits } from './server.mjs';

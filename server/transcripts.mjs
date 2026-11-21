@@ -556,6 +556,11 @@ function rawItems(entries) {
                     // shown with its answer (answerAsk); until then it is the ask card's
                     const qs = Array.isArray(u.input?.questions) ? u.input.questions : [];
                     asks.set(u.id, { text: qs.map(q => q?.question).filter(Boolean).join('\n\n'), at: e.timestamp });
+                } else if (u.name === 'ExitPlanMode' && typeof u.input?.plan === 'string' && u.input.plan.trim()) {
+                    // the plan you are asked to approve, as part of Claude's reply
+                    flush();
+                    items.push({ role: 'assistant', text: u.input.plan, at: e.timestamp, ...(!newTurn && { continues: true }) });
+                    newTurn = false;
                 } else if (RISKY.test(cmd)) {
                     // a push, merge or force on its own visible line, never folded into the hidden "Ran N commands"
                     flush();

@@ -274,7 +274,8 @@ export function deriveKind(ps, agent, hasPr, requested = false) {
         return hasPr ? { kind: 'unknown', reason: 'no answer from the forge' } : { kind: 'idle', reason: 'nothing to do' };
     }
 
-    const kind = ps.changes ? 'changes'
+    // review comments ask for a fix with or without the forge's changes flag; on an approved MR they are a note on Approved
+    const kind = ps.changes || (!ps.ready && (ps.unresolved || ps.unanswered)) ? 'changes'
         : ps.ci === 'failing' ? 'failing'
         : ps.blocked === 'conflict' || ps.blocked === 'rebase' ? 'conflict'
         : ps.blocked ? 'blocked'

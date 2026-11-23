@@ -49,6 +49,9 @@ for (const ps of [...mrStates, { state: 'merged' }, { state: 'closed' }, null]) 
             if (row.state.kind === 'gate') {
                 old.stage = 2;
             }
+            if (row.state.kind === 'changes' && !ps.changes) {
+                Object.assign(old, { column: 'needs-you', action: row.action }); // comments alone ask for a fix too, see below
+            }
             assert.deepEqual({ column: row.column, next: row.next, action: row.action, stage: row.stage }, old, JSON.stringify({ ps, agent, requested }));
             n++;
         }
@@ -86,3 +89,11 @@ const blockedByGate = { state: 'open', blocked: 'blocked', approved: true, notRe
 assert.equal(rowOf(blockedByGate, null, opts).next, `Blocked by another MR · ${GATE}`, 'a blocked MR still names the gate step');
 assert.equal(rowOf({ ...blockedByGate, notReady: null }, null, opts).next, 'Blocked by another MR');
 console.log('ok blocked names the gate step');
+
+const commentsOnly = { state: 'open', unresolved: 2, unresolvedBy: ['Ann'], reviewers: ['Ann'], ci: 'running' };
+assert.equal(rowOf(commentsOnly, null, opts).state.kind, 'changes');
+assert.deepEqual([rowOf(commentsOnly, null, opts).column, rowOf(commentsOnly, null, opts).action.label], ['needs-you', 'Fix & reply']);
+assert.equal(rowOf({ ...commentsOnly, unresolved: 0, unanswered: 1, unansweredBy: ['Ann'] }, null, opts).action.label, 'Fix & reply');
+assert.equal(rowOf({ ...commentsOnly, unresolved: 0 }, null, opts).state.kind, 'pipeline', 'no comments, no fix');
+assert.equal(rowOf({ ...commentsOnly, ready: true, ci: null }, null, opts).action.label, 'Merge + close issue', 'an approved MR with open comments still merges');
+console.log('ok comments get the fix button');

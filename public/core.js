@@ -43,7 +43,7 @@ const parse = v => {
 // The tracked list is the server's (tracked.json, shared with paired phones); localStorage keeps this browser's copy for a fast first paint.
 /**
  * @type {{ sessions: Session[], tracked: string[], project: string, selected: string | null, chat: string | null, unfold: Set<string>,
- *   outbox: OutboxItem[], nudged: Set<string>, offline?: boolean, serverError?: boolean,limits?: Limits | null, asking?: string | null, reviews?: ReviewRequest[], items?: WorkItem[],
+ *   outbox: OutboxItem[], nudged: Set<string>, offline?: boolean, serverError?: boolean, formatWarn?: boolean, update?: { server: boolean, reloading: boolean } | null, limits?: Limits | null, asking?: string | null, reviews?: ReviewRequest[], items?: WorkItem[],
  *   opened?: { key: string, since: number }, showMerged?: boolean, starting?: string | null, startingTmux?: string | null, focus?: string | null, boot?: { question: string, options: string[], selected: number } | null }}
  */
 export const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [], nudged: new Set(), limits: null };
@@ -129,30 +129,32 @@ export const friendly = msg => FRIENDLY.find(([re]) => re.test(msg))?.[1] ?? msg
  * @returns {K extends keyof PageIds ? PageIds[K] : HTMLElement}
  */
 export const $ = id => /** @type {any} */ (document.getElementById(id));
-// Failed poll (network, 401, non-OK): header "Offline", list dimmed with its "Disconnected" note. The next good poll clears it.
+// Failed poll (network, 401, non-OK): header "Offline" (the Header island reads state.offline), list dimmed with its "Disconnected" note. The next good poll clears it.
 // status: the HTTP status of the answer, if one came. A 500 is Homebase itself failing, not the connection (a proxy in
 // front answers 502-504 while Homebase is down), and is named so.
 /** @param {boolean} off @param {number} [status] */
 export const setOffline = (off, status) => {
-    const failed = off && status === 500;
+    const failed = off && status === 500, changed = off !== Boolean(state.offline) || failed !== Boolean(state.serverError);
     state.offline = off;
     state.serverError = failed;
-    $('offline').hidden = !off;
-    $('offline').textContent = failed ? 'Server error' : 'Offline';
+    if (changed) {
+        vue.bump();
+    }
     document.body.classList.toggle('disconnected', off);
     document.body.classList.toggle('server-error', failed);
     document.querySelector('.stale-note').textContent = `${failed ? 'Homebase hit an error (see its log)' : 'Disconnected'} — showing the last known data`;
 };
-// Header warning when Claude Code's transcript or screen no longer parses: any reason shown keeps it up. The server puts
-// its "Claude Code is newer than the checked version" message in data-version; that alone shows it too, from the first poll on.
+// Header warning when Claude Code's transcript or screen no longer parses: any reason shown keeps it up
+// (state.formatWarn, drawn by the Header island next to the server's own version warning).
 /** @type {Set<string>} */
 const formatReasons = new Set();
 /** @param {string} reason @param {boolean} on */
 export const setFormatWarn = (reason, on) => {
     formatReasons[on ? 'add' : 'delete'](reason);
-    const warn = $('format-warn'), version = warn.dataset.version ?? '';
-    warn.hidden = !formatReasons.size && !version;
-    warn.textContent = [formatReasons.size ? 'Claude Code\'s format changed — status may be wrong' : '', version].filter(Boolean).join(' · ');
+    if (Boolean(state.formatWarn) !== formatReasons.size > 0) {
+        state.formatWarn = formatReasons.size > 0;
+        vue.bump();
+    }
 };
 /**
  * @template {string} K
@@ -535,9 +537,10 @@ export function commandRun(items, n) {
     return plain(items[n - 1]) ? [] : items.slice(n, end < 0 ? items.length : end);
 }
 
-// Plug-in points: app.js sets hooks.inMilestone to milestone.js's inMilestone(item, selected), hooks.milestoneId to the picked one, hooks.refresh for keys.js's r, hooks.setProject for its [ and ] and hooks.openProjects for its g p;
-// keys.js sets hooks.rendered, which list.js and issues.js call after each render, and hooks.refocus, which diff.js calls when the element it was opened from is gone.
-/** @type {{ inMilestone: (x: WorkItem) => boolean, milestoneId: () => number | null, refresh: () => void, setProject: (name: string) => void, openProjects: () => void, rendered?: (refocus: boolean) => void, refocus?: () => void }} */
+// Plug-in points: app.js sets hooks.refresh for keys.js's r, hooks.setProject for its [ and ] and hooks.reloadServer for the header's "Reload server";
+// the Vue islands set hooks.inMilestone and hooks.milestoneId (the picked milestone, useMilestoneFilter), hooks.openProjects for g p (the Header island) and hooks.collapseIssue for Esc (useIssues);
+// keys.js sets hooks.rendered, which list.js and the Issues island call after each render, and hooks.refocus, which diff.js calls when the element it was opened from is gone.
+/** @type {{ inMilestone: (x: WorkItem) => boolean, milestoneId: () => number | null, refresh: () => void, setProject: (name: string) => void, openProjects: () => void, reloadServer?: () => void, collapseIssue?: () => boolean, rendered?: (refocus: boolean) => void, refocus?: () => void }} */
 export const hooks = { inMilestone: () => true, milestoneId: () => null, refresh: () => {}, setProject: () => {}, openProjects: () => {} };
 
 // The Vue islands (web/README.md). load() resolves to web/dist/main.js, or to null when web/ isn't built (the server

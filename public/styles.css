@@ -69,7 +69,9 @@ body { margin:0; font:var(--fs-l)/1.5 Inter, -apple-system, system-ui, sans-seri
 header.top { background:var(--bg); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:var(--sp-3); padding:var(--sp-2) var(--sp-5); flex-wrap:wrap; }
 .brand { display:flex; align-items:center; gap:var(--sp-2); font-weight:600; font-size:var(--fs-l); letter-spacing:-.01em; }
 .sep { color:var(--line); font-size:18px; font-weight:300; }
-/* Project picker (picker.js): a button with the current choice, and a filterable list in a popover; a bottom sheet on phones */
+/* The Vue Header island's mount: its parts (picker, milestone pill, notes) lay out as the header's own children */
+#header-island { display:contents; }
+/* Project picker (web/src/islands/Header/ProjectPicker.vue): a button with the current choice, and a filterable list in a popover; a bottom sheet on phones */
 .pp { position:relative; display:inline-flex; min-width:0; }
 .pp-btn { appearance:none; display:inline-flex; align-items:center; gap:var(--sp-2); max-width:260px; height:30px; padding:0 var(--sp-2) 0 10px; border:1px solid transparent; border-radius:var(--r-s); background:none; color:var(--fg); font:inherit; font-size:var(--fs-m); font-weight:600; cursor:pointer; transition:background-color .12s, border-color .12s; }
 .pp-btn:hover, .pp.open .pp-btn { background:var(--hover); border-color:var(--line); }
@@ -115,12 +117,11 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .quiet:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 .top .demo { border:1px solid var(--c-needs); border-radius:999px; padding:1px 8px; color:var(--c-needs); font-size:var(--fs-s); }
 .offline { margin-left:auto; color:var(--c-needs); font-size:var(--fs-s); }
-.offline:not([hidden]) + #bell { margin-left:12px !important; }
 .fmtwarn { margin-left:auto; color:var(--c-needs); font-size:var(--fs-s); }
-.fmtwarn:not([hidden]) + #bell, .offline:not([hidden]) ~ .fmtwarn, .updated:not([hidden]) ~ .fmtwarn { margin-left:12px !important; }
+.offline:not([hidden]) ~ .fmtwarn, .updated:not([hidden]) ~ .fmtwarn { margin-left:12px !important; }
 .updated { margin-left:auto; color:var(--muted); font-size:var(--fs-s); }
 .updated .show { padding:0 2px; }
-.updated:not([hidden]) ~ .offline, .updated:not([hidden]) ~ #bell { margin-left:12px !important; }
+.updated:not([hidden]) ~ .offline, #header-island:has(> :is(.updated, .fmtwarn):not([hidden])) + #bell { margin-left:12px !important; }
 #bell { margin-left:auto; display:grid; place-items:center; height:26px; }
 #bell .b-on, #bell.on .b-off { display:none; }
 #bell.on .b-on { display:inline; }
@@ -654,7 +655,8 @@ ul.comments li.seen a { color:var(--muted); }
 .is-legend .sw { width:9px; height:9px; border-radius:2px; background:var(--c); }
 .is-due { text-align:right; font-size:var(--fs-s); color:var(--muted); white-space:nowrap; }
 .is-due b { color:var(--fg); font-weight:600; }
-.issues.stale > * { opacity:.5; transition:opacity .15s; }
+.is-pane { display:contents; } /* the Issues island's root */
+.is-pane.stale > * { opacity:.5; transition:opacity .15s; }
 .is-hint { display:inline-flex; gap:6px; align-items:center; color:var(--muted); font-size:var(--fs-s); }
 .is-hint wa-spinner { font-size:var(--fs-xs); --track-width:2px; }
 .bone { display:block; height:12px; width:90px; border-radius:var(--r-xs); background:var(--line-soft); animation:bone 1.2s ease-in-out infinite alternate; }
@@ -710,7 +712,7 @@ ul.comments li.seen a { color:var(--muted); }
 .is-note { font-size:var(--fs-s); color:var(--muted); flex-shrink:0; }
 @container (max-width: 640px) { .lane { grid-template-columns:1fr; } .who { border-right:0; border-bottom:1px solid var(--line-soft); } .is-head { grid-template-columns:1fr; } .is-due { text-align:left; } }
 
-/* Milestone pill (milestone.js): a header pill with a caret, and a menu that matches the project picker's list */
+/* Milestone pill (web/src/islands/Header/MilestonePill.vue): a header pill with a caret, and a menu that matches the project picker's list */
 .ms-pick { position:relative; min-width:0; max-width:100%; font-size:var(--fs-m); }
 .ms-pick > summary { list-style:none; max-width:100%; }
 .ms-pick > summary::-webkit-details-marker { display:none; }
@@ -787,7 +789,7 @@ wa-details[open] .g-note { display:none; }
 @media (max-width: 900px) {
   body { height:var(--vvh, 100dvh); } /* --vvh: the height above an iOS keyboard (app.js fitKeyboard) */
   header.top { gap:8px; padding:max(8px, env(safe-area-inset-top)) 12px 8px; }
-  header.top > * { min-width:0; }
+  header.top > *, #header-island > * { min-width:0; }
   /* one row: no logo, separator or bell (desktop notifications; a phone's are in the + menu), the milestone as its name only */
   header.top { flex-wrap:nowrap; }
   header.top :is(.brand, .sep, #bell, .ms-pick > summary :is(.n, .ms-bar)) { display:none; }

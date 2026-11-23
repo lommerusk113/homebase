@@ -34,11 +34,8 @@
   <div class="brand"><img src="/icon.svg" width="26" height="26" alt="">Homebase</div>
   <span class="demo" data-demo hidden title="Invented data: nothing is sent to Claude">Demo</span><!-- shown by the server in --demo -->
   <span class="sep">/</span>
-  <span class="pp"><button class="pp-btn" id="project" type="button" aria-label="Project" title="Switch project (g then p)"></button></span><!-- the list is built by picker.js -->
-  <span id="milestone-slot"></span><!-- milestone pill goes here (milestoneSelector from milestone.js) -->
-  <span class="updated" id="updated" role="status" hidden><span id="updated-text"></span> <button class="show" id="updated-go" type="button"></button></span>
-  <span class="offline" id="offline" hidden>Offline</span>
-  <span class="fmtwarn" id="format-warn" data-version="__HOMEBASE_CLAUDE_WARN__" hidden>Claude Code's format changed — status may be wrong</span>
+  <!-- the Vue Header island (web/src/islands/Header.vue): project picker, milestone pill, and the update, offline and format notes -->
+  <span id="header-island" data-version="__HOMEBASE_CLAUDE_WARN__"></span>
   <button class="quiet" id="bell" title="Desktop notifications" aria-label="Desktop notifications" aria-pressed="false">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <g class="b-on"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><circle class="b-dot" cx="18.5" cy="5.5" r="3.5"/></g>
@@ -60,7 +57,7 @@
     </span>
     <div class="stale-note" role="status">Disconnected — showing the last known data</div>
     <div class="masters" id="masters" role="tabpanel" aria-labelledby="tab-work"></div>
-    <div class="masters issues" id="issues" role="tabpanel" aria-labelledby="tab-issues" hidden></div>
+    <div class="masters issues" id="issues" role="tabpanel" aria-labelledby="tab-issues" hidden></div><!-- the Vue Issues island (web/src/islands/Issues.vue) -->
     <div class="limits" id="limits" hidden></div>
   </div>
   <aside id="chat" aria-label="Chat">

@@ -22,7 +22,6 @@ export const STATIC = {
     '/keys.js': ['keys.js', JS],
     '/log.js': ['log.js', JS],
     '/newproject.js': ['newproject.js', JS],
-    '/picker.js': ['picker.js', JS],
     '/diff.js': ['diff.js', JS],
     '/icon.svg': ['icon.svg', 'image/svg+xml'],
     '/sw.js': ['sw.js', JS],

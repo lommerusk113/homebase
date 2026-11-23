@@ -1,11 +1,9 @@
 // Issues tab: the selected milestone's open issues in one lane per person (you first, then A–Z, then Unassigned).
-// Read-only towards the forge; "Send to chat" only types into the bound chat session. Draws from milestone.js's /api/milestones data.
-import { $, el, link, ago, prChip, tooltip, waButton, state, store, hooks, firstName, visibleSessions, forgeWords } from './core.js';
-import { ciPill, issueWork } from './list.js';
-import { canned, cannedLabel } from './canned.js';
-import { chatSession, sendText, bindChat } from './chat.js';
+// The logic only: the tab is drawn by the Issues island (web/src/islands/Issues.vue) from useIssues.ts.
+import { $, store, hooks, forgeWords } from './core.js';
+import { canned } from './canned.js';
 
-const STATES = { doing: 'in progress', closable: 'can be closed', todo: 'not started', free: 'unassigned' };
+export const STATES = { doing: 'in progress', closable: 'can be closed', todo: 'not started', free: 'unassigned' };
 
 // Open issues as cards with their state, in lane order: in progress, can be closed, not started, unassigned.
 /** @typedef {Issue & { st: keyof typeof STATES }} Card */
@@ -86,49 +84,16 @@ export const shortTitle = (title, milestone) => {
     return m && m[1].toLowerCase().startsWith(milestone.toLowerCase()) ? m[2] : title;
 };
 
-const COLOURS = ['#0969da', '#8250df', '#1a7f37', '#9a6700', '#bf3989', '#0a7b83'];
-const initials = n => n.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
-
-/** @type {Milestones | null | undefined} */
-let data;
-let openIid = null, closedOpen = false;
-const sentAt = new Map(); // iid -> last send, so a re-render keeps the button showing it
-const SENT_SHOWN_MS = 3000; // after a send, until the outbox or a chat's prompt names the issue: "Starting…" shows and further sends of that issue are ignored
-
-const names = (text, iid) => new RegExp(`#${iid}(?!\\d)`).test(text ?? '');
-
-// This issue was just sent to a chat and has not landed in its transcript yet.
-/** @param {Card} c */
-function startingNow(c) {
-    return Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_SHOWN_MS || state.outbox.some(o => o.canned && !o.error && names(o.text, c.iid));
-}
-
-// Who already works on the issue in any chat of the project (list.js issueWork), so Start never sends a second Implement.
-/** @param {Card} c */
-const workOn = c => (c.st === 'todo' || c.st === 'free' ? issueWork(String(c.iid), visibleSessions().filter(s => s.project === data?.project)) : null);
-
-// Shows the chat that works on the issue, with its work item open on the Work tab.
-/** @param {NonNullable<ReturnType<typeof issueWork>>} work */
-function showWork(work) {
-    state.selected = work.key ?? state.selected;
-    if (work.sessionId) {
-        bindChat(work.sessionId);
+// The Issues tab's line for a project without milestones to show (d.reason from /api/milestones).
+/** @param {Milestones} d */
+export function emptyText(d) {
+    if (d.reason === 'none') {
+        return `No open milestones in ${d.project}.`;
     }
-}
-
-/** @param {Card} c */
-async function sendIssue(c) {
-    const s = chatSession();
-    if (!s || startingNow(c) || workOn(c)) {
-        return;
+    if (d.reason === 'unsupported') {
+        return `Milestones aren't available for ${d.project}: ${d.error ?? 'unknown project'}.`;
     }
-    sentAt.set(c.iid, Date.now());
-    renderIssues();
-    setTimeout(() => renderIssues(), SENT_SHOWN_MS);
-    if (!await sendText(s.id, chatMessage(c), undefined, undefined, true)) {
-        sentAt.delete(c.iid); // refused or failed: the chat says why, and the card offers Start again
-    }
-    renderIssues();
+    return `Milestones unavailable for ${d.project}: ${d.error ?? 'unknown error'}. Press r or the refresh button to retry.`;
 }
 
 // The board's two views: Work (the item list) and Issues, switched by the header's segmented control (#tabs).
@@ -147,239 +112,5 @@ export function showTab(tab) {
 }
 export const activeTab = () => ($('issues').hidden ? 'work' : 'issues');
 
-// Grey placeholder lanes while the issues load: three lanes of a few cards.
-function skeleton() {
-    return [0, 1, 2].map(n => {
-        const sec = el('section', 'lane skel'), side = el('div', 'who'), strip = el('div', 'strip');
-        side.append(el('i', 'bone'), el('i', 'bone short'));
-        strip.append(...Array.from({ length: 3 - n }, () => el('i', 'bone card')));
-        sec.append(side, strip);
-        return sec;
-    });
-}
-
-const NO_GROUPS = { closable: [], doing: [], assigned: [], unassigned: [], done: [] };
-
-// d: an /api/milestones response, null for "All my projects", undefined while the project's first response loads.
-// A selected milestone without groups is still loading its issues (the counts are already there).
-/** @param {Milestones | null} [d] */
-export function renderIssues(d = data) {
-    data = d;
-    const pane = $('issues'), hadFocus = pane.contains(document.activeElement);
-    const ms = d?.selected;
-    if (d === undefined || d?.loading || ms?.loading) {
-        pane.replaceChildren(...(ms ? [head({ ...ms, groups: NO_GROUPS }, 'Loading issues…')] : []), ...skeleton());
-        pane.setAttribute('aria-busy', 'true');
-        return;
-    }
-    pane.removeAttribute('aria-busy');
-    if (d?.reason) {
-        const box = el('div', 'welcome', emptyText(d));
-        if (d.url) {
-            box.append(' ', link(null, 'Milestones page ↗', d.url));
-        }
-        pane.replaceChildren(box);
-        return;
-    }
-    if (!ms?.groups) {
-        pane.replaceChildren(el('div', 'welcome', d === null ? 'Pick a project in the header to see its milestone issues.'
-            : ms?.error ? `Could not load the issues: ${ms.error}` : 'Pick a milestone in the header pill to see its issues.'));
-        return;
-    }
-    const cards = issueCards(ms.groups);
-    pane.replaceChildren(head(/** @type {SelectedMilestone & { groups: IssueGroups }} */ (ms), d.updating && 'Updating…'), ...buildLanes(cards, ms.groups.done, d.me).map((l, n) => lane(l, n, ms)), closedLine(ms.groups.done),
-        el('div', 'is-note', `Read-only: Homebase never writes to ${forgeWords(d.forge).forge}. "Send to chat" only types into the chat on the right.`));
-    hooks.rendered?.(hadFocus);
-}
-
-// The Issues tab's line for a project without milestones to show (d.reason from /api/milestones).
-/** @param {Milestones} d */
-export function emptyText(d) {
-    if (d.reason === 'none') {
-        return `No open milestones in ${d.project}.`;
-    }
-    if (d.reason === 'unsupported') {
-        return `Milestones aren't available for ${d.project}: ${d.error ?? 'unknown project'}.`;
-    }
-    return `Milestones unavailable for ${d.project}: ${d.error ?? 'unknown error'}. Press r or the refresh button to retry.`;
-}
-
-// hint: "Loading issues…" or "Updating…" next to the title, with a spinner.
-/** @param {SelectedMilestone & { groups: IssueGroups }} ms @param {string | false} [hint] */
-function head(ms, hint) {
-    const g = ms.groups, open = ms.total - ms.closed, h = el('div', 'is-head');
-    const title = el('div', 'is-title'), gl = link(null, `${forgeWords(data?.forge).forge} ↗`, ms.url);
-    title.append(el('b', null, `⚑ ${ms.title}`), gl);
-    if (hint) {
-        const s = el('span', 'is-hint');
-        s.append(el('wa-spinner'), hint);
-        title.append(s);
-    }
-    const big = el('div', 'is-big', `${open} open `);
-    big.append(el('small', null, `of ${ms.total ?? '…'}`));
-    const segs = [[ms.closed, '--c-ready', 'closed'], [g.closable.length, '--c-ready', 'can be closed'], [g.doing.length, '--c-doing', 'in progress'],
-        [g.assigned.length, '--c-idle', 'not started'], [g.unassigned.length, '--c-needs', 'unassigned']];
-    const bar = el('div', 'is-bar'), legend = el('div', 'is-legend');
-    for (const [n, c, label] of segs) {
-        if (!n) {
-            continue;
-        }
-        const i = el('i');
-        i.style.flex = String(n);
-        i.style.background = `var(${c})`;
-        bar.append(i);
-        const s = el('span');
-        s.style.setProperty('--c', `var(${c})`);
-        s.append(el('i', 'sw'), `${n} ${label}`);
-        legend.append(s);
-    }
-    const mid = el('div');
-    mid.append(bar, legend);
-    const due = el('div', 'is-due');
-    if (ms.mine) {
-        due.append('across ', el('b', null, 'all milestones'));
-    } else if (ms.due) {
-        due.append('due ', el('b', null, new Date(ms.due + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })));
-    } else {
-        due.append(el('b', null, 'No due date'));
-    }
-    h.append(title, big, mid, due);
-    return h;
-}
-
-/** @param {Lane} lane @param {number} n @param {SelectedMilestone} ms */
-function lane({ who, me, list, closed }, n, ms) {
-    // Unassigned is amber only while something is up for grabs
-    const sec = el('section', 'lane' + (who || !list.length ? '' : ' free')), side = el('div', 'who'), name = el('div', 'name');
-    const av = el('span', who ? 'av' : 'av none', who ? initials(who.name) : '?');
-    if (who) {
-        av.style.background = COLOURS[n % COLOURS.length];
-    }
-    name.append(av, who ? firstName(who.name) : 'Unassigned');
-    if (who) {
-        name.title = `${who.name} (@${who.username})`;
-    }
-    if (me) {
-        name.append(el('span', 'you', 'you'));
-    }
-    const count = st => list.filter(c => c.st === st).length;
-    const parts = who ? [['doing', 'in progress'], ['closable', 'can close'], ['todo', 'not started'], ['free', 'unassigned']].map(([st, l]) => count(st) && `${count(st)} ${l}`).filter(Boolean)
-        : list.length ? [`${list.length} up for grabs`] : [];
-    side.append(name, el('small', null, parts.join(' · ') || 'nothing open'), el('small', null, `${closed} closed`));
-    const strip = el('div', 'strip');
-    strip.append(...(list.length ? list.map(c => card(c, ms)) : [el('span', 'empty', ms.total === 0 ? 'No issues here.' : 'Every open issue has an owner.')]));
-    sec.append(side, strip);
-    return sec;
-}
-
-/** @param {Card} c @param {SelectedMilestone} ms */
-function card(c, ms) {
-    const open = openIid === c.iid, a = el('article', `card ${c.st}${open ? ' open' : ''}`);
-    a.dataset.key = `issue:${c.iid}`;
-    a.dataset.url = c.url;
-    const work = workOn(c);
-    if (!work) {
-        a.dataset.msg = chatMessage(c); // what the a key confirms and sends, through the card's .act-btn
-        a.dataset.label = cannedLabel(a.dataset.msg);
-    }
-    a.setAttribute('aria-expanded', open);
-    const top = el('div', 'top');
-    top.append(el('span', 'mono', `#${c.iid}`), el('span', 'st', work ? STATES.doing : startingNow(c) ? 'starting…' : STATES[c.st]), el('span', 'age', c.updated ? ago(Date.parse(c.updated)) : ''));
-    if (c.updated) {
-        /** @type {HTMLElement} */ (top.lastChild).title = `Updated ${new Date(c.updated).toLocaleString()}`;
-    }
-    const ft = el('div', 'ft');
-    for (const m of c.mrs) {
-        ft.append(prChip({ pr: m.url }), ...ciPill(m.pipeline));
-    }
-    if (!c.mrs.length) {
-        ft.append(el('span', 'chip', `no ${forgeWords(data?.forge).mr}`));
-    }
-    if (!open && (c.st === 'todo' || c.st === 'free')) {
-        const go = startingNow(c);
-        const start = work ? waButton('Check on it', 'act-btn', { variant: 'neutral', appearance: 'outlined' })
-            : waButton(go ? 'Starting…' : 'Start', 'act-btn', { variant: 'brand', appearance: 'filled', ...(go || !chatSession() ? { disabled: true } : {}) });
-        start.onclick = e => {
-            e.stopPropagation();
-            if (work) {
-                showWork(work);
-            } else {
-                sendIssue(c);
-            }
-        };
-        // somebody else's issue: say so before it is started
-        if (!work && c.assignees.length && !c.assignees.some(p => p.username === data?.me?.username)) {
-            start.title = `Assigned to ${c.assignees.map(p => firstName(p.name)).join(', ')}`;
-        }
-        ft.append(start);
-    }
-    a.append(top, el('div', 'tt', open ? c.title : shortTitle(c.title, ms.title)));
-    if (ms.mine && c.milestoneTitle) {
-        a.append(el('small', 'is-ms', `⚑ ${c.milestoneTitle}`));
-    }
-    a.append(ft);
-    if (open) {
-        a.append(more(c, work));
-    } else {
-        a.title = c.title;
-    }
-    a.onclick = () => {
-        openIid = open ? null : c.iid;
-        renderIssues();
-    };
-    return a;
-}
-
-/** @param {Card} c @param {ReturnType<typeof issueWork>} work */
-function more(c, work) {
-    const box = el('div', 'more'), msg = chatMessage(c), acts = el('div', 'acts');
-    box.append(el('div', 'desc', c.desc || 'No description.'));
-    const gl = link('gl', `Open in ${forgeWords(data?.forge).forge} ↗`, c.url);
-    if (work) { // somebody is on it already: show that chat instead of sending Implement again
-        const show = waButton('Check on it', 'act-btn', { variant: 'neutral', appearance: 'outlined' });
-        show.onclick = e => {
-            e.stopPropagation();
-            showWork(work);
-        };
-        acts.append(show, tooltip(show, 'Already being worked on: shows the chat that has it'), gl);
-    } else {
-        const sent = startingNow(c);
-        const send = waButton(sent ? 'Starting…' : 'Send to chat', 'act-btn', { variant: 'brand', appearance: 'filled', ...(sent || !chatSession() ? { disabled: true } : {}) });
-        send.onclick = e => {
-            e.stopPropagation();
-            sendIssue(c);
-        };
-        const note = el('span', 'msg', 'sends ');
-        note.append(el('code', null, msg));
-        acts.append(send, tooltip(send, chatSession() ? `Types "${msg}" into the chat on the right` : 'No chat session to send to'), note, gl);
-    }
-    box.append(acts);
-    box.onclick = e => e.stopPropagation();
-    return box;
-}
-
-/** @param {Issue[]} done */
-function closedLine(done) {
-    const d = el('details', 'is-closed'), s = el('summary');
-    s.append(el('b', null, `Closed · ${done.length}`), el('span', null, closedBy(done).map(([who, n]) => `${who === 'unassigned' ? who : firstName(who)} ${n}`).join(' · ')));
-    const chips = el('div', 'chips');
-    chips.append(...done.map(i => {
-        const a = link('chip', `#${i.iid} ${i.title}`, i.url);
-        a.title = i.title;
-        return a;
-    }));
-    d.append(s, chips);
-    d.open = closedOpen;
-    d.ontoggle = () => { closedOpen = d.open; };
-    return d;
-}
-
-// Esc in the Issues tab folds the open card; false when there was none.
-export function collapseIssue() {
-    if (openIid == null) {
-        return false;
-    }
-    openIid = null;
-    renderIssues();
-    return true;
-}
+// Esc in the Issues tab folds the open card (the Issues island, useIssues); false when there was none.
+export const collapseIssue = () => hooks.collapseIssue?.() ?? false;

@@ -82,3 +82,18 @@ export const ChatActionsKey: InjectionKey<ReturnType<typeof useChatActions>> = S
 export const PushKey: InjectionKey<ReturnType<typeof usePush>> = Symbol('push');
 export const AskKey: InjectionKey<ReturnType<typeof useAsk>> = Symbol('ask');
 export const BootKey: InjectionKey<ReturnType<typeof useBoot>> = Symbol('boot');
+
+// ---- header and issues ----
+import type { usePicker } from '@/composables/usePicker';
+import type { useMilestoneFilter } from '@/composables/useMilestoneFilter';
+import type { useConnection } from '@/composables/useConnection';
+import type { useFormatWarn } from '@/composables/useFormatWarn';
+import type { useUpdate } from '@/composables/useUpdate';
+import type { useIssues } from '@/composables/useIssues';
+
+export const PickerKey: InjectionKey<ReturnType<typeof usePicker>> = Symbol('picker');
+export const MilestoneFilterKey: InjectionKey<ReturnType<typeof useMilestoneFilter>> = Symbol('milestoneFilter');
+export const ConnectionKey: InjectionKey<ReturnType<typeof useConnection>> = Symbol('connection');
+export const FormatWarnKey: InjectionKey<ReturnType<typeof useFormatWarn>> = Symbol('formatWarn');
+export const UpdateKey: InjectionKey<ReturnType<typeof useUpdate>> = Symbol('update');
+export const IssuesKey: InjectionKey<ReturnType<typeof useIssues>> = Symbol('issues');

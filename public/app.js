@@ -1,49 +1,11 @@
-// Entry point: header (project picker, bell, projects dialog), polling, notifications, limits strip.
-import { api, $, el, state, store, syncClock, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary, waitsOnYou, vue, push } from './core.js';
+// Entry point: header (bell, refresh, projects dialog), polling, notifications, limits strip, and mounting the Vue islands.
+import { api, $, el, state, store, syncClock, saveTracked, isTracked, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary, vue, push } from './core.js';
 import { renderBoard, select, attentionEvents, askingEvents, sessionTopic } from './list.js';
 import { refreshChat, initChat, bindChat, focusChat, isMaster, chatSession } from './chat.js';
 import { openNewProject, initNewProject } from './newproject.js';
-import { milestoneSelector, inMilestone } from './milestone.js';
 import { initKeys } from './keys.js';
-import { picker } from './picker.js';
-import { renderIssues, showTab, activeTab } from './issues.js';
+import { showTab, activeTab } from './issues.js';
 import { refreshLog, openLog } from './log.js';
-
-// One milestone pill for the selected project (none for "All"); it filters the list. Rebuilt only when the project changes.
-// The old pill stops (timers, in-flight fetch) the moment the project changes; data for another project is dropped.
-let pillFor = null, milestone = null, pillStop = new AbortController();
-hooks.inMilestone = x => inMilestone(x, milestone);
-hooks.milestoneId = () => milestone?.id ?? null;
-function renderMilestone() {
-    if (pillFor === state.project) {
-        return;
-    }
-    pillStop.abort();
-    pillStop = new AbortController();
-    pillFor = state.project;
-    milestone = null;
-    $('issues').classList.remove('stale');
-    renderIssues(pillFor === 'all' ? null : undefined);
-    if (pillFor === 'all') {
-        $('milestone-slot').replaceChildren();
-        return;
-    }
-
-    const pill = milestoneSelector(pillFor, {
-        signal: pillStop.signal,
-        onChange: m => {
-            milestone = m;
-            renderBoard();
-        },
-        onData: d => {
-            if (d.project === state.project) {
-                renderIssues(d);
-            }
-        },
-        onBusy: b => $('issues').classList.toggle('stale', b)
-    });
-    $('milestone-slot').replaceChildren(pill);
-}
 
 // Web Awesome's dark theme is a class; follow the OS like the rest of the page does.
 const dark = matchMedia('(prefers-color-scheme: dark)');
@@ -60,31 +22,11 @@ const counts = () => {
     return c;
 };
 
-// One row of the project picker: a dot for the loudest state among its chats, and what they are doing underneath.
-/** @param {string} value @param {string} name @param {Session[]} mine @returns {import('./picker.js').PickItem} */
-function pickItem(value, name, mine) {
-    const chats = mine.filter(s => !s.sidechain);
-    const waiting = mine.flatMap(s => s.items || []).filter(x => x.column === 'needs-you').length + mine.filter(waitsOnYou).length; // as projectCounts
-    const working = chats.filter(s => s.status === 'working').length;
-    const parts = [waiting && `${waiting} waiting on you`, working && `${working} working`, chats.some(s => s.rulesStale) && 'old rules', `${chats.length || 'No'} chat${chats.length === 1 ? '' : 's'}`];
-
-    return { value, name, sub: parts.filter(Boolean).join(' · '), state: waiting ? 'needs' : working ? 'working' : 'idle' };
-}
-
-function renderProjects() {
+// The picked project must be on the board: one that was removed falls back to "All my projects".
+function checkProject() {
     if (state.project !== 'all' && !state.tracked.includes(state.project)) {
         state.project = 'all';
     }
-    const names = [...state.tracked].sort((a, b) => a.localeCompare(b));
-    projects.update([pickItem('all', 'All my projects', state.sessions.filter(isTracked)), ...names.map(n => pickItem(n, n, state.sessions.filter(s => s.project === n)))], state.project);
-    // the picker button is the one cue for chats waiting in other projects
-    const other = state.project === 'all' ? 0 : projectCounts(state.sessions, state.tracked).filter(c => c.project !== state.project).reduce((n, c) => n + c.waiting, 0);
-    const pb = $('project');
-    pb.dataset.other = other ? String(other) : '';
-    const picked = state.project === 'all' ? 'All my projects' : state.project;
-    pb.setAttribute('aria-label', `Project: ${picked}${other ? `, ${other} waiting on you in other projects` : ''}`);
-    pb.title = other ? `${other} waiting on you in other projects` : 'Switch project (g then p)';
-    renderMilestone();
 }
 /** @param {string} name a tracked project or 'all' */
 function setProject(name) {
@@ -94,18 +36,11 @@ function setProject(name) {
     state.project = name;
     state.focus = null;
     store.set('project', name);
-    renderProjects();
     renderBoard();
     refreshChat();
     refreshLog();
 }
 hooks.setProject = setProject;
-const projects = picker($('project'), {
-    onPick: setProject,
-    placeholder: 'Filter projects…',
-    actions: [['New project…', () => openNewProject()], ['Manage projects…', () => $('manage').click()]]
-});
-hooks.openProjects = projects.open;
 
 function renderDialog() {
     const c = counts(), body = $('dlg-body');
@@ -116,7 +51,7 @@ function renderDialog() {
             state.tracked = kind === 'add' ? [...state.tracked, name] : state.tracked.filter(p => p !== name);
             saveTracked();
             renderDialog();
-            renderProjects();
+            checkProject();
             renderBoard();
         };
         return r;
@@ -201,7 +136,6 @@ initNewProject(({ name, dir, sessionId, tmux }) => {
     }
     state.project = name;
     store.set('project', name);
-    renderProjects();
     renderBoard();
     if (sessionId) {
         bindChat(sessionId);
@@ -397,6 +331,7 @@ api('/api/refresh').then(r => r.json()).then(/** @param {RefreshState} d */ d =>
 
 // Header note when Homebase changed on disk: server code (Reload server: the server replaces itself, and the page reloads
 // once a new server pid answers) or only browser files (Refresh). page.updated is a restart that brought new code.
+// state.update holds what the note says; the Header island draws it.
 /** @type {{ pid: number, serverStale: boolean, page: string } | undefined} */
 let firstVersion;
 let reloadingSince = 0;
@@ -418,17 +353,18 @@ async function refreshVersion() {
     if (Date.now() - reloadingSince > 20_000) {
         reloadingSince = 0; // the new server never came (see server.log in the Homebase dir): offer it again
     }
-    const server = v.serverStale, fresh = page.updated || v.page !== firstVersion.page, go = $('updated-go');
-    $('updated').hidden = !server && !fresh && !reloadingSince;
-    $('updated-text').textContent = reloadingSince ? 'Reloading the server…' : server ? 'Homebase was updated —' : 'Page updated —';
-    go.hidden = Boolean(reloadingSince);
-    go.textContent = server ? 'Reload server' : 'Refresh';
-    go.onclick = !server ? () => location.reload() : async () => {
-        reloadingSince = Date.now();
-        refreshVersion();
-        await api('/api/server/reload', { method: 'POST' }).catch(() => {});
-    };
+    const server = v.serverStale, fresh = page.updated || v.page !== firstVersion.page;
+    const update = server || fresh || reloadingSince ? { server, reloading: Boolean(reloadingSince) } : null;
+    if (JSON.stringify(update) !== JSON.stringify(state.update ?? null)) {
+        state.update = update;
+        vue.bump();
+    }
 }
+hooks.reloadServer = async () => {
+    reloadingSince = Date.now();
+    refreshVersion();
+    await api('/api/server/reload', { method: 'POST' }).catch(() => {});
+};
 
 let lastSessions = '', lastRender = 0, polling = false;
 /** @type {Session[] | undefined} */
@@ -505,11 +441,8 @@ async function pollOnce() {
                 state.startingTmux = null;
                 bindChat(started.id);
             }
-            renderProjects();
+            checkProject();
             renderBoard();
-            if (activeTab() === 'issues') {
-                renderIssues(); // the cards' Start button and "starting…" follow the chat session
-            }
             // diffed over all items, then filtered to every tracked project (not only the selected one), so changing the project filter doesn't read as transitions
             const items = state.sessions.flatMap(s => s.items || []);
             const events = [...askingEvents(prevSessions, state.sessions), ...attentionEvents(state.items, items, x => seenAt(x.pr))].filter(e => isTracked(e.item ?? e.session));
@@ -646,7 +579,7 @@ initChat();
 try {
     state.sessions = JSON.parse(sessionStorage.getItem('sessions')) || [];
     migrateTracked();
-    renderProjects();
+    checkProject();
     renderBoard();
 } catch {}
 // The server's list wins (the Mac's and every paired phone's board are one); none saved yet, this browser's list becomes it.
@@ -656,15 +589,21 @@ api('/api/tracked').then(r => (r.ok ? r.json() : undefined)).then(list => {
     } else if (Array.isArray(list) && list.join() !== state.tracked.join()) {
         state.tracked = list;
         store.set('tracked', JSON.stringify(list));
-        renderProjects();
+        checkProject();
         renderBoard();
     }
 }).catch(() => {});
 poll();
 setInterval(poll, 1500); // /api/sessions costs ~40ms warm (GitLab stays behind its own caches), so a new row or Now: line lands within ~1.5s
-// ?vue=1: the demo island (web/src/islands/Demo.vue) in the header, proof that Vue islands run in this page.
-if (new URLSearchParams(location.search).has('vue')) {
-    const slot = el('span');
-    $('milestone-slot').after(slot);
-    vue.load().then(m => m?.mount('Demo', slot));
-}
+// The Vue islands (web/README.md): the header's project picker, milestone pill and notes, and the Issues tab.
+// ?vue=1 adds the demo island (web/src/islands/Demo.vue) to the header.
+vue.load().then(m => {
+    const header = $('header-island');
+    m?.mount('Header', header, { version: header.dataset.version });
+    m?.mount('Issues', $('issues'));
+    if (m && new URLSearchParams(location.search).has('vue')) {
+        const slot = el('span');
+        header.after(slot);
+        m.mount('Demo', slot);
+    }
+});

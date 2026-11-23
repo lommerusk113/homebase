@@ -130,7 +130,7 @@ function mrNext(prState, mr) {
         return first + (prState.blocked === 'conflict' || prState.blocked === 'rebase' ? ' · has merge conflicts' : '');
     }
     if (prState.blocked) {
-        return BLOCKED_STEP[prState.blocked];
+        return BLOCKED_STEP[prState.blocked] + (prState.notReady ? ` · ${prState.notReady}` : '');
     }
     if (prState.notReady) {
         return prState.notReady;

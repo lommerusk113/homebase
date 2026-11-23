@@ -81,3 +81,8 @@ const gateDemoted = { state: 'open', ready: false, approved: true, notReady: GAT
 assert.equal(rowOf(gateDemoted, null, opts).stage, 2, 'a gate-demoted MR sits in review, so its stage says Review, not Approved');
 assert.equal(rowOf({ ...gateDemoted, notReady: '2 threads still open — resolve them' }, null, opts).stage, 3, 'approved with open threads stays Approved');
 console.log('ok gate-demoted stage');
+
+const blockedByGate = { state: 'open', blocked: 'blocked', approved: true, notReady: GATE, reviewers: [] };
+assert.equal(rowOf(blockedByGate, null, opts).next, `Blocked by another MR · ${GATE}`, 'a blocked MR still names the gate step');
+assert.equal(rowOf({ ...blockedByGate, notReady: null }, null, opts).next, 'Blocked by another MR');
+console.log('ok blocked names the gate step');

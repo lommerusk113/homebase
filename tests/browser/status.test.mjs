@@ -26,7 +26,7 @@ export default {
     },
 
     'the Push button sits with the unpushed badge, and is hidden on a work repo\'s default branch': async ({ page, open, IDS }) => {
-        await open({ chat: IDS.tracker });
+        await open({ project: 'tracker', tracked: '["alpha","tracker"]', chat: IDS.tracker });
         await page.waitFor(`!document.getElementById('c-unpushed').hidden && !document.getElementById('c-push').hidden`, { what: 'the badge and Push on a hobby repo' });
         assert.equal(await page.ev(`document.getElementById('c-push').textContent`), 'Push');
         await open(); // alpha: GitLab, on main, one ahead

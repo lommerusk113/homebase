@@ -1,7 +1,9 @@
 import { ref } from 'vue';
+import { composer } from 'old/core.js';
 import { discussText } from '@/lib/discuss';
 
 const discussing = ref(false); // the user chose Discuss on the question card: their next message is about it
+composer.endDiscuss = () => { discussing.value = false }; // old chat.js: focusing or leaving a chat ends it
 
 /**
  * Discuss on a question card: the composer takes the focus with a hint, and the next send is typed as a discussion

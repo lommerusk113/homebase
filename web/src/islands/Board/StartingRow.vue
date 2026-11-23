@@ -5,12 +5,12 @@ import { ChatRowsKey, useInjected } from '@/keys';
 import StepInChat from './StepInChat.vue';
 
 const props = defineProps<{ sid: string; issue: string }>();
-const { byId, bind } = useInjected(ChatRowsKey);
+const { byId, focus } = useInjected(ChatRowsKey);
 const s = toRef(() => byId.value.get(props.sid)!);
 </script>
 
 <template>
-    <tr class="starting" :data-key="`starting:${sid}:${issue}`" @click="bind(sid)">
+    <tr class="starting" :data-key="`starting:${sid}:${issue}`" @click="focus(sid)">
         <td class="what" colspan="6">
             <b><span class="pulse" />{{ ` #${issue} · starting…` }}</b>
             <small class="next">{{ s.status === 'working' && s.now?.includes(`#${issue}`) ? 'The chat session is on it' : 'Queued in the chat session' }}</small>

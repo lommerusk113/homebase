@@ -35,6 +35,25 @@ export default {
         await page.waitFor(`${back}.hidden && ${focus}.hidden && ${title} === 'alpha' && document.getElementById('wait').hidden`, { what: 'the main chat back' });
     },
 
+    'switching project leaves a helper': async ({ page, open, IDS }) => {
+        await open({ project: 'all', chat: IDS.worker });
+        await page.waitFor(`document.querySelector('${row(IDS.asker)}')`, { what: 'the row' });
+        await page.ev(`import('/chat.js').then(m => m.focusChat(${JSON.stringify(IDS.asker)}, { id: 'agent-x', description: 'Port the header' }))`);
+        await page.waitFor(`import('/chat.js').then(m => m.activeHelper()?.id === 'agent-x')`, { what: 'the helper in the pane' });
+        await page.ev(`import('/core.js').then(m => m.hooks.setProject('alpha'))`);
+        await page.waitFor(`import('/core.js').then(m => m.state.helper === null)`, { what: 'the helper left behind' });
+    },
+
+    'focusing or leaving a chat ends a Discuss started on the one before': async ({ page, open, IDS }) => {
+        const msg = `document.getElementById('msg').getAttribute('placeholder')`;
+        await open({ project: 'beta', chat: IDS.asker });
+        await page.waitFor(`!document.getElementById('ask').hidden && document.getElementById('ask-discuss')`, { what: 'the ask card' });
+        await page.click('#ask-discuss');
+        await page.waitFor(`${msg} === 'Discuss this question…'`, { what: 'discussing' });
+        await page.ev(`import('/chat.js').then(m => m.focusChat(${JSON.stringify(IDS.asker)}))`);
+        await page.waitFor(`${msg} !== 'Discuss this question…'`, { what: 'Discuss ended by the focus' });
+    },
+
     'a chat with a pending question shows Needs you on its row, and the row opens the question in that chat': async ({ page, open, IDS }) => {
         await open({ project: 'all', chat: IDS.worker });
         await page.waitFor(`document.querySelector('${row(IDS.asker)}')`, { what: 'the asking row' });

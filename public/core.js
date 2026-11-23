@@ -398,12 +398,13 @@ export const waitsOnYou = moved('waitsOnYou'); // moved: web/src/lib/waiting.ts
 /**
  * @type {{
  *   turn: (data: (Partial<Transcript> & { error?: boolean }) | null) => void,
+ *   endDiscuss: () => void,
  *   ask: (s: Session, data: Transcript) => Promise<void>,
  *   boot: (tmux: string | null | undefined) => Promise<void>,
  *   wait: (s: Session | null, data: Transcript | null, items: ChatItem[]) => void,
  *   send: (sid: string, text: string, answerTo?: string, note?: string, canned?: boolean) => Promise<boolean> }}
  */
-export const composer = { turn: () => {}, ask: async () => {}, boot: async () => {}, wait: () => {}, send: async () => false };
+export const composer = { turn: () => {}, endDiscuss: () => {}, ask: async () => {}, boot: async () => {}, wait: () => {}, send: async () => false };
 /** Desktop notifications asked for in this browser (the bell) and allowed by it. */
 export const notifyOn = () => store.get('notify') === '1' && window.Notification?.permission === 'granted';
 export const push = { label: 'Enable notifications on this device', state: '' };

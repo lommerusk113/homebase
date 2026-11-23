@@ -87,6 +87,7 @@ export function bindChat(id) {
 /** @param {string} id @param {{ id: string, description: string } | null} [helper] a helper of that chat to step in on @param {string | null} [askedFor] the helper whose question this chat relays */
 export function focusChat(id, helper = null, askedFor = null) {
     clearTimeout(returnTimer);
+    composer.endDiscuss(); // a Discuss started on the chat we leave is not about this one
     state.helper = helper && { sid: id, ...helper };
     state.askedFor = askedFor;
     nextId = null;
@@ -137,6 +138,7 @@ export function unfocusChat() {
         return focusChat(helper.sid); // back to the chat that started it
     }
     if (state.focus) {
+        composer.endDiscuss();
         state.focus = null;
         renderBoard();
         refreshChat();

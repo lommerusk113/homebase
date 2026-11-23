@@ -19,6 +19,7 @@ function setProject(name) {
     }
     state.project = name;
     state.focus = null;
+    state.helper = null;
     store.set('project', name);
     renderBoard();
     refreshChat();

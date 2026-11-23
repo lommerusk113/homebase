@@ -50,7 +50,7 @@ export default {
         assert.equal(await page.ev(`${row}.querySelector('b bdi')?.textContent`), 'مرحبا שלום', 'a right-to-left title is isolated from the labels around it');
         await page.clickOn(row);
         await page.waitFor(`!${row}`, { what: 'the row gone once looked at' });
-        assert.equal(await page.ev(`document.getElementById('feed').textContent.includes('The cache is fine')`), true, 'and its chat open');
+        await page.waitFor(`document.getElementById('feed').textContent.includes('The cache is fine')`, { what: 'and its chat open' }); // the feed island draws a tick later
     },
 
     'a send Homebase never answered is not confirmed, and Retry sends no second copy once the first arrived': async ({ page, open }) => {

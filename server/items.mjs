@@ -57,7 +57,7 @@ export function toGate(run, sha, heads = new Map()) {
 const LIFECYCLE = ['Implement', 'Verify', 'Review', 'Approved', 'Merged'];
 const VERB = ['exploring', 'implementing', 'verifying', 'shipping', 'finishing'];
 
-function lifecycle(pr, prState, agent) {
+export function lifecycle(pr, prState, agent) {
 
     if (prState?.state === 'merged' || prState?.state === 'closed') {
         return 4;
@@ -111,10 +111,16 @@ export function nextStep(prState, agent, mr = 'MR') {
     }
     if (agent?.status === 'done' && agent.outcome && agent.stopReason !== 'killed') {
         const at = clock(agent.updated);
-        const then = nextStep(prState, null, mr);
+        const then = mrNext(prState, mr);
 
         return `Helper finished: ${agent.outcome.replace(/[.!]$/, '')}${at ? ` (${at})` : ''}${then.startsWith('Open the ') ? '' : ` · ${then}`}`;
     }
+    return mrNext(prState, mr);
+}
+
+// The MR's own next step (no agent): review comments, a failing pipeline and conflicts first, then what blocks the merge.
+function mrNext(prState, mr) {
+
     if (!prState) {
         return `Open the ${mr} to check its state`;
     }
@@ -240,6 +246,111 @@ export function rowAction(pr, prState, agent, title) {
     }
 
     return null;
+}
+
+// One kind per row, from the same inputs the old chains read; KINDS says what each kind shows. ps: the MR state after demote().
+// Order matters: an MR's first blocker wins, as in rowAction.
+export function deriveKind(ps, agent, hasPr, requested = false) {
+
+    if (ps?.state === 'merged') {
+        return { kind: 'merged', reason: 'the forge says merged' };
+    }
+    if (ps?.state === 'closed') {
+        return { kind: 'abandoned', reason: 'the forge says closed' };
+    }
+    if (requested) {
+        return { kind: 'requested', reason: 'named in an open prompt' };
+    }
+    if (agent?.status === 'running') {
+        return { kind: 'running', reason: 'the helper is working' };
+    }
+    if (agent?.status === 'stopped') {
+        return { kind: STOPPED.has(agent.stopReason) ? agent.stopReason : 'stopped', reason: agent.stopReason ?? 'no reason given' };
+    }
+    if (!hasPr && agent?.status === 'done') {
+        return { kind: 'finished', reason: 'the helper finished without an MR' };
+    }
+    if (!ps) {
+        return hasPr ? { kind: 'unknown', reason: 'no answer from the forge' } : { kind: 'idle', reason: 'nothing to do' };
+    }
+
+    const kind = ps.changes ? 'changes'
+        : ps.ci === 'failing' ? 'failing'
+        : ps.blocked === 'conflict' || ps.blocked === 'rebase' ? 'conflict'
+        : ps.blocked ? 'blocked'
+        : ps.notReady === GATE_STEP ? 'gate'
+        : ps.notReady ? 'threads'
+        : ps.replied && !ps.ready ? 'replied'
+        : ps.ci === 'running' ? 'pipeline'
+        : ps.draft ? 'draft'
+        : ps.ready ? 'ready'
+        : ps.reviewers?.length ? 'in-review' : 'needs-reviewer';
+
+    return { kind, reason: 'the MR state' };
+}
+
+const STOPPED = new Set(['api-error', 'rate-limit', 'interrupted']);
+
+const mrRefOf = c => `${mrRef(c.pr)} (${c.pr})`;
+const continueIt = c => canned('continue', c.title);
+const stoppedText = why => c => {
+    const at = clock(c.agent.updated);
+    return `Helper stopped: ${why}${at ? ` at ${at}` : ''} — Continue resumes it`;
+};
+const baseStage = c => lifecycle(c.pr, c.ps, c.agent);
+const noButton = () => null;
+const mrKind = (column, action = noButton) => ({ column, action, next: c => mrNext(c.ps, c.mr), stage: baseStage });
+const agentKind = (column, next, action = noButton) => ({ column, next, action, stage: baseStage });
+
+// What each kind of row shows: column (its group; see columnOf), next (its text), action (the canned send of its button, or null)
+// and stage (its lifecycle index). c: { ps, agent, pr, title, mr, aMr, now }.
+export const KINDS = {
+    merged: { column: 'done', next: () => 'Merged', action: noButton, stage: () => 4 },
+    abandoned: { column: 'closed', next: () => 'Closed without merging', action: noButton, stage: () => 4 },
+    requested: agentKind('doing', () => 'Claude is on it…'),
+    running: agentKind('doing', c => c.agent.step ?? `${c.agent.description} is ${VERB[c.agent.stage] ?? 'working'}…`),
+    stopped: agentKind('needs-you', () => 'Agent stopped — check the chat', continueIt),
+    'api-error': agentKind('needs-you', stoppedText('API error'), continueIt),
+    'rate-limit': agentKind('needs-you', stoppedText('rate limit hit'), continueIt),
+    interrupted: agentKind('needs-you', stoppedText('interrupted'), continueIt),
+    finished: agentKind('finished', c => `Finished without ${c.aMr}`),
+    idle: mrKind('idle'),
+    unknown: mrKind('unknown'),
+    changes: mrKind('needs-you', c => canned('fix', mrRefOf(c))),
+    failing: mrKind('needs-you', c => canned('pipeline', mrRefOf(c))),
+    conflict: mrKind('needs-you', c => canned('rebase', mrRefOf(c))),
+    blocked: mrKind('review'),
+    gate: mrKind('review', c => canned('gate', mrRefOf(c))),
+    threads: mrKind('review'),
+    replied: mrKind('review'),
+    pipeline: mrKind('review'),
+    draft: mrKind('needs-you', c => canned('ready', mrRefOf(c))),
+    ready: mrKind('ready', c => canned('merge', mrRefOf(c))),
+    'in-review': mrKind('review'),
+    'needs-reviewer': mrKind('review', c => canned('review', mrRefOf(c)))
+};
+
+// The group of a row: a draft MR that isn't running its pipeline waits on you, whatever else blocks it.
+export function columnOf(kind, ps) {
+
+    const col = KINDS[kind].column;
+
+    return col === 'review' && ps?.draft && ps.ci !== 'running' ? 'needs-you' : col;
+}
+
+// A row's column, next text, action and stage from its kind. A finished helper's outcome leads the text of an MR row.
+export function rowOf(ps, agent, { pr = null, title = null, mr = 'MR', aMr = 'a MR', requested = false, now = Date.now() } = {}) {
+
+    const { kind, reason } = deriveKind(ps, agent, !!pr, requested);
+    const k = KINDS[kind];
+    const c = { ps, agent, pr, title, mr, aMr, now };
+    let next = k.next(c);
+    if (agent?.status === 'done' && agent.outcome && agent.stopReason !== 'killed' && k.column !== 'finished' && !['merged', 'abandoned', 'requested'].includes(kind)) {
+        const at = clock(agent.updated);
+        next = `Helper finished: ${agent.outcome.replace(/[.!]$/, '')}${at ? ` (${at})` : ''}${kind === 'unknown' ? '' : ` · ${next}`}`;
+    }
+
+    return { state: { kind, reason }, column: columnOf(kind, ps), next, action: k.action(c), stage: k.stage(c) };
 }
 
 // Review chats (server/reviewer.mjs keeps them on disk): row key -> { id, at, sent }.

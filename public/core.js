@@ -540,6 +540,15 @@ export function commandRun(items, n) {
 /** @type {{ inMilestone: (x: WorkItem) => boolean, milestoneId: () => number | null, refresh: () => void, setProject: (name: string) => void, openProjects: () => void, rendered?: (refocus: boolean) => void, refocus?: () => void }} */
 export const hooks = { inMilestone: () => true, milestoneId: () => null, refresh: () => {}, setProject: () => {}, openProjects: () => {} };
 
+// The Vue islands (web/README.md). load() resolves to web/dist/main.js, or to null when web/ isn't built (the server
+// then leaves its tags out of index.html). main.js sets bump when it loads: call it after changing state an island shows.
+const WEB = '/web/main.js';
+export const vue = {
+    bump: () => {},
+    /** @returns {Promise<{ mount(name: string, el: Element, props?: object): () => void } | null>} */
+    load: () => (document.querySelector(`script[src="${WEB}"]`) ? import(WEB) : Promise.resolve(null))
+};
+
 /** @param {{ project: string }} x */
 export const isTracked = x => state.tracked.includes(x.project);
 // In a tracked project and in the selected one (or "All").

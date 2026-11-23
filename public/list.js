@@ -1,5 +1,5 @@
 // Left column: work items grouped by what they wait on, and attention transitions.
-import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, touch, seenAt, markSeen, freshComments, authorSummary, updateTitle, setWorkCount, waitsOnYou, markHandled, forgeWords } from './core.js';
+import { $, el, COLUMNS, COL, LIFECYCLE, state, store, hooks, visibleSessions, ago, prChip, plain, foldable, waButton, tooltip, touch, seenAt, markSeen, freshComments, authorSummary, updateTitle, setWorkCount, waitsOnYou, markHandled, forgeWords, vue } from './core.js';
 import { chatSession, bindChat, focusChat, sendText, isMaster } from './chat.js';
 import { milestoneTag } from './milestone.js';
 import { diffIcon } from './diff.js';
@@ -613,9 +613,11 @@ export function renderBoard() {
         const w = el('div', 'welcome'), b = waButton('+ Add projects', null, { variant: 'success', appearance: 'accent', size: 'm' });
         w.append(el('h2', null, 'No projects on your board'), el('div', null, 'Pick the projects you want to follow. Sessions from other projects stay hidden.'), b);
         b.onclick = () => $('manage').click();
-        return $('masters').replaceChildren(w);
+        $('masters').replaceChildren(w);
+    } else {
+        renderItems();
     }
-    renderItems();
+    vue.bump();
 }
 
 // Transitions into an attention state since the previous poll, at most one per item, plus a comment event per item with

@@ -282,6 +282,7 @@ Every merge must pass these:
 node test.mjs                  # unit tests in tests/unit/, one file per area (also: npm test)
 node tests/browser/run.mjs     # headless browser tests (about 30 s)
 ./check-types.sh               # type-checks public/*.js, no build
+(cd web && npm ci && npm run build)  # the Vue islands: type check and build (web/README.md)
 ```
 
 Running Homebase downloads nothing, but two of these checks need more: `./check-types.sh` fetches TypeScript with `npx` (network on first use), and the browser tests need a local Chrome.

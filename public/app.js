@@ -1,5 +1,5 @@
 // Entry point: header (project picker, bell, projects dialog), polling, notifications, limits strip.
-import { api, $, el, state, store, syncClock, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary, waitsOnYou } from './core.js';
+import { api, $, el, state, store, syncClock, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary, waitsOnYou, vue } from './core.js';
 import { renderBoard, select, attentionEvents, askingEvents, sessionTopic } from './list.js';
 import { refreshChat, initChat, bindChat, focusChat, isMaster, chatSession } from './chat.js';
 import { openNewProject, initNewProject } from './newproject.js';
@@ -661,3 +661,9 @@ api('/api/tracked').then(r => (r.ok ? r.json() : undefined)).then(list => {
 }).catch(() => {});
 poll();
 setInterval(poll, 1500); // /api/sessions costs ~40ms warm (GitLab stays behind its own caches), so a new row or Now: line lands within ~1.5s
+// ?vue=1: the demo island (web/src/islands/Demo.vue) in the header, proof that Vue islands run in this page.
+if (new URLSearchParams(location.search).has('vue')) {
+    const slot = el('span');
+    $('milestone-slot').after(slot);
+    vue.load().then(m => m?.mount('Demo', slot));
+}

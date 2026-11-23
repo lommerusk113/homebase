@@ -153,6 +153,8 @@ import { say } from './helpers.mjs';
     assert.equal(workingTitle(ses('x', 'p', now, { now: '[Image: /t/a.png]\nFix   the *login*\nredirect', topic: 'Old topic', title: 'First prompt' })), 'Fix the login redirect', 'the request the turn handles');
     assert.equal(workingTitle(ses('x', 'p', now, { now: null, topic: 'Old topic', title: 'First prompt' })), 'Old topic', 'no request: the newest reply topic');
     assert.equal(workingTitle(ses('x', 'p', now, { now: '[Image: /t/a.png]', topic: null, title: 'First prompt' })), 'First prompt', 'nothing else: the title');
+    assert.equal(workingTitle(ses('x', 'p', now, { now: 'do it', topic: 'Where the Vue move stands', title: 'First prompt' })), 'Where the Vue move stands', 'a short answer: the topic it answers');
+    assert.equal(workingTitle(ses('x', 'p', now, { now: 'yes', topic: null, title: 'First prompt' })), 'yes', 'a short answer with no topic stays');
     assert.equal(workingLine(ses('x', 'p', now, { step: 'running npm test', stepAt: now - 125_000 })), 'p · Now: running npm test · for 2m');
     assert.equal(workingLine(ses('x', 'p', now, { step: null, since: now - 300_000 })), 'p · Now: thinking · for 5m', 'no tool call yet: the turn start');
     assert.equal(workingLine(ses('x', 'p', now, { step: 'editing a.js', stepAt: now })), 'p · Now: editing a.js', 'under a minute: no time');

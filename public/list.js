@@ -103,8 +103,12 @@ export function workingLine(s) {
 // What a working chat is on: the request its turn handles (no pasted image paths), else its newest reply's topic, else its title.
 /** @param {Session} s */
 export function workingTitle(s) {
-    return excerpt((s.now ?? '').replace(/\[Image: [^\]]*\]/g, ''), 100) || s.topic || s.title || sessionTopic(s);
+    const asked = excerpt((s.now ?? '').replace(/\[Image: [^\]]*\]/g, ''), 100);
+    // a short answer ("do it", "yes go ahead") says nothing on its own: the reply it answers names the work
+    const short = asked.split(' ').length <= SHORT_WORDS;
+    return (short && s.topic) || asked || s.topic || s.title || sessionTopic(s);
 }
+const SHORT_WORDS = 3;
 // Text from a chat (a title, a project name, a question) in its own <bdi>, so a right-to-left one doesn't reorder the
 // labels and ages around it.
 /** @param {string} text */

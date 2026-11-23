@@ -14,12 +14,25 @@ const use = (id, input, output, ts) => JSON.stringify({ type: 'assistant', times
 const u = addUsage({ byId: new Map() }, [use('m1', 2, 30, T('00.000')), use('m1', 2, 30, T('01.000')), use('m2', 5, 7, T('09.000')), `{"type":"user","timestamp":"${T('10.000')}"}`].join('\n'));
 assert.deepEqual(u.totals, { input: 7, output: 37, cacheRead: 200, cacheWrite: 20 });
 assert.equal(u.last - u.first, 10_000);
+assert.equal(u.active, 10_000); // gaps all under the idle cutoff
 const uf = `${mkdtempSync(`${tmpdir()}/hb-`)}/agent.jsonl`;
 writeFileSync(uf, use('a', 1, 1, T('00.000')) + '\n' + use('b', 1, 1, T('01.000')).slice(0, 20)); // second line half-written
 assert.equal((await readUsage(uf)).output, 1);
 appendFileSync(uf, use('b', 1, 1, T('01.000')).slice(20) + '\n' + use('b', 1, 1, T('01.000')) + '\n' + use('c', 1, 4, T('02.000')) + '\n');
-assert.deepEqual(await readUsage(uf), { input: 3, output: 6, cacheRead: 300, cacheWrite: 30, first: Date.parse(T('00.000')), last: Date.parse(T('02.000')) });
+assert.deepEqual(await readUsage(uf), { input: 3, output: 6, cacheRead: 300, cacheWrite: 30, first: Date.parse(T('00.000')), last: Date.parse(T('02.000')), active: 2000 });
 assert.equal((await readUsage(uf)).output, 6); // unchanged file: nothing re-counted
+// a helper resumed 3 days later keeps one transcript: only the active parts count, whole or read in pieces
+const DAY = 86_400_000, M = 60_000, ts = ms => new Date(Date.parse(T('00.000')) + ms).toISOString();
+const lines = [use('x1', 1, 1, ts(0)), use('x2', 1, 1, ts(4 * M)), use('x3', 1, 1, ts(3 * DAY)), use('x4', 1, 1, ts(3 * DAY + 2 * M))];
+assert.equal(addUsage({ byId: new Map() }, lines.join('\n')).active, 6 * M);
+const split = addUsage(addUsage({ byId: new Map() }, lines.slice(0, 2).join('\n')), lines.slice(2).join('\n'));
+assert.equal(split.active, 6 * M);
+assert.equal(split.last - split.first, 3 * DAY + 2 * M);
+const sf = `${mkdtempSync(`${tmpdir()}/hb-`)}/agent.jsonl`;
+writeFileSync(sf, lines.slice(0, 2).join('\n') + '\n');
+assert.equal((await readUsage(sf)).active, 4 * M);
+appendFileSync(sf, lines.slice(2).join('\n') + '\n');
+assert.equal((await readUsage(sf)).active, 6 * M);
 assert.equal(formatDuration(14 * 60_000), '14m');
 assert.equal(formatDuration(20_000), '<1m');
 assert.equal(formatDuration(65 * 60_000), '1h 05m');
@@ -31,10 +44,14 @@ assert.deepEqual(limitsOf({ rate_limits: { five_hour: { used_percentage: 34, res
 assert.equal(limitsOf({ rate_limits: { five_hour: { used_percentage: 34, resets_at: 1738300000 }, seven_day: { used_percentage: 12, resets_at: 1738857600 } } }, now).fiveHour, null); // already reset
 assert.equal(limitsOf({ session_id: 'x' }, now), null);
 const timed = workItems([{ id: 's', project: 'p', prs: [{ url: mr(5), at: 1 }], agents: [
-    agent('a1', 2, { prs: [mr(5)], usage: { input: 1, output: 2, cacheRead: 1_000_000, cacheWrite: 200_000, first: 0, last: 14 * 60_000 } }),
-    agent('a2', 3, { description: 'Fix !5', status: 'running', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, first: 100 * 60_000, last: 101 * 60_000 } })
+    agent('a1', 2, { prs: [mr(5)], usage: { input: 1, output: 2, cacheRead: 1_000_000, cacheWrite: 200_000, first: 0, last: 14 * 60_000, active: 14 * 60_000 } }),
+    agent('a2', 3, { description: 'Fix !5', status: 'running', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, first: 100 * 60_000, last: 101 * 60_000, active: 60_000 } })
 ] }], () => open(), 151 * 60_000)[0];
-assert.deepEqual([timed.tokens, timed.time], ['1.2M tok', '1h 05m']);
+assert.deepEqual([timed.tokens, timed.time], ['1.2M tok', '15m']); // the running helper idle for 50m counts only its active minute
+const live = workItems([{ id: 's', project: 'p', prs: [{ url: mr(5), at: 1 }], agents: [
+    agent('a2', 3, { description: 'Fix !5', status: 'running', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, first: 100 * 60_000, last: 101 * 60_000, active: 60_000 } })
+] }], () => open(), 105 * 60_000)[0];
+assert.equal(live.time, '5m'); // active minute + 4m since its last entry, under the cutoff
 assert.equal(timed.tokensTitle, 'input 1 · output 2 · cache read 1,000,000 · cache write 200,000');
 console.log('ok usage + limits');
 

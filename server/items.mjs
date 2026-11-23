@@ -1,6 +1,6 @@
 // Work-item rules (pure): one item per MR or loose agent, its column, lifecycle stage, next step, row action, gate badge and milestone.
 import { PR_URL } from './entries.mjs';
-import { USAGE_KEYS, formatDuration, formatTokens } from './usage.mjs';
+import { USAGE_KEYS, IDLE_CUTOFF_MS, formatDuration, formatTokens } from './usage.mjs';
 import { mentionsMr, mrRef, forgeWords } from './forge.mjs';
 import { canned } from '../public/canned.js';
 
@@ -318,12 +318,12 @@ function itemGroups(sessions, prOf, now, seeds) {
 }
 
 // Token sums and working time over an item's agents: summed per agent, so idle gaps between agents don't count;
-// a running agent counts up to now.
+// a running agent counts up to now only while its last entry is recent. Idle gaps inside a transcript don't count.
 function agentUsage(agents, now) {
 
     const tokens = Object.fromEntries(Object.keys(USAGE_KEYS).map(k => [k, agents.reduce((n, a) => n + (a.usage?.[k] ?? 0), 0)]));
     const total = Object.values(tokens).reduce((a, b) => a + b, 0);
-    const timeMs = agents.reduce((n, a) => n + (a.usage?.first != null ? (a.status === 'running' ? now : a.usage.last) - a.usage.first : 0), 0);
+    const timeMs = agents.reduce((n, a) => n + ((a.usage?.active ?? 0) + (a.status === 'running' && a.usage?.last != null && now - a.usage.last < IDLE_CUTOFF_MS ? now - a.usage.last : 0)), 0);
 
     return {
         tokens: total ? formatTokens(total) : null,

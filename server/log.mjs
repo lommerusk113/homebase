@@ -226,7 +226,7 @@ async function finishedAgents(sessionDir, since) {
                     value: {
                         kind: 'agent', id, at: st.mtimeMs, started: u.first, description: a.description, tldr: a.tldr, body: a.body, report: a.report,
                         pr: a.pr, prs: a.prs, branches: [meta.worktreeBranch].filter(Boolean), // transcript gitBranch is the parent checkout's
-                        time: u.first != null && u.last > u.first ? formatDuration(u.last - u.first) : null,
+                        time: u.active > 0 ? formatDuration(u.active) : null,
                         tokens: tokens ? formatTokens(tokens) : null
                     }
                 };

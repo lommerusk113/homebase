@@ -3,9 +3,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, statSync } from 'node:fs
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { column, nextStep, rowAction } from '../../server.mjs';
 import { prState, prs } from '../../server/forge.mjs';
-import { mr, fakeBin, withFakeGlab, glabMr } from './helpers.mjs';
+import { mr, fakeBin, withFakeGlab, glabMr, nextOf, colOf, actOf } from './helpers.mjs';
 
 {
     // a hung glab can't hold the first /api/sessions load: the MR lookup times out like every other forge call
@@ -22,15 +21,15 @@ import { mr, fakeBin, withFakeGlab, glabMr } from './helpers.mjs';
     // ready means merge now: a failing or running pipeline GitLab doesn't require still blocks it
     const failed = await glabMr({ head_pipeline: { status: 'failed' } }, 101);
     assert.deepEqual([failed.ready, failed.ci], [false, 'failing']);
-    assert.equal(column('idle', failed, true), 'needs-you'); // Fix pipeline is on you
+    assert.equal(colOf(failed, null, true), 'needs-you'); // Fix pipeline is on you
     assert.equal((await glabMr({ head_pipeline: { status: 'running' } }, 102)).ready, false);
     assert.equal((await glabMr({ head_pipeline: { status: 'success' } }, 103)).ready, true);
     console.log('ok ready vs ci');
 
     // merge statuses besides review and CI say what blocks the MR instead of "Waiting for review"
     const conflict = await glabMr({ detailed_merge_status: 'conflict', reviewers: [{ name: 'Ann' }] }, 111);
-    assert.deepEqual([conflict.ready, conflict.blocked, nextStep(conflict, null), rowAction(mr(4), conflict, null, 'T').label], [false, 'conflict', 'Merge conflicts — rebase it', 'Rebase']);
-    assert.equal(nextStep(await glabMr({ detailed_merge_status: 'blocked_status' }, 112), null), 'Blocked by another MR');
+    assert.deepEqual([conflict.ready, conflict.blocked, nextOf(conflict, null), actOf(mr(4), conflict, null, 'T').label], [false, 'conflict', 'Merge conflicts — rebase it', 'Rebase']);
+    assert.equal(nextOf(await glabMr({ detailed_merge_status: 'blocked_status' }, 112), null), 'Blocked by another MR');
     // a must-pass project without a pipeline isn't "Pipeline failing"
     assert.equal((await glabMr({ detailed_merge_status: 'ci_must_pass' }, 113)).ci, null);
     // unchecked/checking keep the last answer, so a ready MR doesn't flap and notify again

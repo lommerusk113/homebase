@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
-import { status, summarize, column, filesTouched, summarizeAgent, agentStatus } from '../../server.mjs';
+import { colOf } from './helpers.mjs';
+import { status, summarize, filesTouched, summarizeAgent, agentStatus } from '../../server.mjs';
 
-assert.equal(column('working', { state: 'merged' }, true), 'doing');
-assert.equal(column('idle', { state: 'merged' }, true), 'done');
-assert.equal(column('idle', { state: 'open', ready: true }, true), 'ready');
-assert.equal(column('idle', { state: 'open', changes: true }, true), 'needs-you');
-assert.equal(column('idle', { state: 'open', blocked: 'conflict' }, true), 'needs-you');
-assert.equal(column('idle', { state: 'open', blocked: 'checks' }, true), 'review'); // nothing to type for an external check
-assert.equal(column('waiting', null, true), 'unknown'); // an MR whose lookup gave nothing is not "in review"
-assert.equal(column('waiting', null, false), 'needs-you');
-assert.equal(column('idle', null, false), 'idle');
+assert.equal(colOf({ state: 'merged' }, null, true), 'done');
+assert.equal(colOf({ state: 'open', ready: true }, null, true), 'ready');
+assert.equal(colOf({ state: 'open', changes: true }, null, true), 'needs-you');
+assert.equal(colOf({ state: 'open', blocked: 'conflict' }, null, true), 'needs-you');
+assert.equal(colOf({ state: 'open', blocked: 'checks' }, null, true), 'review'); // nothing to type for an external check
+assert.equal(colOf(null, null, true), 'unknown'); // an MR whose lookup gave nothing is not "in review"
+assert.equal(colOf(null, null, false), 'idle');
 
 assert.equal(status({ type: 'assistant' }, 1_000), 'working');
 assert.equal(status({ type: 'assistant' }, 60_000), 'waiting');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { column, nextStep, workItems, rowAction, itemColumn, groupIssues, excerpt } from '../../server.mjs';
+import { workItems, groupIssues, excerpt } from '../../server.mjs';
 import { chatMessage } from '../../web/src/lib/issues.ts';
-import { agent, glabMr } from './helpers.mjs';
+import { agent, glabMr, nextOf, colOf, actOf } from './helpers.mjs';
 
 // An error nobody gave a status is ours: the caller gets a fixed text, the detail (absolute paths) goes to the server's output.
 {
@@ -24,8 +24,8 @@ import { agent, glabMr } from './helpers.mjs';
 
 {
     // an MR closed without merging is not "merged": its own group, and an issue whose only MR was closed starts afresh
-    assert.equal(column('idle', { state: 'closed' }, true), 'closed');
-    assert.equal(itemColumn({ state: 'closed' }, { status: 'running' }, true), 'closed');
+    assert.equal(colOf({ state: 'closed' }, null, true), 'closed');
+    assert.equal(colOf({ state: 'closed' }, { status: 'running' }, true), 'closed');
     assert.equal(chatMessage({ iid: 10, st: 'todo', assignees: [{ username: 'a' }], mrs: [{ iid: 150, state: 'closed' }] }), 'Implement #10');
     assert.equal(chatMessage({ iid: 10, st: 'todo', assignees: [], mrs: [] }), 'Assign #10 to me first (it is unassigned), then implement it.');
     assert.equal(chatMessage({ iid: 10, st: 'doing', mrs: [{ iid: 150, state: 'closed' }, { iid: 151, state: 'open' }] }), 'Check on #10 and !151');
@@ -67,8 +67,8 @@ import { agent, glabMr } from './helpers.mjs';
     const url = 'https://github.com/o/r/pull/3';
     assert.deepEqual([ghPr(pr, url).ready, ghPr(pr, url).blocked], [true, null]);
     const conflict = ghPr({ ...pr, mergeable: 'CONFLICTING' }, url);
-    assert.deepEqual([conflict.ready, conflict.blocked, column('idle', conflict, true), rowAction(url, conflict, null, 'T').label], [false, 'conflict', 'needs-you', 'Rebase']);
-    assert.doesNotMatch(nextStep(conflict, null), /merge it/);
+    assert.deepEqual([conflict.ready, conflict.blocked, colOf(conflict, null, true), actOf(url, conflict, null, 'T').label], [false, 'conflict', 'needs-you', 'Rebase']);
+    assert.doesNotMatch(nextOf(conflict, null), /merge it/);
 
     const pull = (number, o) => ({ number, html_url: `https://github.com/o/r/pull/${number}`, state: 'open', merged_at: null, title: `PR ${number}`, body: '', head: { ref: 'x' }, user: { login: 'ann' }, ...o });
     const links = ghLinks([pull(1, { title: '#7 - Dark mode' }), pull(2, { body: 'Fixes #8', state: 'closed', merged_at: '2026-01-01T00:00:00Z' }), pull(3, { head: { ref: '9-export' }, state: 'closed' }), pull(4, { title: 'Bump to v7' })]);
@@ -136,11 +136,11 @@ import { agent, glabMr } from './helpers.mjs';
 {
     // a conflict is not hidden behind a review comment or a failing pipeline
     const base = { state: 'open', blocked: 'conflict' };
-    assert.match(nextStep({ ...base, changes: true, unanswered: 1, unansweredBy: ['Ann'] }, null), /^Reply to Ann's comment.*conflict/);
-    assert.match(nextStep({ ...base, changes: true }, null), /^Address review comments.*conflict/);
-    assert.match(nextStep({ ...base, ci: 'failing' }, null), /^Pipeline failing.*conflict/);
-    assert.equal(nextStep({ state: 'open', changes: true }, null), 'Address review comments');
-    assert.equal(nextStep(base, null), 'Merge conflicts — rebase it');
+    assert.match(nextOf({ ...base, changes: true, unanswered: 1, unansweredBy: ['Ann'] }, null), /^Reply to Ann's comment.*conflict/);
+    assert.match(nextOf({ ...base, changes: true }, null), /^Address review comments.*conflict/);
+    assert.match(nextOf({ ...base, ci: 'failing' }, null), /^Pipeline failing.*conflict/);
+    assert.equal(nextOf({ state: 'open', changes: true }, null), 'Address review comments');
+    assert.equal(nextOf(base, null), 'Merge conflicts — rebase it');
     console.log('ok conflict beside comments');
 }
 {

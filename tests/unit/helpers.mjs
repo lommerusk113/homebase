@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { prState } from '../../server/forge.mjs';
+import { rowOf } from '../../server/items.mjs';
 
 export const tu = (name, extra) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', name, ...extra }] } });
 export const say = text => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });
@@ -39,3 +40,9 @@ export const withFakeGlab = async (body, fn) => {
 // a GitLab MR as glab answers it; fields not given are the plain open, unblocked defaults
 export const glabMr = (fields, n) => withFakeGlab(`echo '${JSON.stringify({ state: 'opened', title: 't', source_branch: 'b', detailed_merge_status: 'mergeable', ...fields })}'`,
     () => prState(`https://gitlab.example.com/g/p/-/merge_requests/${n}`));
+
+// A row's next text, group and button for an MR state and helper, as the board shows them.
+const url = 'https://gitlab.com/g/p/-/merge_requests/1';
+export const nextOf = (ps, agent, mrWord = 'MR') => rowOf(ps, agent, { pr: url, mr: mrWord }).next;
+export const colOf = (ps, agent, hasPr) => rowOf(ps, agent, { pr: hasPr ? url : null }).column;
+export const actOf = (pr, ps, agent, title) => rowOf(ps, agent, { pr, title }).action;

@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { nextStep, rowAction, isBot, humanComments, withThreads, itemColumn } from '../../server.mjs';
+import { isBot, humanComments, withThreads } from '../../server.mjs';
 import { attentionEvents, askingEvents } from '../../web/src/lib/board.ts';
 import { freshComments, authorSummary } from '../../web/src/lib/comments.ts';
 import { projectCounts } from '../../web/src/lib/waiting.ts';
-import { open, mr } from './helpers.mjs';
+import { open, mr, nextOf, colOf, actOf } from './helpers.mjs';
 
 const it = (key, column, ci) => ({ key, column, prState: ci ? { ci } : null });
 const ev = (prev, next) => attentionEvents(prev, next).map(e => [e.kind, e.item.key]);
@@ -83,19 +83,19 @@ assert.deepEqual(hc.unresolvedBy, ['Børre Stellander']);
 const waiting = open({ reviewers: ['Børre Stellander'] });
 const thr = (n, by = ['Børre Stellander']) => ({ count: n + 1, items: [], unresolved: n, unresolvedBy: n ? by : [] });
 const t2 = withThreads({ ...waiting, ci: 'failing' }, thr(2));
-assert.equal(itemColumn(t2, null, true), 'needs-you');
-assert.equal(nextStep(t2, null), 'Address 2 unresolved comments from Børre Stellander · Pipeline failing');
-assert.equal(nextStep(withThreads(waiting, thr(1, ['A', 'B'])), null), 'Address 1 unresolved comment from A, B');
-assert.equal(rowAction(mr(4), t2, null, 'T').label, 'Fix & reply');
-assert.equal(itemColumn(withThreads(waiting, thr(0)), null, true), 'review'); // all resolved, no approval yet
-assert.equal(nextStep(withThreads(waiting, thr(0)), null), 'Waiting for review by Børre Stellander');
+assert.equal(colOf(t2, null, true), 'needs-you');
+assert.equal(nextOf(t2, null), 'Address 2 unresolved comments from Børre Stellander · Pipeline failing');
+assert.equal(nextOf(withThreads(waiting, thr(1, ['A', 'B'])), null), 'Address 1 unresolved comment from A, B');
+assert.equal(actOf(mr(4), t2, null, 'T').label, 'Fix & reply');
+assert.equal(colOf(withThreads(waiting, thr(0)), null, true), 'review'); // all resolved, no approval yet
+assert.equal(nextOf(withThreads(waiting, thr(0)), null), 'Waiting for review by Børre Stellander');
 assert.equal(withThreads(waiting, null), waiting); // no comments data yet
 // a stopped agent needs you even when its MR is ready; a finished one without an MR is "finished"
-assert.equal(itemColumn(open({ ready: true }), { status: 'stopped' }, true), 'needs-you');
-assert.equal(itemColumn(null, { status: 'stopped' }, false), 'needs-you');
-assert.equal(itemColumn(null, { status: 'done' }, false), 'finished');
-assert.equal(itemColumn(open({ draft: true }), null, true), 'needs-you'); // a draft can't be reviewed: marking it ready is on you
-assert.equal(itemColumn(open({ draft: true, ci: 'running' }), null, true), 'review', 'not while its pipeline runs: nothing to do yet');
+assert.equal(colOf(open({ ready: true }), { status: 'stopped' }, true), 'needs-you');
+assert.equal(colOf(null, { status: 'stopped' }, false), 'needs-you');
+assert.equal(colOf(null, { status: 'done' }, false), 'finished');
+assert.equal(colOf(open({ draft: true }), null, true), 'needs-you'); // a draft can't be reviewed: marking it ready is on you
+assert.equal(colOf(open({ draft: true, ci: 'running' }), null, true), 'review', 'not while its pipeline runs: nothing to do yet');
 assert.equal(withThreads({ state: 'merged' }, thr(2)).changes, undefined);
 // the comment that moves an item into needs-you notifies once
 const nc = { ...cm('a', CT(2)), column: 'needs-you' };
@@ -110,34 +110,34 @@ const turn = (...threads) => humanComments([], 'me', 10, threads);
 const mine = turn(th(B, ME), th(B, ME, BOT)); // last note by me (my Claude posts as me), a bot after me doesn't count
 assert.deepEqual([mine.unresolved, mine.replied, mine.repliedTo], [0, 2, ['Børre']]);
 const wr = withThreads({ ...waiting, changes: true }, mine); // GitLab's discussions_not_resolved set changes
-assert.equal(itemColumn(wr, null, true), 'review');
-assert.equal(nextStep(wr, null), 'Replied to 2 threads — waiting for Børre to resolve');
-assert.equal(rowAction(mr(4), wr, null, 'T'), null);
-assert.equal(rowAction(mr(4), { ...wr, reviewers: [] }, null, 'T'), null); // no Request review either
-assert.equal(rowAction(mr(4), { ...wr, ci: 'failing' }, null, 'T').label, 'Fix pipeline'); // only a failing pipeline beats it
-assert.equal(nextStep({ ...wr, ci: 'running' }, null), 'Replied to 2 threads — waiting for Børre to resolve');
+assert.equal(colOf(wr, null, true), 'review');
+assert.equal(nextOf(wr, null), 'Replied to 2 threads — waiting for Børre to resolve');
+assert.equal(actOf(mr(4), wr, null, 'T'), null);
+assert.equal(actOf(mr(4), { ...wr, reviewers: [] }, null, 'T'), null); // no Request review either
+assert.equal(actOf(mr(4), { ...wr, ci: 'failing' }, null, 'T').label, 'Fix pipeline'); // only a failing pipeline beats it
+assert.equal(nextOf({ ...wr, ci: 'running' }, null), 'Replied to 2 threads — waiting for Børre to resolve');
 // mergeable wins over replied threads; unanswered comments and a failing pipeline still win over mergeable
 const wrReady = { ...wr, ready: true };
-assert.equal(itemColumn(wrReady, null, true), 'ready');
-assert.equal(nextStep(wrReady, null), 'Approved — merge it · 2 replied threads still open');
-assert.equal(rowAction(mr(4), wrReady, null, 'T').label, 'Merge + close issue');
-assert.equal(nextStep({ ...wrReady, replied: 1 }, null), 'Approved — merge it · 1 replied thread still open');
-assert.equal(rowAction(mr(4), { ...wrReady, ci: 'failing' }, null, 'T').label, 'Fix pipeline');
+assert.equal(colOf(wrReady, null, true), 'ready');
+assert.equal(nextOf(wrReady, null), 'Approved — merge it · 2 replied threads still open');
+assert.equal(actOf(mr(4), wrReady, null, 'T').label, 'Merge + close issue');
+assert.equal(nextOf({ ...wrReady, replied: 1 }, null), 'Approved — merge it · 1 replied thread still open');
+assert.equal(actOf(mr(4), { ...wrReady, ci: 'failing' }, null, 'T').label, 'Fix pipeline');
 const theirsReady = withThreads({ ...waiting, ready: true }, turn(th(B), th(ME, B)));
-assert.equal(nextStep(theirsReady, null), 'Approved — 2 unanswered comments from Børre');
-assert.equal(rowAction(mr(4), theirsReady, null, 'T').label, 'Fix & reply');
+assert.equal(nextOf(theirsReady, null), 'Approved — 2 unanswered comments from Børre');
+assert.equal(actOf(mr(4), theirsReady, null, 'T').label, 'Fix & reply');
 const theirs = turn(th(B), th(ME, B));
 assert.deepEqual([theirs.unresolved, theirs.unresolvedBy, theirs.replied], [2, ['Børre'], 0]);
-assert.equal(itemColumn(withThreads(waiting, theirs), null, true), 'needs-you');
+assert.equal(colOf(withThreads(waiting, theirs), null, true), 'needs-you');
 const mix = withThreads(waiting, turn(th(B), th(B, ME)));
-assert.equal(itemColumn(mix, null, true), 'needs-you');
-assert.equal(nextStep(mix, null), 'Address 1 unresolved comment from Børre');
-assert.equal(rowAction(mr(4), mix, null, 'T').label, 'Fix & reply');
+assert.equal(colOf(mix, null, true), 'needs-you');
+assert.equal(nextOf(mix, null), 'Address 1 unresolved comment from Børre');
+assert.equal(actOf(mr(4), mix, null, 'T').label, 'Fix & reply');
 // a thread whose last note, by the reviewer, hands it to someone else with an @mention waits on that person
 const hand = (author, body) => ({ author, body });
 const handed = turn({ resolved: false, notes: [hand(B, 'is 2400 right?'), hand(ME, 'No code change'), hand(B, '@PetterGT should take a look')] });
 assert.deepEqual([handed.unresolved, handed.replied, handed.repliedTo], [0, 1, ['PetterGT']]);
-assert.equal(nextStep(withThreads({ ...waiting, changes: true }, handed), null), 'Replied to 1 thread — waiting for PetterGT to resolve');
+assert.equal(nextOf(withThreads({ ...waiting, changes: true }, handed), null), 'Replied to 1 thread — waiting for PetterGT to resolve');
 assert.equal(turn({ resolved: false, notes: [hand(B, '@me what about this'), ] }).unresolved, 1); // mentioning me is still on me
 assert.equal(turn({ resolved: false, notes: [hand(B, 'ping @borre')] }).unresolved, 1); // own name is no hand-off
 const done = turn({ ...th(B), resolved: true }, th(ME), th(BOT)); // resolved, my own, bot-only threads don't count
@@ -152,17 +152,17 @@ const ANN = { name: 'Ann', username: 'ann' };
 const asked = humanComments([note(ME, 1), note(B, 2)], 'me', 10, []);
 assert.deepEqual([asked.unanswered, asked.unansweredBy], [1, ['Børre']]);
 const askedPr = withThreads(waiting, asked);
-assert.equal(itemColumn(askedPr, null, true), 'needs-you');
-assert.equal(nextStep(askedPr, null), "Reply to Børre's comment");
-assert.deepEqual(rowAction(mr(4), askedPr, null, 'T'), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
+assert.equal(colOf(askedPr, null, true), 'needs-you');
+assert.equal(nextOf(askedPr, null), "Reply to Børre's comment");
+assert.deepEqual(actOf(mr(4), askedPr, null, 'T'), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
 assert.equal(withThreads(waiting, humanComments([note(B, 2), note(ME, 3, false)], 'me', 10, [])), waiting); // my later thread note answers it
 assert.equal(withThreads(waiting, humanComments([note(ME, 1), note(BOT, 2)], 'me', 10, [])), waiting); // bots don't count
-assert.equal(nextStep(withThreads(waiting, humanComments([note(ME, 1), note(B, 2), note(ANN, 3)], 'me')), null), 'Answer 2 comments from Ann, Børre');
+assert.equal(nextOf(withThreads(waiting, humanComments([note(ME, 1), note(B, 2), note(ANN, 3)], 'me')), null), 'Answer 2 comments from Ann, Børre');
 const both = withThreads(waiting, humanComments([note(B, 2)], 'me', 10, [th(B), th(ANN)]));
 assert.deepEqual([both.unresolved, both.unanswered], [2, 1]);
-assert.equal(nextStep(both, null), 'Address 2 unresolved threads and answer 1 comment from Børre, Ann');
+assert.equal(nextOf(both, null), 'Address 2 unresolved threads and answer 1 comment from Børre, Ann');
 const askedReady = withThreads({ ...waiting, ready: true }, asked);
-assert.equal(nextStep(askedReady, null), 'Approved — 1 unanswered comment from Børre');
-assert.equal(rowAction(mr(4), askedReady, null, 'T').label, 'Fix & reply');
+assert.equal(nextOf(askedReady, null), 'Approved — 1 unanswered comment from Børre');
+assert.equal(actOf(mr(4), askedReady, null, 'T').label, 'Fix & reply');
 assert.equal(withThreads(waiting, humanComments([], 'me', 10, [])), waiting); // no comments
 console.log('ok comments');

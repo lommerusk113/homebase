@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { nextStep, workItems, tmuxArgs, repoName, rowAction, gateRuns, gateFor, toGate, sameRepo } from '../../server.mjs';
+import { workItems, tmuxArgs, repoName, gateRuns, gateFor, toGate, sameRepo } from '../../server.mjs';
 import { rowOf } from '../../server/items.mjs';
 import { loadStore, record, seeds, flush } from '../../server/store.mjs';
-import { open, mr, agent } from './helpers.mjs';
+import { open, mr, agent, nextOf, actOf } from './helpers.mjs';
 
-assert.equal(nextStep({ state: 'merged' }, { status: 'running', stage: 1 }), 'Merged');
-assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebase !7' }), 'Rebase !7 is verifying…');
-assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebase !7', step: 'running unit tests' }), 'running unit tests');
+assert.equal(nextOf({ state: 'merged' }, { status: 'running', stage: 1 }), 'Merged');
+assert.equal(nextOf(open(), { status: 'running', stage: 2, description: 'Rebase !7' }), 'Rebase !7 is verifying…');
+assert.equal(nextOf(open(), { status: 'running', stage: 2, description: 'Rebase !7', step: 'running unit tests' }), 'running unit tests');
 {
     const { stepOf } = await import('../../server.mjs');
     assert.equal(stepOf({ name: 'Bash', input: { command: 'npm test\nmore' } }), 'running unit tests');
@@ -27,27 +27,27 @@ assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebas
     assert.equal(stepOf({ name: 'Edit', input: { file_path: '/x/src/login.js' } }), 'editing login.js');
     assert.equal(stepOf({ name: 'mcp__x__y', input: {} }), 'using mcp__x__y');
 }
-assert.equal(nextStep(null, { status: 'stopped' }), 'Agent stopped — check the chat');
+assert.equal(nextOf(null, { status: 'stopped' }), 'Agent stopped — check the chat');
 const at = new Date(Date.UTC(2026, 0, 1, 12, 0)).getTime();
 const hm = new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-assert.equal(nextStep(null, { status: 'stopped', stopReason: 'api-error', updated: at }), `Helper stopped: API error at ${hm} — Continue resumes it`);
-assert.equal(nextStep(null, { status: 'stopped', stopReason: 'rate-limit', updated: at }), `Helper stopped: rate limit hit at ${hm} — Continue resumes it`);
+assert.equal(nextOf(null, { status: 'stopped', stopReason: 'api-error', updated: at }), `Helper stopped: API error at ${hm} — Continue resumes it`);
+assert.equal(nextOf(null, { status: 'stopped', stopReason: 'rate-limit', updated: at }), `Helper stopped: rate limit hit at ${hm} — Continue resumes it`);
 {
     const next = (stopReason, updated) => rowOf(null, { status: 'stopped', stopReason, updated }, { title: 'T', now: 11 * 60_000 }).next;
     assert.equal(next('closed'), 'Helper stopped: its chat was closed — Continue resumes it');
     assert.equal(next('silent', 60_000), 'No output for 10m — may still be working · Continue nudges it');
     assert.match(next('api-error', at), /^Helper stopped: API error/);
 }
-assert.equal(nextStep(null, { status: 'done', outcome: 'Nothing left to push.', updated: at }).startsWith(`Helper finished: Nothing left to push (${hm})`), true);
-assert.equal(nextStep(open({ ready: true }), { status: 'done', outcome: 'Nothing left to push.', updated: at }).startsWith(`Helper finished: Nothing left to push (${hm}) · `), true);
-assert.equal(nextStep(open({ changes: true, reviewers: ['Ann'] }), null), 'Address review comments from Ann');
-assert.equal(nextStep(open({ changes: true, reviewers: ['Ann'], changesBy: ['bob'] }), null), 'Address review comments from bob');
-assert.equal(nextStep(open({ reviewers: ['Ann', 'Bo'] }), { status: 'done' }), 'Waiting for review by Ann, Bo');
-assert.equal(nextStep(open(), null), 'Needs a reviewer');
-assert.equal(nextStep(open({ ready: true }), null), 'Approved — merge it');
-assert.equal(nextStep(open({ ci: 'failing' }), null), 'Pipeline failing');
-assert.equal(nextStep(open({ ci: 'running' }), null), 'Pipeline running');
-assert.equal(nextStep(open({ draft: true }), null), 'Draft — mark it ready for review');
+assert.equal(nextOf(null, { status: 'done', outcome: 'Nothing left to push.', updated: at }).startsWith(`Helper finished: Nothing left to push (${hm})`), true);
+assert.equal(nextOf(open({ ready: true }), { status: 'done', outcome: 'Nothing left to push.', updated: at }).startsWith(`Helper finished: Nothing left to push (${hm}) · `), true);
+assert.equal(nextOf(open({ changes: true, reviewers: ['Ann'] }), null), 'Address review comments from Ann');
+assert.equal(nextOf(open({ changes: true, reviewers: ['Ann'], changesBy: ['bob'] }), null), 'Address review comments from bob');
+assert.equal(nextOf(open({ reviewers: ['Ann', 'Bo'] }), { status: 'done' }), 'Waiting for review by Ann, Bo');
+assert.equal(nextOf(open(), null), 'Needs a reviewer');
+assert.equal(nextOf(open({ ready: true }), null), 'Approved — merge it');
+assert.equal(nextOf(open({ ci: 'failing' }), null), 'Pipeline failing');
+assert.equal(nextOf(open({ ci: 'running' }), null), 'Pipeline running');
+assert.equal(nextOf(open({ draft: true }), null), 'Draft — mark it ready for review');
 console.log('ok next');
 
 const items = workItems([
@@ -74,7 +74,7 @@ assert.deepEqual(perks(3 * 3600_000), []);
 assert.deepEqual(workItems([{ id: 'm', project: 'p', prs: [], agents: [agent('r', 0, { description: 'Also rebase', firstDescription: 'Fix login' })] }], () => null, 0)
     .map(i => [i.title, i.firstTitle]), [['Also rebase', 'Fix login']]);
 const one = prOf => workItems([{ id: 's', project: 'p', prs: [{ url: mr(5), at: 1 }], agents: [] }], prOf, 0, new Map())[0];
-assert.equal(one(() => open({ ready: true })).stageLabel, 'Approved');
+assert.equal(one(() => open({ ready: true })).stageLabel, 'Review', 'approved but no gate yet: demoted to in review'); // with a passed gate it reads Approved
 assert.deepEqual((({ column, stageLabel, next }) => [column, stageLabel, next])(one(() => ({ state: 'closed' }))), ['closed', 'Closed', 'Closed without merging']);
 const verifying = workItems([{ id: 's', project: 'p', prs: [], agents: [agent('v', 1, { status: 'running', stage: 2 })] }], () => null, 0, new Map());
 assert.deepEqual(verifying.map(i => i.stageLabel), ['Verify']);
@@ -172,20 +172,20 @@ assert.equal(repoName('github-personal:lommerusk113/homebase.git\n'), 'homebase'
 assert.equal(repoName('git@gitlab.com:tritt/accounting/pracsys.git'), 'pracsys');
 assert.equal(repoName('https://github.com/contaas/portal-frontend'), 'portal-frontend');
 console.log('ok repo name');
-const act = (prState, agent, url = mr(4)) => rowAction(url, prState, agent, 'T');
+const act = (prState, agent, url = mr(4)) => actOf(url, prState, agent, 'T');
 assert.deepEqual(act(open({ ready: true, reviewers: ['Ann'] }), null), { label: 'Merge + close issue', message: `Run review-gate on !4 (${mr(4)}). If the verdict is ready, merge it and close its issue. If it's fix first, show me the findings and don't merge.` });
 assert.equal(act(open({ ready: true }), null, 'https://github.com/o/r/pull/9').message.slice(0, 63), 'Run review-gate on #9 (https://github.com/o/r/pull/9). If the v');
 assert.deepEqual(act(open({ changes: true, reviewers: ['Ann'] }), null), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
 // one precedence with nextStep: a stopped agent wins over the MR's own ask, but not over a merged MR; a running pipeline asks nothing
 assert.deepEqual([open({ changes: true }), open({ ready: true })].map(p => act(p, { status: 'stopped' }).label), ['Continue', 'Continue']);
-assert.equal(nextStep(open({ ready: true }), { status: 'stopped' }), 'Agent stopped — check the chat');
+assert.equal(nextOf(open({ ready: true }), { status: 'stopped' }), 'Agent stopped — check the chat');
 assert.equal(act({ state: 'merged' }, { status: 'stopped' }), null);
 assert.equal(act(open({ ci: 'running' }), null), null);
 assert.deepEqual(act(open({ ci: 'failing', reviewers: ['Ann'] }), null), { label: 'Fix pipeline', message: `The pipeline on !4 (${mr(4)}) is failing — find out why and fix it.` });
 assert.deepEqual(act(open(), { status: 'done' }), { label: 'Request review', message: `Assign a reviewer to !4 (${mr(4)}) — suggest who.` });
 assert.equal(act(open(), null, 'https://github.com/o/r/pull/9').message, 'Assign a reviewer to #9 (https://github.com/o/r/pull/9) — suggest who.');
-assert.deepEqual(rowAction(null, null, { status: 'stopped' }, 'Implement #9'), { label: 'Continue', message: "The subagent 'Implement #9' stopped — check why and continue it." });
-assert.equal(rowAction(null, null, { status: 'running' }, 'x'), null); // doing
+assert.deepEqual(actOf(null, null, { status: 'stopped' }, 'Implement #9'), { label: 'Continue', message: "The subagent 'Implement #9' stopped — check why and continue it." });
+assert.equal(actOf(null, null, { status: 'running' }, 'x'), null); // doing
 assert.equal(act(open({ ready: true }), { status: 'running' }), null); // doing
 assert.equal(act(open({ reviewers: ['Ann'] }), null), null); // waiting on review
 assert.equal(act({ state: 'merged' }, null), null);
@@ -246,7 +246,7 @@ const gated = workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], 
 assert.equal(gated[0].gate.verdict, 'fix first');
 // approved + CI green but the gate warns and 3 threads are open: not ready, no merge, Next names the gate
 const notReady = workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: runs, agents: [] }], () => open({ ready: true, ci: 'success', replied: 3, sha: 'abc' }), 0, new Map())[0];
-assert.deepEqual([notReady.column, notReady.stageLabel, notReady.next, notReady.action.label], ['review', 'Approved', 'Gate not passed for the latest commit — run review-gate', 'Run gate']);
+assert.deepEqual([notReady.column, notReady.stageLabel, notReady.next, notReady.action.label], ['review', 'Review', 'Gate not passed for the latest commit — run review-gate', 'Run gate']);
 // gate passed for the head: the open threads are the blocker, with no button; with none open it is ready
 const passed = [{ ...runs[1], verdict: 'ready', commit: 'abc1234' }];
 const withGate = pr => workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: passed, agents: [] }], () => open({ ready: true, sha: 'abc1234ff', branch: 'kjn-gate', ...pr }), 0, new Map())[0];

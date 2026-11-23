@@ -45,7 +45,7 @@ export { addUsage, readUsage, formatDuration, formatTokens } from './server/usag
 export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, stepOf, status, lastActivity, summarize, sentSummaries } from './server/sessions.mjs';
 export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments, signedIn, me, repoOfUrl, swrEntry, swr, cached, refreshAll, refreshInfo } from './server/forge.mjs';
 export {
-    column, gateFor, toGate, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf, itemUpdated
+    gateFor, toGate, rowOf, sameRepo, worksOnMr, requestFor, workItems, milestoneOf, itemUpdated
 } from './server/items.mjs';
 export { reviewRows } from './server/reviews.mjs';
 export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones, mineView } from './server/milestones.mjs';

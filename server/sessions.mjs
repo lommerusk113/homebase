@@ -661,18 +661,18 @@ async function itemsOf(out) {
     const comments = new Map([...urls].filter(u => states.get(u)?.state === 'open')
         .map(u => [u, swrEntry(`comments:${u}`, PR_TTL_MS, () => fetchComments(u)).value ?? null]));
 
-    const items = workItems(out, u => withThreads(states.get(u) ?? null, comments.get(u)), Date.now(), undefined, seeded);
+    // a failed lookup: the MR state's error, else the comments' (the `unknown` row kind says it in its text)
+    const errorOf = (url, project) => {
+        const commentsError = problemText(swr.get(`comments:${url}`)?.error, forgeWords(project, url).cli);
+        return prError(url) ?? (commentsError && `comments: ${commentsError}`);
+    };
+    const items = workItems(out, u => withThreads(states.get(u) ?? null, comments.get(u)), Date.now(), undefined, seeded, undefined, errorOf);
     for (const it of items) {
         // only an already fetched milestone list; /api/milestones fills it for the projects on the board
         it.milestone = milestoneOf(it.prState, swr.get(`ms:${it.project}`)?.value ?? []);
         it.comments = comments.get(it.pr) ?? null;
         // a failed lookup: without any state the row says why; with an older one it is flagged stale
-        const w = forgeWords(it.project, it.pr);
-        const commentsError = it.pr && problemText(swr.get(`comments:${it.pr}`)?.error, w.cli);
-        it.forgeError = it.pr ? prError(it.pr) ?? (commentsError && `comments: ${commentsError}`) : null;
-        if (it.forgeError && !it.prState && it.column === 'unknown') {
-            it.next = `Couldn't check the ${w.mr}: ${it.forgeError}`;
-        }
+        it.forgeError = it.pr ? errorOf(it.pr, it.project) : null;
     }
     // each project's forge state, on its sessions: the page says once when the forge can't be reached, and how old its data is
     for (const project of new Set(out.map(s => s.project))) {

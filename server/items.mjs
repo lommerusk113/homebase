@@ -6,29 +6,6 @@ import { canned } from '../web/src/lib/canned.ts';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
-export function column(status, prState, hasPr) {
-
-    if (status === 'working') {
-        return 'doing';
-    }
-    if (prState?.state === 'merged' || prState?.state === 'closed') {
-        return prState.state === 'merged' ? 'done' : 'closed';
-    }
-    // review comments, a failing pipeline, a needed rebase or a draft (not reviewable yet; once its pipeline is through) wait on
-    // you (each gets its rowAction button), not on a reviewer
-    if (prState?.changes || prState?.ci === 'failing' || prState?.blocked === 'conflict' || prState?.blocked === 'rebase' || (prState?.draft && prState.ci !== 'running')) {
-        return 'needs-you';
-    }
-    if (prState?.ready) {
-        return 'ready';
-    }
-    if (hasPr) {
-        return prState ? 'review' : 'unknown'; // no answer from the forge at all: not known to be in review
-    }
-
-    return status === 'waiting' ? 'needs-you' : 'idle';
-}
-
 // The newest gate run that names this MR by URL, !N / #N, or its branch.
 export function gateFor(runs, url, branch) {
 
@@ -53,11 +30,11 @@ export function toGate(run, sha, heads = new Map()) {
     return { verdict: run.verdict, at: run.at, tldr: run.tldr, commit: run.commit, stale: !!(sha && checked && !sha.startsWith(checked) && !checked.startsWith(sha)) };
 }
 
-// The left side's lifecycle: agent stages first, then MR states.
+// A row's stage in LIFECYCLE: agent stages first, then MR states.
 const LIFECYCLE = ['Implement', 'Verify', 'Review', 'Approved', 'Merged'];
 const VERB = ['exploring', 'implementing', 'verifying', 'shipping', 'finishing'];
 
-export function lifecycle(pr, prState, agent) {
+function stageOf(pr, prState, agent) {
 
     if (prState?.state === 'merged' || prState?.state === 'closed') {
         return 4;
@@ -72,51 +49,9 @@ export function lifecycle(pr, prState, agent) {
 // Last activity: the newest of the agent's, the link's and the MR's own update (forge-seeded MRs have no agent or link time); 0 when none.
 export const itemUpdated = (agent, linkedAt, prState) => Math.max(agent?.updated ?? 0, linkedAt ?? 0, prState?.updatedAt ?? 0);
 
-export function itemColumn(prState, agent, hasPr) {
-
-    if (prState?.state === 'merged' || prState?.state === 'closed') {
-        return prState.state === 'merged' ? 'done' : 'closed';
-    }
-    if (agent?.status === 'running') {
-        return 'doing';
-    }
-    if (agent?.status === 'stopped') {
-        return 'needs-you';
-    }
-
-    return !hasPr && agent?.status === 'done' ? 'finished' : column('idle', prState, hasPr);
-}
-
 const BLOCKED_STEP = { conflict: 'Merge conflicts — rebase it', rebase: 'Needs a rebase onto its target', blocked: 'Blocked by another MR', checks: 'Waiting for external status checks' }; // blocked and checks are GitLab's
 
 const clock = ms => (ms ? new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '');
-
-// What has to happen next for a work item, as one deterministic line. mr: the forge's word for it (forgeWords).
-export function nextStep(prState, agent, mr = 'MR') {
-
-    if (prState?.state === 'merged') {
-        return 'Merged';
-    }
-    if (prState?.state === 'closed') {
-        return 'Closed without merging';
-    }
-    if (agent?.status === 'running') {
-        return agent.step ? agent.step : `${agent.description} is ${VERB[agent.stage] ?? 'working'}…`;
-    }
-    if (agent?.status === 'stopped') {
-        const why = { 'api-error': 'API error', 'rate-limit': 'rate limit hit', interrupted: 'interrupted' }[agent.stopReason];
-        const at = clock(agent.updated);
-
-        return why ? `Helper stopped: ${why}${at ? ` at ${at}` : ''} — Continue resumes it` : 'Agent stopped — check the chat';
-    }
-    if (agent?.status === 'done' && agent.outcome && agent.stopReason !== 'killed') {
-        const at = clock(agent.updated);
-        const then = mrNext(prState, mr);
-
-        return `Helper finished: ${agent.outcome.replace(/[.!]$/, '')}${at ? ` (${at})` : ''}${then.startsWith('Open the ') ? '' : ` · ${then}`}`;
-    }
-    return mrNext(prState, mr);
-}
 
 // The MR's own next step (no agent): review comments, a failing pipeline and conflicts first, then what blocks the merge.
 function mrNext(prState, mr) {
@@ -190,58 +125,6 @@ function reviewComments(prState) {
     return null;
 }
 
-// The one-click command for a work item's row, as { label, message } typed into its session (the texts: web/src/lib/canned.ts), or null when nothing is on you.
-export function rowAction(pr, prState, agent, title) {
-
-    // same order as nextStep: a merged/closed MR, then a running or stopped agent, then what the MR asks for
-    if (agent?.status === 'running' || prState?.state === 'merged' || prState?.state === 'closed') {
-        return null;
-    }
-    if (agent?.status === 'stopped') {
-        return canned('continue', title);
-    }
-    if (!pr || prState?.state !== 'open') {
-        return null;
-    }
-
-    const ref = `${mrRef(pr)} (${pr})`;
-    if (prState.changes) {
-        return canned('fix', ref);
-    }
-    if (prState.ci === 'failing') {
-        return canned('pipeline', ref);
-    }
-    if (prState.blocked === 'conflict' || prState.blocked === 'rebase') {
-        return canned('rebase', ref);
-    }
-    if (prState.blocked) {
-        return null; // another MR or an external check, nothing to type
-    }
-    if (prState.notReady === GATE_STEP) {
-        return canned('gate', ref);
-    }
-    if (prState.notReady) {
-        return null; // open threads: the reviewer resolves them
-    }
-    if (prState.replied && !prState.ready) {
-        return null; // every open thread was last answered by me: the reviewer resolves them, unless GitLab already allows the merge
-    }
-    if (prState.ci === 'running') {
-        return null;
-    }
-    if (prState.draft) {
-        return canned('ready', ref);
-    }
-    if (prState.ready) {
-        return canned('merge', ref);
-    }
-    if (!prState.reviewers?.length && !prState.draft) {
-        return canned('review', ref);
-    }
-
-    return null;
-}
-
 // One kind per row, from the same inputs the old chains read; KINDS says what each kind shows. ps: the MR state after demote().
 // Order matters: an MR's first blocker wins, as in rowAction.
 export function deriveKind(ps, agent, hasPr, requested = false) {
@@ -297,13 +180,13 @@ const silentText = c => {
     const m = c.agent.updated ? Math.max(1, Math.round((c.now - c.agent.updated) / 60_000)) : null;
     return m ? `No output for ${m}m — may still be working · Continue nudges it` : 'No recent output — may still be working · Continue nudges it';
 };
-const baseStage = c => lifecycle(c.pr, c.ps, c.agent);
+const baseStage = c => stageOf(c.pr, c.ps, c.agent);
 const noButton = () => null;
-const mrKind = (column, action = noButton) => ({ column, action, next: c => mrNext(c.ps, c.mr), stage: baseStage });
+const mrKind = (column, action = noButton) => ({ column, action: c => (c.pr ? action(c) : null), next: c => mrNext(c.ps, c.mr), stage: baseStage });
 const agentKind = (column, next, action = noButton) => ({ column, next, action, stage: baseStage });
 
 // What each kind of row shows: column (its group; see columnOf), next (its text), action (the canned send of its button, or null)
-// and stage (its lifecycle index). c: { ps, agent, pr, title, mr, aMr, now }.
+// and stage (its lifecycle index). c: { ps, agent, pr, title, mr, aMr, now, error }, error being why the forge couldn't be asked.
 export const KINDS = {
     merged: { column: 'done', next: () => 'Merged', action: noButton, stage: () => 4 },
     abandoned: { column: 'closed', next: () => 'Closed without merging', action: noButton, stage: () => 4 },
@@ -317,7 +200,7 @@ export const KINDS = {
     silent: agentKind('needs-you', silentText, continueIt),
     finished: agentKind('finished', c => `Finished without ${c.aMr}`),
     idle: mrKind('idle'),
-    unknown: mrKind('unknown'),
+    unknown: { ...mrKind('unknown'), next: c => (c.error ? `Couldn't check the ${c.mr}: ${c.error}` : mrNext(null, c.mr)) },
     changes: mrKind('needs-you', c => canned('fix', mrRefOf(c))),
     failing: mrKind('needs-you', c => canned('pipeline', mrRefOf(c))),
     conflict: mrKind('needs-you', c => canned('rebase', mrRefOf(c))),
@@ -341,11 +224,11 @@ export function columnOf(kind, ps) {
 }
 
 // A row's column, next text, action and stage from its kind. A finished helper's outcome leads the text of an MR row.
-export function rowOf(ps, agent, { pr = null, title = null, mr = 'MR', aMr = 'a MR', requested = false, now = Date.now() } = {}) {
+export function rowOf(ps, agent, { pr = null, title = null, mr = 'MR', aMr = 'a MR', requested = false, now = Date.now(), error = null } = {}) {
 
     const { kind, reason } = deriveKind(ps, agent, !!pr, requested);
     const k = KINDS[kind];
-    const c = { ps, agent, pr, title, mr, aMr, now };
+    const c = { ps, agent, pr, title, mr, aMr, now, error };
     let next = k.next(c);
     if (agent?.status === 'done' && agent.outcome && agent.stopReason !== 'killed' && k.column !== 'finished' && !['merged', 'abandoned', 'requested'].includes(kind)) {
         const at = clock(agent.updated);
@@ -523,7 +406,7 @@ function isDismissed(x) {
 
 // One row per work item, newest agent first, with its column, stage, next step, action, gate badge and usage.
 // Without the rows the user dismissed.
-export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads, seeds = [], reviews = reviewers) {
+export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads, seeds = [], reviews = reviewers, errorOf = () => null) {
 
     // a reviewer chat is not work on the MR it reviews: it never becomes a row or its working chat
     const reviewerIds = new Set([...reviews.values()].map(r => r.id));
@@ -536,13 +419,12 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const gates = it.pr ? sessions.filter(s => s.project === it.project).flatMap(s => [...s.gates ?? [], ...(s.agents ?? []).flatMap(a => a.gates ?? [])]) : [];
         const gate = it.pr ? toGate(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null;
         const ps = demote(prState, gate);
-        const stage = lifecycle(it.pr, ps, agent);
         // asked in the master's open turn but no agent runs for it yet: show it as in progress, without the button
         const requested = it.pr && agent?.status !== 'running' && prState?.state !== 'merged' && prState?.state !== 'closed'
             ? requestFor(sessions, it.project, it.pr, prState) : null;
-        const col = requested ? 'doing' : itemColumn(ps, agent, !!it.pr);
         const title = prState?.title ?? agent?.description ?? it.pr;
         const w = forgeWords(it.project, it.pr);
+        const row = rowOf(ps, agent, { pr: it.pr, title, mr: w.mr, aMr: w.aMr, requested: !!requested, now, error: it.pr ? errorOf(it.pr, it.project) : null });
 
         return {
             key: it.key,
@@ -552,9 +434,10 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             firstTitle: prState?.title ? null : agent?.firstDescription ?? null,
             pr: it.pr,
             prState,
-            column: col,
-            stage,
-            stageLabel: prState?.state === 'closed' ? 'Closed' : LIFECYCLE[stage],
+            state: row.state,
+            column: row.column,
+            stage: row.stage,
+            stageLabel: prState?.state === 'closed' ? 'Closed' : LIFECYCLE[row.stage],
             agentStatus: agent?.status ?? null,
             agentId: agent && !agent.stored ? agent.id : null, // "Step in" opens its transcript; one that scrolled out of every tail has none
             agentDescription: agent?.description ?? null,
@@ -568,8 +451,8 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             agentLinks: agents.filter(a => a.status === 'done').map(a => ({ id: a.id, description: a.description, finished: a.updated })), // for the store; dropped before the response
             activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
-            next: requested ? 'Claude is on it…' : col === 'finished' ? `Finished without ${w.aMr}` : nextStep(ps, agent, w.mr),
-            action: requested ? null : rowAction(it.pr, ps, agent, title) ?? (col === 'review' ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now) : null),
+            next: row.next,
+            action: row.action ?? (row.column === 'review' ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now) : null),
             checks: sessions.find(s => s.id === (agent?.sessionId ?? it.linkSession))?.checks ?? null,
             gate,
             ...agentUsage(agents, now)

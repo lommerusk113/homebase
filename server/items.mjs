@@ -332,7 +332,25 @@ function agentUsage(agents, now) {
     };
 }
 
+// Rows the user dismissed (server/dismissed.mjs keeps them on disk): item key -> when.
+export const dismissed = new Map();
+// A dismissed row stays away until its helper moves again (a new message resumed it); then it is back for good.
+function isDismissed(x) {
+
+    const at = dismissed.get(x.key);
+    if (at == null || x.pr) {
+        return false;
+    }
+    if (x.agentStatus === 'running' || x.updated > at) {
+        dismissed.delete(x.key);
+        return false;
+    }
+
+    return true;
+}
+
 // One row per work item, newest agent first, with its column, stage, next step, action, gate badge and usage.
+// Without the rows the user dismissed.
 export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads, seeds = []) {
 
     return itemGroups(sessions, prOf, now, seeds).map(it => {
@@ -376,7 +394,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             gate: it.pr ? toGate(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
             ...agentUsage(agents, now)
         };
-    });
+    }).filter(x => !isDismissed(x));
 }
 
 const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

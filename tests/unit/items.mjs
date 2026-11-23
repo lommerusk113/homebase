@@ -240,3 +240,48 @@ assert.equal(sameRepo('https://gitlab.com/tritt/accounting/pracsys/-/merge_reque
 assert.equal(sameRepo('https://gitlab.com/tritt/accounting/pracsys/-/merge_requests/1590', 'homebase'), false);
 assert.equal(sameRepo('https://github.com/lommerusk113/homebase/pull/3', 'homebase'), true);
 console.log('ok same repo');
+
+// a dismissed row without an MR stays away, on disk too, until its helper moves again; an MR's row is never dismissed
+{
+    const { loadDismissed, dismiss } = await import('../../server/dismissed.mjs');
+    const dir = join(mkdtempSync(join(tmpdir(), 'hb-dismissed-')), 'homebase');
+    const rows = (a, prs = []) => workItems([{ id: 's', project: 'p', prs, agents: [a] }], () => open(), 2000, new Map()).map(i => i.key);
+    const stopped = agent('helper-1', 1000, { status: 'stopped' });
+    assert.deepEqual(rows(stopped), ['helper-1']);
+
+    for (const key of [mr(5), '../x', '', null, 'a b', 'x'.repeat(129)]) {
+        await assert.rejects(dismiss(dir, key), e => e.status === 400, String(key));
+    }
+    assert.deepEqual(rows(stopped), ['helper-1'], 'a refused key dismisses nothing');
+
+    await dismiss(dir, 'helper-1', 1500);
+    assert.deepEqual(rows(stopped), [], 'gone');
+    assert.deepEqual(rows(agent('other', 1000, { status: 'stopped' })), ['other'], 'only that row');
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'dismissed.json'), 'utf8')), [['helper-1', 1500]]);
+    loadDismissed(join(dir, 'none'));
+    assert.deepEqual(rows(stopped), ['helper-1'], 'nothing saved there');
+    loadDismissed(dir);
+    assert.deepEqual(rows(stopped), [], 'another server start reads it back');
+
+    // a new message resumed it: back while it runs, and it stays once it stops again
+    assert.deepEqual(rows({ ...stopped, status: 'running', updated: 1600 }), ['helper-1']);
+    assert.deepEqual(rows({ ...stopped, updated: 1600 }), ['helper-1']);
+    await dismiss(dir, 'helper-1', 1700);
+    assert.deepEqual(rows({ ...stopped, updated: 1600 }), [], 'dismissed again');
+    assert.deepEqual(rows({ ...stopped, updated: 1800 }), ['helper-1'], 'moved since, without being seen running');
+
+    // a row with an MR is keyed by its URL, which is refused above; an agent id dismissed earlier doesn't hide its later MR row
+    await dismiss(dir, 'helper-1', 9999);
+    assert.deepEqual(rows({ ...stopped, prs: [mr(5)] }, [{ url: mr(5), at: 1 }]), [mr(5)]);
+
+    writeFileSync(join(dir, 'dismissed.json'), '[["helper-1", 99');
+    loadDismissed(dir);
+    assert.deepEqual(rows(stopped), ['helper-1'], 'nothing kept from a broken file');
+    for (let n = 0; n < 501; n++) {
+        await dismiss(dir, `h${n}`, n);
+    }
+    const saved = JSON.parse(readFileSync(join(dir, 'dismissed.json'), 'utf8'));
+    assert.deepEqual([saved.length, saved[0], saved.at(-1)], [500, ['h1', 1], ['h500', 500]], 'the oldest goes first');
+    loadDismissed(join(dir, 'none'));
+    console.log('ok dismissed rows');
+}

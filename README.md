@@ -25,7 +25,7 @@ Ctrl+C stops it and removes the temp folder.
 
 ## What you get
 
-* **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested", "Doing" and "In review", and the Issues tab shows the milestone's issues. Merge requests and pull requests come from `glab` and `gh`.
+* **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested", "Doing" and "In review", and the Issues tab shows the milestone's issues. Merge requests and pull requests come from `glab` and `gh`. A row with no MR or PR to act on (a helper that stopped or finished) has a Dismiss button, which puts it away on every device until that helper works again.
 * **A chat view.** The transcript of one session, with each reply collapsed to its `TLDR:` line; "Show more" opens the full reply.
 
   ![A chat with one reply opened and one collapsed](docs/screenshots/chat.png)
@@ -232,6 +232,7 @@ What Homebase stores, all in the Homebase dir:
 * `asking/<session>.json`: the hook's markers. The answer, the next tool (for a permission prompt), a new prompt or the end of the turn removes the marker; Homebase also ignores one the transcript has moved past, a permission prompt that was answered (Claude's input box is back on the chat's screen while the approved tool still runs), or one older than a day.
 * `tracked.json`: the projects on your board.
 * `handled.json`: the replies you marked as handled (the newest 500), as `<session>/<reply>` ids.
+* `dismissed.json`: the work rows you dismissed (the newest 500), as helper id and time; a row comes back when its helper works again.
 * `vapid.json` and `subscriptions.json`: the Web Push keys and subscriptions; this computer's browser and paired devices may subscribe.
 * `devices.json`: the paired devices (see [Use from your phone](#use-from-your-phone-tailscale)).
 

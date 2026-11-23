@@ -4440,3 +4440,12 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
     rmSync(home, { recursive: true, force: true });
     console.log('ok died baseline');
 }
+
+// a /clear-ed chat's rows move to its successor, through a chain of clears
+{
+    const { followClears } = await import('./server/sessions.mjs');
+    const items = [{ sessionId: 'a' }, { sessionId: 'x' }];
+    followClears(items, [{ id: 'a' }, { id: 'b', clearedFrom: 'a' }, { id: 'c', clearedFrom: 'b' }, { id: 'x' }]);
+    assert.deepEqual(items.map(i => i.sessionId), ['c', 'x']);
+    console.log('ok follow clears');
+}

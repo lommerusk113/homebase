@@ -638,9 +638,22 @@ async function itemsOf(out) {
     return items;
 }
 
+// An item of a /clear-ed chat moves to its successor (clearedFrom, followed to the end), so its button types into the live chat
+// (a send to the cleared one is refused, as its tmux now runs the successor).
+export function followClears(items, sessions) {
+
+    const next = new Map(sessions.filter(s => s.clearedFrom).map(s => [s.clearedFrom, s.id]));
+    for (const i of items) {
+        for (let hops = 0; next.has(i.sessionId) && hops < 50; hops++) {
+            i.sessionId = next.get(i.sessionId);
+        }
+    }
+}
+
 // Each session gets its items and subagent counts; its raw agents, gates and open prompts stay out of the response.
 function attachItems(out, items, now) {
 
+    followClears(items, out);
     for (const s of out) {
         s.items = items.filter(i => i.sessionId === s.id);
         s.subagents = { running: s.agents.filter(a => a.status === 'running').length, finished: s.agents.filter(a => a.status === 'done' && now - a.updated < FINISHED_MS).length };
@@ -730,8 +743,8 @@ export async function sessions() {
         s.unpushed = await unpushedOf(s.cwd);
     }));
 
+    await attachTmux(out, now, live); // first: it sets clearedFrom, which attachItems follows
     attachItems(out, await itemsOf(out), now);
-    await attachTmux(out, now, live);
 
     return out.sort(byActivity);
 }

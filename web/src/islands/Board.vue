@@ -3,7 +3,7 @@
 // #masters by renderBoard() (public/list.js); every redraw of the old page is a bump it follows.
 import { onBeforeUpdate, onMounted, onUpdated, provide, watchEffect } from 'vue';
 import { hooks, setWorkCount } from 'old/core.js';
-import { BoardGroupsKey, ChatRowsKey, CommentsKey, FoldsKey, ForgeNotesKey, ProjectKey, ReviewsKey, SelectionKey, SentMarksKey, WorkItemsKey } from '@/keys';
+import { BoardGroupsKey, ChatRowsKey, CommentsKey, FoldsKey, ForgeNotesKey, ProjectKey, ReviewsKey, SelectionKey, SentMarksKey, UnfoldKey, WorkItemsKey } from '@/keys';
 import { useProject } from '@/composables/useProject';
 import { useSentMarks } from '@/composables/useSentMarks';
 import { useWorkItems } from '@/composables/useWorkItems';
@@ -13,6 +13,7 @@ import { useChatRows } from '@/composables/useChatRows';
 import { useReviews } from '@/composables/useReviews';
 import { useFolds } from '@/composables/useFolds';
 import { useForgeNotes } from '@/composables/useForgeNotes';
+import { useUnfold } from '@/composables/useUnfold';
 import { useBoardGroups } from '@/composables/useBoardGroups';
 import Welcome from './Board/Welcome.vue';
 import ForgeNotes from './Board/ForgeNotes.vue';
@@ -35,6 +36,7 @@ function provideAll() {
     provide(ReviewsKey, reviews);
     provide(FoldsKey, folds);
     provide(ForgeNotesKey, useForgeNotes());
+    provide(UnfoldKey, useUnfold());
     provide(BoardGroupsKey, board);
 
     return board;

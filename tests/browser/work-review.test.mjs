@@ -49,12 +49,12 @@ export default {
         assert.deepEqual(out, [null, 1]);
     },
 
-    'an MR without a milestone that does not wait on you is hidden under a picked milestone': async ({ page, open }) => {
+    'an MR without a milestone is hidden under a picked milestone': async ({ page, open }) => {
         await open();
         await page.waitFor(`${row(MR(104))}`);
         const out = await page.ev(`(async () => {
             const core = await import('/core.js'), list = await import('/list.js');
-            const it = ${items}.find(i => i.pr && i.prState && i.milestone && !['needs-you', 'ready'].includes(i.column));
+            const it = ${items}.find(i => i.pr && i.prState && i.milestone);
             const shown = () => !!document.querySelector('#masters tr[data-key="' + it.key + '"]');
             const before = shown();
             it.milestone = null;
@@ -64,7 +64,7 @@ export default {
         assert.deepEqual(out, [true, false]);
     },
 
-    'a needs-you MR without a milestone stays under a picked milestone': async ({ page, open }) => {
+    'a needs-you MR without a milestone is hidden under a picked milestone too': async ({ page, open }) => {
         await open();
         await page.waitFor(`${row(MR(104))}`);
         const out = await page.ev(`(async () => {
@@ -73,7 +73,7 @@ export default {
             list.renderBoard();
             return !!document.querySelector('#masters tr[data-key="${MR(104)}"]');
         })()`);
-        assert.equal(out, true);
+        assert.equal(out, false);
     },
 
     'the no-response hint goes once the MR has another action': async ({ page, open }) => {

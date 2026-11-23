@@ -1132,8 +1132,8 @@ assert.equal(inMilestone(row('u', { id: 7, title: 'S' }), { id: 7 }), true);
 assert.equal(inMilestone(row('u', { id: 8, title: 'R' }), { id: 7 }), false);
 assert.equal(inMilestone(row('u', null), { id: 7 }), false); // an MR without a milestone is not in the picked one
 assert.equal(inMilestone({ pr: 'u', milestone: null, prState: null }, { id: 7 }), true); // not checked yet: milestone unknown, stays
-assert.equal(inMilestone({ ...row('u', { id: 8, title: 'R' }), column: 'needs-you' }, { id: 7 }), true);
-assert.equal(inMilestone({ ...row('u', { id: 8, title: 'R' }), column: 'ready' }, { id: 7 }), true);
+assert.equal(inMilestone({ ...row('u', { id: 8, title: 'R' }), column: 'needs-you' }, { id: 7 }), false); // waiting on you does not keep it
+assert.equal(inMilestone({ ...row('u', null), column: 'ready' }, { id: 7 }), false);
 assert.equal(inMilestone(row(null, null), { id: 7 }), true); // an agent without an MR stays
 assert.equal(inMilestone(row('u', null), null), true); // no milestone selected
 

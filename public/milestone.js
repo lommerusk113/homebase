@@ -9,10 +9,10 @@ const due = d => (d ? `due ${new Date(d + 'T00:00').toLocaleDateString(undefined
 
 // Whether a work item stays in the list for the selected milestone ({ id } or null): items with an MR of that
 // milestone, plus items without an MR (running or stopped agents), with an MR not checked yet (no prState, so its
-// milestone is unknown), or waiting on you (Needs you, Ready). An MR without a milestone is not in it. No selection keeps everything.
+// milestone is unknown). An MR of another milestone or none is hidden, even when it waits on you. No selection keeps everything.
 /** @param {WorkItem} item @param {{ id: number } | null} selected */
 export function inMilestone(item, selected) {
-    return !selected || !item.pr || !item.prState || item.column === 'needs-you' || item.column === 'ready' || item.milestone?.id === selected.id;
+    return !selected || !item.pr || !item.prState || item.milestone?.id === selected.id;
 }
 
 // Small tag for a work-item row whose MR belongs to a milestone (item.milestone { id, title } comes from the server).

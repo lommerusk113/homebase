@@ -230,8 +230,8 @@ function itemRows(x) {
     const ci = ciPill(x.prState?.pipeline); // shown only where the board is too narrow for the MR column (styles.css)
     ci[0]?.classList.add('ci-narrow');
     what.append(...ci, name, next);
-    // a row in the picked milestone gets no tag (it would repeat the header pill); one kept from another (it waits on you) does
-    if (x.milestone && x.milestone.id !== hooks.milestoneId()) {
+    // with a milestone picked every row is in it, so the tag would only repeat the header pill
+    if (x.milestone && !hooks.milestoneId()) {
         name.prepend(milestoneTag(x));
     }
     if (state.project === 'all') {

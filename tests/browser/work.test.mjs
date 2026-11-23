@@ -208,6 +208,19 @@ export default {
         assert.equal(await page.ev(`localStorage.getItem('fold:finished:alpha')`), 'open');
     },
 
+    'a reload never paints a closed Recently finished with its rows showing': async ({ page, open }) => {
+        await open();
+        await page.waitFor(`document.querySelector('#masters .group.g-finished')`, { what: 'the finished group' });
+        // from the first frame of the reloaded page, note every frame where a closed finished group shows a row (also before wa-details is defined)
+        await page.cmd('Page.addScriptToEvaluateOnNewDocument', { source: `window.__shown = 0;
+            const tick = () => { const g = document.querySelector('.group.g-finished'); if (g && !g.open && !g.hasAttribute('open') && [...g.querySelectorAll('tr')].some(r => r.checkVisibility())) window.__shown++; requestAnimationFrame(tick); };
+            requestAnimationFrame(tick);` });
+        await page.cmd('Page.reload', {});
+        await page.waitFor(`customElements.get('wa-details') && document.querySelector('#masters .group.g-finished')`, { what: 'the finished group after the reload' });
+        await page.ev(`new Promise(r => setTimeout(r, 500))`);
+        assert.equal(await page.ev(`window.__shown`), 0, 'frames with a closed group showing rows');
+    },
+
     'In review folds per project when chosen, with its count': async ({ page, open }) => {
         await open({ 'fold:review:alpha': 'closed' });
         await page.waitFor(`document.querySelector('#masters .group.g-review')`, { what: 'the review group' });

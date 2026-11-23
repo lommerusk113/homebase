@@ -541,6 +541,8 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .g-head { display:flex; align-items:center; gap:8px; margin:0; padding:8px var(--sp-4); font-size:var(--fs-s); font-weight:600; color:var(--fg); }
 .group.g-finished { opacity:.7; }
 wa-details.group { --show-duration:0s; --hide-duration:0s; }
+/* before wa-details is defined (its loader is lazy) a closed group would show its rows; hide them as the defined element will */
+wa-details.group:not(:defined):not([open]) > :not([slot="summary"]) { display:none; }
 wa-details.group::part(header) { padding:0 16px 0 0; }
 wa-details.group::part(content) { padding:0; }
 wa-details.group::part(icon) { color:var(--muted); font-size:var(--fs-s); }

@@ -103,7 +103,7 @@ function glab(path) {
 
 // Personal repos answer only to the keychain token, and never to the work account's GITHUB_TOKEN, as on GitHub.
 const personal = () => process.env.GH_TOKEN === PERSONAL_TOKEN && !process.env.GITHUB_TOKEN;
-const trackerPr = { state: 'OPEN', title: 'Fix the tracker sync', body: '', reviewDecision: 'APPROVED', isDraft: false, headRefName: 'tracker-sync', baseRefName: 'main', milestone: null, reviewRequests: [], latestReviews: [], statusCheckRollup: [{ conclusion: 'SUCCESS', completedAt: ago(300) }], headRefOid: 'ttt9999' };
+const trackerPr = { state: 'OPEN', title: 'Fix the tracker sync', body: '', reviewDecision: 'APPROVED', isDraft: false, headRefName: 'tracker-sync', baseRefName: 'main', milestone: null, reviewRequests: [], latestReviews: [], statusCheckRollup: [{ conclusion: 'SUCCESS', completedAt: ago(300) }], headRefOid: 'abc9999' };
 
 function gh(rest) {
 

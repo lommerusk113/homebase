@@ -78,6 +78,20 @@ import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from
         release = () => (fail ? reject(new Error('boom')) : resolve(n));
     });
     const get = shared(build, 1000, () => clock);
+    // stale(): a build begun before it is neither reused nor cached
+    {
+        const old = get();
+        const oldRelease = release;
+        get.stale();
+        const fresh = get();
+        assert.equal(builds, 2, 'stale() starts a fresh build');
+        oldRelease();
+        release();
+        assert.deepEqual([await old, await fresh], [1, 2]);
+        assert.equal(await get(), 2, 'the old build did not take the cache');
+        get.stale();
+        builds = 0;
+    }
     const [a, b] = [get(), get()];
     release();
     assert.deepEqual(await Promise.all([a, b]), [1, 1], 'concurrent callers share one build');

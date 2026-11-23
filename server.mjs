@@ -237,6 +237,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             // A row without an MR (a stopped or finished helper) the user is done with: hidden until that helper moves again
             if (isPost('/api/dismissed')) {
                 await dismiss(DATA_DIR, url.searchParams.get('key'));
+                polledSessions.stale();
                 return res.end('ok');
             }
             if (isPost('/api/rules/seen')) {

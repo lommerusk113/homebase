@@ -761,23 +761,38 @@ export async function sessions() {
 // One build shared by the callers that arrive while it runs, its result reused for ttlMs: a failed build is not kept.
 export function shared(build, ttlMs = 1000, now = Date.now) {
 
-    let flight = null, at = -Infinity, last;
+    let flight = null, at = -Infinity, last, gen = 0;
 
-    return () => {
+    const get = () => {
         if (now() - at < ttlMs) {
             return Promise.resolve(last);
         }
-        flight ??= build().then(value => {
-            last = value;
-            at = now();
+        if (!flight) {
+            const mine = gen;
+            flight = build().then(value => {
+                if (mine === gen) { // not begun before a stale(): its list may miss the write
+                    last = value;
+                    at = now();
+                }
 
-            return value;
-        }).finally(() => {
-            flight = null;
-        });
+                return value;
+            }).finally(() => {
+                if (mine === gen) {
+                    flight = null;
+                }
+            });
+        }
 
         return flight;
     };
+    // after a write the list reflects (a dismiss): the next call builds afresh, not from the cache or a build begun before
+    get.stale = () => {
+        gen++;
+        at = -Infinity;
+        flight = null;
+    };
+
+    return get;
 }
 
 // sessions() for the polls (every open page asks every 1.5s, the push watcher every 5s): at most one build at a time, about one a second.

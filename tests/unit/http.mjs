@@ -218,6 +218,7 @@ console.log('ok refreshAll, cached');
         const subsFile = join(rs.dir, 'subscriptions.json');
         assert.equal(JSON.parse(readFileSync(subsFile, 'utf8')).length, 1);
         assert.equal((await remote({ path: '/api/server/reload', method: 'POST', headers: { cookie, 'x-homebase-token': token, 'x-codetool': '1' } })).status, 403, 'a phone cannot reload the server');
+        assert.equal((await remote({ path: '/api/checks?project=x', method: 'POST', body: '{"commands":["true"]}', headers: { cookie, 'x-homebase-token': token, 'x-codetool': '1' } })).status, 403, 'a phone cannot set check commands');
         // revoke on the Mac: the device is back to the pair page
         const [dev] = JSON.parse((await call(rs.port, { path: '/api/pair/devices', headers: { 'x-homebase-token': local } })).body);
         assert.equal(dev.name, 'Phone');

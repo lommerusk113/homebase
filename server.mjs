@@ -250,6 +250,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return json({ commands: readChecks(url.searchParams.get('project'), DATA_DIR) });
             }
             if (isPost('/api/checks')) {
+                if (remote) {
+                    return deny(403, 'set check commands from the Mac'); // they run as shell commands: a paired phone must not set them
+                }
                 return json(saveChecks(url.searchParams.get('project'), await readBody(req, 16 * 1024), DATA_DIR));
             }
             // A reply that wrongly says "needs you", marked as handled; an open question or permission prompt is not one

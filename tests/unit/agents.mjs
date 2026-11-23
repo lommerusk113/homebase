@@ -60,6 +60,7 @@ assert.equal(summarizeAgent({ finished: false }, [
         [['a1', 'Also rebase'], ['a2', 'Docs']]);
 }
 assert.equal(summarizeAgent({ finished: false }, [], 600_000).status, 'stopped');
+assert.equal(summarizeAgent({ finished: false }, [], 600_000).stopReason, 'silent', 'a quiet-time guess says so');
 const MIN = 60_000;
 const call = (...ids) => ({ type: 'assistant', message: { content: ids.map(id => ({ type: 'tool_use', id, name: 'Bash' })) } });
 const result = id => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id }] } });
@@ -148,3 +149,4 @@ console.log('ok agents');
     assert.deepEqual(keys, ['kept']);
     console.log('ok stopped by the chat: no row');
 }
+

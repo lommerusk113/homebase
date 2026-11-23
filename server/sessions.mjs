@@ -238,7 +238,8 @@ export function agentStatus(meta, entries, ageMs) {
     }
     const limit = pending.size ? AGENT_TOOL_MS : AGENT_THINK_MS;
 
-    return { status: ageMs < limit ? 'running' : 'stopped' };
+    // a guess: nothing says it stopped, it has only been quiet for too long
+    return ageMs < limit ? { status: 'running' } : { status: 'stopped', stopReason: 'silent' };
 }
 
 // A tool call as what the agent is doing, in plain words: "running npm test", "editing login.js".

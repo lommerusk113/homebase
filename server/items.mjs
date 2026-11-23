@@ -289,13 +289,18 @@ export function deriveKind(ps, agent, hasPr, requested = false) {
     return { kind, reason: 'the MR state' };
 }
 
-const STOPPED = new Set(['api-error', 'rate-limit', 'interrupted']);
+const STOPPED = new Set(['api-error', 'rate-limit', 'interrupted', 'closed', 'silent']);
 
 const mrRefOf = c => `${mrRef(c.pr)} (${c.pr})`;
 const continueIt = c => canned('continue', c.title);
 const stoppedText = why => c => {
     const at = clock(c.agent.updated);
     return `Helper stopped: ${why}${at ? ` at ${at}` : ''} — Continue resumes it`;
+};
+// A guess, not a signal: the helper may still be working.
+const silentText = c => {
+    const m = c.agent.updated ? Math.max(1, Math.round((c.now - c.agent.updated) / 60_000)) : null;
+    return m ? `No output for ${m}m — may still be working · Continue nudges it` : 'No recent output — may still be working · Continue nudges it';
 };
 const baseStage = c => lifecycle(c.pr, c.ps, c.agent);
 const noButton = () => null;
@@ -313,6 +318,8 @@ export const KINDS = {
     'api-error': agentKind('needs-you', stoppedText('API error'), continueIt),
     'rate-limit': agentKind('needs-you', stoppedText('rate limit hit'), continueIt),
     interrupted: agentKind('needs-you', stoppedText('interrupted'), continueIt),
+    closed: agentKind('needs-you', () => 'Helper stopped: its chat was closed — Continue resumes it', continueIt),
+    silent: agentKind('needs-you', silentText, continueIt),
     finished: agentKind('finished', c => `Finished without ${c.aMr}`),
     idle: mrKind('idle'),
     unknown: mrKind('unknown'),

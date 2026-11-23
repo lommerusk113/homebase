@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { nextStep, workItems, tmuxArgs, repoName, rowAction, gateRuns, gateFor, toGate, sameRepo } from '../../server.mjs';
+import { rowOf } from '../../server/items.mjs';
 import { loadStore, record, seeds, flush } from '../../server/store.mjs';
 import { open, mr, agent } from './helpers.mjs';
 
@@ -31,6 +32,12 @@ const at = new Date(Date.UTC(2026, 0, 1, 12, 0)).getTime();
 const hm = new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 assert.equal(nextStep(null, { status: 'stopped', stopReason: 'api-error', updated: at }), `Helper stopped: API error at ${hm} — Continue resumes it`);
 assert.equal(nextStep(null, { status: 'stopped', stopReason: 'rate-limit', updated: at }), `Helper stopped: rate limit hit at ${hm} — Continue resumes it`);
+{
+    const next = (stopReason, updated) => rowOf(null, { status: 'stopped', stopReason, updated }, { title: 'T', now: 11 * 60_000 }).next;
+    assert.equal(next('closed'), 'Helper stopped: its chat was closed — Continue resumes it');
+    assert.equal(next('silent', 60_000), 'No output for 10m — may still be working · Continue nudges it');
+    assert.match(next('api-error', at), /^Helper stopped: API error/);
+}
 assert.equal(nextStep(null, { status: 'done', outcome: 'Nothing left to push.', updated: at }).startsWith(`Helper finished: Nothing left to push (${hm})`), true);
 assert.equal(nextStep(open({ ready: true }), { status: 'done', outcome: 'Nothing left to push.', updated: at }).startsWith(`Helper finished: Nothing left to push (${hm}) · `), true);
 assert.equal(nextStep(open({ changes: true, reviewers: ['Ann'] }), null), 'Address review comments from Ann');

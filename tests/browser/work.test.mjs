@@ -220,12 +220,13 @@ export default {
 
     'Dismiss puts away a row without an MR on every device, until its helper works again': async ({ page, open, IDS, homebase, answerPosts }) => {
         const file = join(dirname(homebase), 'home', '.claude', 'projects', '-fx-alpha', IDS.master, 'subagents', 'agent-stopped.jsonl');
-        const was = statSync(file).mtime, button = `${row('agent-stopped')}?.querySelector('.dismiss-btn')`;
+        const was = statSync(file).mtime, button = `${row('agent-stopped')}?.querySelector('wa-button[aria-label="Dismiss"]')`;
         await open();
         await page.waitFor(`${button} && ${row(MR(104))}`, { what: 'the stopped helper with its Dismiss button' });
-        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters .dismiss-btn')].map(b => b.closest('tr').dataset.key)`), ['agent-stopped', 'agent-notes'],
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters wa-button[aria-label="Dismiss"]')].map(b => b.closest('tr').dataset.key)`), ['agent-stopped', 'agent-notes'],
             'only on the rows with no MR whose helper is not working: the stopped one and the finished one');
         assert.ok(await page.ev(`(() => { const b = ${button}.getBoundingClientRect(), td = ${button}.closest('td').getBoundingClientRect(); return b.width > 0 && b.left >= td.left && b.right <= td.right; })()`), 'it fits its cell');
+        assert.equal(await page.ev(`${button}.title || ${button}.getAttribute('title')`), 'Dismiss', 'its tooltip');
         try {
             page.route = q => (q.url.includes('/api/dismissed') ? null : answerPosts(q)); // this POST only writes the fixture's dismissed.json
             await page.clickOn(button);

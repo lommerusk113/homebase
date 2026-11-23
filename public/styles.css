@@ -561,7 +561,8 @@ wa-details.group::part(icon) { color:var(--muted); font-size:var(--fs-s); }
 .rows tr { cursor:pointer; }
 .rows tr:hover { background:var(--hover); }
 .rows tr.sel { background:var(--accent-bg); }
-.rows .what { padding-left:16px; }
+.rows .what { padding-left:40px; position:relative; } /* the gutter holds the dismiss X, on every row, so titles line up */
+.rows .what wa-button.dismiss-btn { position:absolute; left:6px; top:50%; transform:translateY(-50%); }
 .rows .what b, .rows .what .next { display:block; overflow:hidden; text-overflow:ellipsis; }
 .rows .what b { font-weight:500; }
 .rows .what .next { color:var(--muted); font-size:var(--fs-s); }
@@ -827,7 +828,8 @@ wa-details[open] .g-note { display:none; }
   .rows tr:first-child { border-top:0; }
   .rows td { border-top:0; padding:4px 8px 10px; }
   .rows .what, .rows td[colspan] { grid-column:1 / -1; }
-  .rows .what { padding:10px 14px 2px; }
+  .rows .what { padding:10px 14px 2px 44px; }
+  .rows .what wa-button.dismiss-btn { --wa-form-control-height:36px; left:4px; top:4px; transform:none; }
   .rows .prog { width:auto; padding-left:14px; }
   .rows .pr, .rows .br { display:none; }
   .rows tr.asking b { white-space:normal; } /* the question wraps: as a flex row it has no ellipsis to end on */

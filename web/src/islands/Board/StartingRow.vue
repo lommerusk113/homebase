@@ -11,7 +11,7 @@ const s = toRef(() => byId.value.get(props.sid)!);
 
 <template>
     <tr class="starting" :class="{ viewing: viewing(sid) }" :data-key="`starting:${sid}:${issue}`" @click="focus(sid)">
-        <td class="what" colspan="5">
+        <td class="what">
             <b><span class="pulse" />{{ ` #${issue} · starting…` }}</b>
             <small class="next">{{ s.status === 'working' && s.now?.includes(`#${issue}`) ? 'The chat session is on it' : 'Queued in the chat session' }}</small>
         </td>

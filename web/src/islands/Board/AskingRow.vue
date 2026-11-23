@@ -28,7 +28,7 @@ const label = computed(() => (asks.value != null
 
 <template>
     <tr class="asking" :class="{ viewing: viewing(sid) }" :data-key="`asking:${sid}`" role="button" :aria-label="label" @click="focus(sid)">
-        <td class="what" colspan="5">
+        <td class="what">
             <button v-if="replyOf(s)" type="button" class="need-done" title="Mark as handled" aria-label="Mark as handled" @click.stop="markDone(s)">✓</button>
             <template v-if="asks != null">
                 <b><span class="pulse" />{{ ' ' }}<NeedsYou />{{ ' ' }}<bdi>{{ asks }}</bdi></b>

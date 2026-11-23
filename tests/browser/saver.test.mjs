@@ -9,6 +9,7 @@ export default {
     'the Token saver switch is off at first, flips on, and stays on after a reload': async ({ page, open, base, answerPosts, homebase }) => {
         const file = join(homebase, 'token-saver.md');
         rmSync(file, { force: true });
+        rmSync(join(homebase, 'token-saver-choice'), { force: true });
         await open();
         page.route = q => (q.url.includes('/api/saver') ? null : answerPosts(q));
         await page.waitFor(`${sw} && ${sw}.textContent.trim() === 'Token saver' && document.getElementById('saver').nextElementSibling === null`, { what: 'the switch in the footer' });

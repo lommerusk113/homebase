@@ -6,6 +6,7 @@ import { parseQuestion, answerQuestion, saveUpload, readUpload, UPLOAD_MAX, UPLO
 import { seenHash } from '../../public/core.js';
 import { pasteLabel, isLongPaste, expandPastes } from '../../web/src/lib/draft.ts';
 import { claudeLine, rulesFile, loginShell } from '../../server/tmux.mjs';
+import { saverOn, saveSaver, saverRules, SAVER_RULE } from '../../server/saver.mjs';
 import { projectOf } from '../../server/sessions.mjs';
 
 {
@@ -221,12 +222,31 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     assert.equal(loginShell('', p => p === '/bin/bash'), '/bin/bash', 'no $SHELL and no zsh: bash');
     assert.equal(loginShell('', () => false), '/bin/sh', 'sh as the last resort');
     assert.equal(claudeLine(' --resume x', '/nope/rules.md'), 'claude --resume x', 'no rules file: plain claude');
-    assert.match(claudeLine(' --resume x'), /^claude --append-system-prompt-file '.*\/homebase-rules(\.local)?\.md' --resume x$/);
+    assert.match(claudeLine(' --resume x', undefined, false), /^claude --append-system-prompt-file '.*\/homebase-rules(\.local)?\.md' --resume x$/);
     const d = mkdtempSync(join(tmpdir(), 'rf-'));
     assert.equal(rulesFile(d), join(d, 'homebase-rules.md'), 'tracked file by default');
     writeFileSync(join(d, 'homebase-rules.local.md'), 'mine');
     assert.equal(rulesFile(d), join(d, 'homebase-rules.local.md'), 'the local file wins when it exists');
     console.log('ok claude line');
+}
+
+{
+    // Token saver: the one rule chats get, on and off
+    assert.match(saverRules(true), /^Token saver is on: start every helper \(Agent tool\) with model: sonnet, unless the user names another model\.$/);
+    assert.ok(!saverRules(false).includes('sonnet') && saverRules(false).startsWith('Token saver is off'));
+    const on = claudeLine(' --resume x', '/nope/rules.md', true);
+    assert.equal(on, `claude --append-system-prompt '${SAVER_RULE}' --resume x`, 'on: the rule is added as text');
+    assert.equal(claudeLine(' --resume x', '/nope/rules.md', false), 'claude --resume x', 'off: nothing added');
+    const dir = mkdtempSync(join(tmpdir(), 'saver-'));
+    assert.equal(saverOn(dir), false, 'off by default');
+    await saveSaver('{"on":true}', dir);
+    assert.equal(saverOn(dir), true);
+    assert.equal(readFileSync(join(dir, 'token-saver.md'), 'utf8').trim(), SAVER_RULE, 'the file a stale chat re-reads says the rule');
+    await saveSaver('{"on":false}', dir);
+    assert.equal(saverOn(dir), false);
+    await assert.rejects(saveSaver('{"on":"yes"}', dir), e => e.status === 400);
+    rmSync(dir, { recursive: true });
+    console.log('ok token saver rules');
 }
 
 {

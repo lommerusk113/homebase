@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { saverOn, SAVER_RULE } from './saver.mjs';
 
 const run = promisify(execFile);
 
@@ -18,7 +19,9 @@ export const rulesFile = (dir = fileURLToPath(new URL('..', import.meta.url))) =
     return existsSync(local) ? local : join(dir, 'homebase-rules.md');
 };
 export const RULES_FILE = rulesFile();
-export const claudeLine = (extra = '', rules = RULES_FILE) => `claude${existsSync(rules) ? ` --append-system-prompt-file '${rules.replace(/'/g, `'\\''`)}'` : ''}${extra}`;
+const quoted = t => `'${t.replace(/'/g, `'\\''`)}'`;
+// saver: Token saver on adds its one rule as text (the file flag takes only the rules file)
+export const claudeLine = (extra = '', rules = RULES_FILE, saver = saverOn()) => `claude${existsSync(rules) ? ` --append-system-prompt-file ${quoted(rules)}` : ''}${saver ? ` --append-system-prompt ${quoted(SAVER_RULE)}` : ''}${extra}`;
 
 // Your $SHELL; without one the first of zsh, bash and sh that exists (a Linux box may have no zsh)
 export const loginShell = (shell = process.env.SHELL, exists = existsSync) => shell || ['/bin/zsh', '/bin/bash'].find(p => exists(p)) || '/bin/sh';

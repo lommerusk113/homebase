@@ -23,6 +23,7 @@ import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor, webTags, 
 import { saveUpload, readUpload } from './server/uploads.mjs';
 import { saveSeen } from './server/rules.mjs';
 import { readTracked, saveTracked } from './server/tracked.mjs';
+import { saverOn, saveSaver } from './server/saver.mjs';
 import { loadHandled, markHandled } from './server/handled.mjs';
 import { loadDismissed, dismiss } from './server/dismissed.mjs';
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
@@ -56,6 +57,7 @@ export { accountOf, readToken, ghRun, scrub } from './server/account.mjs';
 export { saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME } from './server/uploads.mjs';
 export { saveSeen, readSeen } from './server/rules.mjs';
 export { readTracked, saveTracked, validTracked } from './server/tracked.mjs';
+export { saverOn, saveSaver, saverRules, SAVER_RULE } from './server/saver.mjs';
 export { isStale, serverMtime, pageHash } from './server/reload.mjs';
 export { parseNumstat, parseNameStatus, parseStatus, changes, fileBody, diffFolder, diff, MAX_DIFF_BYTES } from './server/diff.mjs';
 
@@ -227,6 +229,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
             if (isPost('/api/tracked')) {
                 await saveTracked(DATA_DIR, await readBody(req, 64 * 1024));
+                return res.end('ok');
+            }
+            // Token saver: helpers on Sonnet (server/saver.mjs)
+            if (url.pathname === '/api/saver' && req.method === 'GET') {
+                return json({ on: saverOn(DATA_DIR) });
+            }
+            if (isPost('/api/saver')) {
+                await saveSaver(await readBody(req, 1024), DATA_DIR);
                 return res.end('ok');
             }
             // A reply that wrongly says "needs you", marked as handled; an open question or permission prompt is not one

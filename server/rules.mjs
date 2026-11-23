@@ -3,6 +3,7 @@ import { stat, readFile, writeFile, rename, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { RULES_FILE } from './tmux.mjs';
+import { saverFile } from './saver.mjs';
 import { canned } from '../public/canned.js';
 
 const TTL_MS = 10_000;
@@ -13,7 +14,8 @@ export const watched = (cwd, home = homedir()) => [
     [basename(RULES_FILE), RULES_FILE],
     ['CLAUDE.md', join(home, '.claude', 'CLAUDE.md')],
     ['CLAUDE.md', join(cwd, 'CLAUDE.md')],
-    ['AGENTS.md', join(cwd, 'AGENTS.md')]
+    ['AGENTS.md', join(cwd, 'AGENTS.md')],
+    ['token-saver.md', saverFile()]
 ];
 
 async function mtimeOf(path, now) {
@@ -43,7 +45,7 @@ export async function rulesStale(startedAt, cwd, now = Date.now(), home = homedi
         if (m > startedAt) {
             names.add(name);
             at = Math.max(at, m);
-            if (path.startsWith(join(cwd, '/'))) {
+            if (path.startsWith(join(cwd, '/')) || path === saverFile()) { // "Load new rules" names these two kinds
                 project.push(path);
             }
         }

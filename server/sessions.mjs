@@ -176,8 +176,10 @@ export function agentStatus(meta, entries, ageMs) {
         return { status: 'stopped', stopReason: 'api-error' };
     }
 
-    // the hand-back call is the agent's last act and gets no result, so it would read as a pending call for half an hour
-    if (turns.some(e => e.type === 'assistant' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_use' && b.name === 'SubagentHandback'))) {
+    // the hand-back call is the agent's last act and gets no result, so it would read as a pending call for half an hour;
+    // a message sent to it afterwards resumes it, so only a hand-back with no assistant turn after it counts
+    const handback = turns.findLastIndex(e => e.type === 'assistant' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_use' && b.name === 'SubagentHandback'));
+    if (handback >= 0 && !turns.slice(handback + 1).some(e => e.type === 'assistant')) {
         return { status: 'done' };
     }
 

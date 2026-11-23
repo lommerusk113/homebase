@@ -51,6 +51,13 @@ assert.deepEqual([a.status, a.pr, a.branch], ['done', 'https://gitlab.com/x/y/-/
 assert.equal(summarizeAgent({ finished: false }, [], 1_000).status, 'running');
 // an agent whose last act was the hand-back call (no result, meta.finished not flipped yet) is done, not running for half an hour
 assert.equal(summarizeAgent({ finished: false }, [{ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'h', name: 'SubagentHandback', input: { message: 'Done.' } }] } }], 5 * 60_000).status, 'done');
+// a message after the hand-back resumes the agent: it works again
+assert.equal(summarizeAgent({ finished: false }, [
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'h', name: 'SubagentHandback', input: { message: 'Done.' } }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'h', content: 'delivered' }] } },
+    { type: 'user', message: { content: 'Now rebase it.' } },
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'b', name: 'Bash', input: { command: 'git fetch' } }] } }
+], 5_000).status, 'running');
 {
     // a row goes by the newest SendMessage summary sent to that agent
     const { sentSummaries } = await import('./server.mjs');

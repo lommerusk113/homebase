@@ -5,3 +5,4 @@ CLAUDE.md
 .claude/
 tests/browser/last-run.log
 homebase-rules.local.md
+web/dist/

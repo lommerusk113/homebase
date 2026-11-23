@@ -97,3 +97,8 @@ export const ConnectionKey: InjectionKey<ReturnType<typeof useConnection>> = Sym
 export const FormatWarnKey: InjectionKey<ReturnType<typeof useFormatWarn>> = Symbol('formatWarn');
 export const UpdateKey: InjectionKey<ReturnType<typeof useUpdate>> = Symbol('update');
 export const IssuesKey: InjectionKey<ReturnType<typeof useIssues>> = Symbol('issues');
+
+// ---- footer ----
+import type { useTokenSaver } from '@/composables/useTokenSaver';
+
+export const TokenSaverKey: InjectionKey<ReturnType<typeof useTokenSaver>> = Symbol('tokenSaver');

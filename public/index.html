@@ -58,7 +58,7 @@
     <div class="stale-note" role="status">Disconnected — showing the last known data</div>
     <div class="masters" id="masters" role="tabpanel" aria-labelledby="tab-work"></div>
     <div class="masters issues" id="issues" role="tabpanel" aria-labelledby="tab-issues" hidden></div><!-- the Vue Issues island (web/src/islands/Issues.vue) -->
-    <div class="limits" id="limits" hidden></div>
+    <div class="foot"><div class="limits" id="limits" hidden></div><div class="saver" id="saver"></div><!-- the Token saver switch: the TokenSaver island (web/src/islands/TokenSaver.vue) --></div>
   </div>
   <aside id="chat" aria-label="Chat">
     <div class="c-head"><button class="c-back" id="c-back" type="button" hidden>← Main chat</button><button class="c-back c-next" id="c-next" type="button" hidden></button><span class="c-branch" id="c-branch" hidden></span><span class="c-unpushed" id="c-unpushed" hidden></span><span class="c-newer" id="newer" role="status" hidden><span id="newer-text"></span><button class="show" id="newer-go">Switch</button></span></div>

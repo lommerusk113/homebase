@@ -601,6 +601,7 @@ vue.load().then(m => {
     const header = $('header-island');
     m?.mount('Header', header, { version: header.dataset.version });
     m?.mount('Issues', $('issues'));
+    m?.mount('TokenSaver', $('saver'));
     if (m && new URLSearchParams(location.search).has('vue')) {
         const slot = el('span');
         header.after(slot);

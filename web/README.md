@@ -83,7 +83,7 @@ Pure helpers with a unit test sit in `src/lib/` without Vue or `old/` imports, s
 
 ## Porting order
 
-Ported: the board (`Board`), the chat feed (`Feed`), the composer and question cards (`Composer`, `Ask`), the Changes viewer (`Diff`, `DiffButton`), and the header and Issues tab (`Header`, `Issues`).
+Ported: the board (`Board`), the chat feed (`Feed`), the composer and question cards (`Composer`, `Ask`), the Changes viewer (`Diff`, `DiffButton`), the header and Issues tab (`Header`, `Issues`), and the footer's Token saver switch (`TokenSaver`, with `useTokenSaver`; the setting lives on the server, `server/saver.mjs`).
 
 Left in old code: the waiting strip and rules strip (`public/chat.js`), the limits strip, bell and projects dialog (`public/app.js`), keyboard handling (`public/keys.js`), and the shell (bootstrapping, polling, the phone tabs).
 Next: the phone layout, then the shell itself, after which `public/` is deleted. Pure logic the node unit tests import from `public/*.js` moves to `web/src/lib/` along the way.

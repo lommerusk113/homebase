@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, touch, visibleSessions, updateTitle, rich, foldable, foldLine, foldButton, commandRun, waButton, tooltip, chatStatus, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou, markHandled } from './core.js';
+import { api, $, el, state, store, touch, visibleSessions, updateTitle, rich, waButton, chatStatus, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou, vue } from './core.js';
 import { renderBoard, sessionTopic } from './list.js';
 import { cannedLabel } from './canned.js';
 import { syncDiff } from './diff.js';
@@ -47,9 +47,18 @@ let chatKey = null;
 let stick = false; // set by a send: the next render scrolls to the bottom even if the user had scrolled up
 const FEED_STEP = 60; // items per load; "Show earlier" adds this many
 let feedMax = { sid: '', max: FEED_STEP };
-/** @type {number | null} */
-let keepFromBottom = null; // set by "Show earlier": the next render keeps the view where it was
-let away = false; // the window lost focus or was hidden; back on focus
+// "Show earlier" in the feed: one more step of older items.
+export function showEarlier() {
+    feedMax.max += FEED_STEP;
+    refreshChat();
+}
+
+// The message list is a Vue island (web/src/islands/Feed.vue). Its composables set these two when web/dist loads:
+// merge is the transcript's items with the session's outbox, minus what Clear view hides (it prunes state.outbox and
+// state.nudged on the way; hidden: how many items the cut-off took off the front), show draws a feed.
+/** @typedef {{ sid: string | null, items: ChatItem[], data?: Transcript, hidden?: number, cutFresh?: boolean, fresh?: boolean, lastSeen?: number, first?: boolean, stick?: boolean, starting?: boolean }} FeedInput */
+/** @type {{ merge: ((s: Session, data: Transcript) => { items: ChatItem[], hidden: number, cut: { at: number, fresh: boolean } }) | null, show: ((v: FeedInput) => void) | null }} */
+export const feedPort = { merge: null, show: null };
 
 // cleared:<id> holds a timestamp (Clear view) or {"at","mode":"new"} (New conversation: the same cut, but not a "hidden" one)
 /** @param {string | null} raw @returns {{ at: number, fresh: boolean }} */
@@ -61,6 +70,16 @@ export function clearState(raw) {
         return { at: 0, fresh: false };
     }
     return v && typeof v === 'object' ? { at: Number(v.at) || 0, fresh: v.mode === 'new' } : { at: Number(v) || 0, fresh: false };
+}
+
+// Retry on a bubble whose failed send gave its text back to the box: sent from the bubble, it must not wait there for a second Enter.
+/** @param {OutboxItem} o */
+export function forgetGivenBack(o) {
+    const ta = /** @type {WaTextarea} */ ($('msg'));
+    if (ta.value === o.text && (draftSid ?? startingTarget()) === o.sid) {
+        ta.value = '';
+        saveDraft(draftStorage(), o.sid, ta);
+    }
 }
 
 // The #msg draft and its selection per session in sessionStorage, so a reload doesn't lose typed text. Empty text
@@ -226,23 +245,6 @@ export function topicHue(topic) {
     return ((h ^ (h >>> 16)) >>> 0) % TOPIC_HUES;
 }
 
-// Needs-you bubbles stay unread (a dot) until opened or answered. needs-seen:<sid> = { at, keys }: anything at or
-// before `at` counts as seen, so the first load doesn't light up every old bubble.
-const seenStore = sid => {
-    try {
-        return JSON.parse(store.get(`needs-seen:${sid}`)) || null;
-    } catch {
-        return null;
-    }
-};
-function markRead(sid, key, b) {
-    const v = seenStore(sid) ?? { at: 0, keys: [] };
-    if (!v.keys.includes(key)) {
-        store.set(`needs-seen:${sid}`, JSON.stringify({ ...v, keys: [...v.keys, key].slice(-200) }));
-    }
-    b.querySelector('.unread')?.remove();
-}
-
 // A big option button, as in the needs-you card and the ask card: a number badge, the label (its "(Recommended)" shown as
 // a badge instead) and an optional description. ro: a read-only row (no pane to answer on). quiet: a plain text
 // button with no number, for "Chat about this".
@@ -288,7 +290,7 @@ export function focusQuestionOf(sid) {
     }
 }
 /** @param {string} sid */
-function focusWanted(sid) {
+export function focusWanted(sid) {
     if (wantQuestion?.sid !== sid) {
         return;
     }
@@ -307,265 +309,9 @@ function focusWanted(sid) {
 // A keyboard press on a button that is about to go away (an option, Retry, Dismiss): the composer takes the focus, which
 // would otherwise fall to <body>. Not after a tap (a phone would raise its keyboard) or a digit key (focus is elsewhere).
 /** @param {Event} e */
-function focusComposer(e) {
+export function focusComposer(e) {
     if (/** @type {MouseEvent} */ (e).detail === 0 && document.activeElement === e.currentTarget) {
         $('msg').focus({ preventScroll: true });
-    }
-}
-
-// "10:42" today, "Nov 14 10:42" before
-/** @param {string} at */
-function shortTime(at) {
-    const d = new Date(at), hm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    return d.toDateString() === new Date().toDateString() ? hm : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${hm}`;
-}
-
-// A slash command or `!` bash line on one line: the command and a hint of its result, opening to the panel or output
-// as the terminal drew it. Several in a row: one line that opens to the list.
-/** @param {ChatItem[]} run @param {string} sid */
-function commandLine(run, sid) {
-    const [i] = run, line = el('div', 'tools detail command'), top = el('div', 'c-cmd');
-    line.dataset.key = `${sid}:${i.at}:${run.length > 1 ? 'cmds' : i.cmd}`;
-    if (run.length > 1) {
-        const list = el('div', 'c-cmds');
-        list.append(...run.map(c => commandLine([c], sid)));
-        line.append(foldLine(el('div', 'c-cmd', `${run.length} commands`), list, line.dataset.key));
-        return line;
-    }
-    const lines = i.text ? i.text.split('\n') : [], long = lines.length > 1 || i.text.length > 80;
-    top.append(el('span', 'mono', i.cmd), ...(i.text ? [el('span', 'c-result', long ? ` · ${lines.length} line${lines.length > 1 ? 's' : ''}` : ` · ${i.text}`)] : []));
-    line.append(long ? foldLine(top, el('pre', 'c-panel mono', i.text), line.dataset.key) : top);
-    if (i.hint) { // what to do about a picker left open: never folded away
-        line.append(el('div', 'c-result', i.hint));
-    }
-    return line;
-}
-
-/** @param {ChatItem} i @param {string} sid @param {string | null} prevTopic @param {{ latest?: boolean, unread?: boolean, replies?: HTMLElement | null }} [look] */
-function bubble(i, sid, prevTopic, look = {}) {
-    if (i.role === 'tools') {
-        const line = el('div', `tools${i.quiet ? ' quiet' : ''}${i.risky ? ' risky' : ''}`, i.detail ? undefined : i.text);
-        if (i.risky) { // "Ran: git merge …" on one line, cut by the page (addShowMore drops the button where nothing is cut)
-            const [, cmd, failed] = i.text.match(/^([\s\S]*?)( · \d+ failed)?$/), box = el('div', 'fold-line');
-            const short = el('span', 'c-ran', cmd), full = el('div', 'c-ran-full', cmd);
-            box.append(short, ...(failed ? [el('span', 'c-failed', failed)] : []), foldButton(full, `${sid}:${i.at}:ran`, short), full);
-            line.replaceChildren(box);
-        }
-        if (i.detail) { // a finished agent's result, folded under its line
-            line.classList.add('detail');
-            line.append(...foldable(i.text, i.detail, `${sid}:${i.at}:detail`));
-        }
-        return line;
-    }
-    if (i.role === 'error') {
-        return el('div', 'tools api-error', i.text);
-    }
-    if (i.role === 'compact') {
-        return el('div', 'tools compact', i.text);
-    }
-    if (i.role === 'command') {
-        return commandLine([i], sid);
-    }
-    // only the newest reply can be waiting on the user: an older one reads as a plain card
-    const needs = i.role === 'assistant' && i.needsYou && !i.error && !!look.latest;
-    const kind = i.role !== 'assistant' || i.error ? '' : needs ? ' needs' : ` fyi${look.latest ? ' latest' : ''}`;
-    const b = el('div', `bubble ${i.role}${kind}${i.error || /** @type {OutboxItem} */ (i).unconfirmed ? ' failed' : ''}${i.interrupted ? ' interrupted' : ''}`);
-    const key = `${sid}:${i.at}`;
-    // who speaks, for a screen reader: sides and colours say it to the eye only
-    if (i.role === 'user' || i.role === 'assistant') {
-        b.setAttribute('role', 'group');
-        b.setAttribute('aria-label', i.role === 'user' ? 'You' : needs ? 'Claude, needs you' : 'Claude');
-    }
-    // the interrupted mark gets its own tooltip instead of the timestamp
-    if (i.at && !i.interrupted) {
-        b.title = new Date(i.at).toLocaleString();
-    }
-    if (i.topic) {
-        b.classList.add('topical');
-        b.style.setProperty('--tc', `var(--t${topicHue(i.topic)})`);
-    }
-    // topic header only where it changes from Claude's previous bubble, so a run on one task reads as one block
-    const head = i.topic && i.topic !== prevTopic;
-    if (head || needs) {
-        const row = el('div', 'b-topic');
-        if (head) {
-            row.append(el('span', 'b-topic-name', i.topic));
-        }
-        if (needs) {
-            const pill = el('button', 'need-pill', 'needs you');
-            pill.type = 'button';
-            pill.onclick = jumpToNeeds;
-            if (look.unread) {
-                pill.prepend(el('span', 'unread'));
-            }
-            row.append(pill);
-            if (i.id) {
-                // Claude got it wrong (it only wants a later deploy, say): the reply stops needing you, here and on the board
-                const done = el('button', 'need-done', '✓');
-                done.type = 'button';
-                done.title = 'Mark as handled';
-                done.setAttribute('aria-label', 'Mark as handled');
-                done.onclick = () => markHandled(sid, /** @type {string} */ (i.id)).then(refreshChat, err => showErr(err.message));
-                row.append(done);
-            }
-            b.tabIndex = 0;
-            for (const ev of ['click', 'focusin']) { // focus: reading by keyboard counts, Show more included
-                b.addEventListener(ev, () => markRead(sid, key, b));
-            }
-        }
-        if (i.at) {
-            // the full date sits on the time itself, so it doesn't pop up over the whole card
-            const t = el('span', 'b-time', shortTime(i.at));
-            t.title = b.title;
-            b.removeAttribute('title');
-            row.append(t);
-        }
-        b.append(row);
-    }
-    if (i.role === 'assistant') {
-        // a question's options stay out of the fold, under the TLDR
-        // an older reply's Heads-up goes into its fold: the newest one says it
-        const heads = i.headsUp && !look.latest ? `**Heads-up:** ${i.headsUp}\n\n` : '';
-        const parts = foldable(i.tldr, heads + (i.options ? i.text.replace(i.options, '') : i.text), key);
-        if (i.options) {
-            const opts = rich(i.options);
-            opts.classList.add('b-options');
-            parts.splice(1, 0, opts);
-        }
-        if (i.headsUp && look.latest) {
-            const heads = el('div', 'b-heads');
-            heads.append(el('b', null, 'Heads-up: '), ...rich(i.headsUp, true).childNodes);
-            parts.splice(1, 0, heads);
-        }
-        b.append(...parts);
-    } else if (i.label) { // a button's message: the action on one line, what it typed behind it
-        b.classList.add('canned');
-        b.append(foldLine(el('div', 'body', i.label), rich(i.text), key));
-    } else {
-        const text = withoutImageLines(i.text);
-        if (text || !imageNames(i.text).length) {
-            const body = rich(text);
-            if (!state.unfold.has(key)) {
-                body.classList.add('fold');
-            }
-            b.append(body);
-        }
-        const names = imageNames(i.text);
-        if (names.length) {
-            const row = el('div', 'b-images');
-            row.append(...names.map(bubbleImage));
-            b.append(row);
-        }
-    }
-    if (look.replies) {
-        b.append(look.replies);
-    }
-    if (i.answer) {
-        b.append(answerTag(i.answer));
-    }
-    if (i.interrupted) {
-        b.append(tooltip(b, 'Interrupted by you'));
-    }
-    const note = noteRow(i, sid, key);
-    if (note) {
-        b.append(note);
-    }
-    b.dataset.key = key;
-
-    return b;
-}
-
-// Under a user bubble: "Not sent" or "Not confirmed" (with Retry and Dismiss), "sending…" or "queued" (with Send now), else null.
-/** @param {ChatItem | OutboxItem} i @param {string} sid @param {string} key */
-function noteRow(i, sid, key) {
-
-    const lost = ('unconfirmed' in i && i.unconfirmed) || (i.error && state.outbox.includes(/** @type {OutboxItem} */ (i))) ? /** @type {OutboxItem} */ (i) : null;
-    const note = i.error ? `Not sent${'refused' in i && i.refused ? `: ${i.error}` : ''}` : lost ? 'Not confirmed — Claude may not have received this' : i.sending ? 'sending…' : i.pending ? 'queued' : null;
-    if (!note) {
-        return null;
-    }
-
-    const n = el('div', 'b-note', note);
-    if (lost) {
-        const drop = () => { state.outbox = state.outbox.filter(o => o !== lost); };
-        const retry = waButton('Retry', 'retry', { pill: true }), dismiss = waButton('Dismiss', 'dismiss', { pill: true, appearance: 'plain' });
-        retry.onclick = async e => {
-            if (lost.unconfirmed) { // it may have arrived after all: look before sending a second copy
-                retry.disabled = true;
-                try {
-                    if (await arrived(lost)) {
-                        return refreshChat(); // which drops the bubble for the transcript's own
-                    }
-                } catch {
-                    retry.disabled = false;
-                    return showErr('Couldn’t check whether this arrived, so it was not sent again. Try Retry once Homebase answers.');
-                }
-            }
-            drop();
-            const ta = /** @type {WaTextarea} */ ($('msg'));
-            if (ta.value === lost.text && (draftSid ?? startingTarget()) === lost.sid) { // a failed send gave the text back: sent from here, it must not wait for a second Enter
-                ta.value = '';
-                saveDraft(draftStorage(), lost.sid, ta);
-            }
-            focusComposer(e);
-            sendText(lost.sid, lost.text, lost.answerTo, lost.note, lost.canned);
-        };
-        dismiss.onclick = e => {
-            drop();
-            focusComposer(e);
-            refreshChat();
-        };
-        n.append(' ', ...(lost.refused ? [] : [retry]), dismiss); // a refusal (409) would only be refused again: its reason says what to do
-    }
-    if (i.pending && !i.sending) {
-        const btn = waButton('Send now', 'send-now', { pill: true });
-        btn.onclick = () => sendNow(sid, key);
-        n.append(btn, tooltip(btn, "Interrupts Claude's current step so your message is handled now"));
-    }
-
-    return n;
-}
-
-// The user's short reply to this question, outside the fold so it shows when collapsed to the TLDR.
-/** @param {Answer} a */
-function answerTag(a) {
-    const yes = !/^(no|nope)\b/i.test(a.text);
-    const t = el('div', `answer${yes ? ' yes' : ''}${a.error ? ' failed' : ''}`);
-    t.append(el('span', 'mark', a.error ? '!' : yes ? '✓' : '✕'), ` You: ${a.text}`);
-    const note = a.error ? `Not sent: ${a.error}` : a.unconfirmed ? 'not confirmed — Claude may not have received this' : a.sending ? 'sending…' : a.queued ? 'queued' : null;
-    if (note) {
-        t.append(` · ${note}`);
-    }
-    return t;
-}
-
-// "Show more" only where the fold actually cuts something off; needs layout, so runs after insertion.
-function addShowMore(feed) {
-    for (const ran of /** @type {NodeListOf<HTMLElement>} */ (feed.querySelectorAll('.c-ran:not([hidden])'))) {
-        /** @type {HTMLElement} */ (ran.parentElement.querySelector('.show')).hidden = ran.scrollWidth <= ran.clientWidth;
-    }
-    for (const body of feed.querySelectorAll('.body.fold')) {
-        if (body.scrollHeight <= body.clientHeight + 4) {
-            body.classList.remove('fold');
-            continue;
-        }
-        const btn = el('button', 'show', 'Show more');
-        btn.setAttribute('aria-expanded', 'false');
-        btn.onclick = () => {
-            const key = body.parentElement.dataset.key, folded = body.classList.toggle('fold');
-            if (folded) {
-                state.unfold.delete(key);
-            } else {
-                state.unfold.add(key);
-            }
-            btn.textContent = folded ? 'Show more' : 'Show less';
-            btn.setAttribute('aria-expanded', String(!folded));
-            body.parentElement.dispatchEvent(new Event('click')); // marks a needs-you bubble read
-            if (!folded) {
-                body.scrollIntoView({ block: 'nearest' }); // text taller than the pane starts at its top
-            }
-        };
-        body.after(btn);
     }
 }
 
@@ -619,7 +365,7 @@ function setStatus(data) {
 
 // Scrolls to and focuses what needs the user: the ask card when it shows, else the reply the pinned strip is about,
 // else the newest needs-you bubble.
-function jumpToNeeds() {
+export function jumpToNeeds() {
 
     const waiting = !$('wait').hidden && $('feed').querySelector(`[data-key="${CSS.escape($('wait').dataset.key ?? '')}"]`);
     const t = /** @type {HTMLElement | undefined} */ (!$('ask').hidden ? $('ask') : waiting || [...$('feed').querySelectorAll('.bubble.needs')].at(-1));
@@ -632,8 +378,6 @@ function jumpToNeeds() {
     t.focus({ preventScroll: true });
 }
 
-// same unwrap as the server's unwrapPasted, plus whitespace collapsed, for matching sent text to transcript text
-const norm = t => (t || '').replace(/<pasted_content id="([^"]*)">([\s\S]*?)<\/pasted_content(?: id="\1")?>/g, '$2').replace(/\s+/g, ' ').trim();
 // "New session started in …" above the feed, for a newer master in the bound session's project.
 /** @param {Session | null} s */
 function showNewer(s) {
@@ -778,7 +522,7 @@ function fillCard(id, tmux, question, options, answer, { detail = '', risky = fa
 
 // The red error line, with raw server and tmux errors turned into plain sentences.
 /** @param {string} msg */
-const showErr = msg => { $('c-err').textContent = friendly(msg); };
+export const showErr = msg => { $('c-err').textContent = friendly(msg); };
 
 // POSTs an answer; a refusal's text is the error.
 /** @param {string} url */
@@ -918,82 +662,6 @@ async function showBoot(tmux) {
     }
 }
 
-const LANDED_SLACK_MS = 10_000; // a transcript item may predate the send it matches by this much
-const OUTBOX_TTL_MS = 30_000; // after a successful send, a bubble nothing matched by then is marked not confirmed
-
-// Whether the transcript's items hold what an outbox item sent (see feedItems).
-/** @param {ChatItem[]} items @param {OutboxItem} o */
-function landedIn(items, o) {
-    const sameSend = (text, at) => [o.text, o.note && `${o.text}\n\n${o.note}`].some(t => t && norm(text) === norm(t)) && !(Date.parse(at) < Date.parse(o.at) - LANDED_SLACK_MS);
-    return items.some(i => (i.role === 'user' && sameSend(i.text, i.at))
-        || (i.role === 'command' && sameSend(i.cmd, i.at)) // a slash command whose output the transcript now holds
-        || (i.role === 'compact' && /^\/compact\b/.test(o.text) && !(Date.parse(i.at) < Date.parse(o.at) - LANDED_SLACK_MS)) // a /compact is its divider
-        || (i.answer && sameSend(i.answer.text, i.answer.at)));
-}
-// The same, read fresh from the server: before Retry sends a not confirmed message again. Throws when it can't be read.
-/** @param {OutboxItem} o */
-async function arrived(o) {
-    const s = state.sessions.find(x => x.id === o.sid);
-    if (!s) {
-        return false; // a chat still starting has no transcript to ask
-    }
-    const r = await api(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}`);
-    if (!r.ok) {
-        throw new Error(await r.text());
-    }
-    return landedIn((await r.json()).items, o);
-}
-
-// The transcript's items merged with this session's outbox, minus what Clear view hides; prunes state.outbox and
-// state.nudged on the way. hidden: how many items the cut-off removed from the front.
-/** @param {Session} s @param {Transcript} data @returns {{ items: ChatItem[], hidden: number, cut: { at: number, fresh: boolean } }} */
-function feedItems(s, data) {
-
-    // Optimistic bubbles go once any user/queued/pending item (or answer) has the same text, sent no earlier than
-    // LANDED_SLACK_MS before: the transcript is the source of truth. OUTBOX_TTL_MS after the send succeeded with no
-    // match, it stays marked not confirmed (Retry / Dismiss) rather than vanishing.
-    // (compared with what was sent: the text, or the text plus its unshown note, as the transcript has the two together)
-    state.outbox = state.outbox.filter(o => o.sid !== s.id || o.error || !landedIn(data.items, o));
-    // a slash command with no output in the transcript never shows there: once sent it stays, with its result; so does an
-    // answer typed into a question's text box, unless the transcript shows it as that question's answer
-    for (const o of state.outbox) {
-        o.unconfirmed ||= o.sid === s.id && !o.text.startsWith('/') && !o.answered && Date.now() - o.okAt > OUTBOX_TTL_MS;
-    }
-
-    // a queued item whose Send now was clicked shows "sending…" until the queue entry resolves
-    state.nudged = new Set(data.items.filter(i => i.pending).map(i => `${s.id}:${i.at}`).filter(k => state.nudged.has(k)));
-    /** @type {ChatItem[]} */
-    const items = data.items.map(i => (i.pending && state.nudged.has(`${s.id}:${i.at}`) ? { ...i, sending: true } : i));
-
-    // placed by send time, so one sent before a queued message stays above it
-    for (const o of state.outbox.filter(o => o.sid === s.id)) {
-        // a chip answer shows as the question's tag, not a bubble
-        const q = o.answerTo && items.findIndex(x => x.role === 'assistant' && x.at === o.answerTo);
-        if (q >= 0) {
-            if (!items[q].answer) {
-                items[q] = { ...items[q], answer: { text: o.text, sending: !o.error && !o.unconfirmed, error: o.error, unconfirmed: o.unconfirmed } };
-            }
-            continue;
-        }
-        const i = items.findIndex(x => Date.parse(x.at) > Date.parse(o.at));
-        const r = o.result;
-        const hint = r?.stuck ?? (r?.pick ? 'Pick this in the terminal, or type the command with its argument (e.g. /model opus)' : undefined);
-        // a slash command that went through is its command line; one still sending or not sent keeps its bubble (Retry)
-        const ran = r || (o.text.startsWith('/') && !o.sending && !o.error);
-        items.splice(i < 0 ? items.length : i, 0, ...(ran ? [{ role: /** @type {const} */ ('command'), text: r?.text ?? '', cmd: o.text, at: o.at, hint }] : [o]));
-    }
-
-    // Clear view: items up to the stored cut-off stay hidden in Homebase only
-    const cut = clearState(store.get(`cleared:${s.id}`));
-    const hidden = items.findLastIndex(i => i.at && Date.parse(i.at) <= cut.at) + 1;
-    // not the question that still waits for an answer (a decision, or reply chips nothing came after), nor a message that is not confirmed sent
-    const open = openDecision({ items }), n = items.findLastIndex(i => i.replies?.length && !i.answer);
-    const asks = n >= 0 && !items.slice(n + 1).some(x => x.role === 'user') ? items[n] : null;
-    items.unshift(...items.splice(0, hidden).filter(i => i === open || i === asks || state.outbox.includes(/** @type {OutboxItem} */ (i))));
-
-    return { items, hidden, cut };
-}
-
 const EXCERPT_CHARS = 150;
 
 // What an older question asked, for the note that tells Claude which one a chip answers: its TLDR, else its last paragraph.
@@ -1008,7 +676,7 @@ function questionExcerpt(i) {
 
 // What a chip on items[n] sends after its label: nothing for the newest item, else a note naming the question it answers.
 /** @param {ChatItem[]} items @param {number} n */
-const answerNote = (items, n) => (n === items.length - 1 ? undefined : `(Answering your earlier question from ${items[n].at}: "${questionExcerpt(items[n])}")`);
+export const answerNote = (items, n) => (n === items.length - 1 ? undefined : `(Answering your earlier question from ${items[n].at}: "${questionExcerpt(items[n])}")`);
 
 // The amber strip pinned above the composer while Claude's newest reply says something waits on the user, also after
 // the user said something else: that text (a click jumps to the reply) and its chips. The ask card takes its place.
@@ -1046,35 +714,6 @@ function showWait(s, data, items) {
     }));
 }
 
-// Quick replies under a Claude message that ends with a question and has no answer yet. The newest one waits for Claude
-// to finish; an older one stays (the send just queues) and its chips carry a note naming the question; a message
-// the user sent after it hides them.
-/** @param {Session} s @param {Transcript} data @param {ChatItem[]} items @param {number} n */
-function quickReplyRow(s, data, items, n) {
-
-    const q = items[n], newest = n === items.length - 1;
-    if (q === openDecision({ items }) && !data.asking) {
-        return null; // the strip above the composer has its chips
-    }
-    if (!(q.replies?.length && (!q.answer || q.answer.error || q.answer.unconfirmed) && !data.asking && (newest || !items.slice(n + 1).some(x => x.role === 'user')) && !(newest && data.working))) {
-        return null;
-    }
-
-    const note = answerNote(items, n);
-    const row = el('div', 'replies');
-    row.append(...q.replies.map((t, i) => {
-        const b = optButton(t, i);
-        b.onclick = e => {
-            focusComposer(e);
-            sendChip(b, s.id, t, q.at, note);
-        };
-
-        return b;
-    }));
-
-    return row;
-}
-
 // A chip tap sends its answer; the row's chips stay disabled (as the ask card's do) so a double tap sends once. Sent, the
 // row is replaced once the answer shows; a failed send enables them again.
 /** @param {HTMLElement} b @param {string} sid @param {string} text @param {string} answerTo @param {string} note */
@@ -1093,73 +732,16 @@ async function sendChip(b, sid, text, answerTo, note) {
     }
 }
 
-const NEAR_BOTTOM_PX = 40; // this close to the bottom counts as reading the newest: a re-render keeps it in view
-/** @param {HTMLElement} feed */
-const nearBottom = feed => feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX;
-/** @param {HTMLElement} feed @returns {HTMLElement[]} */
-const keyed = feed => /** @type {HTMLElement[]} */ ([...feed.querySelectorAll('[data-key]')]);
-
-// Where the reader is: at the newest (end), or with the first visible bubble (key) y px below the feed's top. Taken
-// only when the feed's offset differs from the one last taken or set (top), i.e. when the user scrolled, and after a
-// click in the feed (Show more). Content that changes height by itself (a re-render, a thumbnail loading, a button
-// upgrading, the composer resizing the feed) is not the reader moving: watchSizes sees it and restorePlace puts them back.
-/** @type {{ end: boolean, top: number, key?: string, y: number }} */
-let place = { end: true, top: 0, y: 0 };
-/** @param {HTMLElement} feed */
-function notePlace(feed) {
-    const feedTop = feed.getBoundingClientRect().top;
-    // the window drops old items off the top, so the bubble is the anchor, not the scroll offset
-    const b = keyed(feed).find(b => b.getBoundingClientRect().bottom > feedTop + 5);
-    place = { end: nearBottom(feed), top: feed.scrollTop, key: b?.dataset.key, y: b ? b.getBoundingClientRect().top - feedTop : 0 };
-}
-// True when the user scrolled since the place was taken; takes the new one.
-/** @param {HTMLElement} feed */
-function syncPlace(feed) {
-    const moved = feed.scrollTop !== place.top;
-    if (moved) {
-        notePlace(feed);
-    }
-    return moved;
-}
-/** @param {HTMLElement} feed */
-function restorePlace(feed) {
-    if (place.end) {
-        feed.scrollTop = feed.scrollHeight;
-    } else {
-        feed.scrollTop = place.top;
-        const b = place.key && keyed(feed).find(b => b.dataset.key === place.key);
-        if (b) {
-            feed.scrollTop += b.getBoundingClientRect().top - feed.getBoundingClientRect().top - place.y;
-        }
-    }
-    place.top = feed.scrollTop;
-}
-/** @type {ResizeObserver | undefined} */
-let sizes;
-let clicked = false; // a click in the feed is being handled: a size change now is the reader's own (Show more)
-// Watches the feed and every item in it for a change of size, whatever the cause; called after each redraw.
-/** @param {HTMLElement} feed */
-function watchSizes(feed) {
-    sizes ??= new ResizeObserver(() => {
-        if (clicked) {
-            return notePlace(feed);
-        }
-        syncPlace(feed);
-        restorePlace(feed);
-    });
-    sizes.disconnect();
-    for (const e of [feed, ...feed.children]) {
-        sizes.observe(e);
-    }
-}
-
 let refreshSeq = 0; // a refresh that finishes after a newer one started is stale: it must not render over it
 
 export async function refreshChat() {
 
     const seq = ++refreshSeq;
+    if (!feedPort.merge) {
+        await vue.load(); // the feed island's module, which sets feedPort
+    }
     followFocus();
-    const s = chatSession(), feed = $('feed');
+    const s = chatSession();
     swapComposer(s?.id ?? null);
     // persist the binding, or a successor it moved to
     if (s && !state.focus && store.get(bindKey()) !== s.id) {
@@ -1180,7 +762,7 @@ export async function refreshChat() {
         setStatus(state.offline ? { error: true } : null);
         // a message sent to a starting project (by tmux name) shows until its session binds
         const sent = state.outbox.filter(o => o.sid === startingTarget());
-        return feed.replaceChildren(...(sent.length ? sent.map(o => bubble(o, o.sid, null)) : [el('div', 'welcome', state.starting ? 'Chat starting…' : 'No session to chat with yet. Use ☰ → Open existing folder… to start one in a project, or ☰ → New project.')]));
+        return feedPort.show({ sid: startingTarget(), items: sent, starting: !!state.starting });
     }
 
     /** @type {Transcript} */
@@ -1209,11 +791,10 @@ export async function refreshChat() {
     }
     compactUi(s, data);
 
-    const { items, hidden, cut } = feedItems(s, data);
+    const { items, hidden, cut } = feedPort.merge(s, data);
     announceReply(s, data, items);
     showWait(s, data, items);
     showFocus(s, items);
-    const fresh = cut.fresh || !!s.clearedFrom; // a New conversation, before or after the successor is bound
     const lastSeen = Number(store.get(`last-seen:${s.id}`)) || Infinity;
     const key = s.id + JSON.stringify([items, data.asking, data.working, hidden, data.more, data.capped, lastSeen]);
     if (key === chatKey) {
@@ -1221,136 +802,10 @@ export async function refreshChat() {
     }
 
     const first = !chatKey?.startsWith(s.id);
-    syncPlace(feed);
     chatKey = key;
-
-    let seen = seenStore(s.id);
-    if (!seen) {
-        seen = { at: Date.parse(items.at(-1)?.at) || Date.now(), keys: [] };
-        store.set(`needs-seen:${s.id}`, JSON.stringify(seen));
-    }
-    // unread: newer than the first load, not opened, and no message from the user after it
-    const unread = /** @param {ChatItem} i @param {number} n */ (i, n) => i.needsYou
-        && Date.parse(i.at) > seen.at
-        && !seen.keys.includes(`${s.id}:${i.at}`)
-        && !items.slice(n + 1).some(x => x.role === 'user');
-    const latest = items.findLastIndex(i => i.role === 'assistant');
-    const before = new Set(keyed(feed).map(b => b.dataset.key));
-    const firstNew = items.findIndex(i => Date.parse(i.at) > lastSeen);
-    let topic = null;
-    feed.replaceChildren(...items.flatMap((i, n) => {
-        const prev = topic;
-        if (i.role === 'assistant') {
-            topic = i.topic;
-        }
-
-        const run = i.role === 'command' ? commandRun(items, n) : null;
-        if (run && run.length !== 1) { // commands in a row: one line where the run starts
-            return run.length ? [commandLine(run, s.id)] : [];
-        }
-        let b;
-        try {
-            b = bubble(i, s.id, prev, { latest: n === latest, unread: unread(i, n), replies: quickReplyRow(s, data, items, n) });
-        } catch (e) { // one item that can't be drawn shows as its plain text; the rest of the feed stays
-            console.error(e);
-            b = el('div', `bubble ${i.role}`, typeof i.text === 'string' ? i.text : JSON.stringify(i.text ?? ''));
-        }
-        // only a bubble new since the last render rises in; a re-render redraws them all
-        if (!first && b.dataset.key && !before.has(b.dataset.key)) {
-            b.classList.add('enter');
-        }
-
-        return n === firstNew ? [el('div', 'tools compact c-new', 'New'), b] : [b];
-    }));
-
-    if (hidden && !cut.fresh) {
-        const line = el('div', 'c-hidden', 'Earlier messages hidden · '), btn = el('button', 'show', 'Show');
-        btn.onclick = () => {
-            store.set(`cleared:${s.id}`, '');
-            refreshChat();
-        };
-        line.append(btn);
-        feed.prepend(line);
-    } else if (data.more && !hidden) {
-        const line = el('div', 'c-hidden c-earlier', 'Earlier messages not shown · '), btn = el('button', 'show', 'Show earlier');
-        btn.onclick = () => {
-            feedMax.max += FEED_STEP;
-            keepFromBottom = feed.scrollHeight - feed.scrollTop;
-            refreshChat();
-        };
-        line.append(btn);
-        feed.prepend(line);
-    } else if (data.capped && !hidden) { // the server reads no further back: say so, rather than end as if this were the start
-        feed.prepend(el('div', 'c-hidden c-capped', 'Older messages are not shown here — the terminal has the whole chat'));
-    } else if (!items.length) {
-        feed.append(el('div', 'welcome', fresh ? 'New conversation — say something to Claude' : 'No messages yet. Send one below, or run `claude` in a terminal in this project.'));
-    }
-
-    addShowMore(feed);
-    if (keepFromBottom !== null) {
-        feed.scrollTop = feed.scrollHeight - keepFromBottom;
-        notePlace(feed);
-    } else {
-        place.end ||= first || stick;
-        restorePlace(feed);
-    }
-    watchSizes(feed);
+    // fresh: a New conversation, before or after the successor is bound. The island calls focusWanted once it has drawn.
+    feedPort.show({ sid: s.id, items, data, hidden, cutFresh: cut.fresh, fresh: cut.fresh || !!s.clearedFrom, lastSeen, first, stick });
     stick = false;
-    keepFromBottom = null;
-    focusWanted(s.id);
-}
-
-// "New since you looked": leaving the window marks the time per session (kept while an older mark is unread, i.e. the
-// feed is scrolled up); the feed draws a New divider above the first later item, gone once you're back and scroll to the bottom.
-function initNewMarker() {
-
-    const feed = $('feed');
-    watchSizes(feed);
-    // Show more grew a bubble: the reader stays on it, not at the end. Capture, as the button stops the click; the
-    // place is taken once it has toggled, by the timeout or by watchSizes, whichever the browser runs first.
-    feed.addEventListener('click', () => {
-        clicked = true;
-        setTimeout(() => {
-            clicked = false;
-            notePlace(feed);
-        });
-    }, true);
-    const bottom = () => nearBottom(feed);
-    const leave = () => {
-        const s = chatSession();
-        if (s && (!store.get(`last-seen:${s.id}`) || bottom())) {
-            store.set(`last-seen:${s.id}`, String(Date.now()));
-        }
-        away = true;
-    };
-
-    window.addEventListener('blur', leave);
-    window.addEventListener('focus', () => { away = false; });
-    document.addEventListener('visibilitychange', () => (document.hidden ? leave() : (away = false)));
-    feed.addEventListener('scroll', () => {
-        const s = chatSession();
-        if (syncPlace(feed) && !away && s && store.get(`last-seen:${s.id}`) && bottom()) {
-            store.set(`last-seen:${s.id}`, '');
-            refreshChat();
-        }
-    });
-}
-
-/** @param {string} sid @param {string} key */
-async function sendNow(sid, key) {
-    state.nudged.add(key);
-    $('c-err').textContent = '';
-    refreshChat();
-    try {
-        const r = await api(`/api/interrupt?id=${encodeURIComponent(sid)}`, { method: 'POST' });
-        if (!r.ok) {
-            throw new Error(await r.text());
-        }
-    } catch (err) {
-        state.nudged.delete(key);
-        showErr(err.message);
-        refreshChat();
-    }
 }
 
 // The menu item and the "Compact?" nudge follow the bound session; the auto mode piggybacks on the same poll.
@@ -1404,13 +859,6 @@ const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 /** @type {File[]} */
 let attached = [];
 let uploading = false;
-// Upload names in a message's "[Image: …]" lines (only the names /api/upload makes).
-/** @param {string} text @returns {string[]} */
-const IMAGE_LINE = /^\[Image: \/[^\]\n]*\/([0-9a-f-]{36}\.(?:png|jpe?g|gif|webp))\]$/gm;
-const imageNames = text => [...(text || '').matchAll(IMAGE_LINE)].map(m => m[1]);
-// The text without those lines: the bubble shows the pictures instead of their paths.
-/** @param {string} text */
-const withoutImageLines = text => (text || '').replace(IMAGE_LINE, '').replace(/\n{3,}/g, '\n\n').trim();
 
 // data: URLs, as the CSP allows no blob: images. /api/upload/<name> needs the token header, so no plain <img src>.
 /** @param {Blob} blob @returns {Promise<string>} */
@@ -1420,16 +868,6 @@ const dataUrl = blob => new Promise((ok, fail) => {
     r.onerror = () => fail(r.error);
     r.readAsDataURL(blob);
 });
-// ponytail: every image the chat showed stays in memory until reload; fine for a session's worth of screenshots
-/** @type {Map<string, Promise<string>>} */
-const images = new Map();
-/** @param {string} name */
-function imageUrl(name) {
-    if (!images.has(name)) {
-        images.set(name, api(`/api/upload/${name}`).then(r => (r.ok ? r.blob().then(dataUrl) : '')).catch(() => ''));
-    }
-    return /** @type {Promise<string>} */ (images.get(name));
-}
 /** @param {Promise<string>} url @param {string} alt */
 function thumb(url, alt) {
     const img = el('img');
@@ -1437,35 +875,6 @@ function thumb(url, alt) {
     url.then(u => { if (u) { img.src = u; } else { img.remove(); } });
     return img;
 }
-// A bubble's thumbnail: once loaded, the same element on every redraw of the feed, as a new <img> has no height until
-// it has decoded and everything below it would jump on each redraw.
-// ponytail: one element per upload, so a second bubble naming the same image would take it from the first
-/** @type {Map<string, HTMLImageElement>} */
-const shown = new Map();
-/** @param {string} name */
-function bubbleImage(name) {
-    const img = shown.get(name) ?? zoomable(thumb(imageUrl(name), name));
-    img.onload = () => shown.set(name, img);
-    return img;
-}
-// Click a bubble thumbnail: the full image over the page; click or Escape closes it.
-/** @param {HTMLImageElement} img */
-function zoomable(img) {
-    img.onclick = () => {
-        const box = el('div', 'lightbox'), full = el('img');
-        full.src = img.src;
-        full.alt = img.alt;
-        const close = () => { box.remove(); document.removeEventListener('keydown', onKey); };
-        /** @param {KeyboardEvent} e */
-        const onKey = e => { if (e.key === 'Escape') { close(); } };
-        box.onclick = close;
-        document.addEventListener('keydown', onKey);
-        box.append(full);
-        document.body.append(box);
-    };
-    return img;
-}
-
 /** @param {Iterable<File>} files */
 function attach(files) {
     const list = [...files];
@@ -1574,7 +983,7 @@ function setAutoCompact(on) {
 export function initChat() {
     setNeedsOnly(store.get('needs-only') === '1');
     setAutoCompact(store.get('auto-compact') !== '0');
-    initNewMarker();
+    vue.load().then(m => m?.mount('Feed', $('feed'), { scroller: $('feed') }));
     $('c-back').onclick = unfocusChat;
     $('c-next').onclick = () => nextId && focusChat(nextId);
     document.addEventListener('keydown', e => e.key === 'Escape' && state.focus && !e.composedPath().some(n => /^(INPUT|WA-TEXTAREA|TEXTAREA|WA-DIALOG|WA-DROPDOWN)$/.test(/** @type {Element} */ (n).nodeName || '')) && unfocusChat());

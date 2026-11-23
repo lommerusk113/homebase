@@ -458,7 +458,7 @@ export const rich = (text, inline) => {
 };
 
 // First sentence of a message without a TLDR, capped near 200 chars, with dangling ** or ` closed.
-function lead(text) {
+export function lead(text) {
     const line = (text || '').split('\n').map(l => l.trim()).find(l => l && !/^(```|\||---|<)/.test(l)) || '';
     const s = line.replace(/^(#+|[-*+>]|\d+[.)])\s+/, '');
     let cut = s.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? s;

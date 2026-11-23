@@ -4,84 +4,85 @@
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
 @source "./";
 
-/* shadcn-vue's tokens, on island roots only: the old page has its own --muted, --accent and friends on :root.
+/* shadcn-vue's tokens, on island roots only, prefixed --ui-: the old page has its own --muted, --accent and friends on
+   :root, which its classes inside an island must keep seeing.
    ponytail: a Reka portal (dialog, popover) renders outside the root; give it `to` inside the island, or move these
    tokens to a wrapper there, when the first one is ported. */
 .hb-island {
-    --radius: 0.625rem;
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
+    --ui-radius: 0.625rem;
+    --ui-background: oklch(1 0 0);
+    --ui-foreground: oklch(0.145 0 0);
+    --ui-card: oklch(1 0 0);
+    --ui-card-foreground: oklch(0.145 0 0);
+    --ui-popover: oklch(1 0 0);
+    --ui-popover-foreground: oklch(0.145 0 0);
+    --ui-primary: oklch(0.205 0 0);
+    --ui-primary-foreground: oklch(0.985 0 0);
+    --ui-secondary: oklch(0.97 0 0);
+    --ui-secondary-foreground: oklch(0.205 0 0);
+    --ui-muted: oklch(0.97 0 0);
+    --ui-muted-foreground: oklch(0.556 0 0);
+    --ui-accent: oklch(0.97 0 0);
+    --ui-accent-foreground: oklch(0.205 0 0);
+    --ui-destructive: oklch(0.577 0.245 27.325);
+    --ui-border: oklch(0.922 0 0);
+    --ui-input: oklch(0.922 0 0);
+    --ui-ring: oklch(0.708 0 0);
 }
 
 /* the old page follows the system theme too (styles.css), so dark: stays Tailwind's default prefers-color-scheme */
 @media (prefers-color-scheme: dark) {
     .hb-island {
-        --background: oklch(0.145 0 0);
-        --foreground: oklch(0.985 0 0);
-        --card: oklch(0.205 0 0);
-        --card-foreground: oklch(0.985 0 0);
-        --popover: oklch(0.205 0 0);
-        --popover-foreground: oklch(0.985 0 0);
-        --primary: oklch(0.922 0 0);
-        --primary-foreground: oklch(0.205 0 0);
-        --secondary: oklch(0.269 0 0);
-        --secondary-foreground: oklch(0.985 0 0);
-        --muted: oklch(0.269 0 0);
-        --muted-foreground: oklch(0.708 0 0);
-        --accent: oklch(0.269 0 0);
-        --accent-foreground: oklch(0.985 0 0);
-        --destructive: oklch(0.704 0.191 22.216);
-        --border: oklch(1 0 0 / 10%);
-        --input: oklch(1 0 0 / 15%);
-        --ring: oklch(0.556 0 0);
+        --ui-background: oklch(0.145 0 0);
+        --ui-foreground: oklch(0.985 0 0);
+        --ui-card: oklch(0.205 0 0);
+        --ui-card-foreground: oklch(0.985 0 0);
+        --ui-popover: oklch(0.205 0 0);
+        --ui-popover-foreground: oklch(0.985 0 0);
+        --ui-primary: oklch(0.922 0 0);
+        --ui-primary-foreground: oklch(0.205 0 0);
+        --ui-secondary: oklch(0.269 0 0);
+        --ui-secondary-foreground: oklch(0.985 0 0);
+        --ui-muted: oklch(0.269 0 0);
+        --ui-muted-foreground: oklch(0.708 0 0);
+        --ui-accent: oklch(0.269 0 0);
+        --ui-accent-foreground: oklch(0.985 0 0);
+        --ui-destructive: oklch(0.704 0.191 22.216);
+        --ui-border: oklch(1 0 0 / 10%);
+        --ui-input: oklch(1 0 0 / 15%);
+        --ui-ring: oklch(0.556 0 0);
     }
 }
 
 @theme inline {
-    --radius-sm: calc(var(--radius) - 4px);
-    --radius-md: calc(var(--radius) - 2px);
-    --radius-lg: var(--radius);
-    --radius-xl: calc(var(--radius) + 4px);
-    --color-background: var(--background);
-    --color-foreground: var(--foreground);
-    --color-card: var(--card);
-    --color-card-foreground: var(--card-foreground);
-    --color-popover: var(--popover);
-    --color-popover-foreground: var(--popover-foreground);
-    --color-primary: var(--primary);
-    --color-primary-foreground: var(--primary-foreground);
-    --color-secondary: var(--secondary);
-    --color-secondary-foreground: var(--secondary-foreground);
-    --color-muted: var(--muted);
-    --color-muted-foreground: var(--muted-foreground);
-    --color-accent: var(--accent);
-    --color-accent-foreground: var(--accent-foreground);
-    --color-destructive: var(--destructive);
-    --color-border: var(--border);
-    --color-input: var(--input);
-    --color-ring: var(--ring);
+    --radius-sm: calc(var(--ui-radius) - 4px);
+    --radius-md: calc(var(--ui-radius) - 2px);
+    --radius-lg: var(--ui-radius);
+    --radius-xl: calc(var(--ui-radius) + 4px);
+    --color-background: var(--ui-background);
+    --color-foreground: var(--ui-foreground);
+    --color-card: var(--ui-card);
+    --color-card-foreground: var(--ui-card-foreground);
+    --color-popover: var(--ui-popover);
+    --color-popover-foreground: var(--ui-popover-foreground);
+    --color-primary: var(--ui-primary);
+    --color-primary-foreground: var(--ui-primary-foreground);
+    --color-secondary: var(--ui-secondary);
+    --color-secondary-foreground: var(--ui-secondary-foreground);
+    --color-muted: var(--ui-muted);
+    --color-muted-foreground: var(--ui-muted-foreground);
+    --color-accent: var(--ui-accent);
+    --color-accent-foreground: var(--ui-accent-foreground);
+    --color-destructive: var(--ui-destructive);
+    --color-border: var(--ui-border);
+    --color-input: var(--ui-input);
+    --color-ring: var(--ui-ring);
 }
 
 /* The bit of preflight the components rely on, inside islands only. */
 @layer base {
     .hb-island :where(*, ::before, ::after) {
-        border: 0 solid var(--border);
+        border: 0 solid var(--ui-border);
         margin: 0;
         padding: 0;
     }

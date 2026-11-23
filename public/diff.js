@@ -3,14 +3,9 @@
 // the old board's row icon.
 import { api, el, waButton, hooks, vue } from './core.js';
 
-// These islands are styled by styles.css alone, so .hb-island comes off again: inside it shadcn's tokens (--muted,
-// --accent, ...) replace the page's own of the same names. Resolves to the unmount, or to null when web/ isn't built.
+// Resolves to the unmount, or to null when web/ isn't built.
 /** @param {string} name @param {HTMLElement} host @param {object} [props] @returns {Promise<(() => void) | null>} */
-const mount = (name, host, props) => vue.load().then(m => {
-    const unmount = m?.mount(name, host, props) ?? null;
-    host.classList.remove('hb-island');
-    return unmount;
-});
+const mount = (name, host, props) => vue.load().then(m => m?.mount(name, host, props) ?? null);
 
 // The panel is modal: the page behind it takes no focus and is not read while it is open. The dialogs and the
 // live region (#announce) stay as they are.

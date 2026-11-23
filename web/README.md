@@ -27,7 +27,7 @@ Develop against the real server: `npm run dev` here, the page at `http://localho
 * The old code reaches it through `vue` in `public/core.js`: `vue.load()` resolves to that module, or `null` when `web/` isn't built.
 * `import ... from 'old/<file>.js'` imports the old page's own modules (`/core.js`, `/list.js`, …): external in the build, so the very instances the page runs; typed from their JSDoc through `tsconfig.json`'s paths.
 * API response types are global, from `public/api.d.ts`, which the old page's check (`../check-types.sh`) uses too.
-* Styles: Tailwind's utilities in a cascade layer, so the old page's unlayered rules win wherever both apply; no preflight, only a small reset inside `.hb-island`. shadcn's tokens (`--muted`, `--accent`, …) are set on `.hb-island`, not `:root`, because the old page uses those names.
+* Styles: Tailwind's utilities in a cascade layer, so the old page's unlayered rules win wherever both apply; no preflight, only a small reset inside `.hb-island`. shadcn's tokens are set on `.hb-island` as `--ui-muted`, `--ui-accent`, … (Tailwind's `bg-muted` etc. map to them), because the old page uses the plain names and its classes keep working inside an island. Never remove `.hb-island` from a host.
   A Reka portal (dialog, popover) renders outside the island: give it a `to` inside the island when the first one is ported.
 
 ## State bridge

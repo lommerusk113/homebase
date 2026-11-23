@@ -169,6 +169,8 @@ export function buildFixture(root) {
         { type: 'pr-link', prUrl: OTHER_PR, prRepository: `${OWNER}/homebase`, timestamp: ago(700) },
         prompt('Ship the tracker fix', 600),
         said('Opened the PR.', 590),
+        tool('Skill', { skill: 'review-gate', args: TRACKER_PR }, 585), // the gate passed for the PR head (ttt9999 in forge-stub), so an approved PR is Ready to merge
+        said(`**Verdict: ready** for ${TRACKER_PR} at commit ttt9999.\n\nTLDR: ready`, 583),
         done(580)
     ], 580);
 

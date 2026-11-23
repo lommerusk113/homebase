@@ -54,14 +54,17 @@ export default {
         await page.waitFor(`${back}.hidden`, { what: 'the main chat' });
     },
 
-    'after an answer the pane returns to the main chat 1.5s later': async ({ page, open, IDS }) => {
+    'after an answer the pane stays in that chat until the user leaves': async ({ page, open, IDS }) => {
         await open({ project: 'alpha', chat: IDS.worker }); // only the master waits in alpha
         await page.waitFor(`document.querySelector('${row(IDS.master)}')`, { what: 'the row' });
         await page.click(row(IDS.master));
         await page.waitFor(`!${back}.hidden`, { what: 'the back button' });
         await page.ev(`import('/chat.js').then(m => m.sendText(${JSON.stringify(IDS.master)}, 'Yes, tag it'))`);
-        await page.waitFor(`${back}.hidden && ${focus}.hidden`, { what: 'the automatic return', timeout: 5000 });
+        await new Promise(r => setTimeout(r, 2500)); // past the old 1.5s automatic return
+        assert.equal(await page.ev(`${back}.hidden`), false, 'still in the chat after the send');
         assert.equal(await page.ev(`document.getElementById('c-next').hidden`), true);
+        await page.click('#c-back');
+        await page.waitFor(`${back}.hidden`, { what: 'the main chat, by the user' });
     },
 
     'after an answer with another needs-you waiting, a Next link replaces the return': async ({ page, open, IDS }) => {

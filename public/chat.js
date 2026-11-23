@@ -108,8 +108,8 @@ function followFocus() {
     const to = pickChat(visible, state.focus, null)?.id;
     state.focus = to === pickChat(visible, store.get(bindKey()), state.chat)?.id ? null : to;
 }
-// After a focused question is answered: back to the main chat in 1.5s, unless another chat waits on the user, then
-// the header offers "Next: <title> →" instead of jumping.
+// After a focused question is answered the user stays in that chat (Back or Esc leaves); when another chat waits on the
+// user, the header offers "Next: <title> →". Nothing but a user action moves the pane.
 let returnTimer;
 let nextId = null;
 /** @param {string} sid */
@@ -127,8 +127,6 @@ export function answered(sid) {
             nextId = next.id;
             $('c-next').textContent = `Next: ${next.title || sessionTopic(next)} →`;
             $('c-next').hidden = false;
-        } else {
-            unfocusChat();
         }
     }, 1500);
 }

@@ -23,6 +23,11 @@ const r = { id: 'rev', at: now - 100_000, sent: false };
 // no reviewer, or its findings already sent: Review
 assert.equal(reviewAction(undefined, undefined, now).kind, 'review');
 assert.equal(reviewAction({ ...r, sent: true }, sess([prompt, said(FINDINGS), end], 19), now).label, 'Review');
+// after sent: only a moved head under the cap brings Review back; the cap leaves a quiet note
+const sentOnce = { ...r, sent: true, sha: 'aaa1111', rounds: 1 };
+assert.equal(reviewAction(sentOnce, undefined, now, 'aaa1111222'), null, 'same head: no button');
+assert.equal(reviewAction(sentOnce, undefined, now, 'bbb2222').label, 'Review', 'new head, round 1');
+assert.deepEqual(reviewAction({ ...sentOnce, rounds: 2 }, undefined, now, 'bbb2222'), { note: 'Reviewed twice' });
 // started, no transcript yet: Reviewing…; but not forever
 assert.equal(reviewAction(r, undefined, now).label, 'Reviewing…');
 assert.equal(reviewAction(r, undefined, r.at + REVIEWER_START_MS + 1).label, 'Review');

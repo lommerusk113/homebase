@@ -34,7 +34,7 @@ export function loadReviewers(dir) {
     reviewers.clear();
     for (const [key, r] of Array.isArray(saved) ? saved.slice(-MAX) : []) {
         if (KEY.test(key ?? '') && ID.test(r?.id ?? '') && Number.isFinite(r.at)) {
-            reviewers.set(key, { id: r.id, at: r.at, sent: !!r.sent });
+            reviewers.set(key, { id: r.id, at: r.at, sent: !!r.sent, sha: typeof r.sha === 'string' ? r.sha : null, rounds: Number.isFinite(r.rounds) ? r.rounds : 1 });
         }
     }
 }
@@ -51,7 +51,7 @@ const bad = (status, message) => Object.assign(new Error(message), { status });
 
 // Starts the reviewer for a row (key) in cwd. One per row: refused while the last one's findings are not sent yet.
 // gitlab: a work repo (review-gate) rather than a hobby one. Never pushes or merges: the chat is only told not to.
-export async function startReviewer(dir, { key, cwd, gitlab }, { tm = tmux, now = Date.now(), newId = randomUUID } = {}) {
+export async function startReviewer(dir, { key, cwd, gitlab, sha = null }, { tm = tmux, now = Date.now(), newId = randomUUID } = {}) {
 
     if (!KEY.test(key ?? '') || typeof cwd !== 'string') {
         throw bad(400, 'bad row');
@@ -64,7 +64,7 @@ export async function startReviewer(dir, { key, cwd, gitlab }, { tm = tmux, now 
     const id = newId();
     // --session-id names the chat up front, so its tmux (cc-<id8>) is known before its transcript exists; the prompt is its first message
     await tm(['new-session', '-d', '-s', tmuxName(id), '-c', cwd, loginShell(), '-lic', claudeLine(` --disallowedTools ${quoted(READ_ONLY)} --session-id ${id} ${quoted(REVIEW_PROMPT[gitlab ? 'work' : 'hobby'])}`)]);
-    reviewers.set(key, { id, at: now, sent: false });
+    reviewers.set(key, { id, at: now, sent: false, sha, rounds: (old?.rounds ?? 0) + 1 }); // sha: the MR head this review saw
     await save(dir);
 
     return id;

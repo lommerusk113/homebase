@@ -167,6 +167,8 @@ interface WorkItem {
     requested: { at: number; text: string } | null;
     next: string;
     action: RowAction | null;
+    /** a quiet line in the button's slot when there is no button, e.g. 'Reviewed twice' */
+    note?: string | null;
     gate: Gate | null;
     /** the Stop hook's last run of the project's check commands in the row's chat (server/checks.mjs) */
     checks: { state: 'pass' | 'fail' | 'running'; at: number } | null;

@@ -17,6 +17,7 @@ const item = useInjected(ItemKey);
             <span class="sl sl-b">
                 <SentPill v-if="item.sent || item.requested" />
                 <ActionButton v-else-if="item.action && item.sessionId" />
+                <small v-else-if="item.note" class="muted">{{ item.note }}</small>
             </span>
         </span>
     </td>

@@ -294,7 +294,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                         return deny(409, 'Already sent');
                     }
                     try {
-                        await startReviewer(DATA_DIR, { key, cwd, gitlab: !!repo && isGitLab(repo) });
+                        await startReviewer(DATA_DIR, { key, cwd, gitlab: !!repo && isGitLab(repo), sha: row.prState?.sha });
                     } catch (e) {
                         if (once) {
                             release(sentRows, once);

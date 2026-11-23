@@ -237,14 +237,23 @@ export function rowOf(ps, agent, { pr = null, title = null, mr = 'MR', aMr = 'a 
     return { state: { kind, reason }, column: columnOf(kind), next, action: k.action(c), stage: k.stage(c) };
 }
 
-// Review chats (server/reviewer.mjs keeps them on disk): row key -> { id, at, sent }.
+// Review chats (server/reviewer.mjs keeps them on disk): row key -> { id, at, sent, sha, rounds }.
 export const reviewers = new Map();
 export const REVIEWER_START_MS = 2 * 60_000; // a reviewer whose transcript never shows up within this is given up on
 
 // The Review button of an "In review" row, by its reviewer chat: none (or its findings already sent) -> Review, running -> Reviewing…,
 // idle with a reply -> Send findings, typing the reviewer's last message into the row's working chat. `session` is the reviewer's, or undefined.
-export function reviewAction(r, session, now = Date.now()) {
+export function reviewAction(r, session, now = Date.now(), sha = null) {
 
+    if (r && (r.sent || (!session && now - r.at > REVIEWER_START_MS))) {
+        // Review again only on a moved MR head and under the cap; otherwise no button, and a note once capped
+        if (r.rounds >= MAX_REVIEWS) {
+            return { note: 'Reviewed twice' };
+        }
+        if (sha && r.sha && (sha.startsWith(r.sha) || r.sha.startsWith(sha))) {
+            return null;
+        }
+    }
     if (!r || r.sent || (!session && now - r.at > REVIEWER_START_MS)) {
         return { label: 'Review', kind: 'review', message: 'Start a read-only reviewer chat on this branch' };
     }
@@ -260,6 +269,7 @@ export function reviewAction(r, session, now = Date.now()) {
         reviewerId: r.id
     };
 }
+const MAX_REVIEWS = 2;
 const MAX_FINDINGS = 15_000; // a send is capped at 20 KB
 
 // A report that merely quotes another repo's MR (e.g. a Homebase agent citing a pracsys MR) isn't work on this project.
@@ -427,6 +437,8 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const w = forgeWords(it.project, it.pr);
         const row = rowOf(ps, agent, { pr: it.pr, title, mr: w.mr, aMr: w.aMr, requested: !!requested, now, error: it.pr ? errorOf(it.pr, it.project) : null });
 
+        const rev = !row.action && row.column === 'review' ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now, prState?.sha) : null;
+
         return {
             key: it.key,
             project: it.project,
@@ -454,7 +466,8 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
             next: row.next,
-            action: row.action ?? (row.column === 'review' ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now) : null),
+            action: row.action ?? (rev?.label ? rev : null),
+            note: row.action ? null : rev?.note ?? null,
             checks: sessions.find(s => s.id === (agent?.sessionId ?? it.linkSession))?.checks ?? null,
             gate,
             ...agentUsage(agents, now)

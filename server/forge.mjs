@@ -446,10 +446,17 @@ export function humanComments(raw, me, max = 10, threads = null) {
         return { ...shown, unresolved: open.length, unresolvedBy: [...new Set(open.map(c => c.author))], replied: 0, repliedTo: [] };
     }
 
-    // mine: I wrote its last note by a person, so I have replied
+    // mine: I wrote its last note by a person, so I have replied; or its last note hands it to others with an @mention
+    // (not me, not its writer), so it waits on them
     const byPerson = n => n.author.username === me || human(n.author);
-    const turns = threads.filter(t => !t.resolved && t.notes.some(n => human(n.author)))
-        .map(t => ({ mine: t.notes.findLast(byPerson).author.username === me, by: t.notes.filter(n => human(n.author)).map(n => n.author.name) }));
+    const handedTo = n => [...new Set([...(n.body ?? '').matchAll(/(?<![\w@.])@([\w.-]*\w)/g)].map(m => m[1]))]
+        .filter(u => u !== me && u !== n.author.username);
+    const turns = threads.filter(t => !t.resolved && t.notes.some(n => human(n.author))).map(t => {
+        const last = t.notes.findLast(byPerson);
+        const to = last.author.username === me ? [] : handedTo(last);
+
+        return { mine: last.author.username === me || to.length > 0, by: to.length ? to : t.notes.filter(n => human(n.author)).map(n => n.author.name) };
+    });
     const names = list => [...new Set(list.flatMap(t => t.by))];
     const open = turns.filter(t => !t.mine);
     const replied = turns.filter(t => t.mine);
@@ -485,10 +492,10 @@ export async function fetchComments(url) {
     const of = (c, at) => ({ id: c.id, author: author(c.user), at, body: c.body, url: c.html_url });
     const [owner, name] = gh[2].split('/');
     // ponytail: first 100 threads, last 50 comments each; review threads are only in GraphQL
-    const q = `query($o:String!,$n:String!,$p:Int!){repository(owner:$o,name:$n){pullRequest(number:$p){reviewThreads(first:100){nodes{isResolved comments(last:50){nodes{author{__typename login}}}}}}}}`;
+    const q = `query($o:String!,$n:String!,$p:Int!){repository(owner:$o,name:$n){pullRequest(number:$p){reviewThreads(first:100){nodes{isResolved comments(last:50){nodes{body author{__typename login}}}}}}}}`;
     const args = ['api', 'graphql', '-f', `query=${q}`, '-F', `o=${owner}`, '-F', `n=${name}`, '-F', `p=${gh[3]}`];
     const toThread = t => ({
-        resolved: t.isResolved, notes: t.comments.nodes.map(c => ({ author: { name: c.author?.login, username: c.author?.login, type: c.author?.__typename } }))
+        resolved: t.isResolved, notes: t.comments.nodes.map(c => ({ body: c.body, author: { name: c.author?.login, username: c.author?.login, type: c.author?.__typename } }))
     });
     const threads = await apiOnce(`gh graphql threads ${url}`, () => apiSlot(() => ghRun(repo, args, { timeout: apiTimeout() })))
         .then(({ stdout }) => JSON.parse(stdout).data.repository.pullRequest.reviewThreads.nodes.map(toThread))

@@ -133,6 +133,13 @@ const mix = withThreads(waiting, turn(th(B), th(B, ME)));
 assert.equal(itemColumn(mix, null, true), 'needs-you');
 assert.equal(nextStep(mix, null), 'Address 1 unresolved comment from Børre');
 assert.equal(rowAction(mr(4), mix, null, 'T').label, 'Fix & reply');
+// a thread whose last note, by the reviewer, hands it to someone else with an @mention waits on that person
+const hand = (author, body) => ({ author, body });
+const handed = turn({ resolved: false, notes: [hand(B, 'is 2400 right?'), hand(ME, 'No code change'), hand(B, '@PetterGT should take a look')] });
+assert.deepEqual([handed.unresolved, handed.replied, handed.repliedTo], [0, 1, ['PetterGT']]);
+assert.equal(nextStep(withThreads({ ...waiting, changes: true }, handed), null), 'Replied to 1 thread — waiting for PetterGT to resolve');
+assert.equal(turn({ resolved: false, notes: [hand(B, '@me what about this'), ] }).unresolved, 1); // mentioning me is still on me
+assert.equal(turn({ resolved: false, notes: [hand(B, 'ping @borre')] }).unresolved, 1); // own name is no hand-off
 const done = turn({ ...th(B), resolved: true }, th(ME), th(BOT)); // resolved, my own, bot-only threads don't count
 assert.deepEqual([done.unresolved, done.replied], [0, 0]);
 assert.equal(withThreads(waiting, done), waiting);

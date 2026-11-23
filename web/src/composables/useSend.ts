@@ -29,6 +29,11 @@ export function useSend() {
      */
     async function send(sid: string, text: string, answerTo?: string, note?: string, canned?: boolean): Promise<boolean> {
 
+        // a button's message still waiting in the outbox (queued in a busy chat) is not sent again by a second click
+        if (canned && state.outbox.some(o => o.canned && o.sid === sid && o.text === text && !o.error && !o.unconfirmed)) {
+            return true;
+        }
+
         error.value = '';
         const out: OutboxItem = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo, note, canned, ...(canned && { label: cannedLabel(text) ?? undefined }) };
         state.outbox = [...state.outbox.filter(o => !(o.error && o.sid === sid) && !(answerTo && o.answerTo === answerTo)), out];

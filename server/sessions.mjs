@@ -163,7 +163,10 @@ export function backgroundTasks(entries) {
             }
         }
         const told = e.type === 'attachment' && e.attachment?.type === 'queued_command' ? textOf({ message: { content: e.attachment.prompt } }) : e.type === 'user' ? textOf(e) : '';
-        open.delete(told.match(NOTIFIED)?.[1]);
+        // a Monitor's event notices carry no <status>; only the closing one (completed, failed, killed) ends the task
+        if (/<status>/.test(told)) {
+            open.delete(told.match(NOTIFIED)?.[1]);
+        }
     }
 
     return open;
@@ -212,7 +215,12 @@ export function agentStatus(meta, entries, ageMs) {
         prev = e.type;
     }
 
-    const limit = pending.size || waiting ? AGENT_TOOL_MS : last?.type === 'assistant' && textOf(last) ? AGENT_IDLE_MS : AGENT_THINK_MS;
+    // own background work is no silence: it may run for hours, and its closing notice resumes the agent
+    if (waiting) {
+        return { status: 'running' };
+    }
+
+    const limit = pending.size ? AGENT_TOOL_MS : last?.type === 'assistant' && textOf(last) ? AGENT_IDLE_MS : AGENT_THINK_MS;
 
     return { status: ageMs < limit ? 'running' : 'stopped' };
 }

@@ -94,6 +94,17 @@ export default {
         assert.equal(page.posts.filter(p => p.url.includes('/api/send')).length, 1);
     },
 
+    'a second click on a button whose identical message is still queued sends nothing': async ({ page, open, IDS }) => {
+        await open();
+        await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
+        const text = `The subagent 'Fix login' stopped — check why and continue it.`;
+        const go = `import('/chat.js').then(m => m.sendText(${JSON.stringify(IDS.master)}, ${JSON.stringify(text)}, undefined, undefined, true))`;
+        assert.equal(await page.ev(go), true);
+        await page.ev(go);
+        await sleep(1000);
+        assert.equal(page.posts.filter(p => p.url.includes('/api/send') && p.body === text).length, 1);
+    },
+
     'the draft and the error line follow the chat: a focused chat starts empty, and going back restores the draft': async ({ page, open, IDS }) => {
         const asker = `#masters tr[data-key="asking:${IDS.asker}"]`;
         await open({ project: 'all', chat: IDS.worker });

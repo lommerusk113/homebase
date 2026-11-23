@@ -112,6 +112,14 @@ for (const quoted of ['75\tconst bg = \'Command running in background with ID: b
     const r = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: quoted }] } };
     assert.equal(st([call('a'), r, ended], 3 * MIN, { finished: true }).status, 'done', quoted);
 }
+// a persistent Monitor's event notices (no <status>) don't end the watch, and a watch silent for hours is still the agent's own work
+{
+    const mon = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: 'Monitor started (task bt9p1x, persistent).' }] } };
+    const event = { type: 'attachment', attachment: { type: 'queued_command', prompt: '<task-notification>\n<task-id>bt9p1x</task-id>\n<summary>Monitor event: "ci"</summary>\n<event>red</event>\n</task-notification>' } };
+    assert.equal(st([call('a'), mon, event, onHold('Watching CI.')], 11 * MIN).status, 'running', 'event notice keeps the watch open');
+    assert.equal(st([call('a'), mon, event, onHold('Watching CI.')], 3 * 60 * MIN).status, 'running', 'no silence cap while it waits');
+    assert.equal(st([call('a'), mon, told('bt9p1x'), onHold('Done watching.')], 11 * MIN).status, 'stopped', 'the closing notice ends it');
+}
 console.log('ok agents');
 
 // a helper the chat stopped (TaskStop) ends on the interrupt: finished, nothing to continue

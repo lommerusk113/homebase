@@ -45,6 +45,10 @@ for (const ps of [...mrStates, { state: 'merged' }, { state: 'closed' }, null]) 
             if (requested && !live) {
                 continue; // workItems only asks for a request when nothing runs and the MR is open
             }
+            // what the rows changed on purpose since the old rules (each has its own test below)
+            if (row.state.kind === 'gate') {
+                old.stage = 2;
+            }
             assert.deepEqual({ column: row.column, next: row.next, action: row.action, stage: row.stage }, old, JSON.stringify({ ps, agent, requested }));
             n++;
         }
@@ -71,3 +75,9 @@ for (const [kind, k] of Object.entries(KINDS)) {
     assert.equal(/^Merge/.test(sample?.label ?? ''), kind === 'ready', `${kind} merge`);
 }
 console.log('ok every kind has a column and only ready merges');
+
+const opts = { pr: url, title: 'T' };
+const gateDemoted = { state: 'open', ready: false, approved: true, notReady: GATE, reviewers: [] };
+assert.equal(rowOf(gateDemoted, null, opts).stage, 2, 'a gate-demoted MR sits in review, so its stage says Review, not Approved');
+assert.equal(rowOf({ ...gateDemoted, notReady: '2 threads still open — resolve them' }, null, opts).stage, 3, 'approved with open threads stays Approved');
+console.log('ok gate-demoted stage');

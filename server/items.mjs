@@ -327,7 +327,7 @@ export const KINDS = {
     failing: mrKind('needs-you', c => canned('pipeline', mrRefOf(c))),
     conflict: mrKind('needs-you', c => canned('rebase', mrRefOf(c))),
     blocked: mrKind('review'),
-    gate: mrKind('review', c => canned('gate', mrRefOf(c))),
+    gate: { ...mrKind('review', c => canned('gate', mrRefOf(c))), stage: () => 2 }, // approved but not through the gate: still in review
     threads: mrKind('review'),
     replied: mrKind('review'),
     pipeline: mrKind('review'),

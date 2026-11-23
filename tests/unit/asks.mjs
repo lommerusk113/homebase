@@ -135,6 +135,14 @@ assert.deepEqual([plainAsk.needsYou, plainAsk.tldr, plainAsk.text, plainAsk.repl
     assert.deepEqual(waitingAsk('Merge !12? 1. **Yes** — now 2. Later').options.map(o => o.label), ['Yes', 'Later']);
     assert.deepEqual(waitingAsk('which cache — A) Redis — shared, B) in-memory').options.map(o => o.label), ['Redis', 'in-memory']);
     assert.equal(waitingAsk('which cache, Redis or in-memory'), null);
+    {
+        const lbl = x => waitingAsk(x).options.map(o => o.label);
+        assert.deepEqual(lbl('Q? — (1) a; (2) b'), ['a', 'b']);
+        assert.deepEqual(lbl('Q? — (1) a (2) b'), ['a', 'b']);
+        assert.deepEqual(lbl('Q? — 1) a 2) b'), ['a', 'b']);
+        assert.deepEqual(lbl('Q? — (1, recommended) wait for PetterGT; (2) keep 2400 and reply so; (3) build an account choice for the accountant.'),
+            ['wait for PetterGT (recommended)', 'keep 2400 and reply so', 'build an account choice for the accountant']);
+    }
     assert.equal(waitingAsk('merge !1850 (1) only'), null);
     const [r] = chatItems([say(`Built it.\n\n**Waiting on you:** ${w}\n\n**TLDR:** Tell me what to clarify.`)]);
     assert.deepEqual(r.replies, ['how the supplier name is read (recommended)', 'the tooltip text «Forhåndsutfylt av leverandørautomatisering, regel for {leverandør}»', 'something else']);

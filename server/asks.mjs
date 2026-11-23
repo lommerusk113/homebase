@@ -46,7 +46,7 @@ export function waitingOn(text) {
 // (also "1. …" or "A) …"), as { question, context, options: [{ label, desc }] } (label: the option up to its first
 // ": " or " — ", plus "(recommended)" when it says so), else null when it lists fewer than 2 options.
 // ponytail: options split on their markers only; a marker-like "(2)" inside an option's own text cuts it short.
-const OPTION_MARKERS = [/\((\d)\)\s+/g, /(?<=^|\s)(\d)[.)]\s+/g, /(?<=^|\s)\(?([A-Da-d])\)\s+/g];
+const OPTION_MARKERS = [/\((\d)(,\s*recommended)?\)\s+/g, /(?<=^|\s)(\d)[.)]\s+/g, /(?<=^|\s)\(?([A-Da-d])\)\s+/g];
 export function waitingAsk(text) {
 
     for (const re of OPTION_MARKERS) {
@@ -64,7 +64,7 @@ export function waitingAsk(text) {
         const options = marks.map((m, k) => {
             const s = text.slice(m.index + m[0].length, marks[k + 1]?.index ?? text.length).trim().replace(/(?:[;,.]|\s+or)+$/i, '').trim();
             const [head, ...rest] = s.split(/:\s|\s+[—–]\s+/), label = head.replace(/[*_`]/g, '').trim();
-            const rec = /\brecommended\b/i.test(s) && !/\brecommended\b/i.test(label);
+            const rec = (m[2] || /\brecommended\b/i.test(s)) && !/\brecommended\b/i.test(label);
 
             return { label: rec ? `${label} (recommended)` : label, desc: rest.join(': ') };
         });

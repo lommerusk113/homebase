@@ -262,7 +262,8 @@ export default {
     'Step in opens a helper\'s own messages in the chat pane, Back returns': async ({ page, open, IDS }) => {
         const step = `${row('agent-stopped')}?.querySelector('wa-button.step-in')`;
         await open();
-        await page.waitFor(step, { what: 'the helper row with its Step in button' });
+        await page.waitFor(step, { what: 'the helper row with its Open chat icon' });
+        assert.deepEqual(await page.ev(`[${step}.getAttribute('aria-label'), ${step}.title]`), ['Open chat', 'Open chat']);
         await page.clickOn(step);
         await page.waitFor(`document.getElementById('feed').textContent.includes('Find out why the auth test is flaky')`, { what: "the helper's own message in the feed" });
         assert.equal(await page.ev(`document.getElementById('c-focus').textContent`), 'Helper: Investigate flaky test');

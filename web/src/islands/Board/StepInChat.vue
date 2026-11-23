@@ -1,11 +1,12 @@
 <script setup lang="ts">
-// "Step in" on a row backed by its own chat: that chat in the pane, with its composer.
+// The chat icon on a row backed by its own chat: that chat in the pane, with its composer.
 import { ChatRowsKey, useInjected } from '@/keys';
+import ChatIcon from '@/components/ChatIcon.vue';
 
 defineProps<{ sid: string }>();
 const { focus } = useInjected(ChatRowsKey);
 </script>
 
 <template>
-    <wa-button class="step-in" size="s" appearance="outlined" @click.stop="focus(sid)">Step in</wa-button>
+    <ChatIcon @click="focus(sid)" />
 </template>

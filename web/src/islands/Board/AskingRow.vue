@@ -7,6 +7,7 @@ import { excerpt } from '@/lib/text';
 import { ChatRowsKey, ProjectKey, useInjected } from '@/keys';
 import ChatName from './ChatName.vue';
 import NeedsYou from './NeedsYou.vue';
+import StepInChat from './StepInChat.vue';
 
 const props = defineProps<{ sid: string }>();
 const { byId, focus, replyOf, markDone, title, quietFor } = useInjected(ChatRowsKey);
@@ -37,6 +38,7 @@ const label = computed(() => (asks.value != null
                 <b><span class="pulse" />{{ ' ' }}<NeedsYou />{{ ' ' }}<ChatName :sid="sid" :what="what" /></b>
                 <small class="next">{{ hint }}</small>
             </template>
+            <StepInChat :sid="sid" />
         </td>
     </tr>
 </template>

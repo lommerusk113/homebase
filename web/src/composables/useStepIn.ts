@@ -11,10 +11,10 @@ export function useStepIn() {
     const relayed = (x: WorkItem) => x.agentStatus === 'running' && !!x.agentId && !!parent(x) && waitsOnYou(parent(x)!);
 
     return {
-        canStepIn: (x: WorkItem) => !!(x.agentId && x.sessionId),
+        canStepIn: (x: WorkItem) => !!x.sessionId,
         relayed,
         stepIn: (x: WorkItem) => (relayed(x)
             ? focusChat(x.sessionId, null, x.agentDescription ?? x.title)
-            : focusChat(x.sessionId, { id: x.agentId!, description: x.agentDescription ?? x.title }))
+            : focusChat(x.sessionId, x.agentId ? { id: x.agentId, description: x.agentDescription ?? x.title } : null))
     };
 }

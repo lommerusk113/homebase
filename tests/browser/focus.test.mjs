@@ -44,6 +44,15 @@ export default {
         assert.equal(await page.ev(`${back}.hidden`), false);
     },
 
+    'a chat row has the Open chat icon, and the icon opens that chat': async ({ page, open, IDS }) => {
+        await open({ project: 'all', chat: IDS.worker });
+        const icon = `document.querySelector('${row(IDS.asker)} wa-button.step-in')`;
+        await page.waitFor(icon, { what: 'the icon on the asking row' });
+        assert.deepEqual(await page.ev(`[${icon}.getAttribute('aria-label'), ${icon}.title]`), ['Open chat', 'Open chat']);
+        await page.clickOn(icon);
+        await page.waitFor(`!document.getElementById('ask').hidden && /Which database/.test(document.getElementById('ask-q').textContent)`, { what: "that chat's question" });
+    },
+
     'Esc returns to the main chat': async ({ page, open, IDS }) => {
         await open({ project: 'all', chat: IDS.worker });
         await page.waitFor(`document.querySelector('${row(IDS.asker)}')`, { what: 'the row' });

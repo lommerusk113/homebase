@@ -193,8 +193,8 @@ wa-dropdown-item [slot="details"] { font-size:var(--fs-s); color:var(--muted); }
   wa-dropdown-item [slot="details"] { position:relative; left:-2em; } /* takes back the library's 2em gap to the label, now above it */
 }
 wa-button[size="s"] { --wa-form-control-height:26px; --wa-form-control-padding-inline:10px; font-size:var(--fs-s); }
-wa-button.act-btn::part(base), wa-button.dismiss-btn::part(base) { color:var(--muted); }
-wa-button.act-btn:hover:not([disabled])::part(base), wa-button.dismiss-btn:hover::part(base) { color:var(--fg); }
+wa-button.act-btn::part(base), wa-button.step-in::part(base), wa-button.dismiss-btn::part(base) { color:var(--muted); }
+wa-button.act-btn:hover:not([disabled])::part(base), wa-button.step-in:hover:not([disabled])::part(base), wa-button.dismiss-btn:hover::part(base) { color:var(--fg); }
 .manual-toggle { font-size:12px; color:var(--muted); display:inline-flex; align-items:center; gap:3px; margin-right:6px; cursor:pointer; }
 .sent-pill { display:inline-flex; align-items:center; gap:6px; padding:2px 10px; border-radius:var(--r-pill); font-size:var(--fs-s); color:var(--c-doing); background:color-mix(in srgb, var(--c-doing) 14%, transparent); vertical-align:middle; }
 .no-reply { color:var(--c-needs); }

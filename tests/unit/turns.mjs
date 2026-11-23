@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'n
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { status, summarize, pendingQuestion, turnState, askMarker, markerAsk, helperAsk, findClearedSuccessor, tmuxFor, lastActivity, linkClears } from '../../server.mjs';
+import { status, summarize, pendingQuestion, turnState, askMarker, markerAsk, helperAsk, openToolUse, askingHelper, findClearedSuccessor, tmuxFor, lastActivity, linkClears } from '../../server.mjs';
 
 // Turn state, from real entry shapes (Claude Code 2.1.3xx).
 {
@@ -103,6 +103,13 @@ import { status, summarize, pendingQuestion, turnState, askMarker, markerAsk, he
     assert.equal(helperAsk(perm, [...turn, bash, result('b1', '26:01')], now), true, 'its Bash finished before the prompt');
     assert.equal(helperAsk(ask, turn, now), false, 'a question is not a permission prompt');
     assert.equal(helperAsk(null, turn, now), false);
+    // the helper that asks is the one running helper whose own transcript ends in an unanswered tool call
+    assert.equal(openToolUse([bash]), true);
+    assert.equal(openToolUse([bash, result('b1', '26:01')]), false);
+    const h = (id, status, openTool) => ({ id, status, openTool });
+    assert.equal(askingHelper([h('a', 'running', true), h('b', 'running', false), h('c', 'done', true)]), 'a');
+    assert.equal(askingHelper([h('a', 'running', true), h('b', 'running', true)]), null, 'several: unknown');
+    assert.equal(askingHelper([h('a', 'running', false)]), null, 'none: unknown');
     // a pending AskUserQuestion in the transcript wins over the marker
     const inTranscript = { type: 'assistant', timestamp: at('26:00'), message: { content: [{ type: 'tool_use', id: 'q9', name: 'AskUserQuestion', input: { questions: [{ question: 'Real?', options: [] }] } }] } };
     assert.equal(pendingQuestion([...turn, inTranscript], ask), 'Real?');

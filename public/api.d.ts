@@ -27,6 +27,10 @@ interface Session {
     known: boolean;
     /** a question (AskUserQuestion) or a permission prompt waits on the user */
     asking: boolean;
+    /** the prompt is a background helper's (shown on this chat's pane) */
+    helperAsking?: boolean;
+    /** the one running helper that prompt belongs to; null when none or several could be */
+    askingAgent?: string | null;
     /** its turn never ended and has been silent for 30 min, since died rows first ran here (never a closed chat) */
     died?: boolean;
     /** the text of that question or prompt; null when not asking */

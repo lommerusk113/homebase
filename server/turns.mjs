@@ -122,6 +122,23 @@ export function helperAsk(marker, entries, now = Date.now()) {
     return !mine.some(b => b.type === 'tool_use' && b.name !== 'Agent' && b.name !== 'Task' && !done.has(b.id));
 }
 
+// Whether the entries end in a tool call nothing answered yet (a helper's own: the one a permission prompt can be waiting on).
+export function openToolUse(entries) {
+
+    const blocks = entries.filter(e => Array.isArray(e.message?.content)).flatMap(e => e.message.content);
+    const done = new Set(blocks.filter(b => b.type === 'tool_result').map(b => b.tool_use_id));
+
+    return blocks.some(b => b.type === 'tool_use' && !done.has(b.id));
+}
+
+// The running helper a helperAsk prompt belongs to: the only one with an unresolved tool call; null when none or several.
+export function askingHelper(agents) {
+
+    const open = agents.filter(a => a.status === 'running' && a.openTool);
+
+    return open.length === 1 ? open[0].id : null;
+}
+
 // Turn state from the entries, not the mtime: thinking, long replies and long tool calls write nothing for minutes.
 // A turn starts at a user entry with `turnPosition` (human prompt, peer message, task notification; queued_command
 // attachments only land mid-turn) and ends at `turn_duration`, an API error, or an Esc interrupt. An interrupt

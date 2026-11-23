@@ -215,6 +215,26 @@ export default {
         await page.waitFor(`document.querySelector('#ask .c-ask-label').textContent === 'A background helper is asking' && !document.getElementById('ask').hidden`, { what: 'the helper-labelled card' });
     },
 
+    "a helper's prompt shows no card in the main chat but a Needs you row; the helper's chat shows it and answers on the main chat's pane": async ({ page, open, IDS, answerPosts }) => {
+        const json = body => ({ body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
+        const asking = 'Claude needs your permission to use Bash';
+        const question = parseQuestion(readFileSync(new URL('../fixtures/permission-bash.txt', import.meta.url), 'utf8'));
+        await open({ chat: IDS.master });
+        // the list names one running helper as the asker (the fixture has no ask marker to make the server say so)
+        await page.ev(`(() => { const f = window.fetch; window.fetch = async (u, o) => { const r = await f(u, o); if (!String(u).startsWith('/api/sessions')) return r; const j = await r.json(); for (const s of j) if (s.id === '${IDS.master}') Object.assign(s, { asking: true, question: ${JSON.stringify(asking)}, helperAsking: true, askingAgent: 'agent-stopped' }); return new Response(JSON.stringify(j), { headers: { 'content-type': 'application/json' } }); }; })()`);
+        page.route = q => (q.url.includes('/api/transcript') ? json({ items: [], working: false, asking, helperAsking: true })
+            : q.url.includes('/api/agent-feed') ? json({ items: [], working: true, asking, questions: [] })
+                : q.url.includes('/api/question') && q.method !== 'POST' ? json({ question })
+                    : answerPosts(q));
+        await page.waitFor(`document.querySelector('[data-key="asking:${IDS.master}"] small.next')?.textContent.startsWith('A background helper is asking')`, { what: 'the main chat row saying a helper asks' });
+        assert.equal(await page.ev(`document.getElementById('ask').hidden`), true, 'no card in the main chat');
+        await page.clickOn(`document.querySelector('#masters tr[data-key="agent-stopped"] wa-button.step-in')`);
+        await page.waitFor(`document.getElementById('c-focus').textContent === 'Helper: Investigate flaky test' && !document.getElementById('ask').hidden`, { what: "the card in the helper's chat" });
+        assert.ok(await page.ev(`document.querySelector('#masters tr[data-key="agent-stopped"] .needs-you-mark')`), "the helper's row says Needs you");
+        await page.click('#ask-opts wa-button');
+        assert.ok(page.posts.some(p => p.url.includes('/api/question') && p.url.includes(`tmux=`) && p.url.includes('option=')), "answered on the main chat's pane");
+    },
+
     'a long risky command is shown, its first lines then the rest on demand': async ({ page, open, IDS, answerPosts }) => {
         const transcript = { items: [], working: false, asking: 'Claude needs your permission to use Bash' };
         const question = parseQuestion(readFileSync(new URL('../fixtures/permission-bash-long.txt', import.meta.url), 'utf8'));

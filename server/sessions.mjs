@@ -6,7 +6,7 @@ import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ROOT, projectDirs, cache, liveSessions, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, INTERRUPTED } from './entries.mjs';
-import { WORKING_MS, closedSession, turnState, hasTurnMarkers, turnPrompts, pendingQuestion, askMarker, spawnPrompts } from './turns.mjs';
+import { WORKING_MS, closedSession, turnState, hasTurnMarkers, turnPrompts, helperAsk, askingHelper, openToolUse, pendingQuestion, askMarker, spawnPrompts } from './turns.mjs';
 import { splitTldr, gateRuns, latestTopic, queuedPrompts } from './summaries.mjs';
 import { readUsage, usageCache } from './usage.mjs';
 import { chatItems } from './feed.mjs';
@@ -402,7 +402,7 @@ async function agents(sessionDir, now) {
             const a = summarizeAgent(hit.meta, hit.entries, now - st.mtimeMs, id);
             // transcript gitBranch is the parent checkout's branch, not the worktree's, so ask the worktree
             const head = a.status === 'done' ? null : await worktreeHead(hit.meta.worktreePath);
-            out.push({ id, toolUseId: hit.meta.toolUseId ?? null, started: st.birthtimeMs, updated: st.mtimeMs, usage: await readUsage(path, st.size), prompt: await firstPrompt(path), branches: [head ?? a.branch, hit.meta.worktreeBranch].filter(Boolean), ...a });
+            out.push({ id, toolUseId: hit.meta.toolUseId ?? null, started: st.birthtimeMs, updated: st.mtimeMs, openTool: a.status === 'running' && openToolUse(hit.entries), usage: await readUsage(path, st.size), prompt: await firstPrompt(path), branches: [head ?? a.branch, hit.meta.worktreeBranch].filter(Boolean), ...a });
         } catch {
             continue;
         }
@@ -625,7 +625,8 @@ async function readSession({ dir, file, path, st }, now, live) {
         return null; // deleted between stat and read
     }
 
-    const s = summarize(entries, now - st.mtimeMs, await askMarker(file.replace('.jsonl', ''), { live }), live);
+    const marker = await askMarker(file.replace('.jsonl', ''), { live });
+    const s = summarize(entries, now - st.mtimeMs, marker, live);
     const id = s.id ?? file.replace('.jsonl', '');
 
     // subagents run inside their session's process, so they end with it
@@ -639,6 +640,12 @@ async function readSession({ dir, file, path, st }, now, live) {
             spawnedFor: spawns.get(a.toolUseId) ?? null,
             ...(closed && a.status === 'running' && { status: 'stopped', stopReason: 'closed' })
         }));
+
+    // a permission prompt no tool of the chat's own waits on is a helper's: the row of the one helper that waits on a tool is the one asking
+    if (s.asking && helperAsk(marker, entries, now)) {
+        s.helperAsking = true;
+        s.askingAgent = askingHelper(subagents);
+    }
 
     const ctx = await contextOf(id);
 

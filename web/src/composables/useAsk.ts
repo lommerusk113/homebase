@@ -70,6 +70,12 @@ function hide() {
 // descriptions come from the transcript, else the pane. No question readable there: the transcript's, see below.
 async function check(s: Session, data: Transcript) {
 
+    // a helper's prompt shows only in that helper's chat (its feed has no helperAsking): the main chat's row says it, not a card
+    if (data.helperAsking && s.askingAgent) {
+        setFormatWarn('pane', false);
+        return hide();
+    }
+
     if (!data.asking) {
         setFormatWarn('pane', false);
         answeredAsk = null;

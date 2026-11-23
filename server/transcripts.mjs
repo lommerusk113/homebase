@@ -48,5 +48,5 @@ export async function agentFeed(list, sessionId, agentId, max) {
     const feed = chatFeed(entries, Math.min(Math.max(Math.trunc(Number(max)) || FEED_ITEMS, 1), 10_000));
     const items = feed.items, more = feed.earlier > 0, capped = false;
 
-    return { items, more, capped, asking: null, questions: [], working: a.agentStatus === 'running', stuck: false };
+    return { items, more, capped, asking: s.askingAgent === agentId ? s.question : null, questions: [], working: a.agentStatus === 'running', stuck: false };
 }

@@ -181,12 +181,16 @@ import { say } from './helpers.mjs';
 
     const H = 3600_000, c = (hash, at, branch) => ({ hash: hash.repeat(40), short: hash.repeat(7), at, branch });
     const agents = [
-        { id: 'build', started: 10 * H, at: 11 * H, branches: ['worktree-agent-x'], report: 'committed as `ccccccc`', commits: [] },
-        { id: 'merge', started: 12 * H, at: 12.1 * H, branches: [], report: 'main is at `ddddddd`, right after `eeeeeee` and `ccccccc`', commits: [] }
+        { id: 'build', spans: [[10 * H, 11 * H]], at: 11 * H, branches: ['worktree-agent-x'], report: 'committed as `ccccccc`', commits: [] },
+        { id: 'merge', spans: [[12 * H, 12.1 * H]], at: 12.1 * H, branches: [], report: 'main is at `ddddddd`, right after `eeeeeee` and `ccccccc`', commits: [] }
     ];
     const left = nestCommits(agents, [c('c', 10.5 * H, 'worktree-agent-x'), c('d', 12.05 * H, 'main'), c('e', 2 * H, 'main'), c('f', 12.05 * H, 'main')]);
     assert.deepEqual(agents.map(a => [a.id, a.commits.map(x => x.hash[0])]), [['build', ['c']], ['merge', ['d']]], 'branch first, then a hash named in the report while it ran');
     assert.deepEqual(left.map(x => x.hash[0]), ['e', 'f'], 'an older commit the merge agent only refers to stays loose');
+
+    const D = 24 * H, resumed = [{ id: 'r', spans: [[10 * H, 11 * H], [10 * H + 3 * D, 11 * H + 3 * D]], at: 11 * H + 3 * D, branches: [], report: 'made `fffffff`', commits: [] }];
+    nestCommits(resumed, [c('f', 10.5 * H + D, 'main'), c('f', 10.5 * H + 3 * D, 'main')]);
+    assert.deepEqual(resumed[0].commits.map(x => x.at), [10.5 * H + 3 * D], 'a commit from the idle days between a resumed helper\'s active spans is not its own');
 
     const now = new Date(2026, 10, 13, 12).getTime(), at = (d, h) => new Date(2026, 10, d, h).getTime();
     const days = groupByDay([{ at: at(11, 9) }, { at: at(13, 8) }, { at: at(12, 23) }, { at: at(13, 11) }], now);

@@ -78,7 +78,7 @@ export function nestCommits(agents, commits) {
     const left = [];
     for (const c of commits) {
         const named = new RegExp(`\\b${c.hash.slice(0, 7)}[0-9a-f]*\\b`);
-        const ran = a => c.at >= (a.started ?? a.at) - SLACK_MS && c.at <= a.at + SLACK_MS;
+        const ran = a => (a.spans?.length ? a.spans : [[a.at, a.at]]).some(([from, to]) => c.at >= from - SLACK_MS && c.at <= to + SLACK_MS);
         const owner = byAge.find(a => a.branches.includes(c.branch)) ?? byAge.find(a => ran(a) && named.test(a.report));
         if (owner) {
             owner.commits.push(c);
@@ -224,7 +224,7 @@ async function finishedAgents(sessionDir, since) {
                 hit = {
                     mtimeMs: st.mtimeMs,
                     value: {
-                        kind: 'agent', id, at: st.mtimeMs, started: u.first, description: a.description, tldr: a.tldr, body: a.body, report: a.report,
+                        kind: 'agent', id, at: st.mtimeMs, spans: u.spans, description: a.description, tldr: a.tldr, body: a.body, report: a.report,
                         pr: a.pr, prs: a.prs, branches: [meta.worktreeBranch].filter(Boolean), // transcript gitBranch is the parent checkout's
                         time: u.active > 0 ? formatDuration(u.active) : null,
                         tokens: tokens ? formatTokens(tokens) : null

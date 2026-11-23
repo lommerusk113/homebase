@@ -1,7 +1,7 @@
 // Token usage of a transcript, read incrementally by byte offset, and the duration and token formatters.
 import { open, stat } from 'node:fs/promises';
 
-export const usageCache = new Map(); // subagent transcript path -> { offset, byId, first, last, prev, active, totals }
+export const usageCache = new Map(); // subagent transcript path -> { offset, byId, first, last, prev, active, spans, totals }
 // A gap between two transcript entries longer than this is idle (a helper resumed days later), not work.
 export const IDLE_CUTOFF_MS = 10 * 60_000;
 export const USAGE_KEYS = { input: 'input_tokens', output: 'output_tokens', cacheRead: 'cache_read_input_tokens', cacheWrite: 'cache_creation_input_tokens' };
@@ -22,6 +22,13 @@ export function addUsage(u, text) {
             u.last = Math.max(u.last ?? t, t);
             const gap = t - (u.prev ?? t);
             u.active = (u.active ?? 0) + (gap >= 0 && gap < IDLE_CUTOFF_MS ? gap : 0);
+            u.spans ??= [];
+            const span = u.spans.at(-1);
+            if (span && gap >= 0 && gap < IDLE_CUTOFF_MS) {
+                span[1] = t;
+            } else {
+                u.spans.push([t, t]);
+            }
             u.prev = t;
         }
         if (e.type === 'assistant' && e.message?.usage) {
@@ -34,7 +41,7 @@ export function addUsage(u, text) {
     return u;
 }
 
-// Token totals and first/last timestamp and active time (gaps under IDLE_CUTOFF_MS) of a transcript, reading only the bytes appended since the last call.
+// Token totals, first/last timestamp, active time and the active spans [[from, to]] (gaps under IDLE_CUTOFF_MS) of a transcript, reading only the bytes appended since the last call.
 export async function readUsage(path, size) {
 
     size ??= (await stat(path)).size;
@@ -60,7 +67,7 @@ export async function readUsage(path, size) {
         }
     }
 
-    return { ...u.totals, first: u.first, last: u.last, active: u.active };
+    return { ...u.totals, first: u.first, last: u.last, active: u.active, spans: u.spans ?? [] };
 }
 
 // "14m", "1h 05m"

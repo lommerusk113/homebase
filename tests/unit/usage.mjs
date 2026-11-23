@@ -20,7 +20,7 @@ const uf = `${mkdtempSync(`${tmpdir()}/hb-`)}/agent.jsonl`;
 writeFileSync(uf, use('a', 1, 1, T('00.000')) + '\n' + use('b', 1, 1, T('01.000')).slice(0, 20)); // second line half-written
 assert.equal((await readUsage(uf)).output, 1);
 appendFileSync(uf, use('b', 1, 1, T('01.000')).slice(20) + '\n' + use('b', 1, 1, T('01.000')) + '\n' + use('c', 1, 4, T('02.000')) + '\n');
-assert.deepEqual(await readUsage(uf), { input: 3, output: 6, cacheRead: 300, cacheWrite: 30, first: Date.parse(T('00.000')), last: Date.parse(T('02.000')), active: 2000 });
+assert.deepEqual(await readUsage(uf), { input: 3, output: 6, cacheRead: 300, cacheWrite: 30, first: Date.parse(T('00.000')), last: Date.parse(T('02.000')), active: 2000, spans: [[Date.parse(T('00.000')), Date.parse(T('02.000'))]] });
 assert.equal((await readUsage(uf)).output, 6); // unchanged file: nothing re-counted
 // a helper resumed 3 days later keeps one transcript: only the active parts count, whole or read in pieces
 const DAY = 86_400_000, M = 60_000, ts = ms => new Date(Date.parse(T('00.000')) + ms).toISOString();
@@ -28,6 +28,7 @@ const lines = [use('x1', 1, 1, ts(0)), use('x2', 1, 1, ts(4 * M)), use('x3', 1, 
 assert.equal(addUsage({ byId: new Map() }, lines.join('\n')).active, 6 * M);
 const split = addUsage(addUsage({ byId: new Map() }, lines.slice(0, 2).join('\n')), lines.slice(2).join('\n'));
 assert.equal(split.active, 6 * M);
+assert.deepEqual(split.spans, [[Date.parse(T('00.000')), Date.parse(T('00.000')) + 4 * M], [Date.parse(T('00.000')) + 3 * DAY, Date.parse(T('00.000')) + 3 * DAY + 2 * M]]);
 assert.equal(split.last - split.first, 3 * DAY + 2 * M);
 const sf = `${mkdtempSync(`${tmpdir()}/hb-`)}/agent.jsonl`;
 writeFileSync(sf, lines.slice(0, 2).join('\n') + '\n');

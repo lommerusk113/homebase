@@ -19,5 +19,5 @@
         "noFallthroughCasesInSwitch": true,
         "skipLibCheck": true
     },
-    "include": ["public/*.js", "public/types.d.ts"]
+    "include": ["public/*.js", "public/api.d.ts", "public/types.d.ts"]
 }

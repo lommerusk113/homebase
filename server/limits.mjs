@@ -17,10 +17,19 @@ export function limitsOf(j, now = Date.now()) {
 
 // Highest used % seen per window, keyed by name and resets_at. Dumps are per session and can be stale, so a dump
 // must never lower the number within a window; a new resets_at starts fresh. Expired windows are dropped.
+// Only dumps on the newest five-hour window count, and a new five-hour window forgets the weekly peak: a refill
+// starts one and lowers the weekly number, which the sessions still on the old window don't know yet.
 export function peakLimits(peaks, dumps, now = Date.now()) {
 
-    for (const j of dumps) {
-        for (const [name, w] of Object.entries(limitsOf(j, now) ?? {})) {
+    const live = dumps.map(j => limitsOf(j, now)).filter(Boolean);
+    const newest = Math.max(0, ...live.map(l => l.fiveHour?.resetsAt ?? 0));
+    const known = Math.max(0, ...[...peaks.keys()].filter(k => k.startsWith('fiveHour:')).map(k => Number(k.split(':')[1])));
+    if (newest > known) {
+        [...peaks.keys()].filter(k => k.startsWith('sevenDay:')).forEach(k => peaks.delete(k));
+    }
+    const window = Math.max(newest, known);
+    for (const l of window ? live.filter(l => l.fiveHour?.resetsAt === window) : live) {
+        for (const [name, w] of Object.entries(l)) {
             if (w) {
                 const k = `${name}:${w.resetsAt}`;
                 peaks.set(k, Math.max(peaks.get(k) ?? 0, w.used));

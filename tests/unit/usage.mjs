@@ -146,6 +146,13 @@ assert.deepEqual(peakLimits(peaks, [dump(5, 1738443600)], 1738425600_000 + 1).fi
 assert.equal([...peaks.keys()].some(k => k.includes('1738425600000')), false); // expired window dropped
 assert.equal(peakLimits(new Map(), [{}], now), null);
 {
+    const p = new Map(), late = 1738425600_000 - 60_000;
+    assert.equal(peakLimits(p, [dump(90, 1738425600, 82)], late).sevenDay.used, 82);
+    // a refill starts a new five-hour window: its weekly number wins over the peak and over sessions still on the old window
+    assert.deepEqual(peakLimits(p, [dump(100, 1738425600, 75), dump(0, 1738443600, 58)], late), { fiveHour: { used: 0, resetsAt: 1738443600_000 }, sevenDay: { used: 58, resetsAt: 1738857600_000 } });
+    assert.equal(peakLimits(p, [dump(100, 1738425600, 82)], late).sevenDay.used, 58); // the old window can't raise it back
+}
+{
     const dir = mkdtempSync(join(tmpdir(), 'hb-settings-')), f = join(dir, 'settings.json');
     const nap = async () => {};
     for (const [start, written, expected] of [

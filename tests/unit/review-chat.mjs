@@ -43,7 +43,7 @@ assert.equal(rows(new Map([[mr(4), r]]), sess([prompt, tool], 5)).length, 1);
 assert.equal(rows(new Map([[mr(4), r]]), sess([prompt, tool], 5))[0].action.label, 'Reviewing…');
 assert.equal(rows(new Map([[mr(4), r]]), sess([prompt, said(FINDINGS), end], 19))[0].action.label, 'Send findings');
 assert.equal(workItems([master], () => open(), now, undefined, [], new Map())[0].action.label, 'Request review', 'no reviewer asked yet: that comes first');
-assert.equal(workItems([master], () => open({ ready: true, reviewers: ['Ann'] }), now, undefined, [], new Map())[0].action.label, 'Merge + close issue');
+assert.equal(workItems([master], () => open({ ready: true, reviewers: ['Ann'] }), now, undefined, [], new Map())[0].action.label, 'Run gate');
 console.log('ok review rows');
 
 // starting one: fixed prompt, own tmux, one per row

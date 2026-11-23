@@ -88,6 +88,6 @@ import { workItems, issueOf, mentionsMr, turnPrompts, spawnPrompts, worksOnMr, r
     const ready = { ...pr, changes: false, ready: true };
     const gated = one(master([], [gateAgent('toolu_gate')]), () => ready);
     assert.deepEqual([gated.column, gated.next, gated.action, gated.agentStatus], ['doing', 'Gate: code review is implementing…', null, 'running']);
-    assert.equal(one(master([], [gateAgent('toolu_other')]), () => ready).action.label, 'Merge + close issue');
+    assert.equal(one(master([], [gateAgent('toolu_other')]), () => ready).action.label, 'Run gate');
     console.log('ok requested, agent links');
 }

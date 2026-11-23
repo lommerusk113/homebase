@@ -17,6 +17,7 @@ const CANNED: Record<string, Canned> = {
     rebase: { label: 'Rebase', text: ref => `Rebase ${ref} onto its target branch, resolve any conflicts and push.`, of: mr },
     ready: { label: 'Mark ready', text: ref => `Run review-gate on ${ref}. If the verdict is ready, mark it ready for review. If it's fix first, show me the findings and leave it a draft.`, of: mr },
     merge: { label: 'Merge + close issue', text: ref => `Run review-gate on ${ref}. If the verdict is ready, merge it and close its issue. If it's fix first, show me the findings and don't merge.`, of: mr },
+    gate: { label: 'Run gate', text: ref => `Run review-gate on ${ref} for its latest commit and show me the verdict.`, of: mr },
     review: { label: 'Request review', text: ref => `Assign a reviewer to ${ref} — suggest who.`, of: mr },
     start: { label: 'Start', text: iid => `Implement #${iid}`, of: issue, arg: '\\d+' },
     startUnassigned: { label: 'Start', text: iid => `Assign #${iid} to me first (it is unassigned), then implement it.`, of: issue, arg: '\\d+' },

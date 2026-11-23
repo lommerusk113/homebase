@@ -115,6 +115,9 @@ export function nextStep(prState, agent, mr = 'MR') {
     if (prState.blocked) {
         return BLOCKED_STEP[prState.blocked];
     }
+    if (prState.notReady) {
+        return prState.notReady;
+    }
     if (prState.replied && !prState.ready) {
         const n = prState.replied;
         return `Replied to ${n} thread${n === 1 ? '' : 's'} — waiting for ${prState.repliedTo?.join(', ') || 'the reviewer'} to resolve`;
@@ -131,6 +134,20 @@ export function nextStep(prState, agent, mr = 'MR') {
     }
 
     return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
+}
+
+const GATE_STEP = 'Gate not passed for the latest commit — run review-gate';
+
+// An approved MR is only ready to merge once the gate passed for its head and no thread is open; otherwise it stays in review with the first blocker named.
+function demote(prState, gate) {
+
+    if (!prState?.ready) {
+        return prState;
+    }
+    const notReady = gate?.verdict !== 'ready' || gate.stale ? GATE_STEP
+        : prState.replied ? `${prState.replied} thread${prState.replied === 1 ? '' : 's'} still open — resolve them` : null;
+
+    return notReady ? { ...prState, ready: false, approved: true, notReady } : prState;
 }
 
 // The step review comments or a failing pipeline ask for, or null when neither does.
@@ -188,6 +205,12 @@ export function rowAction(pr, prState, agent, title) {
     }
     if (prState.blocked) {
         return null; // another MR or an external check, nothing to type
+    }
+    if (prState.notReady === GATE_STEP) {
+        return canned('gate', ref);
+    }
+    if (prState.notReady) {
+        return null; // open threads: the reviewer resolves them
     }
     if (prState.replied && !prState.ready) {
         return null; // every open thread was last answered by me: the reviewer resolves them, unless GitLab already allows the merge
@@ -387,11 +410,13 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const agent = agents[0] ?? null;
         const prState = it.pr ? prOf(it.pr) : null;
         const gates = it.pr ? sessions.filter(s => s.project === it.project).flatMap(s => [...s.gates ?? [], ...(s.agents ?? []).flatMap(a => a.gates ?? [])]) : [];
-        const stage = lifecycle(it.pr, prState, agent);
+        const gate = it.pr ? toGate(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null;
+        const ps = demote(prState, gate);
+        const stage = lifecycle(it.pr, ps, agent);
         // asked in the master's open turn but no agent runs for it yet: show it as in progress, without the button
         const requested = it.pr && agent?.status !== 'running' && prState?.state !== 'merged' && prState?.state !== 'closed'
             ? requestFor(sessions, it.project, it.pr, prState) : null;
-        const col = requested ? 'doing' : itemColumn(prState, agent, !!it.pr);
+        const col = requested ? 'doing' : itemColumn(ps, agent, !!it.pr);
         const title = prState?.title ?? agent?.description ?? it.pr;
         const w = forgeWords(it.project, it.pr);
 
@@ -417,10 +442,10 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             agentLinks: agents.filter(a => a.status === 'done').map(a => ({ id: a.id, description: a.description, finished: a.updated })), // for the store; dropped before the response
             activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
-            next: requested ? 'Claude is on it…' : col === 'finished' ? `Finished without ${w.aMr}` : nextStep(prState, agent, w.mr),
-            action: requested ? null : rowAction(it.pr, prState, agent, title) ?? (col === 'review' ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now) : null),
+            next: requested ? 'Claude is on it…' : col === 'finished' ? `Finished without ${w.aMr}` : nextStep(ps, agent, w.mr),
+            action: requested ? null : rowAction(it.pr, ps, agent, title) ?? (col === 'review' ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now) : null),
             checks: sessions.find(s => s.id === (agent?.sessionId ?? it.linkSession))?.checks ?? null,
-            gate: it.pr ? toGate(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
+            gate,
             ...agentUsage(agents, now)
         };
     }).filter(x => !isDismissed(x));

@@ -36,6 +36,10 @@ The old code changes `core.state` in place and then redraws. `src/old.ts` wraps 
 So anything that reads `oldState.value` re-runs after the old code changes state and redraws the board.
 A section whose state changes without a board redraw (the chat, the diff viewer) calls `vue.bump()` where it changes it, when that section is ported.
 
+A section with its own data flow, where a board bump must not redraw it, uses a **port** instead, like the chat feed's `feedPort = { merge, show }` in `public/chat.js`. The old module exports an empty object, the section's composable (`useFeed.ts`) fills in its functions when `web/dist` loads, and the old code calls them where it used to draw. The composable keeps its own `shallowRef`, so only that section redraws. Ported so far: the Changes viewer (`Diff`, `DiffButton`) and the chat feed (`Feed`).
+
+Each island is its own Vue app, so give `useId()` ids a section prefix (`feed-`, …): bare ids collide across islands.
+
 Composables are the only readers of `oldState`.
 They return getter refs, `toRef(() => oldState.value.x)`, not `computed`: a computed that returns the same (mutated) object again doesn't notify what depends on it, while a getter ref reads `oldState` on every access.
 Use `computed` only for a derived value whose getter itself reads `oldState.value`.

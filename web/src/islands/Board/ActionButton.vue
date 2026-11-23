@@ -15,5 +15,5 @@ const openReviewer = (reviewerId: string) => bindChat(reviewerId);
 <template>
     <wa-button :id="id" class="act-btn" size="s" appearance="outlined" :disabled="item.action?.kind === 'reviewing' || undefined" @click.stop="press(item, $event.isTrusted)">{{ alreadySent.has(item.key) ? 'Already sent' : item.action?.label }}</wa-button>
     <wa-tooltip :for="id">{{ item.action?.hint ?? item.action?.message }}</wa-tooltip>
-    <wa-button v-if="item.action?.reviewerId" class="open-reviewer" size="s" appearance="plain" @click.stop="openReviewer(item.action.reviewerId)">Open reviewer</wa-button>
+    <wa-button v-if="item.action?.reviewerId" class="open-reviewer" size="s" appearance="plain" aria-label="Open reviewer" title="Open reviewer" @click.stop="openReviewer(item.action.reviewerId)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg></wa-button>
 </template>

@@ -581,8 +581,9 @@ wa-details.group::part(icon) { color:var(--muted); font-size:var(--fs-s); }
 /* fixed slots, so icons, buttons and MR parts line up on every row whether or not each is there */
 .rows .slots { display:inline-flex; align-items:center; justify-content:flex-end; gap:4px; }
 .rows .sl { display:inline-flex; align-items:center; justify-content:center; position:relative; }
-.rows .sl-i { width:32px; } .rows .sl-b { width:104px; justify-content:flex-end; }
-.rows .sl-i .needs-you-mark { position:absolute; right:100%; margin-right:4px; }
+.rows .sl-i { width:32px; } .rows .sl-b { width:150px; justify-content:flex-start; gap:4px; } .rows .sl-b > * { flex:none; white-space:nowrap; }
+.rows .slots { position:relative; } .rows .sl-i:has(.needs-you-mark) { position:static; }
+.rows .sl-i .needs-you-mark { position:absolute; right:100%; margin-right:4px; max-width:none; }
 .rows .sl-pr { width:60px; justify-content:flex-start; } .rows .sl-ci { width:22px; }
 .rows .br .chip { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; }
 .rows .what .next.nl { display:flex; align-items:baseline; gap:6px; white-space:nowrap; }
@@ -595,7 +596,7 @@ ul.comments { margin:0; padding:0; list-style:none; font-size:var(--fs-m); }
 ul.comments li { margin:3px 0; }
 ul.comments a { color:var(--fg); }
 ul.comments li.seen a { color:var(--muted); }
-.rows .pr { width:190px; } .rows .br { width:180px; } .rows .act { width:200px; white-space:nowrap; text-align:right; padding-right:0; }
+.rows .pr { width:190px; } .rows .br { width:180px; } .rows .act { width:310px; white-space:nowrap; text-align:right; padding-right:0; }
 .ci-pill { --c:var(--c-idle); display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; margin-left:4px; border-radius:var(--r-pill); font-size:var(--fs-xs); font-weight:700; line-height:1; text-decoration:none; vertical-align:middle; color:var(--c); background:color-mix(in srgb, var(--c) 15%, transparent); }
 .ci-pill.stale { --c:var(--c-warn); }
 .ci-success { --c:var(--c-ready); } .ci-failed { --c:var(--c-danger); }

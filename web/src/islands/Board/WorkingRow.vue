@@ -11,10 +11,10 @@ const s = toRef(() => byId.value.get(props.sid)!);
 
 <template>
     <tr class="starting working" :class="{ viewing: viewing(sid) }" :data-key="`working:${sid}`" role="button" @click="focus(sid)">
-        <td class="what" colspan="6">
-            <b><span class="pulse" />{{ ' ' }}<bdi>{{ workingTitle(s) }}</bdi>{{ ' ' }}<span class="chip">main chat</span><template v-if="s.manual">{{ ' ' }}<span class="chip" title="Manual mode: you drive this chat, no helpers">manual</span></template></b>
+        <td class="what" colspan="5">
+            <b><span class="pulse" />{{ ' ' }}<bdi>{{ s.title || workingTitle(s) }}</bdi>{{ ' ' }}<span class="chip">main chat</span><template v-if="s.manual">{{ ' ' }}<span class="chip" title="Manual mode: you drive this chat, no helpers">manual</span></template></b>
             <small class="next">{{ workingLine(s) }}</small>
-            <StepInChat :sid="sid" />
         </td>
+        <StepInChat :sid="sid" />
     </tr>
 </template>

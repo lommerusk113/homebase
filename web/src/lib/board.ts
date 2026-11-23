@@ -53,7 +53,7 @@ const SHORT_WORDS = 3;
 /** "project · Now: <step> · for 2m" for a working main chat; the time is since its newest tool call, else its turn start. */
 export function workingLine(s: Session): string {
     const t = ago(s.stepAt ?? s.since ?? s.lastActivity ?? s.updated);
-    return `${s.project} · Now: ${s.step || 'thinking'}${t === 'now' ? '' : ` · for ${t}`}`;
+    return `${s.project} · Now: ${s.step || s.topic || 'thinking'}${t === 'now' ? '' : ` · for ${t}`}`;
 }
 
 /** What a working chat is on: the request its turn handles (no pasted image paths), else its newest reply's topic, else its title. */

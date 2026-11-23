@@ -13,10 +13,10 @@ const s = toRef(() => byId.value.get(props.sid)!);
 
 <template>
     <tr class="asking died" :data-key="`died:${sid}`" role="button" @click="openDied(s)">
-        <td class="what" colspan="6">
+        <td class="what" colspan="5">
             <b><span class="pulse" />{{ ' ' }}<ChatName :sid="sid" what="stopped mid-turn" /></b>
             <small class="next">{{ `No activity for ${quietFor(s) === 'now' ? 'a moment' : quietFor(s)} — Claude may be stuck or closed${touch() ? '' : ' · click to look'}` }}</small>
-            <StepInChat :sid="sid" />
         </td>
+        <StepInChat :sid="sid" />
     </tr>
 </template>

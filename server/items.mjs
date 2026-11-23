@@ -15,19 +15,21 @@ export function gateFor(runs, url, branch) {
 }
 
 // Stale once the MR head moved past the commit the gate checked; without a commit in the report, the head first seen alongside the run stands in.
-export function toGate(run, sha, heads = new Map()) {
+// A run older than `since` (the server start) with no remembered head gets none: it counts as stale, never as passed.
+export const gateKey = run => `${run.at}:${run.text.length}`;
+export function toGate(run, sha, heads = new Map(), since = 0) {
 
     if (!run) {
         return null;
     }
 
-    const key = `${run.at}:${run.text.length}`;
-    if (sha && !heads.has(key)) {
-        heads.set(key, sha); // ponytail: in memory, so a push before a Homebase restart goes unnoticed
+    const key = gateKey(run);
+    if (sha && !heads.has(key) && run.at >= since) {
+        heads.set(key, sha); // ponytail: the first poll after the run stands in for the gate's commit; the store (gateHeadsOf) keeps it across restarts
     }
     const checked = run.commit ?? heads.get(key);
 
-    return { verdict: run.verdict, at: run.at, tldr: run.tldr, commit: run.commit, stale: !!(sha && checked && !sha.startsWith(checked) && !checked.startsWith(sha)) };
+    return { verdict: run.verdict, at: run.at, tldr: run.tldr, commit: run.commit, stale: !!(sha && (!checked || (!sha.startsWith(checked) && !checked.startsWith(sha)))) };
 }
 
 // A row's stage in LIFECYCLE: agent stages first, then MR states.
@@ -266,7 +268,8 @@ export function sameRepo(url, project, repo) {
     return (repo ?? url.match(/^https:\/\/[^/]+\/(.+?)(?:\/-)?\/(?:merge_requests|pull)\//)?.[1])?.split('/').pop() === project;
 }
 
-const gateHeads = new Map(); // gate run -> MR head sha first seen with it
+const gateHeads = new Map(); // gate run -> MR head sha first seen with it (sessions.mjs passes the stored one instead)
+const STARTED = Date.now();
 
 // A prompt's first MR URL, first `!N` and first `#N`: what it is about, not the other issues it lists for context.
 const leadRefs = text => [PR_URL, /(?<![\w&!#])!\d+/, /(?<![\w&!#])#\d+/].map(re => text.match(re)?.[0]).filter(Boolean).join(' ');
@@ -414,7 +417,8 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const agent = agents[0] ?? null;
         const prState = it.pr ? prOf(it.pr) : null;
         const gates = it.pr ? sessions.filter(s => s.project === it.project).flatMap(s => [...s.gates ?? [], ...(s.agents ?? []).flatMap(a => a.gates ?? [])]) : [];
-        const gate = it.pr ? toGate(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null;
+        const run = it.pr ? gateFor(gates, it.pr, prState?.branch) : null;
+        const gate = it.pr ? toGate(run, prState?.sha, heads, STARTED) : null;
         const ps = demote(prState, gate);
         // asked in the master's open turn but no agent runs for it yet: show it as in progress, without the button
         const requested = it.pr && agent?.status !== 'running' && prState?.state !== 'merged' && prState?.state !== 'closed'
@@ -445,6 +449,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             tldr: agent?.tldr ?? null,
             body: agent?.body ?? '',
             files: agent?.files ?? [],
+            gateHead: run && heads.get(gateKey(run)) ? [gateKey(run), heads.get(gateKey(run))] : null, // for the store; dropped before the response
             agentLinks: agents.filter(a => a.status === 'done').map(a => ({ id: a.id, description: a.description, finished: a.updated })), // for the store; dropped before the response
             activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },

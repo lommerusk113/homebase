@@ -112,7 +112,7 @@ console.log('ok items');
     assert.equal(statSync(file).mode & 0o777, 0o600);
     assert.deepEqual(readdirSync(dir), ['items.json']);
     const back = loadStore(file);
-    assert.deepEqual(back.data.p[mr(1)], { title: 'One', issue: '9', branch: 'b', sessionId: 's1', firstSeen: 1000, lastSeen: 1000, state: 'open', mergedAt: null, agents: [{ id: 'a1', description: 'Impl !1', finished: 5 }] });
+    assert.deepEqual(back.data.p[mr(1)], { title: 'One', issue: '9', branch: 'b', sessionId: 's1', firstSeen: 1000, lastSeen: 1000, state: 'open', mergedAt: null, agents: [{ id: 'a1', description: 'Impl !1', finished: 5 }], gateHeads: null });
     assert.equal(back.data.p[mr(2)].mergedAt, 1000);
     record(back, [item(mr(1), { state: 'open', title: 'One', issue: '9' })], 2000);
     assert.equal(back.dirty, false);
@@ -304,4 +304,23 @@ console.log('ok same repo');
     assert.deepEqual([saved.length, saved[0], saved.at(-1)], [500, ['h1', 1], ['h500', 500]], 'the oldest goes first');
     loadDismissed(join(dir, 'none'));
     console.log('ok dismissed rows');
+}
+
+// the gate's head survives a restart: gate passed on A, MR head now B -> stale, and with nothing stored it is stale too, never passed
+{
+    const { gateHeadsOf, loadStore: load } = await import('../../server/store.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'hb-gate-'));
+    const file = join(dir, 'items.json');
+    const run = runs[0];
+    const st = load(file);
+    const heads = new Map();
+    const it = { pr: 'https://github.com/o/gate/pull/1', project: 'gate' };
+    assert.equal(toGate(run, 'aaa111', heads).stale, false);
+    record(st, [{ ...it, prState: { state: 'open' }, gateHead: [...heads][0] }]);
+    flush(st);
+    const reloaded = gateHeadsOf(load(file));
+    assert.equal(toGate(run, 'bbb222', reloaded, Date.now()).stale, true);
+    assert.equal(toGate(run, 'aaa111', reloaded, Date.now()).stale, false);
+    assert.equal(toGate(run, 'bbb222', new Map(), Date.now()).stale, true);
+    rmSync(dir, { recursive: true });
 }

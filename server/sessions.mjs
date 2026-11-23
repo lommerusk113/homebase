@@ -10,7 +10,7 @@ import { WORKING_MS, closedSession, turnState, hasTurnMarkers, turnPrompts, pend
 import { splitTldr, gateRuns, latestTopic, queuedPrompts } from './summaries.mjs';
 import { readUsage, usageCache } from './usage.mjs';
 import { chatItems } from './feed.mjs';
-import { loadStore, record, seeds, flush, STORE_FILE } from './store.mjs';
+import { loadStore, record, seeds, flush, gateHeadsOf, STORE_FILE } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { isManual } from './manual.mjs';
 import { canned } from '../web/src/lib/canned.ts';
@@ -36,6 +36,7 @@ const AGENT_THINK_MS = 10 * 60_000; // last entry is a tool result, user message
 const AGENT_IDLE_MS = 2 * 60_000; // ended its turn with text but never handed back
 
 const store = loadStore();
+const gateHeads = gateHeadsOf(store);
 const projects = new Map(); // cwd -> repo name
 export { repoPaths }; // repo name -> { host, path }, from the origin URL
 
@@ -666,7 +667,7 @@ async function itemsOf(out) {
         const commentsError = problemText(swr.get(`comments:${url}`)?.error, forgeWords(project, url).cli);
         return prError(url) ?? (commentsError && `comments: ${commentsError}`);
     };
-    const items = workItems(out, u => withThreads(states.get(u) ?? null, comments.get(u)), Date.now(), undefined, seeded, undefined, errorOf);
+    const items = workItems(out, u => withThreads(states.get(u) ?? null, comments.get(u)), Date.now(), gateHeads, seeded, undefined, errorOf);
     for (const it of items) {
         // only an already fetched milestone list; /api/milestones fills it for the projects on the board
         it.milestone = milestoneOf(it.prState, swr.get(`ms:${it.project}`)?.value ?? []);
@@ -681,7 +682,7 @@ async function itemsOf(out) {
     }
     record(store, items);
     flush(store);
-    items.forEach(i => { delete i.agentLinks; });
+    items.forEach(i => { delete i.agentLinks; delete i.gateHead; });
 
     return items;
 }

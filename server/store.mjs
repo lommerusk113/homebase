@@ -71,7 +71,8 @@ export function record(store, items, now = Date.now()) {
             lastSeen: it.prState ? now : old?.lastSeen ?? now, // confirmed by the forge, so an MR it can't read any more ages out
             state,
             mergedAt: state === 'merged' ? old?.mergedAt ?? now : old?.mergedAt ?? null,
-            agents: [...agents.values()]
+            agents: [...agents.values()],
+            gateHeads: it.gateHead ? { [it.gateHead[0]]: it.gateHead[1] } : old?.gateHeads ?? null // the MR head seen with its latest gate run
         };
         projectData[it.pr] = next;
         store.dirty ||= !old || !sameEntry(old, next);
@@ -90,6 +91,9 @@ export function record(store, items, now = Date.now()) {
         }
     }
 }
+
+// The gate run -> MR head map toGate fills, as the store last kept it: a head that moved since the gate ran reads as stale after a restart.
+export const gateHeadsOf = store => new Map(Object.values(store.data).flatMap(urls => Object.values(urls).flatMap(e => Object.entries(e.gateHeads ?? {}))));
 
 // The stored MRs still worth a row: open, or merged within windowMs, as { url, project, sessionId, agents } seeds.
 export function seeds(store, now, windowMs) {

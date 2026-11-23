@@ -124,16 +124,10 @@ function mrNext(prState, mr) {
     if (!prState) {
         return `Open the ${mr} to check its state`;
     }
-    // review comments and a failing pipeline come first, but a conflict beside them is said too
-    const first = reviewOrCi(prState);
-    if (first) {
-        return first + (prState.blocked === 'conflict' || prState.blocked === 'rebase' ? ' · has merge conflicts' : '');
-    }
-    if (prState.blocked) {
-        return BLOCKED_STEP[prState.blocked] + (prState.notReady ? ` · ${prState.notReady}` : '');
-    }
-    if (prState.notReady) {
-        return prState.notReady;
+    // everything in the way is said, the first thing to do first
+    const blockers = [reviewComments(prState), prState.ci === 'failing' && 'Pipeline failing', prState.blocked && BLOCKED_STEP[prState.blocked], prState.notReady].filter(Boolean);
+    if (blockers.length) {
+        return blockers.join(' · ');
     }
     if (prState.replied && !prState.ready) {
         const n = prState.replied;
@@ -167,8 +161,8 @@ function demote(prState, gate) {
     return notReady ? { ...prState, ready: false, approved: true, notReady } : prState;
 }
 
-// The step review comments or a failing pipeline ask for, or null when neither does.
-function reviewOrCi(prState) {
+// The step review comments ask for, or null when there are none.
+function reviewComments(prState) {
 
     if (prState.unresolved || prState.unanswered) {
         const u = prState.unresolved ?? 0, g = prState.unanswered ?? 0;
@@ -193,7 +187,7 @@ function reviewOrCi(prState) {
         return by.length ? `Address review comments from ${by.join(', ')}` : 'Address review comments';
     }
 
-    return prState.ci === 'failing' ? 'Pipeline failing' : null;
+    return null;
 }
 
 // The one-click command for a work item's row, as { label, message } typed into its session (the texts: web/src/lib/canned.ts), or null when nothing is on you.

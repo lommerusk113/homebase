@@ -97,3 +97,9 @@ assert.equal(rowOf({ ...commentsOnly, unresolved: 0, unanswered: 1, unansweredBy
 assert.equal(rowOf({ ...commentsOnly, unresolved: 0 }, null, opts).state.kind, 'pipeline', 'no comments, no fix');
 assert.equal(rowOf({ ...commentsOnly, ready: true, ci: null }, null, opts).action.label, 'Merge + close issue', 'an approved MR with open comments still merges');
 console.log('ok comments get the fix button');
+
+const everything = { state: 'open', changes: true, changesBy: ['Ann'], ci: 'failing', blocked: 'conflict', reviewers: ['Ann'] };
+assert.equal(rowOf(everything, null, opts).next, 'Address review comments from Ann · Pipeline failing · Merge conflicts — rebase it', 'every blocker is named');
+assert.equal(rowOf({ ...everything, changes: false, blocked: 'checks', notReady: GATE }, null, opts).next, `Pipeline failing · Waiting for external status checks · ${GATE}`);
+assert.equal(rowOf({ state: 'open', ci: 'failing' }, null, opts).next, 'Pipeline failing');
+console.log('ok next lists every blocker');

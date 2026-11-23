@@ -84,7 +84,7 @@ const waiting = open({ reviewers: ['Børre Stellander'] });
 const thr = (n, by = ['Børre Stellander']) => ({ count: n + 1, items: [], unresolved: n, unresolvedBy: n ? by : [] });
 const t2 = withThreads({ ...waiting, ci: 'failing' }, thr(2));
 assert.equal(itemColumn(t2, null, true), 'needs-you');
-assert.equal(nextStep(t2, null), 'Address 2 unresolved comments from Børre Stellander');
+assert.equal(nextStep(t2, null), 'Address 2 unresolved comments from Børre Stellander · Pipeline failing');
 assert.equal(nextStep(withThreads(waiting, thr(1, ['A', 'B'])), null), 'Address 1 unresolved comment from A, B');
 assert.equal(rowAction(mr(4), t2, null, 'T').label, 'Fix & reply');
 assert.equal(itemColumn(withThreads(waiting, thr(0)), null, true), 'review'); // all resolved, no approval yet

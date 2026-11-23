@@ -6,7 +6,8 @@ import { STATES, shortTitle } from 'old/issues.js';
 import { cannedLabel } from 'old/canned.js';
 import { IssuesKey, useInjected } from '@/keys';
 import type { Card } from '@/composables/useIssues';
-import MrChip from './MrChip.vue';
+import PrChip from '@/components/PrChip.vue';
+import CiPill from '@/components/CiPill.vue';
 import IssueStart from './IssueStart.vue';
 import IssueMore from './IssueMore.vue';
 
@@ -39,7 +40,7 @@ const state = computed(() => (work.value ? STATES.doing : starting(props.card) ?
         <div class="tt">{{ open ? card.title : shortTitle(card.title, ms?.title ?? '') }}</div>
         <small v-if="ms?.mine && card.milestoneTitle" class="is-ms">⚑ {{ card.milestoneTitle }}</small>
         <div class="ft">
-            <MrChip v-for="mr in card.mrs" :key="mr.iid" :mr />
+            <template v-for="mr in card.mrs" :key="mr.iid"><PrChip :pr="mr.url" /><CiPill :pipeline="mr.pipeline" /></template>
             <span v-if="!card.mrs.length" class="chip">no {{ words.mr }}</span>
             <IssueStart v-if="!open && (card.st === 'todo' || card.st === 'free')" :card />
         </div>

@@ -1,15 +1,14 @@
 <script setup lang="ts">
 // An open card's details: the description, and "Send to chat" with the message it types (or the chat that already has it).
-import { computed } from 'vue';
+import { computed, useId } from 'vue';
 import { IssuesKey, useInjected } from '@/keys';
 import type { Card } from '@/composables/useIssues';
-import { uid } from '@/lib/uid';
 
 const props = defineProps<{ card: Card }>();
 
 const { words, canSend, starting, workOn, showWork, send, message } = useInjected(IssuesKey);
 
-const id = uid('is-act');
+const id = `issues-${useId()}`; // prefixed: each island is its own app, bare ids collide
 const work = computed(() => workOn(props.card));
 const sent = computed(() => starting(props.card));
 const msg = computed(() => message(props.card));

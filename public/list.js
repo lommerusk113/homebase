@@ -1,5 +1,5 @@
 // Left column: what the board's rows are made of and its attention transitions. The board itself is the Board island (web/src/islands/Board.vue).
-import { $, el, state, ago, tooltip, seenAt, markSeen, freshComments, updateTitle, waitsOnYou, vue } from './core.js';
+import { $, state, ago, seenAt, markSeen, freshComments, updateTitle, waitsOnYou, vue } from './core.js';
 import { chatSession, bindChat, focusChat } from './chat.js';
 
 // A pipeline as the CI pill shows it: ✓ passed, ✗ failed, ● running/pending, grey for the rest, with its tooltip; null without a pipeline.
@@ -12,22 +12,6 @@ export function pipeWords(p) {
     const [icon, word] = PIPE[p.status] ?? ['–', p.status.replace(/_/g, ' ')];
     const when = p.at && ago(Date.parse(p.at));
     return { icon, label: `Pipeline ${word}`, tip: `Pipeline ${word}${when ? ` · ${when === 'now' ? 'just now' : `${when} ago`}` : ''}` };
-}
-// The pill as old DOM, for the Issues view.
-/** @param {Pipeline | null | undefined} p @returns {HTMLElement[]} */
-export function ciPill(p) {
-    const w = pipeWords(p);
-    if (!w) {
-        return [];
-    }
-    const a = el(p.url ? 'a' : 'span', `ci-pill ci-${p.status}`, w.icon);
-    if (a instanceof HTMLAnchorElement) {
-        a.href = p.url;
-        a.target = '_blank';
-        a.onclick = e => e.stopPropagation();
-    }
-    a.setAttribute('aria-label', w.label);
-    return [a, tooltip(a, w.tip)];
 }
 
 // What the session is on: its newest reply's topic, else the start of its last prompt.

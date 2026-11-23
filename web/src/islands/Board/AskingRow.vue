@@ -6,6 +6,7 @@ import { touch } from 'old/core.js';
 import { excerpt } from '@/lib/text';
 import { ChatRowsKey, ProjectKey, useInjected } from '@/keys';
 import ChatName from './ChatName.vue';
+import NeedsYou from './NeedsYou.vue';
 
 const props = defineProps<{ sid: string }>();
 const { byId, focus, replyOf, markDone, title, quietFor } = useInjected(ChatRowsKey);
@@ -29,11 +30,11 @@ const label = computed(() => (asks.value != null
         <td class="what" colspan="6">
             <button v-if="replyOf(s)" type="button" class="need-done" title="Mark as handled" aria-label="Mark as handled" @click.stop="markDone(s)">✓</button>
             <template v-if="asks != null">
-                <b><span class="pulse" />{{ ' ' }}<bdi>{{ asks }}</bdi></b>
+                <b><span class="pulse" />{{ ' ' }}<NeedsYou />{{ ' ' }}<bdi>{{ asks }}</bdi></b>
                 <small class="next"><bdi>{{ s.project }}</bdi>{{ ' · ' }}<bdi>{{ title(s) }}</bdi>{{ ` · ${since}` }}</small>
             </template>
             <template v-else>
-                <b><span class="pulse" />{{ ' ' }}<ChatName :sid="sid" :what="what" /></b>
+                <b><span class="pulse" />{{ ' ' }}<NeedsYou />{{ ' ' }}<ChatName :sid="sid" :what="what" /></b>
                 <small class="next">{{ hint }}</small>
             </template>
         </td>

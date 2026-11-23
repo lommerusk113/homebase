@@ -101,6 +101,11 @@ let linkedChat = new URLSearchParams(location.search).get('chat');
 if (linkedChat) {
     history.replaceState(null, '', '/');
 }
+// #chat=<session>&agent=<id>: a helper's conversation (chat.js showHead writes it), so a reload comes back to it
+const linkedHelper = new URLSearchParams(location.hash.slice(1));
+if (linkedHelper.has('chat') && linkedHelper.has('agent')) {
+    linkedChat = linkedHelper.get('chat');
+}
 function openLinkedChat() {
     const s = linkedChat && state.sessions.find(x => x.id === linkedChat);
     if (!s) {
@@ -109,6 +114,10 @@ function openLinkedChat() {
     linkedChat = null;
     state.project = state.tracked.includes(s.project) ? s.project : 'all';
     store.set('project', state.project);
+    const agent = s.agents?.find(a => a.id === linkedHelper.get('agent'));
+    if (agent && linkedHelper.get('chat') === s.id) {
+        return focusChat(s.id, { id: agent.id, description: agent.description });
+    }
     bindChat(s.id);
 }
 

@@ -1,6 +1,6 @@
 import { ref, shallowRef, toRef } from 'vue';
 import { composer } from 'old/core.js';
-import { chatSession, startingTarget, refreshChat, jumpToNeeds } from 'old/chat.js';
+import { activeHelper, chatSession, startingTarget, refreshChat, jumpToNeeds } from 'old/chat.js';
 import { oldState } from '@/old';
 
 /** What a refresh of the open chat found: its transcript, a failed poll, or null with no chat. undefined: none yet. */
@@ -19,5 +19,8 @@ export function useChat() {
     // a project that is still starting has no session id, only its tmux name
     const target = toRef(() => session.value?.id ?? (oldState.value, startingTarget()));
 
-    return { session, target, turn, dialogOn, refresh: () => { refreshChat(); }, jumpToNeeds };
+    // set while the pane shows a helper's own conversation: the chat is the one that started it
+    const helper = toRef(() => (oldState.value, activeHelper()));
+
+    return { session, target, helper, turn, dialogOn, refresh: () => { refreshChat(); }, jumpToNeeds };
 }

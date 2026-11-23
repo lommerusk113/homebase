@@ -44,7 +44,7 @@ const parse = v => {
 /**
  * @type {{ sessions: Session[], tracked: string[], project: string, selected: string | null, chat: string | null, unfold: Set<string>,
  *   outbox: OutboxItem[], nudged: Set<string>, offline?: boolean, serverError?: boolean, formatWarn?: boolean, update?: { server: boolean, reloading: boolean } | null, asking?: string | null, reviews?: ReviewRequest[], items?: WorkItem[],
- *   opened?: { key: string, since: number }, showMerged?: boolean, starting?: string | null, startingTmux?: string | null, focus?: string | null, boot?: { question: string, options: string[], selected: number } | null }}
+ *   opened?: { key: string, since: number }, showMerged?: boolean, starting?: string | null, startingTmux?: string | null, focus?: string | null, askedFor?: string | null, helper?: { sid: string, id: string, description: string } | null, boot?: { question: string, options: string[], selected: number } | null }}
  */
 export const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [], nudged: new Set() };
 // The picked project must be on the board: one that was removed falls back to "All my projects".

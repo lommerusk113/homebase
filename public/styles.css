@@ -898,3 +898,6 @@ wa-details[open] .g-note { display:none; }
   .dot, .pulse, .pt-dot, .stage .bar i.on, .vtitle [aria-selected="true"] .vt-word::after { forced-color-adjust:none; background:CanvasText; }
   .stage .bar i { border:1px solid CanvasText; }
 }
+
+.needs-you-mark::after { content:'Needs you'; font-weight:600; color:var(--accent); }
+.step-in { margin-left:8px; }

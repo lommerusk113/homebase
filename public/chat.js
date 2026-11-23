@@ -84,9 +84,11 @@ export function bindChat(id) {
 
 // Shows another chat's question in the pane (the "Needs you" rows, n, a chip) without rebinding the main chat;
 // "← Main chat" (or Esc) goes back. The main chat itself just shows.
-/** @param {string} id */
-export function focusChat(id) {
+/** @param {string} id @param {{ id: string, description: string } | null} [helper] a helper of that chat to step in on @param {string | null} [askedFor] the helper whose question this chat relays */
+export function focusChat(id, helper = null, askedFor = null) {
     clearTimeout(returnTimer);
+    state.helper = helper && { sid: id, ...helper };
+    state.askedFor = askedFor;
     nextId = null;
     $('c-next').hidden = true;
     state.focus = id;
@@ -94,10 +96,13 @@ export function focusChat(id) {
     renderBoard();
     refreshChat();
 }
+// Step in: a helper's own conversation in the pane, over the chat that started it (its sid); null when not showing one.
+/** @returns {{ sid: string, id: string, description: string } | null} */
+export const activeHelper = () => (state.helper && state.helper.sid === state.focus ? state.helper : null);
 // A focused chat that was /clear'ed moves on to its successor, as the main binding does (pickChat); landing on the main chat ends the focus.
 function followFocus() {
     const visible = visibleSessions();
-    if (!state.focus || !visible.some(s => s.id === state.focus)) {
+    if (activeHelper() || !state.focus || !visible.some(s => s.id === state.focus)) {
         return;
     }
     const to = pickChat(visible, state.focus, null)?.id;
@@ -129,6 +134,10 @@ export function answered(sid) {
 }
 export function unfocusChat() {
     clearTimeout(returnTimer);
+    const helper = activeHelper();
+    if (helper) {
+        return focusChat(helper.sid); // back to the chat that started it
+    }
     if (state.focus) {
         state.focus = null;
         renderBoard();
@@ -244,6 +253,12 @@ function showNewer(s) {
 function showHead(s) {
 
     $('c-back').hidden = !(s && s.id === state.focus);
+    const helper = activeHelper();
+    $('c-back').textContent = helper ? `← Back to ${s.title || sessionTopic(s)}` : '← Main chat';
+    const hash = helper ? `#chat=${encodeURIComponent(helper.sid)}&agent=${encodeURIComponent(helper.id)}` : '';
+    if (location.hash !== hash) {
+        history.replaceState(null, '', location.pathname + location.search + hash); // a reload comes back to the helper
+    }
     $('c-next').hidden = $('c-back').hidden || !nextId;
     const branch = $('c-branch'), un = $('c-unpushed');
     branch.hidden = !s?.branch;
@@ -292,6 +307,14 @@ function showFocus(s, items) {
     const box = $('c-focus'), on = s.id === state.focus;
     box.hidden = !on;
     if (!on) {
+        return;
+    }
+    const helper = activeHelper();
+    if (helper) {
+        return box.replaceChildren(el('b', null, `Helper: ${helper.description}`));
+    }
+    if (state.askedFor) {
+        box.replaceChildren(el('b', null, `Asked for helper '${state.askedFor}'`), el('div', null, s.title || s.topic || ''));
         return;
     }
 
@@ -349,11 +372,13 @@ export async function refreshChat() {
 
     /** @type {Transcript} */
     let data;
-    if (feedMax.sid !== s.id) {
-        feedMax = { sid: s.id, max: FEED_STEP };
+    const helper = activeHelper();
+    const feedSid = helper ? `${s.id}:${helper.id}` : s.id;
+    if (feedMax.sid !== feedSid) {
+        feedMax = { sid: feedSid, max: FEED_STEP };
     }
     try {
-        const r = await api(`/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}&max=${feedMax.max}`);
+        const r = await api(helper ? `/api/agent-feed?session=${encodeURIComponent(s.id)}&agent=${encodeURIComponent(helper.id)}&max=${feedMax.max}` : `/api/transcript?dir=${encodeURIComponent(s.dir)}&id=${encodeURIComponent(s.id)}&max=${feedMax.max}`);
         if (!r.ok) {
             throw Object.assign(new Error(await r.text()), { status: r.status });
         }
@@ -374,6 +399,20 @@ export async function refreshChat() {
         return;
     }
 
+    if (helper) {
+        // its own messages as they are: no outbox, no clear cut, no questions to answer from here
+        composer.wait(s, data, []);
+        showFocus(s, []);
+        const items = data.items.map(({ replies, needsYou, ...i }) => i);
+        const key = feedSid + JSON.stringify([items, data.working, data.more, data.capped]);
+        if (key !== chatKey) {
+            const first = !chatKey?.startsWith(feedSid);
+            chatKey = key;
+            feedPort.show({ sid: feedSid, items, data: { ...data, asking: null }, first, stick });
+            stick = false;
+        }
+        return;
+    }
     const { items, hidden, cut } = feedPort.merge(s, data);
     announceReply(s, data, items);
     composer.wait(s, data, items);

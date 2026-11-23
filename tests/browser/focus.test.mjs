@@ -35,6 +35,15 @@ export default {
         await page.waitFor(`${back}.hidden && ${focus}.hidden && ${title} === 'alpha' && document.getElementById('wait').hidden`, { what: 'the main chat back' });
     },
 
+    'a chat with a pending question shows Needs you on its row, and the row opens the question in that chat': async ({ page, open, IDS }) => {
+        await open({ project: 'all', chat: IDS.worker });
+        await page.waitFor(`document.querySelector('${row(IDS.asker)}')`, { what: 'the asking row' });
+        assert.equal(await page.ev(`getComputedStyle(document.querySelector('${row(IDS.asker)} .needs-you-mark'), '::after').content`), '"Needs you"');
+        await page.click(row(IDS.asker));
+        await page.waitFor(`!document.getElementById('ask').hidden && /Which database/.test(document.getElementById('ask-q').textContent)`, { what: 'the question card in that chat' });
+        assert.equal(await page.ev(`${back}.hidden`), false);
+    },
+
     'Esc returns to the main chat': async ({ page, open, IDS }) => {
         await open({ project: 'all', chat: IDS.worker });
         await page.waitFor(`document.querySelector('${row(IDS.asker)}')`, { what: 'the row' });

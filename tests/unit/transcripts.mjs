@@ -257,3 +257,19 @@ import { say } from './helpers.mjs';
     assert.deepEqual(chatItems(echo('Error: Not enough messages to compact.')).map(i => [i.role, i.cmd]), [['command', '/compact Keep it short']]);
     console.log('ok context and compact');
 }
+
+// /api/agent-feed: the helper's own messages, only for a session and helper Homebase listed; the path never comes from the request
+{
+    const home = mkdtempSync(join(tmpdir(), 'hb-home-'));
+    const subs = join(home, '.claude', 'projects', 'p', 's1', 'subagents');
+    mkdirSync(subs, { recursive: true });
+    writeFileSync(join(subs, 'agent-a.jsonl'), JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'helper says hi' }] }, timestamp: new Date().toISOString() }) + '\n');
+    const code = `import { agentFeed } from './server/transcripts.mjs';
+        const list = [{ id: 's1', dir: 'p', items: [{ agentId: 'agent-a', agentStatus: 'running' }] }];
+        const bad = async (s, a) => (await agentFeed(list, s, a).catch(e => e.status));
+        console.log(JSON.stringify([(await agentFeed(list, 's1', 'agent-a')).items.map(i => i.text), await bad('s1', '../s1'), await bad('../x', 'agent-a')]));`;
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home }, cwd: join(import.meta.dirname, '../..'), encoding: 'utf8' });
+    assert.deepEqual(JSON.parse(out), [['helper says hi'], 404, 404]);
+    rmSync(home, { recursive: true, force: true });
+    console.log('ok agent feed');
+}

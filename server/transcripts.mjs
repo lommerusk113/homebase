@@ -2,8 +2,8 @@
 // feed, asks, turns, usage) for code that still imports them from here.
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { ROOT, liveSessions } from './entries.mjs';
-import { FEED_ITEMS, feedTail } from './feed.mjs';
+import { ROOT, liveSessions, tailOf } from './entries.mjs';
+import { FEED_ITEMS, feedTail, chatFeed } from './feed.mjs';
 import { askMarker, turnState, pendingQuestion, pendingAsk } from './turns.mjs';
 
 export * from './entries.mjs';
@@ -31,4 +31,22 @@ export async function transcript(dir, id, max) {
     const turn = turnState(entries, Date.now() - st.mtimeMs, marker, live);
 
     return { items, more, capped, asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', stuck: turn.state === 'stuck', since: turn.since };
+}
+
+// GET /api/agent-feed: a helper's own conversation, in the transcript's shape. Both ids must be a session and one of its
+// helpers from Homebase's own list, so the path is built from what the server found, never from the request.
+export async function agentFeed(list, sessionId, agentId, max) {
+
+    const s = list.find(x => x.id === sessionId), a = s?.items?.find(x => x.agentId && x.agentId === agentId); // the list's rows name each helper (raw agents are dropped from it)
+    if (!a) {
+        throw Object.assign(new Error('no such helper'), { status: 404 });
+    }
+    const path = join(ROOT, s.dir, s.id, 'subagents', `${a.agentId}.jsonl`);
+    // a helper's transcript is all sidechain entries, which the chat feed leaves out: read them as the helper's own conversation
+    // ponytail: the cached tail only (no deeper read for "Show earlier"), which is the last ~512 KB of the helper
+    const entries = (await tailOf(path, await stat(path))).map(e => ({ ...e, isSidechain: false }));
+    const feed = chatFeed(entries, Math.min(Math.max(Math.trunc(Number(max)) || FEED_ITEMS, 1), 10_000));
+    const items = feed.items, more = feed.earlier > 0, capped = false;
+
+    return { items, more, capped, asking: null, questions: [], working: a.agentStatus === 'running', stuck: false };
 }

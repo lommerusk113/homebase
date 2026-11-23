@@ -4,7 +4,7 @@
 
 | Module | What lives there |
 |---|---|
-| `transcripts.mjs` | `transcript()` for `/api/transcript`; re-exports the six transcript modules below |
+| `transcripts.mjs` | `transcript()` for `/api/transcript`, `agentFeed()` for `/api/agent-feed` (a helper's own feed, for Step in); re-exports the six transcript modules below |
 | `entries.mjs` | The projects root, live Claude Code sessions (`liveSessions`), tail reading and its mtime cache, entry cleanup, text and prompt helpers |
 | `summaries.mjs` | A reply or tail at a glance: ▸ topic, TLDR, queued prompts, review-gate runs, tool-call summaries, `RISKY` commands |
 | `feed.mjs` | The chat feed: entries turned into bubbles, answers paired with questions, handled replies, `feedTail` for "Show earlier" |

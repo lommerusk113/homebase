@@ -358,7 +358,7 @@ function itemGroups(sessions, prOf, now, seeds) {
     const live = new Set(sessions.flatMap(s => (s.agents ?? []).map(a => a.id)));
     for (const [it, agents] of stored) {
         for (const a of agents.filter(a => !live.has(a.id))) {
-            it.agents.push({ id: a.id, description: a.description, status: 'done', stage: 4, updated: a.finished ?? 0, prs: [it.pr], sessionId: it.linkSession });
+            it.agents.push({ id: a.id, description: a.description, status: 'done', stage: 4, updated: a.finished ?? 0, prs: [it.pr], sessionId: it.linkSession, stored: true });
         }
     }
 
@@ -432,6 +432,8 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             stage,
             stageLabel: prState?.state === 'closed' ? 'Closed' : LIFECYCLE[stage],
             agentStatus: agent?.status ?? null,
+            agentId: agent && !agent.stored ? agent.id : null, // "Step in" opens its transcript; one that scrolled out of every tail has none
+            agentDescription: agent?.description ?? null,
             updated: itemUpdated(agent, it.linkedAt, prState),
             branch: [prState?.branch, agent?.branch].find(b => b && b !== 'HEAD') ?? null, // transcript gitBranch is unreliable inside worktrees; HEAD is a detached checkout
             stepAt: agent?.status === 'running' ? agent.stepAt ?? null : null,

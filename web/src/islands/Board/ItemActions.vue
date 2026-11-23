@@ -4,6 +4,7 @@ import { ItemKey, useInjected } from '@/keys';
 import DiffIcon from '@/components/DiffIcon.vue';
 import SentPill from './SentPill.vue';
 import ActionButton from './ActionButton.vue';
+import StepInButton from './StepInButton.vue';
 
 const item = useInjected(ItemKey);
 </script>
@@ -11,6 +12,7 @@ const item = useInjected(ItemKey);
 <template>
     <td class="act">
         <DiffIcon :item="item" />
+        <StepInButton />
         <SentPill v-if="item.sent || item.requested" />
         <ActionButton v-else-if="item.action && item.sessionId" />
     </td>

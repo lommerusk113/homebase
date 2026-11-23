@@ -57,6 +57,8 @@ interface Session {
     /** the transcript was written by a subagent */
     sidechain: boolean;
     items: WorkItem[];
+    /** its helpers (subagents) with a transcript of their own */
+    agents?: { id: string; description: string; status: string }[];
     /** origin is the personal (hobby) GitHub account */
     hobby?: boolean;
     /** commits ahead of the upstream; null when there is no upstream */
@@ -150,6 +152,9 @@ interface WorkItem {
     stage: number;
     stageLabel: string;
     agentStatus: string | null;
+    /** the helper behind the row, for Step in; null when it has no transcript left */
+    agentId: string | null;
+    agentDescription: string | null;
     /** when a running agent started its current step (`next` names it); null otherwise */
     stepAt: number | null;
     updated: number;

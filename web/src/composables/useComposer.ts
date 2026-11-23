@@ -13,18 +13,20 @@ let uploading = false;
 /** The message box of the open chat: its draft follows the chat, and submit sends the text with the attached images. */
 export function useComposer() {
 
-    const { session, target } = useChat();
+    const { session, target, helper } = useChat();
     const draft = useDraft();
     const { attached, remove, upload } = useAttachments();
     const { error, showError } = useNotice();
     const { send } = useSend();
     const discuss = useDiscuss();
 
-    watch(() => session.value?.id ?? null, draft.follow, { immediate: true });
+    // a helper's box has a draft of its own, apart from the chat that started it
+    const key = () => (session.value && helper.value ? `${session.value.id}:${helper.value.id}` : session.value?.id ?? null);
+    watch(key, draft.follow, { immediate: true });
 
     async function submit() {
 
-        const s = session.value, files = attached.value, to = target.value;
+        const files = attached.value, to = target.value, id = key();
         let text = draft.expanded();
         if (!text && !files.length) {
             return;
@@ -56,18 +58,19 @@ export function useComposer() {
 
         // cleared at once (the "sending…" bubble shows progress), and the draft with it: a reload during a slow send
         // must not bring the sent text back
-        draft.put(to, '');
+        draft.put(id!, '');
         text = discuss.take(text); // a failed send gives the wrapped text back, which is not wrapped twice
-        const ok = await send(to, text);
-        if (draft.chat() !== (s?.id ?? null)) {
+        // a helper can't be typed into: its chat is asked to pass the text on
+        const ok = await send(to, helper.value ? `Send this to helper '${helper.value.description}' (SendMessage to ${helper.value.id}), verbatim: ${text}` : text);
+        if (draft.chat() !== id) {
             // switched chats meanwhile: the box is the other chat's now, so a failed text goes back into its own chat's draft
-            if (!ok && s && !draft.saved(s.id)) {
-                draft.keep(s.id, text);
+            if (!ok && id && !draft.saved(id)) {
+                draft.keep(id, text);
             }
         } else if (!ok && !draft.text.value) {
-            draft.put(to, text); // give the text back so it isn't lost
+            draft.put(id!, text); // give the text back so it isn't lost
         } else {
-            draft.keep(to); // keeps whatever was typed meanwhile
+            draft.keep(id); // keeps whatever was typed meanwhile
         }
     }
 
@@ -78,6 +81,6 @@ export function useComposer() {
         entersLine: touch,
         label: toRef(() => (session.value ? `Message Claude in ${session.value.project}` : 'Message Claude')),
         /** the box's placeholder */
-        hint: toRef(() => (discuss.discussing.value ? 'Discuss this question…' : `${session.value ? `Message Claude in ${session.value.project}` : 'Message Claude'}…`))
+        hint: toRef(() => (helper.value ? 'Message goes to this helper via its main chat' : discuss.discussing.value ? 'Discuss this question…' : `${session.value ? `Message Claude in ${session.value.project}` : 'Message Claude'}…`))
     };
 }

@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { transcript } from './server/transcripts.mjs';
+import { transcript, agentFeed } from './server/transcripts.mjs';
 import { polledSessions, startingChats } from './server/sessions.mjs';
 import { refreshAll, refreshInfo, isGitLab } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
@@ -473,6 +473,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             if (url.pathname === '/api/diff' && req.method === 'GET') {
                 const q = url.searchParams;
                 return json(await diff(q.get('session'), q.get('item'), q.get('group'), q.get('file')));
+            }
+            if (url.pathname === '/api/agent-feed') {
+                const q = url.searchParams;
+                return json(await agentFeed(await polledSessions(), q.get('session'), q.get('agent'), q.get('max')));
             }
             if (url.pathname === '/api/transcript') {
                 return json(await transcript(url.searchParams.get('dir'), url.searchParams.get('id'), url.searchParams.get('max')));

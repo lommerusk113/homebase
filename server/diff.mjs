@@ -175,7 +175,17 @@ export async function diffFolder(sessionId, itemKey, list = sessions, exists = e
         throw fail(404, 'unknown item');
     }
 
-    return dir(item.worktreePath);
+    // a helper started without its own worktree works in the one that has its MR branch checked out
+    return dir(item.worktreePath) ?? (item.branch && dir(s.cwd) ? dir(await branchWorktree(s.cwd, item.branch)) : null);
+}
+
+// The folder of the worktree that has `branch` checked out, from `git worktree list --porcelain`; null for none.
+async function branchWorktree(cwd, branch) {
+
+    const out = await git(cwd, ['worktree', 'list', '--porcelain']).catch(() => '');
+    const hit = out.split('\n\n').map(b => b.split('\n')).find(l => l.includes(`branch refs/heads/${branch}`));
+
+    return hit?.[0].startsWith('worktree ') ? hit[0].slice(9) : null;
 }
 
 // The list is read afresh on every list request; the file requests that follow check their path against that same

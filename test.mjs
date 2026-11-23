@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, utimesSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, utimesSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, execFileSync } from 'node:child_process';
@@ -3791,6 +3791,10 @@ import { parseDiff, addedRows, diffTotals } from './public/diff.js';
         // a linked worktree (a helper's folder) still works
         git('worktree', 'add', '-q', '-b', 'helper', join(root, 'wt'), 'main');
         assert.deepEqual([(await changes(join(root, 'wt'))).view.repo, (await changes(join(root, 'wt'))).view.branch], ['wt', 'helper']);
+        // an item without its own worktree uses the one that has its branch checked out
+        const byBranch = async () => [{ id: 's1', cwd: repo, items: [{ key: 'mr', worktreePath: null, branch: 'helper' }, { key: 'gone', worktreePath: null, branch: 'nope' }] }];
+        assert.equal(realpathSync(await diffFolder('s1', 'mr', byBranch)), realpathSync(join(root, 'wt')));
+        assert.equal(await diffFolder('s1', 'gone', byBranch), null, 'no worktree has that branch');
         git('worktree', 'remove', '--force', join(root, 'wt'));
 
         // the folder comes from the session list only

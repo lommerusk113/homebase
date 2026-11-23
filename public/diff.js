@@ -353,15 +353,15 @@ export function closeDiff() {
     }
 }
 
-// A work row's "Changes" icon, only when its helper's worktree has changes (an MR row without a worktree gets none:
-// the chat's folder would show unrelated changes). Each row's count is read when the row is drawn and at most every
+// A work row's "Changes" icon, only when its helper's worktree (or the worktree that has its branch checked out) has
+// changes; never the chat's folder, which would show unrelated changes. Each row's count is read when the row is drawn and at most every
 // COUNT_MS after, never on the poll itself; a count that changes redraws the board.
 const ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 6.5v7M8.5 10h7M8.5 17h7"/></svg>';
 /** @type {Map<string, { at: number, n: number }>} item key -> changed files */
 const rowCounts = new Map();
 /** @param {WorkItem} x @param {() => void} redraw @returns {HTMLElement[]} */
 export function diffIcon(x, redraw) {
-    if (!x.worktreePath || !x.sessionId) {
+    if (!(x.worktreePath || x.branch) || !x.sessionId) {
         return [];
     }
     const hit = rowCounts.get(x.key), was = hit?.n ?? 0;

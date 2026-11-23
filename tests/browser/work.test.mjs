@@ -78,7 +78,7 @@ export default {
         });
         assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters .g-head')].map(h => h.textContent)`),
             ['Needs you · 3', 'Review requested · 2', 'Doing · 3', 'In review (3)', 'Ready to merge · 1', 'Recently finished (1)', 'Merged (1)']);
-        assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.next').textContent`), 'Next: Agent stopped — check the chat');
+        assert.match(await page.ev(`${row('agent-stopped')}.querySelector('.next').textContent`), /^Next: No output for \d+m — may still be working/);
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.act-btn').textContent`), 'Continue');
         assert.equal(await page.ev(`${row(`asking:${IDS.master}`)}.querySelector('b').textContent.trim()`), 'Should I tag the release now or wait for QA?', 'the needs-you title is what the reply asks');
         assert.match(await page.ev(`${row(`asking:${IDS.master}`)}.querySelector('.next').textContent`), /^alpha · Login work · \w+( ago)?$/);

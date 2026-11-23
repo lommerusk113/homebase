@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { parseNumstat, parseNameStatus, parseStatus, changes, fileBody, diffFolder, diff, MAX_DIFF_BYTES } from '../../server.mjs';
-import { parseDiff, addedRows, diffTotals } from '../../public/diff.js';
+import { parseDiff, addedRows, diffTotals } from '../../web/src/lib/diff.ts';
 
 {
     // git's -z output: paths are raw, whatever they contain

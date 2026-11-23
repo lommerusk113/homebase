@@ -16,3 +16,6 @@ export function useInjected<T>(key: InjectionKey<T>): T {
 
     return value;
 }
+
+// The Changes view (islands/Diff.vue)
+export const DiffKey: InjectionKey<ReturnType<typeof import('@/composables/useDiff').useDiff>> = Symbol('diff');

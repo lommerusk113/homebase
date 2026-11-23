@@ -2,12 +2,13 @@
 // Entry point: config, startup and the router. Everything else lives in server/ (see server/README.md); what the unit tests (tests/unit/) use is re-exported here.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { transcript } from './server/transcripts.mjs';
 import { polledSessions, startingChats } from './server/sessions.mjs';
-import { refreshAll, refreshInfo } from './server/forge.mjs';
+import { refreshAll, refreshInfo, isGitLab } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
 import { reviewRequests } from './server/reviews.mjs';
 import { limits } from './server/limits.mjs';
@@ -18,7 +19,7 @@ import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuest
 import { send, runningTwice, keepModelSetting, sendToNew, interrupt, clearChat, compactChat, restartChat, settleCommand } from './server/control.mjs';
 import { localHosts, allowedHost, allowedOrigin, tokenOk, ownerOnly, errorReply } from './server/security.mjs';
 import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedRequest, pair, deviceOf, cookieOf, deviceCookie, pairPage, newCode, pairedDevices, revoke } from './server/pairing.mjs';
-import { readConfigFile } from './server/account.mjs';
+import { readConfigFile, repoPaths } from './server/account.mjs';
 import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor, webTags, serveWeb } from './server/static.mjs';
 import { saveUpload, readUpload } from './server/uploads.mjs';
 import { saveSeen } from './server/rules.mjs';
@@ -26,6 +27,7 @@ import { readTracked, saveTracked } from './server/tracked.mjs';
 import { saveSaver, syncSaver } from './server/saver.mjs';
 import { loadHandled, markHandled } from './server/handled.mjs';
 import { loadDismissed, dismiss } from './server/dismissed.mjs';
+import { loadReviewers, startReviewer, markFindingsSent } from './server/reviewer.mjs';
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 import { diff } from './server/diff.mjs';
@@ -115,6 +117,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ownerOnly(DATA_DIR);
     loadHandled(DATA_DIR);
     loadDismissed(DATA_DIR);
+    loadReviewers(DATA_DIR);
     warmMilestones();
     const handler = async (req, res) => {
         const url = new URL(req.url, 'http://x');
@@ -247,6 +250,30 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             // A row without an MR (a stopped or finished helper) the user is done with: hidden until that helper moves again
             if (isPost('/api/dismissed')) {
                 await dismiss(DATA_DIR, url.searchParams.get('key'));
+                polledSessions.stale();
+                return res.end('ok');
+            }
+            // Review chat of an "In review" row: the row is looked up here, so only a row the board shows can be reviewed, in its own checkout
+            if (isPost('/api/reviewer') || isPost('/api/reviewer/sent')) {
+                const list = await polledSessions();
+                const key = url.searchParams.get('key');
+                const row = list.flatMap(s => s.items ?? []).find(i => i.key === key);
+                if (!row) {
+                    return deny(404, 'no such row');
+                }
+                if (url.pathname.endsWith('/sent')) {
+                    await markFindingsSent(DATA_DIR, key);
+                } else {
+                    if (row.column !== 'review') {
+                        return deny(409, 'only a row in review can be reviewed');
+                    }
+                    const cwd = row.worktreePath ?? list.find(s => s.id === row.sessionId)?.cwd;
+                    if (!cwd || !existsSync(cwd)) {
+                        return deny(409, 'the row has no checkout to review');
+                    }
+                    const repo = repoPaths.get(row.project);
+                    await startReviewer(DATA_DIR, { key, cwd, gitlab: !!repo && isGitLab(repo) });
+                }
                 polledSessions.stale();
                 return res.end('ok');
             }

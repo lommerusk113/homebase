@@ -121,7 +121,14 @@ interface Comments {
 
 interface Gate { verdict: 'ready' | 'fix first' | string; at: number; tldr: string | null; commit: string | null; stale: boolean }
 
-interface RowAction { label: string; message: string }
+interface RowAction {
+    label: string;
+    message: string;
+    /** a review chat's button: Review starts the reviewer, Reviewing… waits, Send findings types its last message into the row's chat (the others send `message` as is) */
+    kind?: 'review' | 'reviewing' | 'findings';
+    hint?: string; // the tooltip, when the message is too long for one
+    reviewerId?: string;
+}
 
 interface Activity { id: string; description: string; status: string; tldr: string | null }
 

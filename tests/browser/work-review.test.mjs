@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { MR } from './fixture.mjs';
 
 const row = key => `document.querySelector('#masters tr[data-key="${key}"]')`;
@@ -94,5 +96,42 @@ export default {
             return !!document.querySelector('#masters tr[data-key="${MR(104)}"] .no-reply');
         })()`);
         assert.equal(out, false);
+    },
+
+    'Send findings types the reviewer\'s final message into the working chat, once': async ({ page, open, homebase, restartServer }) => {
+        // a finished reviewer chat in alpha, mapped to the first in-review row; nothing is started or typed anywhere (POSTs are intercepted)
+        const id = 'bbbbbbbb-0000-4000-8000-0000000000ff';
+        const home = join(homebase, '..', 'home'), dir = join(home, '.claude', 'projects', '-fx-alpha'), file = join(dir, `${id}.jsonl`);
+        const at = s => new Date(Date.now() - s * 1000).toISOString();
+        const e = x => JSON.stringify({ isSidechain: false, cwd: join(home, 'repos', 'alpha'), sessionId: id, gitBranch: 'main', ...x });
+        const FINDINGS = '| 1 | nit in login.js |\n\n**Verdict: fix first**';
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(file, [
+            e({ type: 'user', uuid: 'u1', timestamp: at(60), origin: { kind: 'human' }, turnPosition: { promptIndex: 1, turnIndex: 1 }, message: { role: 'user', content: 'Run review-gate' } }),
+            e({ type: 'assistant', uuid: 'a1', timestamp: at(30), message: { model: 'claude-opus-5-5', content: [{ type: 'text', text: FINDINGS }] } }),
+            e({ type: 'system', subtype: 'turn_duration', durationMs: 4000, timestamp: at(29) })
+        ].join('\n') + '\n');
+        try {
+            await open();
+            const key = await page.ev(`import('/core.js').then(core => ${items}.find(i => i.column === 'review' && i.action?.kind === 'review')?.key)`);
+            assert.ok(key, 'an in-review row with a Review button');
+            writeFileSync(join(homebase, 'reviewers.json'), JSON.stringify([[key, { id, at: Date.now() - 20_000, sent: false }]]));
+            await restartServer();
+            await open();
+            await page.waitFor(`${row(key)}?.querySelector('.act-btn')?.textContent.trim() === 'Send findings'`, { what: 'Send findings' });
+            assert.equal(await page.ev(`import('/core.js').then(core => ${items}.filter(i => i.sessionId === ${JSON.stringify(id)}).length)`), 0, 'the reviewer chat is not a row');
+            page.posts.length = 0;
+            await page.ev(`${row(key)}.querySelector('.act-btn').click()`);
+            const want = `Review findings from a fresh reviewer:\n\n${FINDINGS}\n\nAddress them.`;
+            await page.waitFor(`import('/core.js').then(core => core.state.outbox.some(o => o.text === ${JSON.stringify(want)}))`, { what: 'the findings in the outbox' });
+            const sends = page.posts.filter(p => p.url.includes('/api/send'));
+            assert.deepEqual(sends.map(p => p.body), [want]);
+            assert.ok(sends[0].url.includes(`id=${await page.ev(`import('/core.js').then(core => ${items}.find(i => i.key === ${JSON.stringify(key)}).sessionId)`)}`), 'into the row\'s working chat, not the reviewer');
+            assert.ok(page.posts.some(p => p.url.includes('/api/reviewer/sent')), 'marks the findings sent');
+        } finally {
+            rmSync(file, { force: true });
+            rmSync(join(homebase, 'reviewers.json'), { force: true });
+            await restartServer();
+        }
     }
 };

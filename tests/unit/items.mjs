@@ -233,7 +233,7 @@ assert.equal(toGate(null, 'x'), null);
 const gated = workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: runs, agents: [] }], () => open({ ready: true, sha: 'abc' }), 0, new Map());
 assert.equal(gated[0].gate.verdict, 'fix first');
 console.log('ok review gate');
-assert.equal(items[1].action, null);
+assert.equal(items[1].action.label, 'Review'); // waiting on review: the reviewer chat's button (review-chat.mjs)
 console.log('ok actions');
 
 assert.equal(sameRepo('https://gitlab.com/tritt/accounting/pracsys/-/merge_requests/1590', 'pracsys'), true);

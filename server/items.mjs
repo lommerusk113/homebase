@@ -208,6 +208,31 @@ export function rowAction(pr, prState, agent, title) {
     return null;
 }
 
+// Review chats (server/reviewer.mjs keeps them on disk): row key -> { id, at, sent }.
+export const reviewers = new Map();
+export const REVIEWER_START_MS = 2 * 60_000; // a reviewer whose transcript never shows up within this is given up on
+
+// The Review button of an "In review" row, by its reviewer chat: none (or its findings already sent) -> Review, running -> Reviewing…,
+// idle with a reply -> Send findings, typing the reviewer's last message into the row's working chat. `session` is the reviewer's, or undefined.
+export function reviewAction(r, session, now = Date.now()) {
+
+    if (!r || r.sent || (!session && now - r.at > REVIEWER_START_MS)) {
+        return { label: 'Review', kind: 'review', message: 'Start a read-only reviewer chat on this branch' };
+    }
+    if (!session || session.status === 'working' || session.asking || !session.lastReply) {
+        return { label: 'Reviewing…', kind: 'reviewing', message: 'The reviewer is working', reviewerId: r.id };
+    }
+
+    return {
+        label: 'Send findings',
+        kind: 'findings',
+        message: `Review findings from a fresh reviewer:\n\n${session.lastReply.slice(0, MAX_FINDINGS)}\n\nAddress them.`,
+        hint: "Types the reviewer's final message into this chat",
+        reviewerId: r.id
+    };
+}
+const MAX_FINDINGS = 15_000; // a send is capped at 20 KB
+
 // A report that merely quotes another repo's MR (e.g. a Homebase agent citing a pracsys MR) isn't work on this project.
 // A pr-link's own prRepository ("owner/name"), when it has one, says which repo it is for better than the URL does.
 export function sameRepo(url, project, repo) {
@@ -351,9 +376,12 @@ function isDismissed(x) {
 
 // One row per work item, newest agent first, with its column, stage, next step, action, gate badge and usage.
 // Without the rows the user dismissed.
-export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads, seeds = []) {
+export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads, seeds = [], reviews = reviewers) {
 
-    return itemGroups(sessions, prOf, now, seeds).map(it => {
+    // a reviewer chat is not work on the MR it reviews: it never becomes a row or its working chat
+    const reviewerIds = new Set([...reviews.values()].map(r => r.id));
+
+    return itemGroups(sessions.filter(s => !reviewerIds.has(s.id)), prOf, now, seeds).map(it => {
 
         const agents = it.agents.toSorted((a, b) => b.updated - a.updated);
         const agent = agents[0] ?? null;
@@ -390,7 +418,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
             next: requested ? 'Claude is on it…' : col === 'finished' ? `Finished without ${w.aMr}` : nextStep(prState, agent, w.mr),
-            action: requested ? null : rowAction(it.pr, prState, agent, title),
+            action: requested ? null : rowAction(it.pr, prState, agent, title) ?? (col === 'review' ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now) : null),
             gate: it.pr ? toGate(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
             ...agentUsage(agents, now)
         };

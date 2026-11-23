@@ -18,6 +18,7 @@
 | `milestones.mjs` | Milestones tab: milestone lists, issue groups, linked MRs, start-up warm-up |
 | `log.mjs` | Activity log (☰ → Activity log…): finished subagents, git commits, chat topics and closed MRs of a project's last 7 days, `log()` for `/api/log` |
 | `limits.mjs` | Rate limits from the status-line dumps |
+| `reviewer.mjs` | Review chats: POST `/api/reviewer?key=` starts a read-only reviewer Claude (own `cc-<id8>` tmux, fixed prompt) in an in-review row's checkout; `/api/reviewer/sent` marks its findings sent; `reviewers.json` in the Homebase dir maps row key to chat (the button states: `reviewAction` in `items.mjs`) |
 | `saver.mjs` | Token saver: GET/POST `/api/saver`, `token-saver.md` in the Homebase dir (the setting, and the rule a stale chat re-reads); `claudeLine` adds its rule so helpers run on Sonnet |
 | `tmux.mjs` | tmux plumbing: socket override, session names, `/clear` aliases, keystroke steps |
 | `control.mjs` | POST actions: send, interrupt, `/clear` |

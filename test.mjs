@@ -3,7 +3,7 @@
 const UNITS = [
     'agents', 'chat', 'items', 'comments', 'asks', 'usage', 'milestones', 'turns', 'board', 'security', 'http',
     'client', 'links', 'transcripts', 'projects', 'accounts', 'forge', 'sessions', 'send', 'questions', 'push',
-    'diff', 'gitpush', 'setup', 'forge-rows', 'robustness', 'web',
+    'diff', 'gitpush', 'setup', 'forge-rows', 'robustness', 'web', 'review-chat',
 ];
 
 for (const unit of UNITS) {

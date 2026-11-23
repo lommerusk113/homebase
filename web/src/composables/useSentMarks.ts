@@ -1,7 +1,8 @@
 import { chatSession, bindChat, sendText } from 'old/chat.js';
 import { renderBoard } from 'old/list.js';
 import { confirmAction } from 'old/keys.js';
-import { touch } from 'old/core.js';
+import { touch, api, hooks } from 'old/core.js';
+import { useNotice } from '@/composables/useNotice';
 
 // Optimistic "sent" marks: item key -> click time, in memory and sessionStorage, until the server reports the item
 // requested or doing, or SENT_MS pass without that (then the button comes back with a hint).
@@ -40,9 +41,35 @@ function optimistic(x: WorkItem, now = Date.now()): WorkItem {
     return { ...x, sent: at, column: 'doing', next: 'Sent to Claude…' };
 }
 
+const reviewing = new Set<string>(); // rows whose Review POST is in flight, so a double click starts one reviewer
+
+/** Review: starts the row's reviewer chat (POST /api/reviewer); the row says "Reviewing…" from the next poll. */
+async function startReview(x: WorkItem) {
+
+    if (reviewing.has(x.key)) {
+        return;
+    }
+    reviewing.add(x.key);
+    try {
+        const r = await api(`/api/reviewer?key=${encodeURIComponent(x.key)}`, { method: 'POST' }).catch(() => null);
+        if (!r?.ok) {
+            useNotice().showError(r ? await r.text() : 'Couldn’t reach Homebase to start the reviewer');
+        }
+        await hooks.refresh();
+    } finally {
+        reviewing.delete(x.key);
+    }
+}
+
 /** Sends the row's one-click command to its session; the row turns into an in-progress one at once, so it can't be sent twice. */
 async function send(x: WorkItem) {
 
+    if (x.action?.kind === 'review') {
+        return startReview(x);
+    }
+    if (x.action?.kind === 'reviewing') {
+        return;
+    }
     if (sent.has(x.key) || !x.action) {
         return;
     }
@@ -62,6 +89,8 @@ async function send(x: WorkItem) {
         sent.delete(x.key);
         save();
         renderBoard();
+    } else if (x.action.kind === 'findings') {
+        await api(`/api/reviewer/sent?key=${encodeURIComponent(x.key)}`, { method: 'POST' }).catch(() => null); // the next Review starts a fresh reviewer
     }
 }
 

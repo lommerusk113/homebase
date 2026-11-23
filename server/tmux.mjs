@@ -19,7 +19,7 @@ export const rulesFile = (dir = fileURLToPath(new URL('..', import.meta.url))) =
     return existsSync(local) ? local : join(dir, 'homebase-rules.md');
 };
 export const RULES_FILE = rulesFile();
-const quoted = t => `'${t.replace(/'/g, `'\\''`)}'`;
+export const quoted = t => `'${t.replace(/'/g, `'\\''`)}'`;
 // saver: Token saver on adds its one rule as text (the file flag takes only the rules file)
 export const claudeLine = (extra = '', rules = RULES_FILE, saver = saverOn()) => `claude${existsSync(rules) ? ` --append-system-prompt-file ${quoted(rules)}` : ''}${saver ? ` --append-system-prompt ${quoted(SAVER_RULE)}` : ''}${extra}`;
 

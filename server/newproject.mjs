@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { homedir } from 'node:os';
 import { join, isAbsolute, sep } from 'node:path';
-import { ROOT, liveSessions } from './transcripts.mjs';
+import { ROOT, liveSessions } from './entries.mjs';
 import { tmux, sleep, claudeLine, liveTmux } from './tmux.mjs';
 import { sessions, projectOf } from './sessions.mjs';
 import { trustNewProject } from './startup.mjs';

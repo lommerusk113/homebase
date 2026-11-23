@@ -1,7 +1,7 @@
 // The POST actions on a session: type into its tmux session, interrupt, /clear, /compact.
 import { stat, readFile, writeFile } from 'node:fs/promises';
 import { sessions } from './sessions.mjs';
-import { liveSessions } from './transcripts.mjs';
+import { liveSessions } from './entries.mjs';
 import { versionWarning, settingsPath, backupSettings } from './setup.mjs';
 import { refuseIfTrustDialog, cancelQuestion, parseDialog, parseQuestion, questionOpen, capture, inputLine, promptBack, freeTextOption, typeAnswer } from './startup.mjs';
 import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, ELSEWHERE, sleep, NEW_TMUX, OUR_TMUX, withLock } from './tmux.mjs';

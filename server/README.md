@@ -4,7 +4,13 @@
 
 | Module | What lives there |
 |---|---|
-| `transcripts.mjs` | Tail reading and its mtime cache, chat bubbles, TLDR/topic, turn state (with the `hooks/asking.mjs` marker), review-gate runs, token usage, `transcript()` for `/api/transcript` |
+| `transcripts.mjs` | `transcript()` for `/api/transcript`; re-exports the six transcript modules below |
+| `entries.mjs` | The projects root, live Claude Code sessions (`liveSessions`), tail reading and its mtime cache, entry cleanup, text and prompt helpers |
+| `summaries.mjs` | A reply or tail at a glance: ▸ topic, TLDR, queued prompts, review-gate runs, tool-call summaries, `RISKY` commands |
+| `feed.mjs` | The chat feed: entries turned into bubbles, answers paired with questions, handled replies, `feedTail` for "Show earlier" |
+| `asks.mjs` | What a reply asks of you: Waiting on you, option lists and chip labels, quick replies, `topicAndTldr` |
+| `turns.mjs` | Turn state (with the `hooks/asking.mjs` marker), pending AskUserQuestion and permission waits, closed sessions, turn and spawn prompts |
+| `usage.mjs` | Token usage read by byte offset, duration and token formatting |
 | `sessions.mjs` | Repo names, subagent summaries and status, session summaries, `sessions()`, and `polledSessions()` (one shared build, reused for a second) for `/api/sessions` |
 | `items.mjs` | Work-item rules (pure): columns, lifecycle, next step, row action, gate badge, milestone of an MR |
 | `forge.mjs` | glab/gh calls: PR/MR state, comments and threads, limiter, dedupe, the `prs` and `swr` caches, refresh button |
@@ -27,15 +33,21 @@
 | `static.mjs` | App file map, build hash, CSP, `public/vendor` serving, revalidation |
 
 Imports only go one way, with no cycles:
-`transcripts`, `tmux`, `security`, `pairing`, `static`, `uploads`, `tracked`, `push`, `reload` and `limits` import no other module; `forge` neither.
-`items` → transcripts, forge.
-`sessions` → transcripts, forge, items, tmux.
+`tmux`, `security`, `pairing`, `static`, `uploads`, `tracked`, `push`, `reload`, `limits` and `usage` import no other module; `forge` neither.
+`entries` → tmux.
+`summaries` → entries.
+`asks` → summaries.
+`feed` → entries, summaries, asks.
+`turns` → entries, tmux, startup.
+`transcripts` → entries, feed, turns (and re-exports all six).
+`items` → entries, usage, forge.
+`sessions` → entries, summaries, feed, turns, usage, forge, items, tmux.
 `milestones` → forge, items, sessions.
 `reviews` → forge, account.
-`log` → transcripts, forge, sessions.
-`control` → sessions, tmux.
+`log` → entries, summaries, usage, forge, sessions.
+`control` → entries, sessions, tmux.
 `diff` → sessions.
-`newproject` → transcripts, tmux, startup, sessions.
-`startup` → tmux.
+`newproject` → entries, tmux, startup, sessions.
+`startup` → tmux, summaries.
 
 Module state (caches, maps) lives in exactly one module and is imported, never copied.

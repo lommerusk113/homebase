@@ -24,7 +24,7 @@ const onPath = cmd => runs('sh', ['-c', `command -v ${cmd}`]);
 // Chats start claude through the login shell, so one that only its rc file puts on the PATH counts too
 const hasClaude = () => onPath('claude') || runs(loginShell(), ['-lic', 'command -v claude']);
 
-// The newest Claude Code whose screen (server/startup.mjs) and transcript (server/transcripts.mjs) Homebase's parsing was
+// The newest Claude Code whose screen (server/startup.mjs) and transcript (server/entries.mjs, feed.mjs, turns.mjs) Homebase's parsing was
 // checked against: the suites pass and a real chat was driven with it. Bump it after checking a newer one (CONTRIBUTING.md).
 export const VERIFIED_CLAUDE = '2.1.330';
 let installed = null;

@@ -1,5 +1,6 @@
 // Work-item rules (pure): one item per MR or loose agent, its column, lifecycle stage, next step, row action, gate badge and milestone.
-import { PR_URL, USAGE_KEYS, formatDuration, formatTokens } from './transcripts.mjs';
+import { PR_URL } from './entries.mjs';
+import { USAGE_KEYS, formatDuration, formatTokens } from './usage.mjs';
 import { mentionsMr, mrRef, forgeWords } from './forge.mjs';
 import { canned } from '../public/canned.js';
 

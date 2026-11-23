@@ -150,3 +150,12 @@ console.log('ok agents');
     console.log('ok stopped by the chat: no row');
 }
 
+// a finished helper that got a message afterwards is active again; meta.finished never clears
+{
+    const say = t => ({ type: 'assistant', message: { content: [{ type: 'text', text: t }] } });
+    const resumedAt = (ms, tail) => agentStatus({ finished: true }, [say('Done.'), { type: 'user', message: { content: 'one more thing' } }, ...tail], ms);
+    assert.equal(resumedAt(1_000, [call('r')]).status, 'running');
+    assert.deepEqual(resumedAt(11 * 60_000, [call('r'), result('r')]), { status: 'stopped', stopReason: 'silent' });
+    assert.equal(resumedAt(3 * 60_000, [say('Answered.')]).status, 'done', 'it ended its turn again');
+    assert.equal(agentStatus({ finished: true }, [say('Done.'), result('x')], 1_000).status, 'done', 'a tool result is not a message');
+}

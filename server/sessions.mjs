@@ -207,7 +207,10 @@ export function agentStatus(meta, entries, ageMs) {
     }
 
     const waiting = backgroundTasks(entries).size > 0;
-    if (meta.finished) {
+    // meta.finished never clears: a user turn (a message, a task notice) after the turn that ended with text resumed it
+    const endedAt = turns.findLastIndex(e => e.type === 'assistant' && !!textOf(e) && !(Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_use')));
+    const resumed = endedAt >= 0 && turns.slice(endedAt + 1).some(e => e.type === 'user' && !(Array.isArray(e.message?.content) && e.message.content.every(b => b.type === 'tool_result')));
+    if (meta.finished && !resumed) {
         return { status: waiting && ageMs < AGENT_TOOL_MS ? 'running' : 'done' };
     }
 

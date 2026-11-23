@@ -61,6 +61,8 @@ interface Session {
     hobby?: boolean;
     /** commits ahead of the upstream; null when there is no upstream */
     unpushed?: number | null;
+    /** a work repo on its default branch: Homebase never pushes it, so the Push button is hidden */
+    pushBlocked?: boolean;
     /** context window used, % (from the status-line dump); null when there is none */
     context: number | null;
     /** context window size in tokens (from the same dump); null when unknown */

@@ -29,6 +29,7 @@ import { loadDismissed, dismiss } from './server/dismissed.mjs';
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 import { diff } from './server/diff.mjs';
+import { pushSession } from './server/gitpush.mjs';
 import { doctor, setup, unsetup, missingTools, readClaudeVersion, versionWarning } from './server/setup.mjs';
 
 export { readTail, filesTouched, unwrapPasted } from './server/entries.mjs';
@@ -366,6 +367,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             if (isPost('/api/restart')) {
                 await restartChat(url.searchParams.get('id'));
                 return res.end('ok');
+            }
+            if (isPost('/api/push')) {
+                let input;
+                try {
+                    input = JSON.parse(await readBody(req, 1024));
+                } catch {
+                    return deny(400, 'expected a JSON body');
+                }
+                return json(await pushSession(input?.session));
             }
             if (isPost('/api/interrupt')) {
                 await interrupt(url.searchParams.get('id'));

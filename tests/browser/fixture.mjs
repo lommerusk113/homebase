@@ -102,6 +102,14 @@ export function buildFixture(root) {
     commit(alphaRepo, 'Add a perks simulator', 100);
     git('branch', '--set-upstream-to=origin/main', 'main'); // one commit ahead of it, for the header's unpushed count
 
+    // tracker (hobby): one commit ahead of its upstream too, so the header's Push button shows there but not on alpha (a work repo's main)
+    const trackerRepo = join(home, 'repos', 'tracker'), tgit = (...args) => execFileSync('git', ['-C', trackerRepo, ...args]);
+    tgit('symbolic-ref', 'HEAD', 'refs/heads/main');
+    commit(trackerRepo, 'Start the tracker', 3600);
+    tgit('update-ref', 'refs/remotes/origin/main', 'HEAD');
+    commit(trackerRepo, 'Fix the tracker', 100);
+    tgit('branch', '--set-upstream-to=origin/main', 'main');
+
     // status-line dumps (HOMEBASE_STATUSLINE_DIR): context % per session; master amber, asker red, worker under the gauge
     mkdirSync(join(root, 'statusline'), { recursive: true });
     for (const [id, pct] of [[IDS.master, 72], [IDS.asker, 90], [IDS.worker, 40]]) {

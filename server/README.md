@@ -30,6 +30,7 @@
 | `pairing.mjs` | Remote access through `tailscale serve`: the `remote` config, the remote port test, one-time codes and their rate limit, device cookies (hashes in `devices.json`), revoke, the pair page, `isPairedRequest(req)` for other features |
 | `tracked.mjs` | The board's projects, GET/POST `/api/tracked` (`tracked.json`), shared by the Mac and its paired devices |
 | `diff.mjs` | Changes view: GET `/api/diff`, the folder of a session or of an item's worktree, the changed-file lists (git status and diff parsing) and one file's diff, read-only with size caps |
+| `gitpush.mjs` | The header Push button: POST `/api/push`, pushes the session's own branch (never forced; a work repo's default branch, main and master refused) |
 | `reload.mjs` | Update without restarts: `/api/version` (server code newer than at start, browser-file mtime hash), POST `/api/server/reload` replacing the process, bind retry |
 | `static.mjs` | App file map, build hash, CSP, `public/vendor` serving, revalidation, the Vue islands (`/web/main.js` and `/web/main.css` from `web/dist`, their tags in `index.html` only once built; see `web/README.md`) |
 
@@ -49,6 +50,7 @@ Imports only go one way, with no cycles:
 `log` → entries, summaries, usage, forge, sessions.
 `control` → entries, sessions, tmux.
 `diff` → sessions.
+`gitpush` → sessions (and `sessions` → `gitpush`, for `pushBlocked`).
 `newproject` → entries, tmux, startup, sessions.
 `startup` → tmux, summaries.
 

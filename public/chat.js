@@ -251,7 +251,38 @@ function showHead(s) {
     branch.classList.toggle('warn', /^(main|master)$/.test(s?.branch ?? '') && !s?.hobby);
     un.hidden = !(s?.unpushed > 0);
     un.textContent = `${s?.unpushed} unpushed`;
+    const push = $('c-push');
+    push.hidden = un.hidden || !!s?.pushBlocked;
+    if (push.hidden || push.dataset.sid !== s?.id) {
+        push.dataset.sid = s?.id ?? '';
+        $('c-push-err').hidden = true;
+    }
     syncDiff(s);
+}
+
+// Push: the server decides what may go (never a work repo's default branch, never a force); its last git error line shows next to the button.
+async function pushHead() {
+
+    const s = chatSession(), push = /** @type {HTMLButtonElement} */ ($('c-push')), err = $('c-push-err');
+    if (!s || push.disabled) {
+        return;
+    }
+    push.disabled = true;
+    push.textContent = 'Pushing…';
+    err.hidden = true;
+    try {
+        const r = await api('/api/push', { method: 'POST', body: JSON.stringify({ session: s.id }) });
+        if (!r.ok) {
+            throw new Error((await r.text()) || `Push failed (${r.status})`);
+        }
+        s.unpushed = (await r.json()).unpushed;
+    } catch (e) {
+        err.textContent = err.title = e instanceof Error ? e.message : 'Push failed';
+        err.hidden = false;
+    }
+    push.disabled = false;
+    push.textContent = 'Push';
+    showHead(chatSession());
 }
 
 // Above a focused (not main) chat's question: what it is about, its title and linked MR, then its last reply's TLDR.
@@ -382,6 +413,7 @@ export function initChat() {
         m?.mount('Rules', $('rules-host'));
     });
     $('c-back').onclick = unfocusChat;
+    $('c-push').onclick = pushHead;
     $('c-next').onclick = () => nextId && focusChat(nextId);
     document.addEventListener('keydown', e => e.key === 'Escape' && state.focus && !e.composedPath().some(n => /^(INPUT|WA-TEXTAREA|TEXTAREA|WA-DIALOG|WA-DROPDOWN)$/.test(/** @type {Element} */ (n).nodeName || '')) && unfocusChat());
 }

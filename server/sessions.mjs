@@ -13,6 +13,7 @@ import { chatItems } from './feed.mjs';
 import { loadStore, record, seeds, flush, STORE_FILE } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { repoPaths, accountOf } from './account.mjs';
+import { pushBlocked } from './gitpush.mjs';
 import { contextOf } from './limits.mjs';
 import { workItems, milestoneOf, sameRepo } from './items.mjs';
 import { plainCommand } from '../web/src/lib/text.ts';
@@ -105,6 +106,8 @@ export async function unpushedOf(cwd, now = Date.now(), exec = run) {
 
     return n;
 }
+
+export const forgetUnpushed = cwd => unpushed.delete(cwd);
 
 const STAGES = ['Explore', 'Implement', 'Verify', 'Ship', 'Done'];
 // Matched against each command of a Bash call, so they are anchored to its start.
@@ -758,6 +761,7 @@ export async function sessions() {
         const repo = repoPaths.get(s.project);
         s.hobby = !!repo && accountOf(repo) === 'personal';
         s.unpushed = await unpushedOf(s.cwd);
+        s.pushBlocked = s.unpushed > 0 && await pushBlocked(s);
     }));
 
     await attachTmux(out, now, live); // first: it sets clearedFrom, which attachItems follows

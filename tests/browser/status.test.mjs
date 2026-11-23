@@ -25,6 +25,15 @@ export default {
         await page.waitFor(`document.getElementById('c-unpushed').textContent === '1 unpushed' && !document.getElementById('c-unpushed').hidden`, { what: 'the unpushed count' });
     },
 
+    'the Push button sits with the unpushed badge, and is hidden on a work repo\'s default branch': async ({ page, open, IDS }) => {
+        await open({ chat: IDS.tracker });
+        await page.waitFor(`!document.getElementById('c-unpushed').hidden && !document.getElementById('c-push').hidden`, { what: 'the badge and Push on a hobby repo' });
+        assert.equal(await page.ev(`document.getElementById('c-push').textContent`), 'Push');
+        await open(); // alpha: GitLab, on main, one ahead
+        await page.waitFor(`!document.getElementById('c-unpushed').hidden`, { what: 'the badge on the work repo' });
+        assert.equal(await page.ev(`document.getElementById('c-push').hidden`), true);
+    },
+
     'a stuck turn says so and offers Restart chat behind the confirm': async ({ page, open, IDS, answerPosts }) => {
         await open({ chat: IDS.worker });
         page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items: [], working: false, stuck: true, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));

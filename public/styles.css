@@ -224,8 +224,12 @@ a.chip:hover { text-decoration:underline; }
 .c-next { flex-shrink:1; min-width:0; max-width:50%; overflow:hidden; text-overflow:ellipsis; }
 .c-branch, .c-unpushed { flex-shrink:.0001; min-width:0; max-width:30%; padding:0 7px; border:0; background:var(--chip); border-radius:var(--r-pill); font-size:var(--fs-xs); font-weight:400; line-height:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--muted); }
 /* top-left of the chat card, the controls top-right; a newer-session note takes their place */
-.c-unpushed, .c-branch:has(+ .c-unpushed[hidden]) { margin-right:auto; }
-.c-head:has(.c-newer:not([hidden])) :is(.c-branch, .c-unpushed) { display:none; }
+.c-branch:has(+ .c-unpushed[hidden]), .c-unpushed:has(+ .c-push[hidden]), .c-push:has(+ .c-push-err[hidden]), .c-push-err { margin-right:auto; }
+.c-push { flex-shrink:0; margin-left:4px; padding:0 8px; border:1px solid var(--line); background:var(--bg); border-radius:var(--r-pill); font:inherit; font-size:var(--fs-xs); line-height:16px; color:var(--fg); cursor:pointer; }
+.c-push:disabled { cursor:default; color:var(--muted); }
+.c-push-err { flex-shrink:.0001; min-width:0; max-width:40%; margin-left:6px; font-size:var(--fs-xs); color:var(--c-warn); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.c-push[hidden], .c-push-err[hidden] { display:none; }
+.c-head:has(.c-newer:not([hidden])) :is(.c-branch, .c-unpushed, .c-push, .c-push-err) { display:none; }
 .c-branch.warn { color:var(--c-warn); background:color-mix(in srgb, var(--c-warn) 12%, transparent); }
 .c-branch[hidden], .c-unpushed[hidden] { display:none; }
 .c-title { flex:1 1 auto; min-width:0; font-size:var(--fs-m); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

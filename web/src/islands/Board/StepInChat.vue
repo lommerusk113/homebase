@@ -16,7 +16,11 @@ const s = toRef(() => byId.value.get(props.sid)!);
     <td class="pr" />
     <td class="br" />
     <td class="act">
-        <ChatIcon @click="focus(sid)" />
+        <span class="slots">
+            <span class="sl sl-i" />
+            <span class="sl sl-i"><ChatIcon @click="focus(sid)" /></span>
+            <span class="sl sl-b" />
+        </span>
     </td>
     <td class="when">{{ ago(s.lastActivity ?? s.updated) }}</td>
 </template>

@@ -14,8 +14,8 @@ const mr = computed(() => forgeWords(item.value.pr).mr);
 
 <template>
     <template v-if="item.pr">
-        <PrChip :pr="item.pr" :state="item.prState?.state" />
-        <CiPill :pipeline="item.prState?.pipeline" />
+        <span class="sl sl-pr"><PrChip :pr="item.pr" :state="item.prState?.state" /></span>
+        <span class="sl sl-ci"><CiPill :pipeline="item.prState?.pipeline" /></span>
         <GateBadge v-if="item.gate" :gate="item.gate" :mr="mr" />
         <!-- the lookup failed but an older answer is shown: say it may be out of date (with no answer, Next already says so) -->
         <StaleMark v-if="item.forgeError && item.prState" />

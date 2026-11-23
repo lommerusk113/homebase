@@ -82,7 +82,7 @@ export default {
         assert.equal(await page.ev(`${row('agent-stopped')}.querySelector('.act-btn').textContent`), 'Continue');
         assert.equal(await page.ev(`${row(`asking:${IDS.master}`)}.querySelector('b').textContent.trim()`), 'Should I tag the release now or wait for QA?', 'the needs-you title is what the reply asks');
         assert.match(await page.ev(`${row(`asking:${IDS.master}`)}.querySelector('.next').textContent`), /^alpha · Login work · \w+( ago)?$/);
-        assert.equal(await page.ev(`${row(MR(104))}.querySelector('.next').textContent`), "💬 1 Next: Reply to Ann Reviewer's comment");
+        assert.equal(await page.ev(`${row(MR(104))}.querySelector('.next').textContent`), "Next: Reply to Ann Reviewer's comment💬 1");
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.act-btn').textContent`), 'Fix & reply');
         assert.equal(await page.ev(`${row(MR(102))}.querySelector('.act-btn').textContent`), 'Merge + close issue');
         await page.waitFor(`!${row(MR(101))}.querySelector('.ms-tag')`, { what: 'no milestone tag while the pill has Sprint 12 picked' });

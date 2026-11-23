@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // "Next: <step>" under the title. A running agent's line says what it does now, and how long it has been on that
-// step once that's a minute or more. The badge and the hint come first, so the ellipsis doesn't cut them.
+// step once that's a minute or more. The text always starts at the cell's left edge; the comment badge sits after it and the ellipsis cuts the text, not the badge.
 import { ago } from '@/lib/time';
 import { CommentsKey, ItemKey, SentMarksKey, useInjected } from '@/keys';
 import CommentBadge from './CommentBadge.vue';
@@ -19,5 +19,5 @@ function text(x: WorkItem) {
 </script>
 
 <template>
-    <small class="next"><template v-if="item.comments?.count"><CommentBadge />{{ ' ' }}</template><span v-if="noReply(item)" class="no-reply">{{ 'No response yet — check the chat · ' }}</span>{{ text(item) }}</small>
+    <small class="next nl"><span class="nl-text"><span v-if="noReply(item)" class="no-reply">{{ 'No response yet — check the chat · ' }}</span>{{ text(item) }}</span><CommentBadge v-if="item.comments?.count" /></small>
 </template>

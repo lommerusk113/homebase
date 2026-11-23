@@ -23,7 +23,7 @@ import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor, webTags, 
 import { saveUpload, readUpload } from './server/uploads.mjs';
 import { saveSeen } from './server/rules.mjs';
 import { readTracked, saveTracked } from './server/tracked.mjs';
-import { saverOn, saveSaver } from './server/saver.mjs';
+import { saveSaver, syncSaver } from './server/saver.mjs';
 import { loadHandled, markHandled } from './server/handled.mjs';
 import { loadDismissed, dismiss } from './server/dismissed.mjs';
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
@@ -57,7 +57,7 @@ export { accountOf, readToken, ghRun, scrub } from './server/account.mjs';
 export { saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME } from './server/uploads.mjs';
 export { saveSeen, readSeen } from './server/rules.mjs';
 export { readTracked, saveTracked, validTracked } from './server/tracked.mjs';
-export { saverOn, saveSaver, saverRules, SAVER_RULE } from './server/saver.mjs';
+export { saverOn, saveSaver, syncSaver, saverRules, SAVER_RULE } from './server/saver.mjs';
 export { isStale, serverMtime, pageHash } from './server/reload.mjs';
 export { parseNumstat, parseNameStatus, parseStatus, changes, fileBody, diffFolder, diff, MAX_DIFF_BYTES } from './server/diff.mjs';
 
@@ -233,11 +233,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
             // Token saver: helpers on Sonnet (server/saver.mjs)
             if (url.pathname === '/api/saver' && req.method === 'GET') {
-                return json({ on: saverOn(DATA_DIR) });
+                return json(await syncSaver(await limits(), DATA_DIR));
             }
             if (isPost('/api/saver')) {
-                await saveSaver(await readBody(req, 1024), DATA_DIR);
-                return res.end('ok');
+                return json(await saveSaver(await readBody(req, 1024), DATA_DIR, await limits()));
             }
             // A reply that wrongly says "needs you", marked as handled; an open question or permission prompt is not one
             if (isPost('/api/handled')) {
@@ -407,7 +406,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return json(await log(url.searchParams.get('project')));
             }
             if (url.pathname === '/api/limits') {
-                return json(await limits());
+                const lim = await limits();
+                await syncSaver(lim, DATA_DIR); // usage crossing the auto-on line flips the saver here, on the client's poll
+                return json(lim);
             }
             // Read-only, for whoever may read a chat (paired devices too). The folder is the session's own, never the request's.
             if (url.pathname === '/api/diff' && req.method === 'GET') {

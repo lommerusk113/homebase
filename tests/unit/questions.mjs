@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseQuestion, answerQuestion, saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME, cancelQuestion, questionOpen } from '../../server.mjs';
 import { seenHash } from '../../public/core.js';
 import { pasteLabel, isLongPaste, expandPastes } from '../../web/src/lib/draft.ts';
 import { claudeLine, rulesFile, loginShell } from '../../server/tmux.mjs';
-import { saverOn, saveSaver, saverRules, SAVER_RULE } from '../../server/saver.mjs';
+import { saverOn, saveSaver, saverRules, syncSaver, SAVER_RULE } from '../../server/saver.mjs';
 import { projectOf } from '../../server/sessions.mjs';
 
 {
@@ -232,7 +232,7 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
 
 {
     // Token saver: the one rule chats get, on and off
-    assert.match(saverRules(true), /^Token saver is on: start every helper \(Agent tool\) with model: sonnet, unless the user names another model\.$/);
+    assert.match(saverRules(true), /^Token saver is on: start every helper \(Agent tool\) with model: sonnet, unless the user names another model\. Run at most two helpers at a time; do small jobs \(a lookup, a few-line fix\) yourself instead of starting a helper\. Queue further work and start it when a helper finishes\.$/);
     assert.ok(!saverRules(false).includes('sonnet') && saverRules(false).startsWith('Token saver is off'));
     const on = claudeLine(' --resume x', '/nope/rules.md', true);
     assert.equal(on, `claude --append-system-prompt '${SAVER_RULE}' --resume x`, 'on: the rule is added as text');
@@ -245,6 +245,20 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     await saveSaver('{"on":false}', dir);
     assert.equal(saverOn(dir), false);
     await assert.rejects(saveSaver('{"on":"yes"}', dir), e => e.status === 400);
+    // auto-on at 80% used, either window; the user's choice stays separate; the file changes only on a flip
+    const lim = (five, week) => ({ fiveHour: { used: five }, sevenDay: { used: week } });
+    assert.deepEqual(await syncSaver(lim(79, 10), dir), { on: false, auto: false, effective: false, used: 79 });
+    assert.equal(saverOn(dir), false);
+    assert.equal((await syncSaver(lim(10, 80), dir)).effective, true, 'weekly at 80 turns it on');
+    assert.equal(saverOn(dir), true);
+    const at = statSync(join(dir, 'token-saver.md')).mtimeMs;
+    await new Promise(r => setTimeout(r, 20));
+    assert.deepEqual(await syncSaver(lim(95, 10), dir), { on: false, auto: true, effective: true, used: 95 });
+    assert.equal(statSync(join(dir, 'token-saver.md')).mtimeMs, at, 'no rewrite without a flip');
+    assert.equal((await saveSaver('{"on":true}', dir, lim(10, 10))).effective, true);
+    assert.equal((await syncSaver(lim(10, 10), dir)).auto, false);
+    assert.equal(saverOn(dir), true, 'the user choice holds when usage drops');
+    assert.equal((await saveSaver('{"on":false}', dir, lim(10, 10))).effective, false);
     rmSync(dir, { recursive: true });
     console.log('ok token saver rules');
 }

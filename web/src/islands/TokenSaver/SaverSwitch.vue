@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { TokenSaverKey, useInjected } from '@/keys';
 
-const { on, set } = useInjected(TokenSaverKey);
+const { on, note, set } = useInjected(TokenSaverKey);
 </script>
 
 <template>
@@ -12,4 +12,5 @@ const { on, set } = useInjected(TokenSaverKey);
         :checked.prop="on"
         @change="set(($event.target as HTMLInputElement).checked)"
     >Token saver</wa-switch>
+    <small v-if="note" id="saver-note">{{ note }}</small>
 </template>

@@ -44,6 +44,7 @@ export default {
             core.state.sessions.find(s => s.project === 'alpha').items = [1, 2, 3, 4, 5].map(many);
             core.state.reviews = [];
             list.renderBoard();
+            await new Promise(r => setTimeout(r)); // the island draws a tick later
             return [document.querySelector('#masters .d-empty, #masters .welcome')?.textContent ?? null, document.querySelectorAll('#masters .g-head').length];
         })()`);
         assert.deepEqual(out, [null, 1]);
@@ -59,6 +60,7 @@ export default {
             const before = shown();
             it.milestone = null;
             list.renderBoard();
+            await new Promise(r => setTimeout(r)); // the island draws a tick later
             return [before, shown()];
         })()`);
         assert.deepEqual(out, [true, false]);
@@ -71,6 +73,7 @@ export default {
             const core = await import('/core.js'), list = await import('/list.js');
             ${items}.find(i => i.key === ${JSON.stringify(MR(104))}).milestone = null;
             list.renderBoard();
+            await new Promise(r => setTimeout(r)); // the island draws a tick later
             return !!document.querySelector('#masters tr[data-key="${MR(104)}"]');
         })()`);
         assert.equal(out, false);
@@ -87,6 +90,7 @@ export default {
             const x = ${items}.find(i => i.key === ${JSON.stringify(MR(104))});
             Object.assign(x, { column: 'ready', next: 'Approved — merge it', action: { label: 'Merge + close issue', message: 'merge' } });
             list.renderBoard();
+            await new Promise(r => setTimeout(r)); // the island draws a tick later
             return !!document.querySelector('#masters tr[data-key="${MR(104)}"] .no-reply');
         })()`);
         assert.equal(out, false);

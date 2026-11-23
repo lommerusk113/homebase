@@ -37,3 +37,27 @@ export const SendKey: InjectionKey<ReturnType<typeof useSend>> = Symbol('send');
 /** which folds (Show more) are open */
 export const UnfoldKey: InjectionKey<ReturnType<typeof useUnfold>> = Symbol('unfold');
 export const UnreadKey: InjectionKey<ReturnType<typeof useUnread>> = Symbol('unread');
+
+// ---- the board (islands/Board.vue) ----
+import type { Ref } from 'vue';
+import type { useWorkItems } from '@/composables/useWorkItems';
+import type { useSentMarks } from '@/composables/useSentMarks';
+import type { useSelection } from '@/composables/useSelection';
+import type { useComments } from '@/composables/useComments';
+import type { useChatRows } from '@/composables/useChatRows';
+import type { useReviews } from '@/composables/useReviews';
+import type { useFolds } from '@/composables/useFolds';
+import type { useForgeNotes } from '@/composables/useForgeNotes';
+import type { useBoardGroups } from '@/composables/useBoardGroups';
+
+export const WorkItemsKey: InjectionKey<ReturnType<typeof useWorkItems>> = Symbol('workItems');
+export const SentMarksKey: InjectionKey<ReturnType<typeof useSentMarks>> = Symbol('sentMarks');
+export const SelectionKey: InjectionKey<ReturnType<typeof useSelection>> = Symbol('selection');
+export const CommentsKey: InjectionKey<ReturnType<typeof useComments>> = Symbol('comments');
+export const ChatRowsKey: InjectionKey<ReturnType<typeof useChatRows>> = Symbol('chatRows');
+export const ReviewsKey: InjectionKey<ReturnType<typeof useReviews>> = Symbol('reviews');
+export const FoldsKey: InjectionKey<ReturnType<typeof useFolds>> = Symbol('folds');
+export const ForgeNotesKey: InjectionKey<ReturnType<typeof useForgeNotes>> = Symbol('forgeNotes');
+export const BoardGroupsKey: InjectionKey<ReturnType<typeof useBoardGroups>> = Symbol('boardGroups');
+/** The work item a row shows: provided by Board/ItemRows.vue to the row's own parts. */
+export const ItemKey: InjectionKey<Readonly<Ref<WorkItem>>> = Symbol('item');

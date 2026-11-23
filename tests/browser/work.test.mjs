@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, writeFileSync, rmSync, readFileSync, statSync, utimesSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { MR, IDS } from './fixture.mjs';
 import { sleep } from './cdp.mjs';
 
@@ -216,5 +216,32 @@ export default {
         await page.click('.group.g-review .g-head');
         await page.waitFor(`${row(MR(103))}.checkVisibility()`, { what: 'the rows to show' });
         assert.equal(await page.ev(`localStorage.getItem('fold:review:alpha')`), 'open');
+    },
+
+    'Dismiss puts away a row without an MR on every device, until its helper works again': async ({ page, open, IDS, homebase, answerPosts }) => {
+        const file = join(dirname(homebase), 'home', '.claude', 'projects', '-fx-alpha', IDS.master, 'subagents', 'agent-stopped.jsonl');
+        const was = statSync(file).mtime, button = `${row('agent-stopped')}?.querySelector('.dismiss-btn')`;
+        await open();
+        await page.waitFor(`${button} && ${row(MR(104))}`, { what: 'the stopped helper with its Dismiss button' });
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#masters .dismiss-btn')].map(b => b.closest('tr').dataset.key)`), ['agent-stopped', 'agent-notes'],
+            'only on the rows with no MR whose helper is not working: the stopped one and the finished one');
+        assert.ok(await page.ev(`(() => { const b = ${button}.getBoundingClientRect(), td = ${button}.closest('td').getBoundingClientRect(); return b.width > 0 && b.left >= td.left && b.right <= td.right; })()`), 'it fits its cell');
+        try {
+            page.route = q => (q.url.includes('/api/dismissed') ? null : answerPosts(q)); // this POST only writes the fixture's dismissed.json
+            await page.clickOn(button);
+            await page.waitFor(`!${row('agent-stopped')}`, { what: 'the row gone' });
+            assert.equal(await page.ev(`import('/core.js').then(m => m.state.selected)`), null, 'dismissing does not open the row');
+            assert.deepEqual(JSON.parse(readFileSync(join(homebase, 'dismissed.json'), 'utf8')).map(e => e[0]), ['agent-stopped']);
+            await open(); // another load, as another device: the server leaves it out
+            assert.deepEqual(await page.ev(`import('/core.js').then(m => m.api('/api/sessions')).then(r => r.json()).then(l => l.flatMap(s => s.items).filter(i => i.key === 'agent-stopped'))`), [], 'the server no longer lists it');
+            await page.waitFor(`${row(MR(104))} && !${row('agent-stopped')}`, { what: 'the board without it after a reload' }); // the first draw may be the tab's cached list
+            await sleep(2000); // and it stays away over the next polls
+            assert.equal(await page.ev(`!!${row('agent-stopped')}`), false, 'still gone');
+            utimesSync(file, new Date(), new Date()); // a new message resumed the helper: its transcript moves
+            await page.waitFor(row('agent-stopped'), { what: 'the row back once its helper works again' });
+        } finally {
+            utimesSync(file, was, was);
+        }
+        await page.waitFor(button, { what: 'the helper stopped again, and its row staying' });
     }
 };

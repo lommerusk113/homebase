@@ -6,7 +6,8 @@ import tailwindcss from '@tailwindcss/vite';
 // Library build: one ES module (web/dist/main.js) plus its CSS (main.css), loaded by the old page (public/index.html).
 export default defineConfig({
     plugins: [
-        vue(),
+        // <wa-button>, <wa-details> and friends are the old page's Web Awesome elements, not Vue components
+        vue({ template: { compilerOptions: { isCustomElement: tag => tag.startsWith('wa-') } } }),
         tailwindcss(),
         // 'old/core.js' -> an external '/core.js': islands import the very module instances the old page runs, never
         // copies. tsconfig.json maps the same name to ../public for the types.

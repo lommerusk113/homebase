@@ -1,7 +1,6 @@
 // The Changes view's old-page side (GET /api/diff, server/diff.mjs; read-only). The panel and the chat header's button
-// are Vue islands (web/src/islands/Diff.vue and DiffButton.vue): this file puts them into the page, and still draws
-// the old board's row icon.
-import { api, el, waButton, hooks, vue } from './core.js';
+// are Vue islands (web/src/islands/Diff.vue and DiffButton.vue): this file puts them into the page.
+import { el, hooks, vue } from './core.js';
 
 // Resolves to the unmount, or to null when web/ isn't built.
 /** @param {string} name @param {HTMLElement} host @param {object} [props] @returns {Promise<(() => void) | null>} */
@@ -49,52 +48,6 @@ export function closeDiff() {
     } else {
         hooks.refocus?.(); // the row it was opened from was redrawn meanwhile
     }
-}
-
-// A work row's "Changes" icon, only when its helper's worktree (or the worktree that has its branch checked out) has
-// changes; never the chat's folder, which would show unrelated changes. Each row's count is read when the row is drawn and at most every
-// COUNT_MS after, never on the poll itself; a count that changes redraws the board.
-// ponytail: the old board's own copy of useRowDiffCount (web/src/composables/useDiffCounts.ts); it goes when the
-// ported board draws web/src/components/DiffIcon.vue instead.
-const COUNT_MS = 15_000;
-const ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 6.5v7M8.5 10h7M8.5 17h7"/></svg>';
-/** @type {Map<string, { at: number, n: number }>} item key -> changed files */
-const rowCounts = new Map();
-/** @param {WorkItem} x @returns {Promise<number>} */
-async function changedFiles(x) {
-    const r = await api(`/api/diff?${new URLSearchParams({ session: x.sessionId, item: x.key })}`);
-    if (!r.ok) {
-        throw new Error(await r.text());
-    }
-    /** @type {DiffView} */
-    const v = await r.json();
-    return v.repo ? new Set([...v.uncommitted, ...v.committed].map(f => f.path)).size : 0;
-}
-/** @param {WorkItem} x @param {() => void} redraw @returns {HTMLElement[]} */
-export function diffIcon(x, redraw) {
-    if (!(x.worktreePath || x.branch) || !x.sessionId) {
-        return [];
-    }
-    const hit = rowCounts.get(x.key), was = hit?.n ?? 0;
-    if (!document.hidden && (!hit || Date.now() - hit.at >= COUNT_MS)) {
-        rowCounts.set(x.key, { at: Date.now(), n: was }); // one fetch at a time per row
-        changedFiles(x).then(n => {
-            rowCounts.set(x.key, { at: Date.now(), n });
-            if (n !== was) {
-                redraw();
-            }
-        }, () => {});
-    }
-    if (!was) {
-        return [];
-    }
-    const b = waButton('', 'act-btn dv-row', { appearance: 'plain', 'aria-label': 'Changes', title: 'Changes' });
-    b.innerHTML = ICON;
-    b.onclick = e => {
-        e.stopPropagation();
-        openDiff(x.sessionId, x.key);
-    };
-    return [b];
 }
 
 // The chat's corner "±" (Changes) button: the DiffButton island at the end of the chat's top strip, mounted once. It

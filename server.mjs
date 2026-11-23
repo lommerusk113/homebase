@@ -33,6 +33,7 @@ import { loadReviewers, startReviewer, markFindingsSent } from './server/reviewe
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 import { diff } from './server/diff.mjs';
+import { claim, release } from './server/once.mjs';
 import { pushSession } from './server/gitpush.mjs';
 import { doctor, setup, unsetup, missingTools, readClaudeVersion, versionWarning } from './server/setup.mjs';
 
@@ -122,6 +123,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     loadDismissed(DATA_DIR);
     loadReviewers(DATA_DIR);
     warmMilestones();
+    const sentRows = new Map(); // rowKey -> { at, kind }: the row buttons' double-send guard (server/once.mjs)
+    const kindOf = async key => (await polledSessions()).flatMap(s => s.items ?? []).find(i => i.key === key)?.state?.kind;
     const handler = async (req, res) => {
         const url = new URL(req.url, 'http://x');
         for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
@@ -285,7 +288,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                         return deny(409, 'the row has no checkout to review');
                     }
                     const repo = repoPaths.get(row.project);
-                    await startReviewer(DATA_DIR, { key, cwd, gitlab: !!repo && isGitLab(repo) });
+                    const once = url.searchParams.get('once');
+                    if (once && !claim(sentRows, once, row.state?.kind)) {
+                        res.setHeader('x-homebase-once', '1');
+                        return deny(409, 'Already sent');
+                    }
+                    try {
+                        await startReviewer(DATA_DIR, { key, cwd, gitlab: !!repo && isGitLab(repo) });
+                    } catch (e) {
+                        if (once) {
+                            release(sentRows, once);
+                        }
+                        throw e;
+                    }
                 }
                 polledSessions.stale();
                 return res.end('ok');
@@ -331,6 +346,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
             if (isPost('/api/send')) {
                 const body = await readBody(req, MAX_SEND);
+                // a row button's send: a repeat of the same row at the same state kind is refused (a second click, a second device)
+                const once = url.searchParams.get('once');
+                if (once && !claim(sentRows, once, await kindOf(once))) {
+                    res.setHeader('x-homebase-once', '1'); // the client's quiet "Already sent", not an error
+                    return deny(409, 'Already sent');
+                }
+                try {
                 if (url.searchParams.has('tmux')) {
                     await sendToNew(url.searchParams.get('tmux'), body); // a new project's chat that has no transcript yet
                 } else {
@@ -358,6 +380,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     return res.end(warning ?? said); // sent; any other text is a warning
                 }
                 return res.end('ok');
+                } catch (e) {
+                    if (once) {
+                        release(sentRows, once); // a failed send is retried with the same key
+                    }
+                    throw e;
+                }
             }
             if (isPost('/api/upload')) {
                 res.setHeader('connection', 'close'); // a refused body is not read to the end

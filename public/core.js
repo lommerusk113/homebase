@@ -402,7 +402,7 @@ export const waitsOnYou = moved('waitsOnYou'); // moved: web/src/lib/waiting.ts
  *   ask: (s: Session, data: Transcript) => Promise<void>,
  *   boot: (tmux: string | null | undefined) => Promise<void>,
  *   wait: (s: Session | null, data: Transcript | null, items: ChatItem[]) => void,
- *   send: (sid: string, text: string, answerTo?: string, note?: string, canned?: boolean) => Promise<boolean> }}
+ *   send: (sid: string, text: string, answerTo?: string, note?: string, canned?: boolean, once?: string) => Promise<boolean> }}
  */
 export const composer = { turn: () => {}, endDiscuss: () => {}, ask: async () => {}, boot: async () => {}, wait: () => {}, send: async () => false };
 /** Desktop notifications asked for in this browser (the bell) and allowed by it. */

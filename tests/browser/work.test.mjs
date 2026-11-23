@@ -89,6 +89,36 @@ export default {
         assert.equal(await page.ev(`${row(MR(101))}.querySelector('a.chip').textContent`), '!101', 'an open MR shows no "open"');
     },
 
+    'a row action already sent from elsewhere (a second device) is refused quietly: Already sent, one send': async ({ page, open }) => {
+        await open();
+        const btn = `${row('agent-stopped')}.querySelector('.act-btn')`, sends = () => page.posts.filter(p => p.url.includes('/api/send'));
+        await page.waitFor(`${btn}`, { what: 'the Continue button' });
+        const once = `once=${encodeURIComponent('agent-stopped')}`;
+        // the server's guard (server/once.mjs) answers 409 + x-homebase-once to a repeat of the same row at the same state kind
+        let taken = false;
+        page.route = q => {
+            if (!q.url.includes('/api/send')) {
+                return null;
+            }
+            if (taken) {
+                return { status: 409, body: 'Already sent', headers: { 'content-type': 'text/plain', 'x-homebase-once': '1' } };
+            }
+            taken = true;
+
+            return { body: 'ok' };
+        };
+        await page.ev(`${btn}.click()`);
+        await page.waitFor(`!${btn}`, { what: 'the row to turn into a sent one' });
+        assert.ok(sends().every(p => p.url.includes(once)), 'the click carries the row key');
+        // the mark is gone (another tab or device): the second click is refused by the server, quietly
+        await page.ev(`sessionStorage.removeItem('sent'); location.reload()`);
+        await page.waitFor(`${btn}`, { what: 'the button again' });
+        await page.ev(`${btn}.click()`);
+        await page.waitFor(`${btn}?.textContent.trim() === 'Already sent'`, { what: 'Already sent on the button' });
+        assert.equal(sends().length, 2);
+        assert.equal(await page.ev(`document.querySelectorAll('#feed .bubble.err, #feed .outbox.error').length`), 0, 'no error bubble');
+    },
+
     'review requested rows show the MR facts and open it in GitLab': async ({ page, open }) => {
         await open();
         await page.waitFor(`${row(`review:${MR(201)}`)}`, { what: 'the review-requested row' });

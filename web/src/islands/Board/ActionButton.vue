@@ -4,6 +4,7 @@
 import { useId } from 'vue';
 import { ItemKey, SentMarksKey, useInjected } from '@/keys';
 import { bindChat } from 'old/chat.js';
+import { alreadySent } from '@/composables/useSend';
 
 const item = useInjected(ItemKey);
 const { press } = useInjected(SentMarksKey);
@@ -12,7 +13,7 @@ const openReviewer = (reviewerId: string) => bindChat(reviewerId);
 </script>
 
 <template>
-    <wa-button :id="id" class="act-btn" size="s" appearance="outlined" :disabled="item.action?.kind === 'reviewing' || undefined" @click.stop="press(item, $event.isTrusted)">{{ item.action?.label }}</wa-button>
+    <wa-button :id="id" class="act-btn" size="s" appearance="outlined" :disabled="item.action?.kind === 'reviewing' || undefined" @click.stop="press(item, $event.isTrusted)">{{ alreadySent.has(item.key) ? 'Already sent' : item.action?.label }}</wa-button>
     <wa-tooltip :for="id">{{ item.action?.hint ?? item.action?.message }}</wa-tooltip>
     <wa-button v-if="item.action?.reviewerId" class="open-reviewer" size="s" appearance="plain" @click.stop="openReviewer(item.action.reviewerId)">Open reviewer</wa-button>
 </template>

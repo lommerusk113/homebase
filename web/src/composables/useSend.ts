@@ -1,3 +1,4 @@
+import { reactive } from 'vue';
 import { api, state, composer } from 'old/core.js';
 import { friendly } from '@/lib/text';
 import { cannedLabel } from '@/lib/canned';
@@ -6,6 +7,21 @@ import { useChat } from './useChat';
 import { useComposerFocus } from './useComposerFocus';
 import { useDraft } from './useDraft';
 import { useNotice } from './useNotice';
+
+/** Row keys whose button the server refused as already sent (here or on another device): shown as "Already sent" for a moment. */
+export const alreadySent = reactive(new Set<string>());
+
+/** True (and the button says so for a moment) when the response is the server's once-guard refusal. */
+export function refusedAsSent(r: Response | null, key: string): boolean {
+
+    if (r?.status !== 409 || r.headers.get('x-homebase-once') !== '1') {
+        return false;
+    }
+    alreadySent.add(key);
+    setTimeout(() => alreadySent.delete(key), 3000);
+
+    return true;
+}
 
 const SEND_TIMEOUT_MS = 45_000; // past control.mjs BOOT_MS: a chat that has to start first isn't "Not sent" while it still goes through
 
@@ -27,13 +43,9 @@ export function useSend() {
      * Types text into a session as an outbox bubble ("sending…", then gone once the transcript has it); false if it failed.
      * note: appended to what is sent but not shown, so the chat shows just the label.
      * canned: a button's message, not typed by the user: the server refuses it while Claude asks, instead of declining the question.
+     * once: a row button's row key; the server refuses a repeat (409, "Already sent") until the row's state changes.
      */
-    async function send(sid: string, text: string, answerTo?: string, note?: string, canned?: boolean): Promise<boolean> {
-
-        // a button's message still waiting in the outbox (queued in a busy chat) is not sent again by a second click
-        if (canned && state.outbox.some(o => o.canned && o.sid === sid && o.text === text && !o.error && !o.unconfirmed)) {
-            return true;
-        }
+    async function send(sid: string, text: string, answerTo?: string, note?: string, canned?: boolean, once?: string): Promise<boolean> {
 
         error.value = '';
         const out: OutboxItem = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo, note, canned, ...(canned && { label: cannedLabel(text) ?? undefined }) };
@@ -42,7 +54,13 @@ export function useSend() {
         refresh();
 
         try {
-            const r = await api(`/api/send?${sid.startsWith('cc-new-') ? 'tmux' : 'id'}=${encodeURIComponent(sid)}${canned ? '&canned=1' : ''}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: note ? `${text}\n\n${note}` : text, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
+            const r = await api(`/api/send?${sid.startsWith('cc-new-') ? 'tmux' : 'id'}=${encodeURIComponent(sid)}${canned ? '&canned=1' : ''}${once ? `&once=${encodeURIComponent(once)}` : ''}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: note ? `${text}\n\n${note}` : text, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
+            if (once && refusedAsSent(r, once)) {
+                state.outbox = state.outbox.filter(o => o !== out);
+                refresh();
+
+                return false;
+            }
             if (!r.ok) {
                 out.refused = r.status === 409;
                 throw new Error(await r.text());

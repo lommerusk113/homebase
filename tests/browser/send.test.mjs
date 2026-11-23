@@ -94,15 +94,14 @@ export default {
         assert.equal(page.posts.filter(p => p.url.includes('/api/send')).length, 1);
     },
 
-    'a second click on a button whose identical message is still queued sends nothing': async ({ page, open, IDS }) => {
+    'a row button\'s send carries its row key as once, and a refusal as already sent leaves no bubble': async ({ page, open, IDS }) => {
         await open();
         await page.waitFor(`document.getElementById('feed').textContent.includes('tag the release')`, { what: 'the chat' });
-        const text = `The subagent 'Fix login' stopped — check why and continue it.`;
-        const go = `import('/chat.js').then(m => m.sendText(${JSON.stringify(IDS.master)}, ${JSON.stringify(text)}, undefined, undefined, true))`;
-        assert.equal(await page.ev(go), true);
-        await page.ev(go);
-        await sleep(1000);
-        assert.equal(page.posts.filter(p => p.url.includes('/api/send') && p.body === text).length, 1);
+        page.route = q => (q.url.includes('/api/send') && q.url.includes('once=') ? { status: 409, body: 'Already sent', headers: { 'content-type': 'text/plain', 'x-homebase-once': '1' } } : null);
+        const go = `import('/chat.js').then(m => m.sendText(${JSON.stringify(IDS.master)}, 'continue it', undefined, undefined, true, 'row:1'))`;
+        assert.equal(await page.ev(go), false);
+        assert.ok(page.posts.some(p => p.url.includes('&once=row%3A1')), 'the key is in the URL');
+        assert.equal(await page.ev(`import('/core.js').then(m => m.state.outbox.length)`), 0, 'no bubble, no error');
     },
 
     'Discuss on the ask card focuses the composer with a hint, collapses the card, and the next send is typed as a discussion': async ({ page, open, IDS, answerPosts }) => {

@@ -3,6 +3,7 @@ import { renderBoard } from 'old/list.js';
 import { confirmAction } from 'old/keys.js';
 import { touch, api, hooks } from 'old/core.js';
 import { useNotice } from '@/composables/useNotice';
+import { refusedAsSent } from '@/composables/useSend';
 
 // Optimistic "sent" marks: item key -> click time, in memory and sessionStorage, until the server reports the item
 // requested or doing, or SENT_MS pass without that (then the button comes back with a hint).
@@ -51,8 +52,8 @@ async function startReview(x: WorkItem) {
     }
     reviewing.add(x.key);
     try {
-        const r = await api(`/api/reviewer?key=${encodeURIComponent(x.key)}`, { method: 'POST' }).catch(() => null);
-        if (!r?.ok) {
+        const r = await api(`/api/reviewer?key=${encodeURIComponent(x.key)}&once=${encodeURIComponent(x.key)}`, { method: 'POST' }).catch(() => null);
+        if (!refusedAsSent(r, x.key) && !r?.ok) {
             useNotice().showError(r ? await r.text() : 'Couldn’t reach Homebase to start the reviewer');
         }
         await hooks.refresh();
@@ -85,7 +86,7 @@ async function send(x: WorkItem) {
     setTimeout(renderBoard, SENT_MS + 500);
 
     // a failed send drops the sent mark; sendText shows the error
-    if (!await sendText(x.sessionId, x.action.message, undefined, undefined, true)) {
+    if (!await sendText(x.sessionId, x.action.message, undefined, undefined, true, x.key)) {
         sent.delete(x.key);
         save();
         renderBoard();

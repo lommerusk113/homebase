@@ -225,3 +225,18 @@ import { readFileSync } from 'node:fs';
     }
     console.log('ok slash commands');
 }
+
+// Row button double-send guard (once=<rowKey>): a repeat is refused until the kind changes or 120 s pass
+{
+    const { claim, release, ONCE_MS } = await import('../../server/once.mjs');
+    const m = new Map();
+    assert.equal(claim(m, 'k', 'stopped', 0), true, 'first send');
+    assert.equal(claim(m, 'k', 'stopped', 1000), false, 'repeat, same kind');
+    assert.equal(claim(m, 'other', 'stopped', 1000), true, 'another row');
+    assert.equal(claim(m, 'k', 'blocked', 2000), true, 'kind changed');
+    assert.equal(claim(m, 'k', 'blocked', 2000 + ONCE_MS - 1), false);
+    assert.equal(claim(m, 'k', 'blocked', 2000 + ONCE_MS), true, 'after 120 s');
+    release(m, 'k');
+    assert.equal(claim(m, 'k', 'blocked', 2000 + ONCE_MS + 1), true, 'a failed send is retried with the same key');
+    console.log('ok send once guard');
+}

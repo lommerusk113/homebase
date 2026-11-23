@@ -434,8 +434,8 @@ export async function refreshChat() {
 }
 
 // Types text into a session as an outbox bubble; false if it failed. The composer's composable does it (web/src/composables/useSend.ts).
-/** @param {string} sid @param {string} text @param {string} [answerTo] @param {string} [note] @param {boolean} [canned] @returns {Promise<boolean>} */
-export const sendText = (sid, text, answerTo, note, canned) => composer.send(sid, text, answerTo, note, canned);
+/** @param {string} sid @param {string} text @param {string} [answerTo] @param {string} [note] @param {boolean} [canned] @param {string} [once] @returns {Promise<boolean>} */
+export const sendText = (sid, text, answerTo, note, canned, once) => composer.send(sid, text, answerTo, note, canned, once);
 
 // Chat menu toggle: hides FYI bubbles (and tool lines), keeping needs-you, the user's own and the newest Claude bubble.
 /** @param {boolean} on */

@@ -1,15 +1,16 @@
 <script setup lang="ts">
 // The header's notifications bell: the off icon is a bell with a slash, on adds an accent dot (styles.css #bell).
 import { useTemplateRef } from 'vue';
+import 'old/vendor/webawesome/components/tooltip/tooltip.js'; // defined before the note shows, so its open flag holds
 import { useBell } from '@/composables/useBell';
 
 const { supported, on, blocked, toggle } = useBell();
-const tip = useTemplateRef<HTMLElement & { open: boolean }>('tip');
+const note = useTemplateRef<HTMLElement & { open: boolean }>('note');
 
 async function click() {
 
-    if (await toggle() && tip.value) {
-        tip.value.open = true;
+    if (await toggle() && note.value) {
+        note.value.open = true;
     }
 }
 </script>
@@ -21,5 +22,5 @@ async function click() {
             <g class="b-off"><path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="m2 2 20 20"/></g>
         </svg>
     </button>
-    <wa-tooltip v-if="blocked" ref="tip" for="bell">Blocked in browser settings</wa-tooltip>
+    <wa-tooltip v-if="blocked" ref="note" :for.attr="'bell'">Blocked in browser settings</wa-tooltip>
 </template>

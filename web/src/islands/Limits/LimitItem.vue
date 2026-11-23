@@ -8,5 +8,5 @@ const color = (left: number) => (left >= 50 ? 'var(--c-ready)' : left >= 10 ? 'v
 
 <template>
     <span class="limit" :id="id"><span class="limit-label">{{ view.label }}</span><i><b :style="{ width: `${view.left}%`, background: color(view.left) }"></b></i><span>{{ view.text }}</span></span>
-    <wa-tooltip :for="id">{{ view.tip }}<template v-if="updated"><br>{{ updated }}</template></wa-tooltip>
+    <wa-tooltip :for.attr="id">{{ view.tip }}<template v-if="updated"><br>{{ updated }}</template></wa-tooltip>
 </template>

@@ -36,7 +36,7 @@ The old code changes `core.state` in place and then redraws. `src/old.ts` wraps 
 So anything that reads `oldState.value` re-runs after the old code changes state and redraws the board.
 A section whose state changes without a board redraw (the chat, the diff viewer) calls `vue.bump()` where it changes it, when that section is ported.
 
-A section with its own data flow, where a board bump must not redraw it, uses a **port** instead, like the chat feed's `feedPort = { merge, show }` in `public/chat.js`. The old module exports an empty object, the section's composable (`useFeed.ts`) fills in its functions when `web/dist` loads, and the old code calls them where it used to draw. The composable keeps its own `shallowRef`, so only that section redraws. Ported so far: the Changes viewer (`Diff`, `DiffButton`) and the chat feed (`Feed`).
+A section with its own data flow, where a board bump must not redraw it, uses a **port** instead, like the chat feed's `feedPort = { merge, show }` in `public/chat.js`. The old module exports an empty object, the section's composable (`useFeed.ts`) fills in its functions when `web/dist` loads, and the old code calls them where it used to draw. The composable keeps its own `shallowRef`, so only that section redraws.
 
 Each island is its own Vue app, so give `useId()` ids a section prefix (`feed-`, …): bare ids collide across islands.
 
@@ -83,5 +83,7 @@ Pure helpers with a unit test sit in `src/lib/` without Vue or `old/` imports, s
 
 ## Porting order
 
-board rows → the board as a whole → chat feed → composer → diff viewer → issues and header → phone layout.
-Once everything is ported, the old shell itself is replaced and `public/` is deleted.
+Ported: the board (`Board`), the chat feed (`Feed`), the composer and question cards (`Composer`, `Ask`), the Changes viewer (`Diff`, `DiffButton`), and the header and Issues tab (`Header`, `Issues`).
+
+Left in old code: the waiting strip and rules strip (`public/chat.js`), the limits strip, bell and projects dialog (`public/app.js`), keyboard handling (`public/keys.js`), and the shell (bootstrapping, polling, the phone tabs).
+Next: the phone layout, then the shell itself, after which `public/` is deleted. Pure logic the node unit tests import from `public/*.js` moves to `web/src/lib/` along the way.

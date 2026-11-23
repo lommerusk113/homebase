@@ -35,7 +35,7 @@ export { chatItems, chatFeed } from './server/feed.mjs';
 export { quickReplies, askList, optionLabels, waitingOn, waitingAsk, namedChoices } from './server/asks.mjs';
 export { pendingAsk, pendingQuestion, askMarker, markerAsk, turnState, turnPrompts, spawnPrompts } from './server/turns.mjs';
 export { addUsage, readUsage, formatDuration, formatTokens } from './server/usage.mjs';
-export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, stepOf, status, lastActivity, summarize, sentSummaries, killedAgents } from './server/sessions.mjs';
+export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, stepOf, status, lastActivity, summarize, sentSummaries } from './server/sessions.mjs';
 export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments, signedIn, me, repoOfUrl, swrEntry, swr, cached, refreshAll, refreshInfo } from './server/forge.mjs';
 export {
     column, gateFor, toGate, itemColumn, nextStep, rowAction, sameRepo, worksOnMr, requestFor, workItems, milestoneOf, itemUpdated

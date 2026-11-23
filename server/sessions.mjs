@@ -147,7 +147,6 @@ export function agentStage(uses, report, done) {
 // Bash run_in_background, a Bash moved there by its timeout or a message, Monitor, background Workflow, async Agent.
 // At a line start, so a file or transcript the agent read or grepped that quotes one doesn't count.
 const LAUNCHED = /^(?:Command[^\n]*?(?:in background with ID: |moved to the background \(ID: )|Monitor started \(task |Workflow launched in background\. Task ID: )(\w+)|^Async agent launched successfully[\s\S]*?agentId: (\w+)/m;
-const KILL_SLACK_MS = 60_000; // the kill notice lands a little after the helper's last write
 const NOTIFIED = /<task-notification>\s*<task-id>(\w+)<\/task-id>/;
 
 // Background commands and subagents the agent launched that haven't sent their task notification yet.
@@ -170,22 +169,6 @@ export function backgroundTasks(entries) {
     return open;
 }
 
-// Helpers the chat itself stopped (TaskStop): their task notification says killed. agent id (no "agent-") -> when.
-const KILLED = /<task-notification>\s*<task-id>(\w+)<\/task-id>[\s\S]*?<status>killed<\/status>/;
-export function killedAgents(entries) {
-
-    const out = new Map();
-    for (const e of entries) {
-        const told = e.type === 'attachment' && e.attachment?.type === 'queued_command' ? textOf({ message: { content: e.attachment.prompt } }) : e.type === 'user' ? textOf(e) : '';
-        const m = told.match(KILLED);
-        if (m) {
-            out.set(m[1], Date.parse(e.timestamp) || 0);
-        }
-    }
-
-    return out;
-}
-
 // Status from the transcript tail: pending tool calls and thinking may be silent for long; an API error stops it at once.
 // meta.finished flips when the agent ends its turn, even while it waits on its own background work to resume it, and
 // when it dies on an API error.
@@ -196,9 +179,10 @@ export function agentStatus(meta, entries, ageMs) {
     if (last?.isApiErrorMessage) {
         return { status: 'stopped', stopReason: 'api-error' };
     }
-    // Esc or a stop from the chat ends it at once; a message sent to it afterwards adds turns after this one
+    // the chat stopped it on purpose (TaskStop): finished, nothing to continue. A /clear or a crash leaves no such entry,
+    // and a message sent to it afterwards adds turns after this one.
     if (last?.type === 'user' && INTERRUPTED.test(textOf(last).trim())) {
-        return { status: 'stopped', stopReason: 'interrupted' };
+        return { status: 'done', stopReason: 'killed' };
     }
 
     // the hand-back call is the agent's last act and gets no result, so it would read as a pending call for half an hour;
@@ -608,15 +592,12 @@ async function readSession({ dir, file, path, st }, now, live) {
     const closed = closedSession(entries, now - st.mtimeMs, live);
     const spawns = spawnPrompts(entries);
     const renamed = sentSummaries(entries);
-    const killed = killedAgents(entries);
     const subagents = (await agents(join(ROOT, dir, id, 'subagents'), now))
         .map(a => ({
             ...a,
             ...(renamed.get(a.id) && renamed.get(a.id) !== a.description && { description: renamed.get(a.id), firstDescription: a.description }),
             spawnedFor: spawns.get(a.toolUseId) ?? null,
-            ...(closed && a.status === 'running' && { status: 'stopped', stopReason: 'closed' }),
-            // stopped on purpose by the chat, and not sent anything since: nothing to continue
-            ...(a.status !== 'done' && killed.get(a.id.replace(/^agent-/, '')) >= a.updated - KILL_SLACK_MS && { status: 'done', stopReason: 'killed' })
+            ...(closed && a.status === 'running' && { status: 'stopped', stopReason: 'closed' })
         }));
 
     const ctx = await contextOf(id);

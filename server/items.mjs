@@ -298,6 +298,8 @@ function itemGroups(sessions, prOf, now, seeds) {
 
             if (refs.size) {
                 refs.forEach(it => it.agents.push(own));
+            } else if (a.stopReason === 'killed') {
+                continue; // the chat stopped it on purpose: no row, nothing to see or continue
             } else if (a.status !== 'done' || now - a.updated < RECENT_DONE_MS) { // finished without an MR: shown a while so the user sees it completed
                 loose.push({ key: a.id, pr: null, project: s.project, agents: [own], linkedAt: 0, linkSession: null });
             }

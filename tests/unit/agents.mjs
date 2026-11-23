@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { status, summarize, column, filesTouched, summarizeAgent, agentStatus, killedAgents } from '../../server.mjs';
+import { status, summarize, column, filesTouched, summarizeAgent, agentStatus } from '../../server.mjs';
 
 assert.equal(column('working', { state: 'merged' }, true), 'doing');
 assert.equal(column('idle', { state: 'merged' }, true), 'done');
@@ -114,14 +114,20 @@ for (const quoted of ['75\tconst bg = \'Command running in background with ID: b
 }
 console.log('ok agents');
 
-// a helper the chat stopped: its last entry is the interrupt, and the chat's task notification says killed
+// a helper the chat stopped (TaskStop) ends on the interrupt: finished, nothing to continue
 {
     const asst = { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: {} }] } };
     const stop = { type: 'user', message: { content: [{ type: 'text', text: '[Request interrupted by user]' }] } };
-    assert.deepEqual(agentStatus({}, [asst, stop], 1_000), { status: 'stopped', stopReason: 'interrupted' });
+    assert.deepEqual(agentStatus({}, [asst, stop], 1_000), { status: 'done', stopReason: 'killed' });
     assert.equal(agentStatus({}, [asst, stop, asst], 1_000).status, 'running', 'a message after the stop resumes it');
-    const note = text => ({ type: 'user', timestamp: '2026-11-23T10:14:06.000Z', message: { content: text } });
-    const k = killedAgents([note('<task-notification>\n<task-id>a3eff</task-id>\n<status>killed</status>\n</task-notification>'), note('<task-notification>\n<task-id>bdone</task-id>\n<status>completed</status>\n</task-notification>')]);
-    assert.deepEqual([...k], [['a3eff', Date.parse('2026-11-23T10:14:06.000Z')]]);
     console.log('ok stopped by the chat');
+}
+
+// ...and gets no row on the board
+{
+    const { workItems } = await import('../../server.mjs');
+    const a = (id, extra) => ({ id, description: id, status: 'done', stage: 4, updated: 1, prs: [], ...extra });
+    const keys = workItems([{ id: 's', project: 'p', prs: [], agents: [a('kept'), a('gone', { stopReason: 'killed' })] }], () => null, 2, new Map()).map(i => i.key);
+    assert.deepEqual(keys, ['kept']);
+    console.log('ok stopped by the chat: no row');
 }

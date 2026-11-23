@@ -425,7 +425,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
     }).filter(x => !isDismissed(x));
 }
 
-const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+export const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // Milestone { id, title } of an MR: its own milestone, else the listed one whose slug is its target branch (supplier-automation).
 export function milestoneOf(prState, list) {

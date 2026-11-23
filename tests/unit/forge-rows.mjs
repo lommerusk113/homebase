@@ -26,7 +26,8 @@ import { agent, glabMr } from './helpers.mjs';
     // an MR closed without merging is not "merged": its own group, and an issue whose only MR was closed starts afresh
     assert.equal(column('idle', { state: 'closed' }, true), 'closed');
     assert.equal(itemColumn({ state: 'closed' }, { status: 'running' }, true), 'closed');
-    assert.equal(chatMessage({ iid: 10, st: 'todo', mrs: [{ iid: 150, state: 'closed' }] }), 'Implement #10');
+    assert.equal(chatMessage({ iid: 10, st: 'todo', assignees: [{ username: 'a' }], mrs: [{ iid: 150, state: 'closed' }] }), 'Implement #10');
+    assert.equal(chatMessage({ iid: 10, st: 'todo', assignees: [], mrs: [] }), 'Assign #10 to me first (it is unassigned), then implement it.');
     assert.equal(chatMessage({ iid: 10, st: 'doing', mrs: [{ iid: 150, state: 'closed' }, { iid: 151, state: 'open' }] }), 'Check on #10 and !151');
     console.log('ok closed MRs');
 }

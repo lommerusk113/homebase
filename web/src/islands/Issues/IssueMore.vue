@@ -6,7 +6,7 @@ import type { Card } from '@/composables/useIssues';
 
 const props = defineProps<{ card: Card }>();
 
-const { words, canSend, starting, workOn, showWork, send, message } = useInjected(IssuesKey);
+const { words, canSend, starting, workOn, showWork, send, takenBy, message } = useInjected(IssuesKey);
 
 const id = `issues-${useId()}`; // prefixed: each island is its own app, bare ids collide
 const work = computed(() => workOn(props.card));
@@ -24,7 +24,7 @@ const msg = computed(() => message(props.card));
                 <wa-tooltip :for="id">Already being worked on: shows the chat that has it</wa-tooltip>
             </template>
             <template v-else>
-                <wa-button :id class="act-btn" size="s" variant="brand" appearance="filled" :disabled.attr="sent || !canSend || undefined" @click.stop="send(card)">{{ sent ? 'Starting…' : 'Send to chat' }}</wa-button>
+                <wa-button :id class="act-btn" size="s" variant="brand" appearance="filled" :disabled.attr="sent || !canSend || !!takenBy(card) || undefined" @click.stop="send(card)">{{ sent ? 'Starting…' : 'Send to chat' }}</wa-button>
                 <wa-tooltip :for="id">{{ canSend ? `Types "${msg}" into the chat on the right` : 'No chat session to send to' }}</wa-tooltip>
                 <span class="msg">sends <code>{{ msg }}</code></span>
             </template>

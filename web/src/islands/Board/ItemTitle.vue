@@ -8,5 +8,5 @@ const { tagsMilestone } = useInjected(WorkItemsKey);
 </script>
 
 <template>
-    <b :title="item.firstTitle ? `Started as: ${item.firstTitle}` : undefined"><template v-if="project === 'all'"><span class="s-proj">{{ item.project }}</span>{{ ' ' }}</template><span v-if="item.milestone && tagsMilestone()" class="chip ms-tag" :title="`Milestone: ${item.milestone.title}`">⚑ {{ item.milestone.title }}</span>{{ item.title }}</b>
+    <b :title="item.firstTitle ? `Started as: ${item.firstTitle}` : undefined"><template v-if="project === 'all'"><span class="s-proj">{{ item.project }}</span>{{ ' ' }}</template><span v-if="item.milestone && tagsMilestone()" class="chip ms-tag" :title="`Milestone: ${item.milestone.title}`">⚑ {{ item.milestone.title }}</span>{{ item.title }}<template v-if="item.manual">{{ ' ' }}<span class="chip" title="Manual mode: you drive this chat, no helpers">manual</span></template></b>
 </template>

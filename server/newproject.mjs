@@ -10,6 +10,7 @@ import { join, isAbsolute, sep } from 'node:path';
 import { ROOT, liveSessions } from './entries.mjs';
 import { tmux, sleep, claudeLine, liveTmux } from './tmux.mjs';
 import { sessions, projectOf } from './sessions.mjs';
+import { markManual } from './manual.mjs';
 import { trustNewProject } from './startup.mjs';
 import { DEFAULTS, mergeConfig, loadConfig, tokenFor, ghEnv, resolveOwner, scrub as scrubToken } from './account.mjs';
 
@@ -30,13 +31,13 @@ export const validName = n => typeof n === 'string' && NAME.test(n) && !n.starts
 export const publicConfig = async (c = loadConfig(), exec = run) => ({ owner: await resolveOwner(c, exec).catch(() => ''), baseDir: c.baseDir.replace(homedir(), '~'), private: c.private });
 
 const transcriptDir = dir => join(ROOT, dir.replace(/[^A-Za-z0-9]/g, '-'));
-const listTranscripts = dir => readdir(transcriptDir(dir)).then(fs => fs.filter(f => f.endsWith('.jsonl')), () => []);
+export const listTranscripts = dir => readdir(transcriptDir(dir)).then(fs => fs.filter(f => f.endsWith('.jsonl')), () => []);
 
 const inFlight = new Set();
 const bad = (msg, status = 400) => Object.assign(new Error(msg), { status });
 
 // A failing step: marks it, and makes the error the route sends as { ok: false, steps, error }.
-const failer = (steps, scrub = s => s) => (i, e, what) => {
+export const failer = (steps, scrub = s => s) => (i, e, what) => {
     const detail = scrub(e?.stderr?.trim() || (e?.killed ? 'timed out' : e?.message) || 'failed');
     const error = `${what ? `${what} ` : ''}${detail}`;
     steps[i].state = 'failed';
@@ -61,14 +62,14 @@ async function cloneAndStart(c, i, made) {
 }
 
 // The start-chat step: Claude in tmux cc-new-<name> in dir, then wait for its session id; step `i`, `what` heads its error.
-async function startChat(c, i, what) {
+export async function startChat(c, i, what) {
 
-    const { name, dir, steps, fail, tm, nap, transcripts, waitMs, trustMs, before = new Set() } = c; // before: an existing folder's older sessions
+    const { name, dir, steps, fail, tm, nap, transcripts, waitMs, trustMs, before = new Set(), manual = false } = c; // before: an existing folder's older sessions
 
     // the session id is only known once Claude has written its transcript
     const tmuxName = `cc-new-${name}`;
     try {
-        await tm(['new-session', '-d', '-s', tmuxName, '-x', '200', '-y', '50', '-c', dir, 'zsh', '-lic', claudeLine()]);
+        await tm(['new-session', '-d', '-s', tmuxName, '-x', '200', '-y', '50', '-c', dir, 'zsh', '-lic', claudeLine('', undefined, undefined, manual)]);
     } catch (e) {
         throw fail(i, e, what);
     }
@@ -82,6 +83,10 @@ async function startChat(c, i, what) {
         if (!sessionId) {
             await nap(500);
         }
+    }
+
+    if (manual && sessionId) {
+        markManual(sessionId);
     }
 
     return { ok: true, name, dir, tmux: tmuxName, sessionId, steps };

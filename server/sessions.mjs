@@ -12,6 +12,8 @@ import { readUsage, usageCache } from './usage.mjs';
 import { chatItems } from './feed.mjs';
 import { loadStore, record, seeds, flush, STORE_FILE } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
+import { isManual } from './manual.mjs';
+import { canned } from '../web/src/lib/canned.ts';
 import { repoPaths, accountOf } from './account.mjs';
 import { pushBlocked } from './gitpush.mjs';
 import { contextOf } from './limits.mjs';
@@ -766,6 +768,12 @@ export async function sessions() {
 
     await attachTmux(out, now, live); // first: it sets clearedFrom, which attachItems follows
     attachItems(out, await itemsOf(out), now);
+    for (const s of out) {
+        s.manual = isManual(s.id);
+        s.items?.forEach(it => { it.manual = isManual(it.sessionId);
+            it.action ??= it.manual && it.sessionId ? canned('plan') : null;
+        });
+    }
 
     return out.sort(byActivity);
 }

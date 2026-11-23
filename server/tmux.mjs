@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { saverOn, SAVER_RULE } from './saver.mjs';
+import { isManual, MANUAL_RULE } from './manual.mjs';
 
 const run = promisify(execFile);
 
@@ -21,12 +22,13 @@ export const rulesFile = (dir = fileURLToPath(new URL('..', import.meta.url))) =
 export const RULES_FILE = rulesFile();
 export const quoted = t => `'${t.replace(/'/g, `'\\''`)}'`;
 // saver: Token saver on adds its one rule as text (the file flag takes only the rules file)
-export const claudeLine = (extra = '', rules = RULES_FILE, saver = saverOn()) => `claude${existsSync(rules) ? ` --append-system-prompt-file ${quoted(rules)}` : ''}${saver ? ` --append-system-prompt ${quoted(SAVER_RULE)}` : ''}${extra}`;
+// manual: a manual-mode chat adds its rule the same way
+export const claudeLine = (extra = '', rules = RULES_FILE, saver = saverOn(), manual = false) => `claude${existsSync(rules) ? ` --append-system-prompt-file ${quoted(rules)}` : ''}${saver ? ` --append-system-prompt ${quoted(SAVER_RULE)}` : ''}${manual ? ` --append-system-prompt ${quoted(MANUAL_RULE)}` : ''}${extra}`;
 
 // Your $SHELL; without one the first of zsh, bash and sh that exists (a Linux box may have no zsh)
 export const loginShell = (shell = process.env.SHELL, exists = existsSync) => shell || ['/bin/zsh', '/bin/bash'].find(p => exists(p)) || '/bin/sh';
 // ponytail: login+interactive shell (zsh and bash both take -lic) so PATH matches your terminal; id is validated, cwd is passed as its own arg
-const claudeCmd = id => [loginShell(), '-lic', claudeLine(` --resume ${id}`)];
+const claudeCmd = id => [loginShell(), '-lic', claudeLine(` --resume ${id}`, RULES_FILE, saverOn(), isManual(id))];
 
 // tmux keeps Claude running between messages; `tmux attach -t cc-<id8>` reaches it from any terminal.
 export const tmuxName = id => `cc-${id.slice(0, 8)}`;

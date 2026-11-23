@@ -19,6 +19,9 @@ const CANNED: Record<string, Canned> = {
     merge: { label: 'Merge + close issue', text: ref => `Run review-gate on ${ref}. If the verdict is ready, merge it and close its issue. If it's fix first, show me the findings and don't merge.`, of: mr },
     review: { label: 'Request review', text: ref => `Assign a reviewer to ${ref} — suggest who.`, of: mr },
     start: { label: 'Start', text: iid => `Implement #${iid}`, of: issue, arg: '\\d+' },
+    startUnassigned: { label: 'Start', text: iid => `Assign #${iid} to me first (it is unassigned), then implement it.`, of: issue, arg: '\\d+' },
+    startManual: { label: 'Start', text: iid => `Read issue #${iid} with \`glab issue view ${iid} --comments\` and the code it touches, read-only. Give a short summary: what it asks, the open questions and the risks. Then wait for my questions. Don't change code or start helpers until I say so.`, of: issue, arg: '\\d+' },
+    plan: { label: 'Plan it', text: () => '/grill-me Let\'s make the plan for this issue together.' },
     close: { label: 'Close', text: (iid, mrIid) => `Close #${iid}, its MR !${mrIid} is merged`, of: issue, arg: '\\d+' },
     check: { label: 'Check on', text: (iid, mrIid) => `Check on #${iid} and !${mrIid}`, of: issue, arg: '\\d+' },
     // the same two for a GitHub PR, which is written "PR #12"

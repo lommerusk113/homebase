@@ -1,10 +1,12 @@
 import { computed, reactive, ref } from 'vue';
-import { hooks, state, visibleSessions } from 'old/core.js';
+import { api, hooks, state, store, visibleSessions } from 'old/core.js';
+import { firstName } from '@/lib/comments';
 import { forgeWords } from '@/lib/forge';
 import { buildLanes, chatMessage, issueCards, type Card } from '@/lib/issues';
 import { issueWork } from '@/lib/board';
 import { bindChat, chatSession, sendText } from 'old/chat.js';
 import { oldState } from '@/old';
+import { useNotice } from '@/composables/useNotice';
 import { useMilestoneFilter } from '@/composables/useMilestoneFilter';
 
 export type { Card, Lane } from '@/lib/issues';
@@ -18,6 +20,7 @@ const NO_GROUPS: IssueGroups = { closable: [], doing: [], assigned: [], unassign
 const openIid = ref<number | null>(null);
 const closedOpen = ref(false);
 const sentAt = reactive(new Map<number, number>()); // iid -> last send
+const startsOn = reactive(new Set<number>()); // iids whose worktree and chat are being made
 const clock = ref(0); // bumped when a "just sent" mark may have run out, or the outbox changed under it
 
 hooks.collapseIssue = () => {
@@ -37,6 +40,7 @@ const names = (text: string | undefined, iid: number) => new RegExp(`#${iid}(?!\
 export function useIssues() {
 
     const { data, busy } = useMilestoneFilter();
+    const { showError } = useNotice();
 
     const ms = computed(() => data.value?.selected ?? null);
     /** The milestone list or the selected milestone's issues are not in yet (its counts may be). */
@@ -57,7 +61,7 @@ export function useIssues() {
 
         void clock.value;
 
-        return Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_SHOWN_MS || oldState.value.outbox.some(o => o.canned && !o.error && names(o.text, c.iid));
+        return startsOn.has(c.iid) || Date.now() - (sentAt.get(c.iid) ?? 0) < SENT_SHOWN_MS || oldState.value.outbox.some(o => o.canned && !o.error && names(o.text, c.iid));
     }
 
     /** Who already works on a not-started issue in any chat of the project, so Start never sends a second Implement. */
@@ -92,9 +96,59 @@ export function useIssues() {
         clock.value++;
     }
 
+    // Manual mode, remembered per project: the new chat is told to work step by step with the user and start no helpers
+    const manualTick = ref(0);
+    const manualKey = () => `manual-start:${data.value?.project ?? state.project}`;
+    const manual = computed(() => {
+
+        void manualTick.value;
+
+        return store.get(manualKey()) === '1';
+    });
+
+    function setManual(on: boolean) {
+        store.set(manualKey(), on ? '1' : '0');
+        manualTick.value++;
+    }
+
+    /** Why nobody but the assignees may start the issue: it is somebody else's. Undefined when the user may. */
+    function takenBy(c: Card): string | undefined {
+
+        const who = c.assignees;
+
+        return who.length && !who.some(p => p.username === data.value?.me?.username) ? `Assigned to ${who.map(p => firstName(p.name)).join(', ')}, only they can start it` : undefined;
+    }
+
+    /** Start: the server makes the issue's branch and worktree and a chat there with the prompt typed in, unsent; this opens that chat. */
+    async function start(c: Card) {
+
+        if (startsOn.has(c.iid) || workOn(c) || takenBy(c) || !data.value?.project) {
+            return;
+        }
+
+        startsOn.add(c.iid);
+        try {
+            const r = await api('/api/issues/start', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ project: data.value.project, iid: c.iid, manual: manual.value }) });
+            if (!r.ok) {
+                throw new Error(await r.text());
+            }
+            const { sessionId, tmux, dir } = await r.json();
+            if (sessionId) {
+                bindChat(sessionId);
+            } else {
+                state.startingTmux = tmux;
+                state.starting = dir; // poll() binds the chat once a session in that folder shows up
+            }
+        } catch (e) {
+            showError((e as Error).message);
+        } finally {
+            startsOn.delete(c.iid);
+        }
+    }
+
     function toggle(c: Card) {
         openIid.value = openIid.value === c.iid ? null : c.iid;
     }
 
-    return { data, busy, ms, loading, groups, lanes, words, canSend, openIid, closedOpen, starting, workOn, showWork, send, toggle, message: chatMessage };
+    return { data, busy, ms, loading, groups, lanes, words, canSend, openIid, closedOpen, starting, workOn, showWork, send, start, takenBy, manual, setManual, toggle, message: chatMessage };
 }

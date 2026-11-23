@@ -39,7 +39,8 @@ const ISSUES = [
     issue(5, 'Sprint 12: Fix login redirect', { assignees: [me] }),
     issue(6, 'Sprint 12: Add CSV export', { assignees: [ann] }),
     issue(7, 'Sprint 12: Dark mode', {}),
-    issue(8, 'Sprint 12: Cleanup', { assignees: [me] })
+    issue(8, 'Sprint 12: Cleanup', { assignees: [me] }),
+    issue(30, 'Sprint 12: Tidy docs', { assignees: [me] }) // mine, nothing started: the one with an enabled Start
 ];
 const RELATED = {
     5: [MRS[101]],

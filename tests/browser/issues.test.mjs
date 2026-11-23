@@ -8,11 +8,11 @@ export default {
         await open({ tab: 'issues' });
         await page.waitFor(`document.querySelectorAll('#issues .lane:not(.skel)').length === 3`, { what: 'three lanes' });
         assert.deepEqual(await page.ev(lanes), [
-            { name: 'Test', you: true, cards: ['issue:5', 'issue:8'] },
+            { name: 'Test', you: true, cards: ['issue:5', 'issue:8', 'issue:30'] },
             { name: 'Ann', you: false, cards: ['issue:6'] },
             { name: 'Unassigned', you: false, cards: ['issue:7'] }
         ]);
-        assert.equal(await page.ev(`document.querySelector('#issues .is-big').textContent`), '4 open of 5');
+        assert.equal(await page.ev(`document.querySelector('#issues .is-big').textContent`), '5 open of 6');
     },
 
     'Assigned to me lists only my open issues across milestones': async ({ page, open }) => {
@@ -61,20 +61,45 @@ export default {
         assert.doesNotMatch(await page.ev(`document.getElementById('issues').textContent`), /GitLab|\bMRs?\b/, 'a GitHub project never says GitLab or MR');
     },
 
-    'Start on a collapsed card sends Implement #N to the chat and marks it starting': async ({ page, open }) => {
+    'Start on my own issue asks the server for its worktree and chat, and never types into the current chat': async ({ page, open }) => {
         await open({ tab: 'issues' });
-        await page.waitFor(`document.querySelector('#issues .card[data-key="issue:6"] .act-btn:not([disabled])')`, { what: 'the enabled Start button' });
-        assert.equal(await page.ev(`document.querySelector('#issues .card[data-key="issue:6"] .act-btn').textContent`), 'Start');
+        const btn = k => `document.querySelector('#issues .card[data-key="issue:${k}"] .act-btn')`;
+        await page.waitFor(`${btn(30)} && !${btn(30)}.disabled`, { what: 'the enabled Start button' });
+        assert.equal(await page.ev(`${btn(30)}.textContent`), 'Start');
+        await page.click('#issues .card[data-key="issue:30"] .act-btn');
+        await page.waitFor(`true`, { what: 'the click' });
+        await new Promise(r => setTimeout(r, 300));
+        const posts = page.posts.filter(p => p.url.includes('/api/issues/start'));
+        assert.deepEqual(posts.map(p => JSON.parse(p.body)), [{ project: 'alpha', iid: 30, manual: false }]);
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')), []);
+    },
+
+    'the Manual toggle sits by Start, is remembered per project, and goes with the start request': async ({ page, open }) => {
+        await open({ tab: 'issues' });
+        const box = '#issues .card[data-key="issue:30"] .manual-toggle input';
+        await page.waitFor(`document.querySelector('${box}')`, { what: 'the Manual toggle' });
+        assert.equal(await page.ev(`document.querySelector('${box}').checked`), false);
+        await page.click(box);
+        await page.waitFor(`localStorage.getItem('manual-start:alpha') === '1'`, { what: 'the choice saved' });
+        await page.click('#issues .card[data-key="issue:30"] .act-btn');
+        await new Promise(r => setTimeout(r, 300));
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/issues/start')).map(p => JSON.parse(p.body)), [{ project: 'alpha', iid: 30, manual: true }]);
+    },
+
+    "Start is off for somebody else's issue, and says whose it is": async ({ page, open }) => {
+        await open({ tab: 'issues' });
+        const btn = `document.querySelector('#issues .card[data-key="issue:6"] .act-btn')`;
+        await page.waitFor(`${btn}`, { what: "Ann's card" });
+        assert.equal(await page.ev(`${btn}.hasAttribute('disabled')`), true);
+        assert.equal(await page.ev(`${btn}.title`), 'Assigned to Ann, only they can start it');
         await page.click('#issues .card[data-key="issue:6"] .act-btn');
-        await page.waitFor(`document.querySelector('#issues .card[data-key="issue:6"] .st').textContent === 'starting…'`, { what: 'the card to say starting' });
-        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')).map(p => [new URL(p.url).search, p.body]), [[`?id=${IDS.master}&canned=1`, 'Implement #6']]);
-        assert.equal(await page.ev(`document.querySelector('#issues .card[data-key="issue:6"]').classList.contains('open')`), false, 'the click did not expand the card');
+        assert.deepEqual(page.posts.filter(p => p.url.includes('/api/issues/start') || p.url.includes('/api/send')), []);
     },
 
     'an issue another chat of the project already took on offers that chat, never a second Implement': async ({ page, open }) => {
         await open({ tab: 'issues' });
         const btn = `document.querySelector('#issues .card[data-key="issue:7"] .act-btn')`;
-        await page.waitFor(`document.querySelector('#issues .card[data-key="issue:6"] .act-btn:not([disabled])')`, { what: 'the cards' });
+        await page.waitFor(`document.querySelector('#issues .card[data-key="issue:30"] .act-btn:not([disabled])')`, { what: 'the cards' });
         assert.equal(await page.ev(`document.querySelector('#issues .card[data-key="issue:7"]').dataset.msg ?? null`), null, 'the a key has nothing to send');
         await page.click('#issues .card[data-key="issue:7"] .act-btn');
         await page.waitFor(`localStorage.getItem('chat') === '${IDS.worker}'`, { what: 'the chat that queued #7' });
@@ -87,10 +112,10 @@ export default {
 
     'a on an issue card asks first, and only the dialog button sends': async ({ page, open }) => {
         await open({ tab: 'issues' });
-        await page.waitFor(`document.querySelector('#issues .card[data-key="issue:6"] .act-btn:not([disabled])')`, { what: 'the card' });
-        await page.ev(`document.activeElement?.blur(); document.querySelector('#issues .card[data-key="issue:6"]').focus()`);
+        await page.waitFor(`document.querySelector('#issues .card[data-key="issue:30"] .act-btn:not([disabled])')`, { what: 'the card' });
+        await page.ev(`document.activeElement?.blur(); document.querySelector('#issues .card[data-key="issue:30"]').focus()`);
         await page.key('a');
-        await page.waitFor(`document.querySelector('.keys-msg')?.textContent === 'Implement #6'`, { what: 'the confirm dialog' });
+        await page.waitFor(`document.querySelector('.keys-msg')?.textContent === 'Implement #30'`, { what: 'the confirm dialog' });
         assert.deepEqual(page.posts.filter(p => p.url.includes('/api/send')), []);
     }
 };

@@ -72,7 +72,7 @@ export function chatMessage(card: Issue & { st?: string }): string {
         return canned(pr(m) ? 'closePr' : 'close', card.iid, m.iid).message;
     }
 
-    return (mr ? canned(pr(mr) ? 'checkPr' : 'check', card.iid, mr.iid) : canned('start', card.iid)).message;
+    return (mr ? canned(pr(mr) ? 'checkPr' : 'check', card.iid, mr.iid) : canned(card.assignees?.length ? 'start' : 'startUnassigned', card.iid)).message;
 }
 
 /** "Supplier automation: undo in the grid" -> "undo in the grid" when the prefix is the milestone's name. */

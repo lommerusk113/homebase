@@ -63,6 +63,7 @@ interface Session {
     unpushed?: number | null;
     /** a work repo on its default branch: Homebase never pushes it, so the Push button is hidden */
     pushBlocked?: boolean;
+    manual?: boolean; // a manual-mode chat (server/manual.mjs)
     /** context window used, % (from the status-line dump); null when there is none */
     context: number | null;
     /** context window size in tokens (from the same dump); null when unknown */
@@ -139,7 +140,8 @@ interface WorkItem {
     project: string;
     sessionId: string;
     title: string;
-    firstTitle?: string | null; // the agent's spawn description, when a later SendMessage renamed the row
+    manual?: boolean; // its chat is in manual mode
+    firstTitle?: string | null;// the agent's spawn description, when a later SendMessage renamed the row
     pr: string | null;
     forgeError?: string | null; // why the last MR/PR lookup (or its comments, "comments: …") failed, in plain words; the last good data is kept
     prState: PrState | null;

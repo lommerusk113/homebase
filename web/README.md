@@ -84,7 +84,7 @@ The old page can't import them, so `src/old.ts` fills `lib` in `public/core.js` 
 
 ## Porting order
 
-Ported: the board (`Board`), the chat feed (`Feed`), the composer and question cards (`Composer`, `Ask`), the Changes viewer (`Diff`, `DiffButton`), the header and Issues tab (`Header`, `Issues`), and the footer's Token saver switch (`TokenSaver`, with `useTokenSaver`; the setting lives on the server, `server/saver.mjs`).
+Ported: the board (`Board`), the chat feed (`Feed`), the composer and question cards (`Composer`, `Ask`), the Changes viewer (`Diff`, `DiffButton`), the header and Issues tab (`Header`, `Issues`), the waiting and rules strips (`Wait`, `Rules`), the limits strip (`Limits`, mounted into `#limits` itself), the footer's Token saver switch (`TokenSaver`, with `useTokenSaver`; the setting lives on the server, `server/saver.mjs`), and the bell, projects dialog and new-project dialog (`Bell`, `Projects`, `NewProject`).
 
-Left in old code: the waiting strip and rules strip (`public/chat.js`), the limits strip, bell and projects dialog (`public/app.js`), keyboard handling (`public/keys.js`), and the shell (bootstrapping, polling, the phone tabs).
+Left in old code: keyboard handling (`public/keys.js`), and the shell (bootstrapping, polling, the phone tabs).
 Next: the phone layout, then the shell itself, after which `public/` is deleted. Pure logic has moved to `web/src/lib/`.

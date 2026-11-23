@@ -19,7 +19,6 @@ export const STATIC = {
     '/issues.js': ['issues.js', JS],
     '/keys.js': ['keys.js', JS],
     '/log.js': ['log.js', JS],
-    '/newproject.js': ['newproject.js', JS],
     '/diff.js': ['diff.js', JS],
     '/icon.svg': ['icon.svg', 'image/svg+xml'],
     '/sw.js': ['sw.js', JS],

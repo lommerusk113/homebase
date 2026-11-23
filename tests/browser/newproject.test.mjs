@@ -55,7 +55,7 @@ export default {
         await open();
         await openDialog(page);
         await typeName(page, 'newrepo');
-        await page.ev(`${byId('np-desc')}.value = 'Hello'`);
+        await page.ev(`${byId('np-desc')}.value = 'Hello'; ${byId('np-desc')}.dispatchEvent(new Event('input'))`);
         await stubNew(page, 200, ok(NEW_ID));
         await page.click('#np-go');
         await page.waitFor(`window.__posts.length === 1`, { what: 'the POST' });

@@ -121,7 +121,8 @@ header.top { background:var(--bg); border-bottom:1px solid var(--line); display:
 .offline:not([hidden]) ~ .fmtwarn, .updated:not([hidden]) ~ .fmtwarn { margin-left:12px !important; }
 .updated { margin-left:auto; color:var(--muted); font-size:var(--fs-s); }
 .updated .show { padding:0 2px; }
-.updated:not([hidden]) ~ .offline, #header-island:has(> :is(.updated, .fmtwarn):not([hidden])) + #bell { margin-left:12px !important; }
+.updated:not([hidden]) ~ .offline, #header-island:has(> :is(.updated, .fmtwarn):not([hidden])) + #bell-host > #bell { margin-left:12px !important; }
+#bell-host, #projects-host { display:contents; }
 #bell { margin-left:auto; display:grid; place-items:center; height:26px; }
 #bell .b-on, #bell.on .b-off { display:none; }
 #bell.on .b-on { display:inline; }

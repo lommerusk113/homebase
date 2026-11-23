@@ -102,3 +102,15 @@ export const IssuesKey: InjectionKey<ReturnType<typeof useIssues>> = Symbol('iss
 import type { useTokenSaver } from '@/composables/useTokenSaver';
 
 export const TokenSaverKey: InjectionKey<ReturnType<typeof useTokenSaver>> = Symbol('tokenSaver');
+
+// ---- the waiting strip (islands/Wait.vue) ----
+import type { useWait } from '@/composables/useWait';
+
+export const WaitKey: InjectionKey<ReturnType<typeof useWait>> = Symbol('wait');
+
+// ---- the new project dialog (islands/NewProject.vue) and the projects dialog (islands/Projects.vue) ----
+import type { useNewProject } from '@/composables/useNewProject';
+import type { useProjects } from '@/composables/useProjects';
+
+export const NewProjectKey: InjectionKey<ReturnType<typeof useNewProject>> = Symbol('newProject');
+export const ProjectsKey: InjectionKey<ReturnType<typeof useProjects>> = Symbol('projects');

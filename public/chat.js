@@ -1,5 +1,5 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, visibleSessions, updateTitle, rich, waButton, setOffline, openDecision, waitsOnYou, composer, vue } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, setOffline, waitsOnYou, composer, vue } from './core.js';
 import { renderBoard, sessionTopic } from './list.js';
 import { syncDiff } from './diff.js';
 
@@ -147,28 +147,6 @@ export function topicHue(topic) {
     return ((h ^ (h >>> 16)) >>> 0) % TOPIC_HUES;
 }
 
-// A big option button on the strip above the composer: a number badge, the label (its "(Recommended)" shown as a badge
-// instead) and an optional description. The feed and the ask cards draw the same one in Vue.
-/** @param {string} label @param {number} n @param {{ desc?: string }} [o] */
-function optButton(label, n, { desc } = {}) {
-
-    const rec = /\(recommended\)/i.test(label);
-    const b = waButton(label.replace(/\s*\(recommended\)/i, ''), `c-opt${rec ? ' primary' : ''}`, { variant: rec ? 'brand' : 'neutral', appearance: rec ? 'accent' : 'outlined' });
-    const k = el('span', 'k', String(n + 1));
-    k.slot = 'start';
-    b.append(k);
-    if (desc) {
-        b.append(el('small', null, desc));
-    }
-    if (rec) {
-        const r = el('span', 'rec', 'Recommended');
-        r.slot = 'end';
-        b.append(r);
-    }
-
-    return b;
-}
-
 // The numbered options of the question open in the pane: a startup or ask card's, else the strip's above the composer,
 // else the newest reply row's. keys.js: a digit picks the one with that badge.
 /** @returns {HTMLElement[]} */
@@ -261,29 +239,6 @@ function showNewer(s) {
     }
 }
 
-// "Rules changed since this chat started" above the composer; Dismiss hides it until a watched file changes again.
-/** @param {Session | null} s */
-function showRules(s) {
-
-    $('rules').hidden = !s?.rulesStale;
-    if (!$('rules').hidden) {
-        $('rules').title = `Changed: ${s.rulesStale.join(', ')}`;
-        const dismiss = () => {
-            // on the server, so every device agrees; hidden here at once, the next poll drops it everywhere
-            api('/api/rules/seen', { method: 'POST', body: JSON.stringify({ id: s.id, at: s.rulesAt ?? 0 }) }).catch(() => {});
-            s.rulesStale = undefined;
-            showRules(s);
-        };
-        $('rules-dismiss').onclick = dismiss;
-        // Claude re-reads the files itself: no restart, so running agents keep going
-        $('rules-load').onclick = async () => {
-            if (await sendText(s.id, s.rulesReload, undefined, undefined, true)) {
-                dismiss();
-            }
-        };
-    }
-}
-
 // The chat card's top strip (back, branch chips, Changes).
 /** @param {Session | null} s */
 function showHead(s) {
@@ -331,60 +286,6 @@ function questionExcerpt(i) {
 /** @param {ChatItem[]} items @param {number} n */
 export const answerNote = (items, n) => (n === items.length - 1 ? undefined : `(Answering your earlier question from ${items[n].at}: "${questionExcerpt(items[n])}")`);
 
-// The amber strip pinned above the composer while Claude's newest reply says something waits on the user, also after
-// the user said something else: that text (a click jumps to the reply) and its chips. The ask card takes its place.
-let waitKey = null;
-/** @param {Session | null} s @param {Transcript | null} data @param {ChatItem[]} items */
-function showWait(s, data, items) {
-
-    const w = s && data && !data.asking ? openDecision({ items }) : null, key = w && JSON.stringify([s.id, w.at, w.waiting, w.replies]);
-    $('wait').hidden = !w;
-    if (!w || key === waitKey) {
-        waitKey = key;
-        return;
-    }
-
-    waitKey = key;
-    $('wait').dataset.key = `${s.id}:${w.at}`;
-    // "issue — what led here — question — (1) … (2) …": the question on top, the rest muted and clamped, the options as chips
-    $('wait-q').replaceChildren(...rich(w.ask?.question ?? w.waiting, true).childNodes);
-    $('wait-q').onclick = jumpToNeeds;
-    const ctx = $('wait-ctx');
-    ctx.hidden = !w.ask?.context;
-    ctx.replaceChildren(...rich(w.ask?.context ?? '', true).childNodes);
-    ctx.classList.add('clamp');
-    ctx.onclick = () => ctx.classList.toggle('clamp');
-    const n = items.indexOf(w);
-    const opts = w.ask?.options ?? (w.replies ?? []).map(label => ({ label, desc: '' }));
-    $('wait-opts').replaceChildren(...opts.map(({ label, desc }, k) => {
-        const b = optButton(label, k, { desc });
-        b.onclick = e => {
-            focusComposer(e);
-            sendChip(b, s.id, label, w.at, answerNote(items, n));
-        };
-
-        return b;
-    }));
-}
-
-// A chip tap sends its answer; the row's chips stay disabled (as the ask card's do) so a double tap sends once. Sent, the
-// row is replaced once the answer shows; a failed send enables them again.
-/** @param {HTMLElement} b @param {string} sid @param {string} text @param {string} answerTo @param {string} note */
-async function sendChip(b, sid, text, answerTo, note) {
-
-    if (b.hasAttribute('disabled')) {
-        return;
-    }
-    const row = [...b.parentElement.children];
-    row.forEach(x => x.setAttribute('disabled', ''));
-    b.setAttribute('loading', '');
-
-    if (!await sendText(sid, text, answerTo, note)) {
-        row.forEach(x => x.removeAttribute('disabled'));
-        b.removeAttribute('loading');
-    }
-}
-
 let refreshSeq = 0; // a refresh that finishes after a newer one started is stale: it must not render over it
 
 export async function refreshChat() {
@@ -403,12 +304,11 @@ export async function refreshChat() {
     }
     showNewer(state.focus ? null : s);
     showHead(s);
-    showRules(s);
     await composer.boot(s ? null : state.startingTmux); // only a chat still starting: a running one's ❯ prompts and questions aren't startup dialogs
     if (!s) {
         chatKey = null;
         state.asking = null;
-        showWait(null, null, []);
+        composer.wait(null, null, []);
         updateTitle();
         composer.turn(state.offline ? { error: true } : null);
         // a message sent to a starting project (by tmux name) shows until its session binds
@@ -445,7 +345,7 @@ export async function refreshChat() {
 
     const { items, hidden, cut } = feedPort.merge(s, data);
     announceReply(s, data, items);
-    showWait(s, data, items);
+    composer.wait(s, data, items);
     showFocus(s, items);
     const lastSeen = Number(store.get(`last-seen:${s.id}`)) || Infinity;
     const key = s.id + JSON.stringify([items, data.asking, data.working, hidden, data.more, data.capped, lastSeen]);
@@ -478,9 +378,10 @@ export function initChat() {
         m?.mount('Feed', $('feed'), { scroller: $('feed') });
         m?.mount('Composer', $('composer'));
         m?.mount('Ask', $('asks'));
+        m?.mount('Wait', $('wait-host'));
+        m?.mount('Rules', $('rules-host'));
     });
     $('c-back').onclick = unfocusChat;
     $('c-next').onclick = () => nextId && focusChat(nextId);
     document.addEventListener('keydown', e => e.key === 'Escape' && state.focus && !e.composedPath().some(n => /^(INPUT|WA-TEXTAREA|TEXTAREA|WA-DIALOG|WA-DROPDOWN)$/.test(/** @type {Element} */ (n).nodeName || '')) && unfocusChat());
-    $('rules-restart').onclick = () => { $('restart-dlg').open = true; };
 }

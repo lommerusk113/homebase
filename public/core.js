@@ -43,10 +43,16 @@ const parse = v => {
 // The tracked list is the server's (tracked.json, shared with paired phones); localStorage keeps this browser's copy for a fast first paint.
 /**
  * @type {{ sessions: Session[], tracked: string[], project: string, selected: string | null, chat: string | null, unfold: Set<string>,
- *   outbox: OutboxItem[], nudged: Set<string>, offline?: boolean, serverError?: boolean, formatWarn?: boolean, update?: { server: boolean, reloading: boolean } | null, limits?: Limits | null, asking?: string | null, reviews?: ReviewRequest[], items?: WorkItem[],
+ *   outbox: OutboxItem[], nudged: Set<string>, offline?: boolean, serverError?: boolean, formatWarn?: boolean, update?: { server: boolean, reloading: boolean } | null, asking?: string | null, reviews?: ReviewRequest[], items?: WorkItem[],
  *   opened?: { key: string, since: number }, showMerged?: boolean, starting?: string | null, startingTmux?: string | null, focus?: string | null, boot?: { question: string, options: string[], selected: number } | null }}
  */
-export const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [], nudged: new Set(), limits: null };
+export const state = { sessions: [], tracked: parse(store.get('tracked')), project: store.get('project') || 'all', selected: null, chat: store.get('chat'), unfold: new Set(), outbox: [], nudged: new Set() };
+// The picked project must be on the board: one that was removed falls back to "All my projects".
+export const checkProject = () => {
+    if (state.project !== 'all' && !state.tracked.includes(state.project)) {
+        state.project = 'all';
+    }
+};
 export const saveTracked = () => {
     store.set('tracked', JSON.stringify(state.tracked));
     api('/api/tracked', { method: 'POST', body: JSON.stringify(state.tracked) }).catch(() => {});
@@ -354,8 +360,9 @@ export function foldLine(line, body, key) {
 // Plug-in points: app.js sets hooks.refresh for keys.js's r, hooks.setProject for its [ and ] and hooks.reloadServer for the header's "Reload server";
 // the Vue islands set hooks.inMilestone and hooks.milestoneId (the picked milestone, useMilestoneFilter), hooks.openProjects for g p (the Header island) and hooks.collapseIssue for Esc (useIssues);
 // keys.js sets hooks.rendered, which list.js and the Issues island call after each render, and hooks.refocus, which diff.js calls when the element it was opened from is gone.
-/** @type {{ inMilestone: (x: WorkItem) => boolean, milestoneId: () => number | null, refresh: () => void, setProject: (name: string) => void, openProjects: () => void, reloadServer?: () => void, collapseIssue?: () => boolean, rendered?: (refocus: boolean) => void, refocus?: () => void }} */
-export const hooks = { inMilestone: () => true, milestoneId: () => null, refresh: () => {}, setProject: () => {}, openProjects: () => {} };
+// The Limits island sets hooks.refreshLimits (the poll calls it); app.js sets hooks.openPairing (the projects dialog's "Pair a device…") and hooks.projectCreated (the new-project dialog's result).
+/** @type {{ inMilestone: (x: WorkItem) => boolean, milestoneId: () => number | null, refresh: () => void, setProject: (name: string) => void, openProjects: () => void, refreshLimits: () => Promise<void>, openPairing?: () => void, projectCreated?: (p: { name: string, dir: string, sessionId: string | null, tmux?: string }) => void, reloadServer?: () => void, collapseIssue?: () => boolean, rendered?: (refocus: boolean) => void, refocus?: () => void }} */
+export const hooks = { inMilestone: () => true, milestoneId: () => null, refresh: () => {}, setProject: () => {}, openProjects: () => {}, refreshLimits: async () => {} };
 
 // The Vue islands (web/README.md). load() resolves to web/dist/main.js, or to null when web/ isn't built (the server
 // then leaves its tags out of index.html). main.js sets bump when it loads: call it after changing state an island shows.
@@ -386,16 +393,19 @@ export const authorSummary = moved('authorSummary'); // moved: web/src/lib/comme
 export const waitsOnYou = moved('waitsOnYou'); // moved: web/src/lib/waiting.ts
 
 // The composer and the question cards are islands (web/src/islands/Composer.vue, Ask.vue). `composer` is what the old
-// chat code tells them (turn, ask, boot: what a refresh found) and asks of them (send),
+// chat code tells them (turn, ask, boot, wait: what a refresh found) and asks of them (send),
 // set by their composables when web/dist/main.js loads. `push` is app.js's notification state, shown in the + menu.
 /**
  * @type {{
  *   turn: (data: (Partial<Transcript> & { error?: boolean }) | null) => void,
  *   ask: (s: Session, data: Transcript) => Promise<void>,
  *   boot: (tmux: string | null | undefined) => Promise<void>,
+ *   wait: (s: Session | null, data: Transcript | null, items: ChatItem[]) => void,
  *   send: (sid: string, text: string, answerTo?: string, note?: string, canned?: boolean) => Promise<boolean> }}
  */
-export const composer = { turn: () => {}, ask: async () => {}, boot: async () => {}, send: async () => false };
+export const composer = { turn: () => {}, ask: async () => {}, boot: async () => {}, wait: () => {}, send: async () => false };
+/** Desktop notifications asked for in this browser (the bell) and allowed by it. */
+export const notifyOn = () => store.get('notify') === '1' && window.Notification?.permission === 'granted';
 export const push = { label: 'Enable notifications on this device', state: '' };
 
 /** @param {{ project: string }} x */

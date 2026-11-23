@@ -1,11 +1,10 @@
-// Entry point: header (bell, refresh, projects dialog), polling, notifications, limits strip, and mounting the Vue islands.
-import { api, $, el, state, store, syncClock, saveTracked, isTracked, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary, vue, push } from './core.js';
+// Entry point: header (refresh), polling, notifications, and mounting the Vue islands.
+import { api, $, el, state, store, syncClock, saveTracked, checkProject, notifyOn, isTracked, updateTitle, prLabel, waButton, ago, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary, vue, push } from './core.js';
 import { renderBoard, select, attentionEvents, askingEvents, sessionTopic } from './list.js';
 import { refreshChat, initChat, bindChat, focusChat, isMaster, chatSession } from './chat.js';
-import { openNewProject, initNewProject } from './newproject.js';
 import { initKeys } from './keys.js';
 import { showTab, activeTab } from './issues.js';
-import { refreshLog, openLog } from './log.js';
+import { refreshLog } from './log.js';
 
 // Web Awesome's dark theme is a class; follow the OS like the rest of the page does.
 const dark = matchMedia('(prefers-color-scheme: dark)');
@@ -13,21 +12,6 @@ const syncTheme = () => document.documentElement.classList.toggle('wa-dark', dar
 dark.addEventListener('change', syncTheme);
 syncTheme();
 
-/** @returns {Record<string, number>} */
-const counts = () => {
-    const c = /** @type {Record<string, number>} */ ({});
-    for (const s of state.sessions) {
-        c[s.project] = (c[s.project] || 0) + 1;
-    }
-    return c;
-};
-
-// The picked project must be on the board: one that was removed falls back to "All my projects".
-function checkProject() {
-    if (state.project !== 'all' && !state.tracked.includes(state.project)) {
-        state.project = 'all';
-    }
-}
 /** @param {string} name a tracked project or 'all' */
 function setProject(name) {
     if (name === state.project) {
@@ -42,53 +26,6 @@ function setProject(name) {
 }
 hooks.setProject = setProject;
 
-function renderDialog() {
-    const c = counts(), body = $('dlg-body');
-    const row = (name, kind) => {
-        const r = el('div', 'p-row'), b = waButton(kind === 'add' ? '+ Add' : 'Remove', kind);
-        r.append(el('span', null, name), el('small', null, `${c[name] || 0} session${c[name] === 1 ? '' : 's'}`), b);
-        b.onclick = () => {
-            state.tracked = kind === 'add' ? [...state.tracked, name] : state.tracked.filter(p => p !== name);
-            saveTracked();
-            renderDialog();
-            checkProject();
-            renderBoard();
-        };
-        return r;
-    };
-    const others = Object.keys(c).filter(p => !state.tracked.includes(p)).sort((a, b) => c[b] - c[a]);
-    const add = waButton('New project…', 'd-new-btn', { variant: 'brand', appearance: 'outlined' });
-    add.onclick = () => {
-        $('dlg').open = false;
-        openNewProject();
-    };
-    const existing = waButton('Open existing folder…', 'd-open-btn', { variant: 'brand', appearance: 'outlined' });
-    existing.onclick = () => {
-        $('dlg').open = false;
-        openNewProject('open');
-    };
-    const pairBtn = waButton('Pair a device…', 'd-pair-btn', { variant: 'brand', appearance: 'outlined' });
-    pairBtn.onclick = () => {
-        $('dlg').open = false;
-        openPairing();
-    };
-    const logBtn = waButton('Activity log…', 'd-log-btn', { variant: 'brand', appearance: 'outlined' });
-    logBtn.title = 'What happened in the selected project in the last 7 days (l)';
-    logBtn.onclick = () => {
-        $('dlg').open = false;
-        openLog();
-    };
-    const top = el('div', 'd-new');
-    // a paired device (data-remote from the server) cannot pair others: the server answers 403 there
-    top.append(add, existing, ...('remote' in document.documentElement.dataset ? [] : [pairBtn]), logBtn);
-    body.replaceChildren(
-        top,
-        el('h4', null, 'On board'),
-        ...(state.tracked.length ? [...state.tracked].sort().map(p => row(p, 'rm')) : [el('div', 'd-empty', 'None yet.')]),
-        el('h4', null, 'Seen in recent sessions'),
-        ...(others.length ? others.map(p => row(p, 'add')) : [el('div', 'd-empty', 'Nothing else found.')])
-    );
-}
 // "Pair a device…": a fresh one-time code for a phone on the tailnet, and the paired devices with Revoke.
 async function renderDevices() {
     const r = await api('/api/pair/devices');
@@ -119,17 +56,13 @@ function openPairing() {
     newPairCode();
     renderDevices();
 }
+hooks.openPairing = openPairing; // the projects dialog's "Pair a device…"
 $('pair-new').onclick = () => {
     newPairCode();
     renderDevices();
 };
-$('manage').onclick = () => {
-    renderDialog();
-    $('dlg').open = true;
-};
-
 // A project made or opened from "New project…": tracked, selected, and its chat bound as soon as its session is known.
-initNewProject(({ name, dir, sessionId, tmux }) => {
+hooks.projectCreated = ({ name, dir, sessionId, tmux }) => {
     if (!state.tracked.includes(name)) {
         state.tracked = [...state.tracked, name];
         saveTracked();
@@ -145,7 +78,7 @@ initNewProject(({ name, dir, sessionId, tmux }) => {
         refreshChat();
     }
     refreshLog();
-});
+};
 
 // Projects are named after their git repo now; map saved names that were folder names (e.g. codetool → homebase).
 function migrateTracked() {
@@ -236,7 +169,6 @@ if (pushSupported) {
     renderPush();
 }
 
-const notifyOn = () => store.get('notify') === '1' && window.Notification?.permission === 'granted';
 /** @param {AttentionEvent} e @returns {[string, string | undefined]} */
 function eventText({ kind, item: x, session: s, comments }) {
     if (kind === 'asking') {
@@ -276,30 +208,6 @@ function notify(e) {
         document.querySelector('.rows tr.sel')?.scrollIntoView({ block: 'center' });
     };
 }
-const bell = $('bell');
-// the off icon is a bell with a slash; on adds an accent dot (styled in styles.css)
-const renderBell = () => {
-    const on = notifyOn();
-    bell.classList.toggle('on', on);
-    bell.setAttribute('aria-pressed', on);
-};
-bell.hidden = !window.Notification;
-// permission is only ever requested from this click
-let blocked = null;
-bell.onclick = async () => {
-    const on = !notifyOn() && await Notification.requestPermission() === 'granted';
-    if (!on && Notification.permission === 'denied') { // the browser asks nothing then: say why nothing happened
-        blocked ??= tooltip(bell, 'Blocked in browser settings');
-        bell.after(blocked);
-        blocked.open = true;
-    }
-    store.set('notify', on ? '1' : '0');
-    renderBell();
-};
-if (window.Notification) {
-    renderBell();
-}
-
 // Refresh button (and r): the server refetches every GitLab/GitHub cache, keeping the old data meanwhile; the icon spins
 // until that is done, then the list and the milestone pill poll at once. Ignored while running and within 5 s of the last start.
 const reload = $('reload');
@@ -462,62 +370,10 @@ async function pollOnce() {
     }
     await findStarting();
     refreshChat();
-    refreshLimits();
+    hooks.refreshLimits();
     renderReload();
     refreshLog();
     refreshVersion();
-}
-
-// "Session ▬ 70%   Week ▬ 63%"; reset times live in each item's tooltip. Hidden without a dump.
-const leftColor = left => (left >= 50 ? 'var(--c-ready)' : left >= 10 ? 'var(--c-warn)' : 'var(--c-danger)');
-/** @type {[number, number][]} */
-let paceSamples = [];
-let paceReset = 0;
-async function refreshLimits() {
-    /** @type {Limits | null} */
-    let l = null;
-    try {
-        l = await api('/api/limits').then(r => r.json());
-    } catch {}
-    state.limits = l;
-    const box = $('limits'), wins = [l?.fiveHour, l?.sevenDay].map((w, week) => w && limitView(week, w)).filter(Boolean);
-    const a = l?.updated && ago(l.updated), updated = !a ? '' : a === 'now' ? 'Updated just now' : `Updated ${a} ago`;
-    box.hidden = !wins.length;
-    // rebuild only when the set of windows changes, then update in place so an open tooltip survives the 3s refresh
-    const key = wins.map(v => v.label).join();
-    if (box.dataset.key !== key) {
-        box.dataset.key = key;
-        box.replaceChildren(...wins.flatMap(() => {
-            const s = el('span', 'limit'), bar = el('i');
-            bar.append(el('b'));
-            s.append(el('span', 'limit-label'), bar, el('span'));
-            return [s, tooltip(s, '')];
-        }));
-    }
-    // pace of the 5-hour window: a sample a minute (reset by a new window), the last 8
-    const f = l?.fiveHour, now = Date.now();
-    if (f?.resetsAt !== paceReset) {
-        paceSamples = [];
-        paceReset = f?.resetsAt ?? 0;
-    }
-    if (f && (!paceSamples.length || now - paceSamples.at(-1)[0] >= 60_000)) {
-        paceSamples = [...paceSamples, /** @type {[number, number]} */ ([now, f.used])].slice(-8);
-    }
-    const out = f && runOutIn(paceSamples, f.resetsAt, now);
-    box.querySelector('.limit-pace')?.remove();
-    if (out) {
-        const p = el('span', 'limit-pace', `· empty in ~${out}m`);
-        p.style.color = 'var(--c-warn)';
-        box.append(p);
-    }
-    box.querySelectorAll('.limit').forEach((s, i) => {
-        const v = wins[i], [name, bar, val] = s.children, fill = /** @type {HTMLElement} */ (bar.firstChild);
-        name.textContent = v.label;
-        val.textContent = v.text;
-        fill.style.width = `${v.left}%`;
-        fill.style.background = leftColor(v.left);
-        s.nextElementSibling.replaceChildren(v.tip, ...(updated ? [el('br'), updated] : []));
-    });
 }
 
 for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#tabs button'))) {
@@ -595,13 +451,17 @@ api('/api/tracked').then(r => (r.ok ? r.json() : undefined)).then(list => {
 }).catch(() => {});
 poll();
 setInterval(poll, 1500); // /api/sessions costs ~40ms warm (GitLab stays behind its own caches), so a new row or Now: line lands within ~1.5s
-// The Vue islands (web/README.md): the header's project picker, milestone pill and notes, and the Issues tab.
+// The Vue islands (web/README.md): the header's project picker, milestone pill and notes, bell and projects dialog, the Issues tab and the limits strip.
 // ?vue=1 adds the demo island (web/src/islands/Demo.vue) to the header.
 vue.load().then(m => {
     const header = $('header-island');
     m?.mount('Header', header, { version: header.dataset.version });
     m?.mount('Issues', $('issues'));
     m?.mount('TokenSaver', $('saver'));
+    m?.mount('Bell', $('bell-host'));
+    m?.mount('Projects', $('projects-host'));
+    m?.mount('NewProject', $('new-dlg-host'));
+    m?.mount('Limits', $('limits'));
     if (m && new URLSearchParams(location.search).has('vue')) {
         const slot = el('span');
         header.after(slot);

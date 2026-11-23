@@ -1,9 +1,10 @@
 import { computed, toRef } from 'vue';
-import { $, hooks, isTracked } from 'old/core.js';
+import { hooks, isTracked } from 'old/core.js';
 import { projectCounts, waitsOnYou } from '@/lib/waiting';
-import { openNewProject } from 'old/newproject.js';
 import { oldState } from '@/old';
 import type { PickItem } from '@/composables/usePicker';
+import { openNewProject } from './useNewProject';
+import { showProjects } from './useProjects';
 
 // One row of the project picker: a dot for the loudest state among its chats, and what they are doing underneath.
 function pickItem(value: string, name: string, mine: Session[]): PickItem {
@@ -46,7 +47,6 @@ export function useProject() {
         waitingElsewhere,
         setProject: (to: string) => hooks.setProject(to),
         newProject: () => openNewProject(),
-        // ponytail: the old dialog opens from its own header button, until the dialog is ported
-        manageProjects: () => $('manage').click()
+        manageProjects: showProjects
     };
 }

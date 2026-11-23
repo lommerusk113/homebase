@@ -3,6 +3,7 @@ import { api, composer, setFormatWarn } from 'old/core.js';
 import { seenHash } from '@/lib/text';
 import { answered } from 'old/chat.js';
 import { useChat } from './useChat';
+import { useDiscuss } from './useDiscuss';
 import { useComposerFocus } from './useComposerFocus';
 import { useModel } from './useModel';
 import { useNotice } from './useNotice';
@@ -39,6 +40,7 @@ const { picked } = useModel();
 const { showError } = useNotice();
 const { send } = useSend();
 const { focus } = useComposerFocus();
+const discuss = useDiscuss();
 
 const card = shallowRef<Card | null>(null);
 const shown = ref(false); // shown once filled, never empty
@@ -57,6 +59,7 @@ async function readPane(url: string): Promise<PaneQuestion | null> {
 }
 
 function hide() {
+    discuss.end();
     shown.value = false;
     drawn = null;
 }
@@ -150,6 +153,13 @@ composer.ask = async (s, data) => {
 export function useAsk() {
     return {
         card, shown,
+        /** Discuss was chosen: the next message is a discussion of this question. */
+        discussing: discuss.discussing,
+        discuss() {
+            discuss.start();
+            focus();
+        },
+        undiscuss: discuss.end,
         /** Esc in the chat: the transcript then shows the question declined. */
         async dismiss() {
             shown.value = false;

@@ -2,6 +2,7 @@ import { toRef, watch } from 'vue';
 import { state, touch } from 'old/core.js';
 import { useChat } from './useChat';
 import { useComposerFocus } from './useComposerFocus';
+import { useDiscuss } from './useDiscuss';
 import { useDraft } from './useDraft';
 import { useAttachments } from './useAttachments';
 import { useNotice } from './useNotice';
@@ -17,6 +18,7 @@ export function useComposer() {
     const { attached, remove, upload } = useAttachments();
     const { error, showError } = useNotice();
     const { send } = useSend();
+    const discuss = useDiscuss();
 
     watch(() => session.value?.id ?? null, draft.follow, { immediate: true });
 
@@ -55,6 +57,7 @@ export function useComposer() {
         // cleared at once (the "sending…" bubble shows progress), and the draft with it: a reload during a slow send
         // must not bring the sent text back
         draft.put(to, '');
+        text = discuss.take(text); // a failed send gives the wrapped text back, which is not wrapped twice
         const ok = await send(to, text);
         if (draft.chat() !== (s?.id ?? null)) {
             // switched chats meanwhile: the box is the other chat's now, so a failed text goes back into its own chat's draft
@@ -73,6 +76,8 @@ export function useComposer() {
         focusAsked: useComposerFocus().focusAsked,
         /** a touch screen: no hover, and a keyboard whose Enter can only add a line */
         entersLine: touch,
-        label: toRef(() => (session.value ? `Message Claude in ${session.value.project}` : 'Message Claude'))
+        label: toRef(() => (session.value ? `Message Claude in ${session.value.project}` : 'Message Claude')),
+        /** the box's placeholder */
+        hint: toRef(() => (discuss.discussing.value ? 'Discuss this question…' : `${session.value ? `Message Claude in ${session.value.project}` : 'Message Claude'}…`))
     };
 }

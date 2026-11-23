@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { api, page, refreshToken } from '../../public/core.js';
+import { discussText, DISCUSS_LEAD } from '../../web/src/lib/discuss.ts';
 import { saveDraft, loadDraft } from '../../web/src/lib/draft.ts';
 
 {
@@ -57,3 +58,7 @@ import { saveDraft, loadDraft } from '../../web/src/lib/draft.ts';
     assert.equal(loadDraft(null, 's1'), null);
     console.log('ok token refresh, draft');
 }
+
+assert.equal(discussText('why Postgres?'), "Let's discuss this before choosing: why Postgres?");
+assert.ok(discussText('x').startsWith(DISCUSS_LEAD));
+console.log('ok discuss text');

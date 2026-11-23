@@ -105,6 +105,21 @@ export default {
         assert.equal(page.posts.filter(p => p.url.includes('/api/send') && p.body === text).length, 1);
     },
 
+    'Discuss on the ask card focuses the composer with a hint, collapses the card, and the next send is typed as a discussion': async ({ page, open, IDS, answerPosts }) => {
+        await open({ project: 'beta', chat: IDS.asker });
+        await page.waitFor(`!document.getElementById('ask').hidden && document.getElementById('ask-discuss')`, { what: 'the ask card with Discuss' });
+        page.route = answerPosts;
+        await page.click('#ask-discuss');
+        await page.waitFor(`document.getElementById('ask').hidden && !document.getElementById('ask-discussing').hidden`, { what: 'the card collapsed to Discussing' });
+        assert.equal(await page.ev(`document.getElementById('msg').getAttribute('placeholder')`), 'Discuss this question…');
+        await page.type('what is the trade-off?');
+        await page.key('Enter');
+        await page.waitFor(`document.getElementById('msg').value === ''`, { what: 'the box emptied by the send' });
+        const sent = page.posts.filter(p => p.url.includes('/api/send'));
+        assert.deepEqual(sent.map(p => p.body), ["Let's discuss this before choosing: what is the trade-off?"]);
+        assert.equal(await page.ev(`document.getElementById('msg').getAttribute('placeholder')`), 'Message Claude in beta…');
+    },
+
     'the draft and the error line follow the chat: a focused chat starts empty, and going back restores the draft': async ({ page, open, IDS }) => {
         const asker = `#masters tr[data-key="asking:${IDS.asker}"]`;
         await open({ project: 'all', chat: IDS.worker });

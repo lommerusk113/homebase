@@ -8,7 +8,7 @@ import CardOptions from './CardOptions.vue';
 import TerminalCommand from './TerminalCommand.vue';
 
 const DETAIL_LINES = 6;
-const { card, shown, dismiss } = useInjected(AskKey);
+const { card, shown, dismiss, discuss, undiscuss, discussing } = useInjected(AskKey);
 const all = ref(false), terminal = ref(false);
 const lines = computed(() => (card.value?.detail ? card.value.detail.split('\n') : []));
 const rest = computed(() => lines.value.length - DETAIL_LINES);
@@ -22,7 +22,11 @@ watch(card, c => {
 </script>
 
 <template>
-    <div class="c-note c-ask" :class="{ risky: card?.risky }" id="ask" :hidden="!shown">
+    <div class="c-note c-ask" id="ask-discussing" :hidden="!shown || !discussing">
+        Discussing…
+        <wa-button size="s" appearance="plain" id="ask-undiscuss" @click="undiscuss">Back to the question</wa-button>
+    </div>
+    <div class="c-note c-ask" :class="{ risky: card?.risky }" id="ask" :hidden="!shown || discussing">
         <div class="c-ask-label">Claude is asking</div>
         <div class="c-ask-q" id="ask-q" role="heading" aria-level="3">{{ card?.question }}</div>
         <pre class="c-ask-detail mono" id="ask-detail" :hidden="!lines.length">{{ (all ? lines : lines.slice(0, DETAIL_LINES)).join('\n') }}</pre>
@@ -30,6 +34,7 @@ watch(card, c => {
         <CardOptions id="ask-opts" :card="card" />
         <div class="c-term">
             Or type your answer below.
+            <wa-button size="s" appearance="plain" id="ask-discuss" title="Talk it over in the chat before choosing" :hidden="!!card?.detail" @click="discuss">Discuss</wa-button>
             <wa-button size="s" appearance="plain" id="ask-dismiss" title="Sends Esc: Claude moves on without an answer" @click="dismiss">Decline question</wa-button>
             <wa-button size="s" appearance="plain" id="ask-term-toggle" :aria-expanded="String(terminal)" aria-controls="ask-term" :hidden="!card?.answer" @click="terminal = !terminal">Answer in a terminal</wa-button>
         </div>

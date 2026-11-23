@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseQuestion } from '../../server/startup.mjs';
-import { seenHash } from '../../public/core.js';
+import { seenHash } from '../../web/src/lib/text.ts';
 import { sleep } from './cdp.mjs';
 
 const status = `document.getElementById('status').className + ' | ' + document.getElementById('status-text').textContent`;

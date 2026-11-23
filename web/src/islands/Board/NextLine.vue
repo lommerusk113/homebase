@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // "Next: <step>" under the title. A running agent's line says what it does now, and how long it has been on that
 // step once that's a minute or more. The badge and the hint come first, so the ellipsis doesn't cut them.
-import { ago } from 'old/core.js';
+import { ago } from '@/lib/time';
 import { CommentsKey, ItemKey, SentMarksKey, useInjected } from '@/keys';
 import CommentBadge from './CommentBadge.vue';
 

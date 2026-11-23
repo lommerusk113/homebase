@@ -1,6 +1,7 @@
 import { computed, toRef } from 'vue';
-import { COLUMNS, forgeWords, inView } from 'old/core.js';
-import { reviewNote } from 'old/list.js';
+import { COLUMNS, inView } from 'old/core.js';
+import { forgeWords } from '@/lib/forge';
+import { reviewNote } from '@/lib/board';
 import { oldState } from '@/old';
 import type { useWorkItems } from '@/composables/useWorkItems';
 import type { useChatRows } from '@/composables/useChatRows';

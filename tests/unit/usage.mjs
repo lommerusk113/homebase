@@ -3,8 +3,9 @@ import { mkdtempSync, writeFileSync, appendFileSync, readFileSync, readdirSync, 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { chatItems, workItems, addUsage, readUsage, formatDuration, formatTokens, limitsOf, peakLimits } from '../../server.mjs';
-import { canned } from '../../public/canned.js';
-import { commandRun, limitLeft, modelName, limitView } from '../../public/core.js';
+import { canned } from '../../web/src/lib/canned.ts';
+import { commandRun, modelName } from '../../web/src/lib/chat.ts';
+import { limitLeft, limitView } from '../../web/src/lib/limits.ts';
 import { keepModelSetting } from '../../server/control.mjs';
 import { unpushedOf } from '../../server/sessions.mjs';
 import { reloadMessage } from '../../server/rules.mjs';

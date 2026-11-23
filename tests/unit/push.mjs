@@ -3,9 +3,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, utimesSync, readFileSync, rmSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { itemUpdated, isStale, serverMtime, pageHash } from '../../server.mjs';
-import { runOutIn } from '../../public/core.js';
-import { chatMessage } from '../../public/issues.js';
-import { reviewNote } from '../../public/list.js';
+import { runOutIn } from '../../web/src/lib/limits.ts';
+import { chatMessage } from '../../web/src/lib/issues.ts';
+import { reviewNote } from '../../web/src/lib/board.ts';
 import { rulesStale, reloadMessage } from '../../server/rules.mjs';
 import { RULES_FILE } from '../../server/tmux.mjs';
 import { encrypt, vapidKeys, vapidJwt, pushTo, validSub, readSubs, addSub, removeSub, removeDeviceSubs, pushEvents, watchSessions, pageFocused } from '../../server/push.mjs';

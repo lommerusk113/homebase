@@ -1,5 +1,6 @@
 import { shallowRef, toRef, watch } from 'vue';
-import { api, modelName, state } from 'old/core.js';
+import { api, state } from 'old/core.js';
+import { modelName } from '@/lib/chat';
 import { useChat } from './useChat';
 import { useNotice } from './useNotice';
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // ⚠ beside an MR whose state couldn't be checked just now: what is shown is the last good answer.
 import { useId } from 'vue';
-import { forgeWords } from 'old/core.js';
+import { forgeWords } from '@/lib/forge';
 import { ItemKey, useInjected } from '@/keys';
 
 const item = useInjected(ItemKey);

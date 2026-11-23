@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { RULES_FILE } from './tmux.mjs';
 import { saverFile } from './saver.mjs';
-import { canned } from '../public/canned.js';
+import { canned } from '../web/src/lib/canned.ts';
 
 const TTL_MS = 10_000;
 const mtimes = new Map(); // path -> { at, mtime }

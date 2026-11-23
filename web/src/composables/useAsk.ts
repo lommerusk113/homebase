@@ -1,5 +1,6 @@
 import { nextTick, ref, shallowRef } from 'vue';
-import { api, composer, seenHash, setFormatWarn } from 'old/core.js';
+import { api, composer, setFormatWarn } from 'old/core.js';
+import { seenHash } from '@/lib/text';
 import { answered } from 'old/chat.js';
 import { useChat } from './useChat';
 import { useComposerFocus } from './useComposerFocus';

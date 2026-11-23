@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // One person's lane: who, what they have open, and their cards. The last lane is Unassigned (who: null).
 import { computed } from 'vue';
-import { firstName } from 'old/core.js';
+import { firstName } from '@/lib/comments';
 import { IssuesKey, useInjected } from '@/keys';
 import type { Lane } from '@/composables/useIssues';
 import IssueCard from './IssueCard.vue';

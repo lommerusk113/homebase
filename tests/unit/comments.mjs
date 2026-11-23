@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { nextStep, rowAction, isBot, humanComments, withThreads, itemColumn } from '../../server.mjs';
-import { attentionEvents, askingEvents } from '../../public/list.js';
-import { freshComments, authorSummary, projectCounts } from '../../public/core.js';
+import { attentionEvents, askingEvents } from '../../web/src/lib/board.ts';
+import { freshComments, authorSummary } from '../../web/src/lib/comments.ts';
+import { projectCounts } from '../../web/src/lib/waiting.ts';
 import { open, mr } from './helpers.mjs';
 
 const it = (key, column, ci) => ({ key, column, prState: ci ? { ci } : null });

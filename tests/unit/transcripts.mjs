@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { summarize, chatItems, turnState, readTail, fetchComments, latestTopic, queuedPrompts, parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from '../../server.mjs';
-import { sessionTopic, startingIssues, workingLine, workingTitle } from '../../public/list.js';
+import { sessionTopic, startingIssues, workingLine, workingTitle } from '../../web/src/lib/board.ts';
 import { say } from './helpers.mjs';
 
 // tracker e9c15e3f: a ~900 KB tool_result line filled the 512 KB tail, so the chat showed one bubble and the 403 vanished
@@ -202,7 +202,8 @@ import { say } from './helpers.mjs';
     const { mkdtempSync, writeFileSync, rmSync, utimesSync } = await import('node:fs');
     const { tmpdir } = await import('node:os');
     const { join } = await import('node:path');
-    const { ctxLevel, canCompact, autoCompactDue, compactNudgeDue, tokenPercent, AUTO_COMPACT } = await import('../../public/core.js');
+    const { ctxLevel } = await import('../../web/src/lib/chat.ts');
+    const { canCompact, autoCompactDue, compactNudgeDue, tokenPercent, AUTO_COMPACT } = await import('../../web/src/lib/compact.ts');
 
     const dir = mkdtempSync(join(tmpdir(), 'homebase-ctx-')), id = 'bbbbbbbb-0000-4000-8000-000000000001';
     writeFileSync(join(dir, `${id}.json`), JSON.stringify({ context_window: { used_percentage: 72.5 } }));

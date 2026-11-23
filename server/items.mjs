@@ -2,7 +2,7 @@
 import { PR_URL } from './entries.mjs';
 import { USAGE_KEYS, IDLE_CUTOFF_MS, formatDuration, formatTokens } from './usage.mjs';
 import { mentionsMr, mrRef, forgeWords } from './forge.mjs';
-import { canned } from '../public/canned.js';
+import { canned } from '../web/src/lib/canned.ts';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
@@ -162,7 +162,7 @@ function reviewOrCi(prState) {
     return prState.ci === 'failing' ? 'Pipeline failing' : null;
 }
 
-// The one-click command for a work item's row, as { label, message } typed into its session (the texts: public/canned.js), or null when nothing is on you.
+// The one-click command for a work item's row, as { label, message } typed into its session (the texts: web/src/lib/canned.ts), or null when nothing is on you.
 export function rowAction(pr, prState, agent, title) {
 
     // same order as nextStep: a merged/closed MR, then a running or stopped agent, then what the MR asks for

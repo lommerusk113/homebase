@@ -1,7 +1,9 @@
 import { computed, reactive } from 'vue';
-import { ago, inView, waitsOnYou, markHandled, store } from 'old/core.js';
+import { inView, markHandled, store } from 'old/core.js';
+import { ago } from '@/lib/time';
+import { waitsOnYou } from '@/lib/waiting';
 import { isMaster, bindChat, focusChat } from 'old/chat.js';
-import { startingIssues, sessionTopic, workingTitle, workingLine } from 'old/list.js';
+import { startingIssues, sessionTopic, workingTitle, workingLine } from '@/lib/board';
 import { oldState } from '@/old';
 
 const handled = reactive(new Set<string>()); // replies marked as handled here, until the next poll has the server's word

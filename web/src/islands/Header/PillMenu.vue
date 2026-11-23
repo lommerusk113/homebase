@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The pill's menu: the chosen milestone's numbers, then "Assigned to me", every open milestone and "No milestone".
 // Read-only towards GitLab/GitHub: it only links out.
-import { forgeWords } from 'old/core.js';
+import { forgeWords } from '@/lib/forge';
 import { MilestoneFilterKey, useInjected } from '@/keys';
 import PillGroups from './PillGroups.vue';
 import PillOption from './PillOption.vue';

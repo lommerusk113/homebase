@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseQuestion, answerQuestion, saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME, cancelQuestion, questionOpen } from '../../server.mjs';
-import { seenHash } from '../../public/core.js';
+import { seenHash } from '../../web/src/lib/text.ts';
 import { pasteLabel, isLongPaste, expandPastes } from '../../web/src/lib/draft.ts';
 import { claudeLine, rulesFile, loginShell } from '../../server/tmux.mjs';
 import { saverOn, saveSaver, saverRules, syncSaver, SAVER_RULE } from '../../server/saver.mjs';

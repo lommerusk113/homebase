@@ -48,7 +48,8 @@ Old actions are plain functions the composable wraps: `hooks.setProject`, `selec
 The other way round, old code that needs a ported section goes through an object in `public/core.js` that the section's composables fill in when `main.js` loads.
 `feedPort` in `old/chat.js` is one, `composer` another: `refreshChat` hands the composer and the question cards what it found (`composer.turn`, `ask`, `boot`), and the old page's buttons send through `composer.send` (`sendText` in `old/chat.js` is only that call).
 State owned by a ported section lives at module level in its composable, so the chat's islands (`Feed`, `Composer`, `Ask`) and those calls share it.
-Pure helpers with a unit test sit in `src/lib/` without Vue or `old/` imports, so `tests/unit` imports the `.ts` file directly (Node 22.18 or newer).
+Pure logic (no DOM, fetch or state) sits in `src/lib/`, one small module per area (`board`, `issues`, `milestone`, `chat`, `time`, `canned`, …) without Vue or `old/` imports, in erasable TypeScript only (no enums, namespaces or parameter properties; `.ts` extensions on relative imports), so `tests/unit` and `server/*.mjs` import the `.ts` files directly (Node 22.18 or newer).
+The old page can't import them, so `src/old.ts` fills `lib` in `public/core.js` with the modules it still calls, and the old files re-export those through `moved(name)` (each marked `// moved: web/src/lib/x.ts`); they go with the old code.
 
 ## Rules for Vue code
 
@@ -86,4 +87,4 @@ Pure helpers with a unit test sit in `src/lib/` without Vue or `old/` imports, s
 Ported: the board (`Board`), the chat feed (`Feed`), the composer and question cards (`Composer`, `Ask`), the Changes viewer (`Diff`, `DiffButton`), the header and Issues tab (`Header`, `Issues`), and the footer's Token saver switch (`TokenSaver`, with `useTokenSaver`; the setting lives on the server, `server/saver.mjs`).
 
 Left in old code: the waiting strip and rules strip (`public/chat.js`), the limits strip, bell and projects dialog (`public/app.js`), keyboard handling (`public/keys.js`), and the shell (bootstrapping, polling, the phone tabs).
-Next: the phone layout, then the shell itself, after which `public/` is deleted. Pure logic the node unit tests import from `public/*.js` moves to `web/src/lib/` along the way.
+Next: the phone layout, then the shell itself, after which `public/` is deleted. Pure logic has moved to `web/src/lib/`.

@@ -1,5 +1,6 @@
-import { api, state, friendly, composer } from 'old/core.js';
-import { cannedLabel } from 'old/canned.js';
+import { api, state, composer } from 'old/core.js';
+import { friendly } from '@/lib/text';
+import { cannedLabel } from '@/lib/canned';
 import { answered, stickFeed } from 'old/chat.js';
 import { useChat } from './useChat';
 import { useComposerFocus } from './useComposerFocus';

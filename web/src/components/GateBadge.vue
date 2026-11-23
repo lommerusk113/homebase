@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // review-gate badge: ✓ gate (ready), ⚠ gate (fix first), gate stale once the MR head moved.
 import { computed, useId } from 'vue';
-import { ago, plain } from 'old/core.js';
+import { ago } from '@/lib/time';
+import { plain } from '@/lib/text';
 
 /** mr: the forge's word for it ("MR" or "PR") */
 const props = defineProps<{ gate: Gate; mr: string }>();

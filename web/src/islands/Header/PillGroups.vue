@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // The chosen milestone in numbers: its due date (a link to it), the issue counts, and the issues that can be closed.
 import { computed } from 'vue';
-import { forgeWords } from 'old/core.js';
-import { due } from 'old/milestone.js';
+import { forgeWords } from '@/lib/forge';
+import { due } from '@/lib/milestone';
 import { MilestoneFilterKey, useInjected } from '@/keys';
 
 const { ms } = useInjected(MilestoneFilterKey);

@@ -1,6 +1,6 @@
 import { computed, ref, shallowRef } from 'vue';
 import { useMediaQuery } from '@vueuse/core';
-import { PR_HREF } from 'old/core.js';
+import { PR_HREF } from '@/lib/forge';
 import { closeDiff } from 'old/diff.js';
 import { oldState } from '@/old';
 import { addedRows, diffTotals, parseDiff } from '@/lib/diff';

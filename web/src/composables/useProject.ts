@@ -1,5 +1,6 @@
 import { computed, toRef } from 'vue';
-import { $, hooks, isTracked, projectCounts, waitsOnYou } from 'old/core.js';
+import { $, hooks, isTracked } from 'old/core.js';
+import { projectCounts, waitsOnYou } from '@/lib/waiting';
 import { openNewProject } from 'old/newproject.js';
 import { oldState } from '@/old';
 import type { PickItem } from '@/composables/usePicker';

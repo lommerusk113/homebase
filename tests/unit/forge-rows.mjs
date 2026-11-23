@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { column, nextStep, workItems, rowAction, itemColumn, groupIssues, excerpt } from '../../server.mjs';
-import { chatMessage } from '../../public/issues.js';
+import { chatMessage } from '../../web/src/lib/issues.ts';
 import { agent, glabMr } from './helpers.mjs';
 
 // An error nobody gave a status is ours: the caller gets a fixed text, the detail (absolute paths) goes to the server's output.
@@ -33,7 +33,7 @@ import { agent, glabMr } from './helpers.mjs';
 
 {
     // an issue somebody already works on is found in any chat of the project: by a work item (branch, title, MR issue) or a running or queued prompt
-    const { issueWork } = await import('../../public/list.js');
+    const { issueWork } = await import('../../web/src/lib/board.ts');
     const sub = { key: 'agent-1', sessionId: 'a', title: 'Dark mode', branch: '7-dark-mode', column: 'doing' };
     const a = { id: 'a', status: 'idle', items: [sub] }, b = { id: 'b', status: 'working', now: 'refactor', queued: ['then take on #8'] };
     assert.deepEqual(issueWork('7', [b, a]), { sessionId: 'a', key: 'agent-1' });
@@ -111,7 +111,7 @@ import { agent, glabMr } from './helpers.mjs';
     // MR/PR and the forge's name are worded by the project's forge, from one place on each side
     const { forgeWords } = await import('../../server/forge.mjs');
     const { repoPaths } = await import('../../server/account.mjs');
-    const core = await import('../../public/core.js');
+    const core = await import('../../web/src/lib/forge.ts');
     repoPaths.set('ghp', { host: 'github.com', path: 'o/ghp' });
     try {
         assert.deepEqual([forgeWords('ghp').forge, forgeWords('ghp').mr, forgeWords('nope').mr, forgeWords('nope', 'https://github.com/o/r/pull/1').mr], ['GitHub', 'PR', 'MR', 'PR']);

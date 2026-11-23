@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // MR chip, CI pill, gate badge and the out-of-date warning: the row's MR cell, and on a phone (where that cell is hidden) the top of the detail.
 import { computed } from 'vue';
-import { forgeWords } from 'old/core.js';
+import { forgeWords } from '@/lib/forge';
 import { ItemKey, useInjected } from '@/keys';
 import PrChip from '@/components/PrChip.vue';
 import CiPill from '@/components/CiPill.vue';

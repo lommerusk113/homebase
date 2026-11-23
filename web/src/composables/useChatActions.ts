@@ -1,5 +1,6 @@
 import { computed, ref, shallowRef, toRef, watch } from 'vue';
-import { api, store, canCompact, autoCompactDue, compactNudgeDue } from 'old/core.js';
+import { api, store } from 'old/core.js';
+import { canCompact, autoCompactDue, compactNudgeDue } from '@/lib/compact';
 import { setNeedsOnly } from 'old/chat.js';
 import { useChat } from './useChat';
 import { useNotice } from './useNotice';

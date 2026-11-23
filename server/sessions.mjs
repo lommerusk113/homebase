@@ -15,7 +15,7 @@ import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forge
 import { repoPaths, accountOf } from './account.mjs';
 import { contextOf } from './limits.mjs';
 import { workItems, milestoneOf, sameRepo } from './items.mjs';
-import { plainCommand } from '../public/core.js';
+import { plainCommand } from '../web/src/lib/text.ts';
 import { rulesStale, readSeen } from './rules.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor, linkClears, liveTmux, mapNewProjects, startingProjects } from './tmux.mjs';
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // One work item's row, plus its detail row while selected. Its parts read the item through ItemKey.
 import { provide, toRef } from 'vue';
-import { ago } from 'old/core.js';
+import { ago } from '@/lib/time';
 import { ItemKey, SelectionKey, WorkItemsKey, useInjected } from '@/keys';
 import ItemWhat from './ItemWhat.vue';
 import ItemProgress from './ItemProgress.vue';

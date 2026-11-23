@@ -2,7 +2,7 @@
 // Collapsed: only the TLDR (or, without one, the lead sentence, hidden while open as it is a cut of the rest).
 // Show more reveals the rest. The slot is what stays outside the fold, between the two.
 import { computed, nextTick, useTemplateRef } from 'vue';
-import { lead } from 'old/core.js';
+import { lead } from '@/lib/text';
 import { UnfoldKey, useInjected } from '@/keys';
 import RichText from '@/components/RichText.vue';
 import FoldButton from '@/components/FoldButton.vue';

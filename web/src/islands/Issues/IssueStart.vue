@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // A not-started card's button: Start types "Implement #N" into the chat; "Check on it" shows the chat that already has it.
 import { computed } from 'vue';
-import { firstName } from 'old/core.js';
+import { firstName } from '@/lib/comments';
 import { IssuesKey, useInjected } from '@/keys';
 import type { Card } from '@/composables/useIssues';
 

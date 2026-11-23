@@ -98,30 +98,6 @@ export async function api(path, opts = {}) {
     return token && token !== used ? send(token) : r;
 }
 
-// Plain sentences for the raw server and tmux errors the chat can show; anything else passes through.
-/** @type {[RegExp, string][]} */
-const FRIENDLY = [
-    [/^busy$/, "Claude is busy; try again when it's idle"],
-    [/^unknown session/, 'That session is gone. Pick another one from the list.'],
-    [/^bad tmux name/, "This chat's terminal name isn't valid. Reload the page and try again."],
-    [/ENOENT/, "tmux isn't installed"],
-    [/Command failed: tmux|no server running|can't find (session|pane)|no current (session|target)/i, "Couldn't reach this chat's terminal. It may have ended; try Restart chat."]
-];
-/** @param {string} msg */
-// What the ask card showed, as a short FNV-1a hash of the question and the command or diff: sent with an answer, so the
-// server (startup.mjs answerStartup, which imports this) approves only that exact prompt and never one that replaced it.
-/** @param {{ question: string, detail?: string }} q */
-export const seenHash = q => {
-    let h = 0x811c9dc5;
-    for (const c of `${q.question}\n${q.detail ?? ''}`) {
-        h = Math.imul(h ^ c.codePointAt(0), 0x01000193);
-    }
-
-    return (h >>> 0).toString(36);
-};
-
-export const friendly = msg => FRIENDLY.find(([re]) => re.test(msg))?.[1] ?? msg;
-
 /**
  * getElementById, typed for the index.html elements listed in types.d.ts's PageIds.
  * @template {string} K
@@ -204,80 +180,6 @@ export const link = (cls, text, href) => {
     return a;
 };
 
-// A shell command in plain words for a row's "Now:" line: "running browser tests", "editing app.js", "waiting for browser tests".
-// ponytail: regexes over the whole command text, first match wins; an unknown command falls back to "running <first word>"
-/** @type {[RegExp, string][]} */
-const THINGS = [[/run\.mjs/, 'browser tests'], [/test\.mjs|\b(?:vitest|jest)\b|npm (?:run )?test/, 'unit tests'], [/check-types|\btsc\b/, 'type checks']];
-/** @param {string | undefined} command */
-export function plainCommand(command) {
-    const cmd = String(command ?? '').trim().replace(/^(?:cd\s+\S+\s*(?:&&|;)\s*)+/, '');
-    const thing = THINGS.find(([re]) => re.test(cmd))?.[1];
-    const file = (/** @type {string} */ verb) => {
-        const f = cmd.split(/\s+/).findLast(t => /^[\w@./~-]+\.\w+$/.test(t));
-        return `${verb} ${f ? f.split('/').pop() : 'a file'}`;
-    };
-    const git = cmd.match(/\bgit\s+(rebase|merge|commit|push)\b/)?.[1];
-    if (/^(?:while|until|sleep)\b|\bsleep\b|\bpgrep\b/.test(cmd)) {
-        return thing ? `waiting for ${thing}` : 'waiting';
-    }
-    if (git) {
-        return { rebase: 'rebasing', merge: 'merging', commit: 'committing', push: 'pushing' }[git];
-    }
-    if (thing) {
-        return thing === 'type checks' ? 'type-checking' : `running ${thing}`;
-    }
-    const [first = '', next = ''] = cmd.split(/\s+/), bin = first.split('/').pop()?.replace(/\d+$/, '') ?? '';
-    return /screenshot/i.test(cmd) ? 'taking screenshots'
-        : bin === 'sed' ? file('editing')
-        : /^(?:cat|head|tail|less|bat)$/.test(bin) ? file('reading')
-        : /^(?:grep|rg|ag)$/.test(bin) || /\bgit\s+grep\b/.test(cmd) ? 'searching'
-        : bin === 'glab' ? 'calling GitLab' : bin === 'gh' ? 'calling GitHub' : bin === 'curl' ? 'calling an API'
-        : /^(?:zsh|bash|sh)$/.test(bin) && next ? `running ${next.split('/').pop()}`
-        : `running ${bin}`;
-}
-export const plain = t => (t || '').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim();
-// The server's clock, for ages of its timestamps: the page's own may be off (a phone, a manual change). syncClock takes
-// each poll's Date header; under a minute apart is network and rounding, not skew, and no header means no correction.
-let skew = 0;
-/** @param {string | null} date */
-export const syncClock = date => {
-    const d = Date.parse(date ?? '') - Date.now();
-    skew = Math.abs(d) > 60_000 ? d : 0;
-};
-export const serverNow = () => Date.now() + skew;
-export const ago = ms => {
-    const s = (serverNow() - ms) / 1000;
-    return s < 60 ? 'now' : s < 3600 ? `${s / 60 | 0}m` : s < 86400 ? `${s / 3600 | 0}h` : `${s / 86400 | 0}d`;
-};
-// Whole minutes as "45m" / "1h" / "1h20m".
-const hoursMinutes = m => (m < 60 ? `${m}m` : `${m / 60 | 0}h${m % 60 ? m % 60 + 'm' : ''}`);
-// Rate-limit window -> % left and time to reset, as Contado's footer shows it: "70%" and "1h20m" / "4d22h" / "45m".
-/** @param {LimitWindow} w */
-export const limitLeft = (w, now = Date.now()) => {
-
-    const m = Math.max(0, w.resetsAt - now) / 60000 | 0, d = m / 1440 | 0, h = m % 1440 / 60 | 0;
-    const until = d ? `${d}d${h ? h + 'h' : ''}` : hoursMinutes(m);
-
-    return { left: Math.max(0, Math.min(100, Math.round(100 - w.used))), until };
-};
-// Minutes until the window is empty at the pace of its samples [[time, used%]], or null when that is after the reset, the pace is flat or the samples span under 2 minutes.
-/** @param {[number, number][]} samples @param {number} resetsAt @returns {number | null} */
-export const runOutIn = (samples, resetsAt, now = Date.now()) => {
-    const [t0, u0] = samples[0] ?? [], [t1, u1] = samples.at(-1) ?? [];
-    if (samples.length < 2 || t1 - t0 < 120_000 || u1 <= u0) {
-        return null;
-    }
-    const min = (100 - u1) / ((u1 - u0) / (t1 - t0)) / 60000;
-
-    return now + min * 60000 < resetsAt ? Math.max(1, Math.round(min)) : null;
-};
-export const NEEDS_ANSWER = 'Claude needs your answer';
-// Claude's newest reply when it says something still waits on the user (its "Waiting on you: …") and that isn't answered.
-/** @param {{ items?: ChatItem[] } | null} d */
-export const openDecision = d => {
-    const i = d?.items?.findLast(x => x.role === 'assistant');
-    return i?.waiting && !i.answer && !i.error ? i : null;
-};
 // Marks a reply as handled: a "needs you" Claude got wrong. The server then says so to the chat, the board and push.
 /** @param {string} sid @param {string} reply */
 export async function markHandled(sid, reply) {
@@ -286,64 +188,6 @@ export async function markHandled(sid, reply) {
         throw new Error(await r.text());
     }
 }
-// Chat status bar: a failed poll wins (never claim "Idle" on data we couldn't fetch), then asking over working
-// (Claude waits on you); working counts from the turn start (`since`), else from your last message. Idle says whether
-// Claude's last reply wants you (or its newest reply still waits on you, said since or not) and whether its agents
-// still work, from the session `s`.
-/** @param {(Partial<Transcript> & { error?: boolean }) | null} d @param {Pick<Session, 'needsYou' | 'step'> | null} [s] */
-export const chatStatus = (d, now = serverNow(), s = null) => {
-    if (d?.error) {
-        return { kind: 'error', text: state.serverError ? 'Homebase hit an error (see its log) — retrying…' : 'Can’t reach Homebase — reconnecting…' };
-    }
-    if (d?.asking) {
-        return { kind: 'asking', text: 'Claude is asking — see the question above' };
-    }
-    if (d?.stuck && !d.working) {
-        return { kind: 'stuck', text: 'No activity for 30 min — Claude may be stuck' };
-    }
-    if (!d?.working) {
-        return { kind: 'idle', text: s?.needsYou || openDecision(d) ? NEEDS_ANSWER : 'Claude is done' };
-    }
-    const at = d.since ?? Date.parse(d.items?.findLast(i => i.role === 'user' && !i.pending)?.at);
-    const m = (now - at) / 60000 | 0;
-
-    return { kind: 'working', text: `Claude is working…${m > 0 ? ` · ${hoursMinutes(m)}` : ''}${s?.step ? ` · ${s.step}` : ''}` };
-};
-// Context window use, as a level for the gauge colour: amber from 60%, red from 85%.
-/** @param {number} p @returns {'' | 'warn' | 'hot'} */
-export const ctxLevel = p => (p >= 85 ? 'hot' : p >= 60 ? 'warn' : '');
-// /compact only runs on an idle Claude: no open turn, nothing asking (the server refuses otherwise).
-/** @param {Session} s */
-export const canCompact = s => s.status !== 'working' && !s.asking;
-// Compact thresholds are absolute tokens, so a 1M window compacts as early as a 200k one: nudge at 70k, auto at 100k,
-// as a percent of the session's window (1M when the dump doesn't say; never above 90%).
-// Auto-compact: idle for 2 min, 100k tokens of context used, no helpers running, and not tried for an hour (lastAt: when this page last sent it for this session).
-export const AUTO_COMPACT = { nudgeTokens: 70_000, tokens: 100_000, windowTokens: 1_000_000, idleMs: 2 * 60_000, everyMs: 3600_000 };
-/** @param {number} tokens @param {Pick<Session, 'contextSize'>} s */
-export const tokenPercent = (tokens, s) => Math.min(90, tokens / (s.contextSize || AUTO_COMPACT.windowTokens) * 100);
-/** @param {Session} s */
-export const compactNudgeDue = s => (s.context ?? 0) >= tokenPercent(AUTO_COMPACT.nudgeTokens, s);
-/** @param {Session} s @param {number} now @param {number} lastAt */
-export const autoCompactDue = (s, now, lastAt) => canCompact(s)
-    && !s.subagents?.running
-    && (s.context ?? 0) >= tokenPercent(AUTO_COMPACT.tokens, s)
-    && now - (s.lastActivity ?? s.updated) >= AUTO_COMPACT.idleMs
-    && now - lastAt >= AUTO_COMPACT.everyMs;
-// Limits strip item: "Session 70%" at a glance, details in the tooltip; the countdown shows inline only once under 20% is left.
-/** @param {boolean | number} week @param {LimitWindow} w */
-export const limitView = (week, w, now = Date.now()) => {
-    const { left, until } = limitLeft(w, now), at = new Date(w.resetsAt), pad = n => String(n).padStart(2, '0');
-    const when = `${week ? at.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' : ''}${pad(at.getHours())}:${pad(at.getMinutes())}`;
-    return {
-        label: week ? 'Week' : 'Session', left, when,
-        text: `${left}%${left < 20 ? ` · resets ${until}` : ''}`,
-        tip: `${left}% left of your ${week ? 'weekly' : '5-hour'} limit · resets in ${until} (${when})`,
-    };
-};
-export const prLabel = url => {
-    const m = url.match(/merge_requests\/(\d+)/) || url.match(/pull\/(\d+)/);
-    return m ? (url.includes('merge_requests') ? '!' : '#') + m[1] : 'PR';
-};
 /** @param {{ pr: string, prState?: PrState | null }} s */
 export const prChip = s => {
     // "open" is the usual case, so only merged/closed are spelled out
@@ -356,7 +200,6 @@ export const prChip = s => {
 
 // Scan aids on rendered markdown: PR/MR links become chips, file paths become inline code, and !123/#123 (bare or in
 // backticks) become light accent text: chips for every ref made bold sentences hard to read.
-export const PR_HREF = /^https:\/\/\S+?\/(?:-\/merge_requests|pull)\/\d+\/?$/;
 const CHIP_OR_PATH = /(^|[\s(\[])((?:~|\.{1,2})?\/[\w.@+-]+(?:\/[\w.@+-]+)+\/?|[\w.@+-]+(?:\/[\w.@+-]+)+\.[a-z]\w{0,5}|[!#]\d+\b)/gi;
 // A huge table or code block shows its first rows or lines with a "Show all" step: thousands laid out at once freeze
 // the page for seconds. Shown in full once asked, over re-renders too (state.unfold, keyed by size and start).
@@ -392,7 +235,7 @@ function capBig(root) {
 function enrich(root) {
     capBig(root); // first, so the rows held back are only walked when shown
     for (const a of root.querySelectorAll('a')) {
-        if (typeof a.href === 'string' && PR_HREF.test(a.href) && a.textContent.startsWith('http')) { // an SVG link's href is no string
+        if (typeof a.href === 'string' && lib.PR_HREF.test(a.href) && a.textContent.startsWith('http')) { // an SVG link's href is no string
             a.textContent = prLabel(a.href);
             a.className = 'chip mono';
             a.title = a.href;
@@ -459,23 +302,6 @@ export const rich = (text, inline) => {
     return enrich(d);
 };
 
-// First sentence of a message without a TLDR, capped near 200 chars, with dangling ** or ` closed.
-export function lead(text) {
-    const line = (text || '').split('\n').map(l => l.trim()).find(l => l && !/^(```|\||---|<)/.test(l)) || '';
-    const s = line.replace(/^(#+|[-*+>]|\d+[.)])\s+/, '');
-    let cut = s.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? s;
-    const long = cut.length > 200;
-    if (long) {
-        cut = cut.slice(0, 200).replace(/\s+\S*$/, '');
-    }
-    if ((cut.match(/\*\*/g)?.length ?? 0) % 2) {
-        cut += '**';
-    }
-    if ((cut.match(/`/g)?.length ?? 0) % 2) {
-        cut += '`';
-    }
-    return long ? cut + '…' : cut;
-}
 // Collapsed: only the TLDR (or the lead sentence). Show more reveals the rest; open state survives re-renders via state.unfold.
 /** @param {string | null | undefined} tldr @param {string | undefined} rest @param {string} key @returns {HTMLElement[]} */
 export function foldable(tldr, rest, key) {
@@ -525,18 +351,6 @@ export function foldLine(line, body, key) {
     return box;
 }
 
-// Commands with nothing between them show as one line: the run starting at n, or [] where n is inside one. One with
-// a hint (a picker left open) stays its own line, so the hint is never folded away.
-/** @param {ChatItem[]} items @param {number} n @returns {ChatItem[]} */
-export function commandRun(items, n) {
-    const plain = i => i?.role === 'command' && !i.hint;
-    if (!plain(items[n])) {
-        return [items[n]];
-    }
-    const end = items.findIndex((i, k) => k > n && !plain(i));
-    return plain(items[n - 1]) ? [] : items.slice(n, end < 0 ? items.length : end);
-}
-
 // Plug-in points: app.js sets hooks.refresh for keys.js's r, hooks.setProject for its [ and ] and hooks.reloadServer for the header's "Reload server";
 // the Vue islands set hooks.inMilestone and hooks.milestoneId (the picked milestone, useMilestoneFilter), hooks.openProjects for g p (the Header island) and hooks.collapseIssue for Esc (useIssues);
 // keys.js sets hooks.rendered, which list.js and the Issues island call after each render, and hooks.refocus, which diff.js calls when the element it was opened from is gone.
@@ -551,6 +365,25 @@ export const vue = {
     /** @returns {Promise<{ mount(name: string, el: Element, props?: object): () => void } | null>} */
     load: () => (document.querySelector(`script[src="${WEB}"]`) ? import(WEB) : Promise.resolve(null))
 };
+
+// The pure helpers live in web/src/lib/*.ts (the unit tests and the server import them from there). The old page
+// reaches them through `lib`, which web/src/old.ts fills when web/dist/main.js loads, so it has the very instances the
+// islands use (the clock skew, for one). `moved` is a call through it: the re-exports below are for old code only, and go
+// with the old code.
+/** @typedef {typeof import('../web/src/lib/time.ts') & typeof import('../web/src/lib/limits.ts') & typeof import('../web/src/lib/forge.ts') & typeof import('../web/src/lib/text.ts') & typeof import('../web/src/lib/chat.ts') & typeof import('../web/src/lib/comments.ts') & typeof import('../web/src/lib/waiting.ts') & typeof import('../web/src/lib/board.ts')} Lib */
+export const lib = /** @type {Lib} */ ({});
+/** @template {{ [K in keyof Lib]: Lib[K] extends (...a: any[]) => any ? K : never }[keyof Lib]} K @param {K} name @returns {Lib[K]} */
+export const moved = name => /** @type {any} */ ((...a) => /** @type {any} */ (lib[name])(...a));
+export const ago = moved('ago'); // moved: web/src/lib/time.ts
+export const syncClock = moved('syncClock'); // moved: web/src/lib/time.ts
+export const runOutIn = moved('runOutIn'); // moved: web/src/lib/limits.ts
+export const limitView = moved('limitView'); // moved: web/src/lib/limits.ts
+export const prLabel = moved('prLabel'); // moved: web/src/lib/forge.ts
+export const lead = moved('lead'); // moved: web/src/lib/text.ts
+export const openDecision = moved('openDecision'); // moved: web/src/lib/chat.ts
+export const freshComments = moved('freshComments'); // moved: web/src/lib/comments.ts
+export const authorSummary = moved('authorSummary'); // moved: web/src/lib/comments.ts
+export const waitsOnYou = moved('waitsOnYou'); // moved: web/src/lib/waiting.ts
 
 // The composer and the question cards are islands (web/src/islands/Composer.vue, Ask.vue). `composer` is what the old
 // chat code tells them (turn, ask, boot: what a refresh found) and asks of them (send),
@@ -572,17 +405,6 @@ export const isTracked =x => state.tracked.includes(x.project);
 export const inView = x => isTracked(x) && (state.project === 'all' || x.project === state.project);
 /** @returns {Session[]} */
 export const visibleSessions = () => state.sessions.filter(inView);
-// Waits on the user: a question or permission prompt, or idle with a reply that asks for a decision.
-/** @param {Session} s */
-export const waitsOnYou = s => !s.sidechain && (s.asking || (s.needsYou && s.status !== 'working'));
-// Tracked projects (by name) with something waiting on you, for the project picker's cue: Needs you items plus chats asking or needing you.
-/** @param {Session[]} sessions @param {string[]} tracked @returns {{ project: string, waiting: number }[]} */
-export function projectCounts(sessions, tracked) {
-    return [...tracked].sort((a, b) => a.localeCompare(b)).map(project => {
-        const mine = sessions.filter(s => s.project === project);
-        return { project, waiting: mine.flatMap(s => s.items || []).filter(x => x.column === 'needs-you').length + mine.filter(waitsOnYou).length };
-    }).filter(c => c.waiting > 0);
-}
 // "Since last checked" per MR: seen:<mrUrl> in localStorage. An MR never seen before counts as seen now, so the first load doesn't flood.
 /** @param {string} pr @returns {number} */
 export const seenAt = pr => {
@@ -595,15 +417,6 @@ export const seenAt = pr => {
     return now;
 };
 export const markSeen = (pr, at = Date.now()) => store.set(`seen:${pr}`, at);
-/** @param {Comments | null} c @param {number} seen @returns {ReviewComment[]} */
-export const freshComments = (c, seen) => (c?.items ?? []).filter(i => Date.parse(i.at) > seen);
-export const firstName = n => n.split(/\s+/)[0];
-// "Børre" / "Børre, Ann" / "Børre, Ann +1": distinct first names, at most two
-/** @param {ReviewComment[]} items */
-export const authorSummary = items => {
-    const n = [...new Set(items.map(i => firstName(i.author)))];
-    return n.slice(0, 2).join(', ') + (n.length > 2 ? ` +${n.length - 2}` : '');
-};
 /** @param {WorkItem} x */
 const newCount = x => (x.pr ? freshComments(x.comments, seenAt(x.pr)).length : 0);
 // The Work count (the board's title and the phone's Work button): the Needs you rows the board shows now, set by list.js.
@@ -623,15 +436,3 @@ export function updateTitle() {
     document.title = n ? `(${n}) Homebase` : 'Homebase';
 }
 
-// A transcript model id (claude-opus-5-5) as its family name for the chat's model chip; null for none or <synthetic>.
-/** @param {string | null | undefined} id @returns {string | null} */
-// The forge's words on the page, from its name (a session's forge, a milestone answer's) or an MR/PR URL: GitLab has MRs
-// written !12, GitHub has PRs written #12. The one place the page picks them; unknown reads as GitLab.
-/** @param {string | null} [at] */
-export const forgeWords = at => (at === 'GitHub' || at?.includes('/pull/') ? { forge: 'GitHub', mr: 'PR', ref: 'PR #' } : { forge: 'GitLab', mr: 'MR', ref: '!' });
-
-export const modelName = id => {
-    const m = /opus|sonnet|haiku|fable/i.exec(id ?? '')?.[0].toLowerCase();
-
-    return m ? m[0].toUpperCase() + m.slice(1) : null;
-};

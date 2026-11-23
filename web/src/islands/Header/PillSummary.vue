@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The pill itself: the chosen milestone, its open count, due date and progress; a spinner while anything loads.
 import { computed } from 'vue';
-import { pillLabel } from 'old/milestone.js';
+import { pillLabel } from '@/lib/milestone';
 import { MilestoneFilterKey, useInjected } from '@/keys';
 
 const { data, busy, ms, listLoading, empty } = useInjected(MilestoneFilterKey);

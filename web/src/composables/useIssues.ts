@@ -1,12 +1,13 @@
 import { computed, reactive, ref } from 'vue';
-import { forgeWords, hooks, state, visibleSessions } from 'old/core.js';
-import { buildLanes, chatMessage, issueCards, type Card } from 'old/issues.js';
-import { issueWork } from 'old/list.js';
+import { hooks, state, visibleSessions } from 'old/core.js';
+import { forgeWords } from '@/lib/forge';
+import { buildLanes, chatMessage, issueCards, type Card } from '@/lib/issues';
+import { issueWork } from '@/lib/board';
 import { bindChat, chatSession, sendText } from 'old/chat.js';
 import { oldState } from '@/old';
 import { useMilestoneFilter } from '@/composables/useMilestoneFilter';
 
-export type { Card, Lane } from 'old/issues.js';
+export type { Card, Lane } from '@/lib/issues';
 /** The chat (and its work item, if it has one) that already works on an issue. */
 export type IssueWork = NonNullable<ReturnType<typeof issueWork>>;
 

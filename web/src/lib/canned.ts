@@ -4,11 +4,12 @@
 // text: what is typed, from its arguments. of: the part of the arguments the line names. arg: what an argument may
 // look like, where the text is short enough that a longer typed message could otherwise pass for it.
 
-const mr = ref => ref.replace(/ \(.*\)$/, ''); // "!12 (https://…)" -> "!12"
-const issue = iid => `#${iid}`;
+type Canned = { label: string, text: (...a: any[]) => string, of?: (...a: any[]) => string, arg?: string };
 
-/** @type {Record<string, { label: string, text: (...a: any[]) => string, of?: (...a: any[]) => string, arg?: string }>} */
-const CANNED = {
+const mr = (ref: string) => ref.replace(/ \(.*\)$/, ''); // "!12 (https://…)" -> "!12"
+const issue = (iid: number | string) => `#${iid}`;
+
+const CANNED: Record<string, Canned> = {
     rules: { label: 'Load new rules', text: files => `The rules changed. Re-read ${files} now and follow them from here on (they override your earlier instructions where they differ).` },
     continue: { label: 'Continue', text: title => `The subagent '${title}' stopped — check why and continue it.`, of: title => title },
     fix: { label: 'Fix & reply', text: ref => `Address the review comments on ${ref}, push, and reply in each thread.`, of: mr },
@@ -25,22 +26,20 @@ const CANNED = {
     checkPr: { label: 'Check on', text: (iid, n) => `Check on #${iid} and PR #${n}`, of: issue, arg: '\\d+' }
 };
 
-const named = (c, args) => [c.label, c.of?.(...args)].filter(Boolean).join(' ');
+const named = (c: Canned, args: string[]) => [c.label, c.of?.(...args)].filter(Boolean).join(' ');
 
-// A button's message: label is the button's own, message what it types.
-/** @param {string} key @param {...any} args @returns {{ label: string, message: string }} */
-export function canned(key, ...args) {
+/** A button's message: label is the button's own, message what it types. */
+export function canned(key: string, ...args: any[]): { label: string, message: string } {
     return { label: CANNED[key].label, message: CANNED[key].text(...args) };
 }
 
 // each text with its arguments left open: nothing but the whole message matches
-const SHAPES = Object.values(CANNED).map(c => /** @type {const} */ ([c, new RegExp(`^${
+const SHAPES = Object.values(CANNED).map(c => [c, new RegExp(`^${
     c.text(...Array(c.text.length).fill('\0')).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('\0', `(${c.arg ?? '.+?'})`)
-}$`)]));
+}$`)] as const);
 
-// The feed's line for a message a button typed ("Fix & reply !12"), or null for anything else.
-/** @param {string} text @returns {string | null} */
-export function cannedLabel(text) {
+/** The feed's line for a message a button typed ("Fix & reply !12"), or null for anything else. */
+export function cannedLabel(text: string): string | null {
     for (const [c, re] of SHAPES) {
         const m = text.trim().match(re);
         if (m) {

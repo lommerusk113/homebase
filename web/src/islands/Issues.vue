@@ -2,7 +2,7 @@
 // The Issues tab: the selected milestone's open issues in one lane per person (you first, then A–Z, then Unassigned).
 import { computed, onBeforeUpdate, onMounted, onUpdated, provide, useTemplateRef } from 'vue';
 import { hooks } from 'old/core.js';
-import { emptyText } from 'old/issues.js';
+import { emptyText } from '@/lib/issues';
 import { IssuesKey } from '@/keys';
 import { useIssues } from '@/composables/useIssues';
 import IssuesHead from './Issues/IssuesHead.vue';

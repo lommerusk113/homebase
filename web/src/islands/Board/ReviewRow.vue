@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // An open MR by someone else that asks the user for a review. Click (or o) opens it at the forge.
 import { toRef } from 'vue';
-import { ago } from 'old/core.js';
+import { ago } from '@/lib/time';
 import { ReviewsKey, useInjected } from '@/keys';
 import CiPill from '@/components/CiPill.vue';
 

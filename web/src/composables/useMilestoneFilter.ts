@@ -1,6 +1,6 @@
 import { computed, effectScope, ref, shallowRef, toRef, watch } from 'vue';
 import { api, hooks, state, store } from 'old/core.js';
-import { emptyPill, inMilestone, isLoading, toData } from 'old/milestone.js';
+import { emptyPill, inMilestone, isLoading, toData } from '@/lib/milestone';
 import { renderBoard } from 'old/list.js';
 import { oldState } from '@/old';
 

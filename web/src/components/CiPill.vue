@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // CI pill: ✓ passed, ✗ failed, ● running/pending, grey for the rest; nothing without a pipeline. A link when the pipeline has a page.
 import { computed, useId } from 'vue';
-import { pipeWords } from 'old/list.js';
+import { pipeWords } from '@/lib/board';
 
 const props = defineProps<{ pipeline: Pipeline | null | undefined; narrow?: boolean }>();
 const id = useId();

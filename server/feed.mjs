@@ -3,7 +3,7 @@
 import { cache, tailOf, readTailInfo, TAIL_MAX_BYTES, textOf, isSystemText, unwrapPasted, INTERRUPTED } from './entries.mjs';
 import { RISKY, TOOL_KIND, toolSummary, queuedPrompts } from './summaries.mjs';
 import { topicAndTldr, replyChips } from './asks.mjs';
-import { cannedLabel } from '../public/canned.js';
+import { cannedLabel } from '../web/src/lib/canned.ts';
 
 export const FEED_ITEMS = 60; // chat items per load; the page's "Show earlier" asks for more
 

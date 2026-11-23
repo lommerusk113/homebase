@@ -198,7 +198,7 @@ interface ChatItem {
     /** the reply's "**Heads-up:** …" line, shown outside the fold in the warn colour */
     headsUp?: string;
     answer?: Answer;
-    /** a button's message (public/canned.js): the line shown in place of its text */
+    /** a button's message (web/src/lib/canned.ts): the line shown in place of its text */
     label?: string;
     // client-only (chat.js outbox and decorations)
     sending?: boolean;

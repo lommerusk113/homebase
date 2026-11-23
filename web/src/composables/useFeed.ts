@@ -1,5 +1,6 @@
 import { shallowRef } from 'vue';
-import { commandRun, markHandled, openDecision, state, store } from 'old/core.js';
+import { markHandled, state, store } from 'old/core.js';
+import { commandRun, openDecision } from '@/lib/chat';
 import { answerNote, clearState, feedPort, focusWanted, jumpToNeeds, refreshChat, showEarlier, type FeedInput } from 'old/chat.js';
 import { useNotice } from '@/composables/useNotice';
 import { pruneOutbox } from '@/composables/useOutbox';

@@ -1,5 +1,6 @@
 import { computed } from 'vue';
-import { ago, inView } from 'old/core.js';
+import { inView } from 'old/core.js';
+import { ago } from '@/lib/time';
 import { oldState } from '@/old';
 
 const STALE_MS = 75_000; // ponytail: the server rereads an MR after 60 s, so a minute plus a few polls is what "old" starts at

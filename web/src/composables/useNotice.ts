@@ -1,5 +1,5 @@
 import { ref } from 'vue';
-import { friendly } from 'old/core.js';
+import { friendly } from '@/lib/text';
 
 const error = ref('');
 const info = ref('');

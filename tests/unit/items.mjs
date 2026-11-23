@@ -12,7 +12,7 @@ assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebas
 {
     const { stepOf } = await import('../../server.mjs');
     assert.equal(stepOf({ name: 'Bash', input: { command: 'npm test\nmore' } }), 'running unit tests');
-    const { plainCommand } = await import('../../public/core.js');
+    const { plainCommand } = await import('../../web/src/lib/text.ts');
     assert.deepEqual([
         'while pgrep -f "run.mjs" >/dev/null; do sleep 5; done', 'node tests/browser/run.mjs', 'node test.mjs', './check-types.sh', 'git rebase main', 'git push origin x',
         "sed -i '' 's/a/b/' public/app.js", 'cat server/items.mjs', 'rg foo', 'git grep x', 'glab mr list', 'curl -s x', 'until grep -q "passed" /tmp/log; do sleep 2; done',

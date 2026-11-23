@@ -1,4 +1,5 @@
-import { freshComments, seenAt, markSeen, authorSummary, updateTitle } from 'old/core.js';
+import { seenAt, markSeen, updateTitle } from 'old/core.js';
+import { freshComments, authorSummary } from '@/lib/comments';
 import { renderBoard } from 'old/list.js';
 import { oldState } from '@/old';
 

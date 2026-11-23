@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { repoPath, groupIssues, milestoneOf, activeMilestones, keepMilestone, worksOn, noMilestones, mineView, reviewRows, excerpt } from '../../server.mjs';
-import { inMilestone, toData, isLoading, emptyPill, pillLabel } from '../../public/milestone.js';
-import { issueCards, buildLanes, closedBy, chatMessage, shortTitle, owners, emptyText } from '../../public/issues.js';
-import { chatStatus } from '../../public/core.js';
+import { inMilestone, toData, isLoading, emptyPill, pillLabel } from '../../web/src/lib/milestone.ts';
+import { issueCards, buildLanes, closedBy, chatMessage, shortTitle, owners, emptyText } from '../../web/src/lib/issues.ts';
+import { chatStatus } from '../../web/src/lib/chat.ts';
 import { now } from './helpers.mjs';
 
 {

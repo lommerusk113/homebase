@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The MR's human comments: the new ones first counted, the seen ones too, muted (the row's badge counts them).
 import { computed } from 'vue';
-import { ago } from 'old/core.js';
+import { ago } from '@/lib/time';
 import { CommentsKey, ItemKey, useInjected } from '@/keys';
 
 const item = useInjected(ItemKey);

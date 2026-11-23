@@ -3,7 +3,7 @@
 // decision) atop Needs you. Click chats with it.
 import { computed, toRef } from 'vue';
 import { touch } from 'old/core.js';
-import { excerpt } from 'old/list.js';
+import { excerpt } from '@/lib/text';
 import { ChatRowsKey, ProjectKey, useInjected } from '@/keys';
 import ChatName from './ChatName.vue';
 

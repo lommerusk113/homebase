@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The agents that worked on the item before its newest one.
-import { plain } from 'old/core.js';
+import { plain } from '@/lib/text';
 import { ItemKey, useInjected } from '@/keys';
 
 const item = useInjected(ItemKey);

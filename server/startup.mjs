@@ -2,7 +2,7 @@
 // and answer by moving the ❯ selection to the option the user clicked. Homebase never picks an option by itself.
 import { tmux, sleep, sendSteps } from './tmux.mjs';
 import { RISKY } from './summaries.mjs';
-import { seenHash } from '../public/core.js';
+import { seenHash } from '../web/src/lib/text.ts';
 
 const NAME = /^cc-[A-Za-z0-9._-]{1,120}$/;
 const MAX_OPTIONS = 10;

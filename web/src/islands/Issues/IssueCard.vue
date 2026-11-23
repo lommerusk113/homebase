@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // One open issue: its state, title and MRs; a click (or Enter, keys.js) opens it to the description and "Send to chat".
 import { computed } from 'vue';
-import { ago } from 'old/core.js';
-import { STATES, shortTitle } from 'old/issues.js';
-import { cannedLabel } from 'old/canned.js';
+import { ago } from '@/lib/time';
+import { STATES, shortTitle } from '@/lib/issues';
+import { cannedLabel } from '@/lib/canned';
 import { IssuesKey, useInjected } from '@/keys';
 import type { Card } from '@/composables/useIssues';
 import PrChip from '@/components/PrChip.vue';

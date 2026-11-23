@@ -4,7 +4,7 @@ import { createECDH, createPrivateKey, createCipheriv, hkdfSync, randomBytes, si
 import { request } from 'node:https';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { waitsOnYou } from '../public/core.js';
+import { waitsOnYou } from '../web/src/lib/waiting.ts';
 
 const b64u = buf => Buffer.from(buf).toString('base64url');
 const unb64u = s => Buffer.from(s, 'base64url');
@@ -133,7 +133,7 @@ export const removeSub = (dir, endpoint) => updateSubs(dir, subs => subs.filter(
 export const removeDeviceSubs = (dir, device) => updateSubs(dir, subs => subs.filter(s => s.device !== device));
 
 export const DEBOUNCE_MS = 30_000;
-// Sessions that started waiting on you since the previous check (core.js waitsOnYou, as list.js askingEvents), at most
+// Sessions that started waiting on you since the previous check (waitsOnYou and askingEvents in web/src/lib), at most
 // one per session per DEBOUNCE_MS (`sent` holds when each last got one). No previous check, no events.
 export function pushEvents(prev, list, sent, now = Date.now()) {
 

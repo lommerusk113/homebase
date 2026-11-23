@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // The folded "Closed · 12" line: the milestone's closed issues per person, and each as a chip once unfolded.
 import { computed, useTemplateRef } from 'vue';
-import { firstName } from 'old/core.js';
-import { closedBy } from 'old/issues.js';
+import { firstName } from '@/lib/comments';
+import { closedBy } from '@/lib/issues';
 import { IssuesKey, useInjected } from '@/keys';
 
 const { groups, closedOpen } = useInjected(IssuesKey);

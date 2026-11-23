@@ -30,7 +30,7 @@
 | `tracked.mjs` | The board's projects, GET/POST `/api/tracked` (`tracked.json`), shared by the Mac and its paired devices |
 | `diff.mjs` | Changes view: GET `/api/diff`, the folder of a session or of an item's worktree, the changed-file lists (git status and diff parsing) and one file's diff, read-only with size caps |
 | `reload.mjs` | Update without restarts: `/api/version` (server code newer than at start, browser-file mtime hash), POST `/api/server/reload` replacing the process, bind retry |
-| `static.mjs` | App file map, build hash, CSP, `public/vendor` serving, revalidation |
+| `static.mjs` | App file map, build hash, CSP, `public/vendor` serving, revalidation, the Vue islands (`/web/main.js` and `/web/main.css` from `web/dist`, their tags in `index.html` only once built; see `web/README.md`) |
 
 Imports only go one way, with no cycles:
 `tmux`, `security`, `pairing`, `static`, `uploads`, `tracked`, `push`, `reload`, `limits` and `usage` import no other module; `forge` neither.

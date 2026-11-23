@@ -18,9 +18,9 @@ const mtimes = paths => Promise.all(paths.map(p => stat(p).then(st => Math.floor
 
 // Newest mtime of the server's own code: server.mjs and server/*.mjs.
 export const serverMtime = async () => Math.max(...await mtimes([join(root(), 'server.mjs'), ...await filesIn('server', ['.mjs'])]));
-// A short hash of public/*.js and *.css mtimes: it changes when a browser file changes, without a restart.
+// A short hash of public/*.js and *.css mtimes, and of the built islands (web/dist): it changes when a browser file changes, without a restart.
 export const pageHash = async () => {
-    const files = (await filesIn('public', ['.js', '.css'])).sort();
+    const files = [...(await filesIn('public', ['.js', '.css'])).sort(), ...(await filesIn('web/dist', ['.js', '.css']).catch(() => [])).sort()];
     return createHash('sha1').update((await mtimes(files)).join(',')).digest('base64url').slice(0, 12);
 };
 // Pure: code newer than what this process loaded at start.

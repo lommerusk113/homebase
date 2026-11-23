@@ -1,6 +1,6 @@
 // Static files: the fixed app file map, the build hash, the CSP, public/vendor serving and revalidation.
 import { readFile, realpath } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -41,6 +41,34 @@ export const BUILD = createHash('sha1').update(Object.values(STATIC).map(([f]) =
 // built-in icons, which it renders as data: SVG URLs and loads with fetch(). Its components set inline styles.
 export const CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; "
     + "connect-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+
+// The Vue islands: web/ built to web/dist (cd web && npm run build), a fixed pair of files like STATIC. Until it is
+// built, index.html leaves their tags out, so the page runs as before. HOMEBASE_WEB_DIST: a stand-in dist for tests.
+const webDir = () => process.env.HOMEBASE_WEB_DIST ?? fileURLToPath(new URL('../web/dist', import.meta.url));
+const WEB = { '/web/main.js': ['main.js', JS], '/web/main.css': ['main.css', 'text/css; charset=utf-8'] };
+export const webTags = () => (existsSync(join(webDir(), 'main.js'))
+    ? '<link rel="stylesheet" href="/web/main.css">\n<script type="module" src="/web/main.js"></script>'
+    : '');
+
+// false: not an island file. A missing one (not built) is a plain 404.
+export async function serveWeb(urlPath, req, res) {
+
+    const file = Object.hasOwn(WEB, urlPath) && WEB[urlPath];
+    if (!file) {
+        return false;
+    }
+
+    const body = await readFile(join(webDir(), file[0])).catch(() => null);
+    if (!body) {
+        res.statusCode = 404;
+        res.end('web/ is not built: cd web && npm run build');
+        return true;
+    }
+    res.setHeader('content-type', file[1]);
+    sendRevalidated(req, res, body);
+
+    return true;
+}
 
 // Third-party code copied into public/vendor (see VENDOR.md). Only these extensions are ever served from there.
 const VENDOR_DIR = fileURLToPath(new URL('../public/vendor', import.meta.url));

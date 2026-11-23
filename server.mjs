@@ -19,7 +19,7 @@ import { send, runningTwice, keepModelSetting, sendToNew, interrupt, clearChat, 
 import { localHosts, allowedHost, allowedOrigin, tokenOk, ownerOnly, errorReply } from './server/security.mjs';
 import { remoteFrom, setupPairing, isRemote, remoteHosts, loginOk, isPairedRequest, pair, deviceOf, cookieOf, deviceCookie, pairPage, newCode, pairedDevices, revoke } from './server/pairing.mjs';
 import { readConfigFile } from './server/account.mjs';
-import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor } from './server/static.mjs';
+import { STATIC, BUILD, CSP, vendorPath, sendRevalidated, serveVendor, webTags, serveWeb } from './server/static.mjs';
 import { saveUpload, readUpload } from './server/uploads.mjs';
 import { saveSeen } from './server/rules.mjs';
 import { readTracked, saveTracked } from './server/tracked.mjs';
@@ -180,7 +180,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 // data-remote: a paired device, so the page leaves out what only the Mac can do (pairing).
                 res.setHeader('content-security-policy', CSP);
                 res.setHeader('cache-control', 'no-store');
-                return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN).replace('__HOMEBASE_BUILD__', BUILD).replace('__HOMEBASE_CLAUDE_WARN__', versionWarning()).replace('data-demo hidden', DEMO ? 'data-demo' : 'data-demo hidden').replace('<html ', remote ? '<html data-remote ' : '<html '));
+                return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN).replace('__HOMEBASE_BUILD__', BUILD).replace('__HOMEBASE_CLAUDE_WARN__', versionWarning()).replace('data-demo hidden', DEMO ? 'data-demo' : 'data-demo hidden').replace('<html ', remote ? '<html data-remote ' : '<html ').replace('<!-- homebase-web -->', webTags()));
+            }
+            if (await serveWeb(url.pathname, req, res)) {
+                return;
             }
             const vendored = vendorPath(url.pathname);
             if (vendored && await serveVendor(vendored, req, res)) {

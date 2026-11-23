@@ -419,6 +419,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
             next: requested ? 'Claude is on it…' : col === 'finished' ? `Finished without ${w.aMr}` : nextStep(prState, agent, w.mr),
             action: requested ? null : rowAction(it.pr, prState, agent, title) ?? (col === 'review' ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now) : null),
+            checks: sessions.find(s => s.id === (agent?.sessionId ?? it.linkSession))?.checks ?? null,
             gate: it.pr ? toGate(gateFor(gates, it.pr, prState?.branch), prState?.sha, heads) : null,
             ...agentUsage(agents, now)
         };

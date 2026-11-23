@@ -69,7 +69,7 @@ export async function startChat(c, i, what) {
     // the session id is only known once Claude has written its transcript
     const tmuxName = `cc-new-${name}`;
     try {
-        await tm(['new-session', '-d', '-s', tmuxName, '-x', '200', '-y', '50', '-c', dir, 'zsh', '-lic', claudeLine('', undefined, undefined, manual)]);
+        await tm(['new-session', '-d', '-s', tmuxName, '-x', '200', '-y', '50', '-c', dir, 'zsh', '-lic', claudeLine('', undefined, { manual })]);
     } catch (e) {
         throw fail(i, e, what);
     }

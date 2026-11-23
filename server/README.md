@@ -20,6 +20,7 @@
 | `limits.mjs` | Rate limits from the status-line dumps |
 | `reviewer.mjs` | Review chats: POST `/api/reviewer?key=` starts a read-only reviewer Claude (own `cc-<id8>` tmux, fixed prompt) in an in-review row's checkout; `/api/reviewer/sent` marks its findings sent; `reviewers.json` in the Homebase dir maps row key to chat (the button states: `reviewAction` in `items.mjs`) |
 | `saver.mjs` | Token saver: GET/POST `/api/saver`, `token-saver.md` in the Homebase dir (the setting, and the rule a stale chat re-reads); `claudeLine` adds its rule so helpers run on Sonnet |
+| `checks.mjs` | Checks before done: GET/POST `/api/checks?project=` (`{commands: [...]}` in `checks.json` in the Homebase dir; set with `curl -X POST -H 'x-codetool: 1' -d '{"commands":["npm test"]}' 'localhost:<port>/api/checks?project=<repo>'`), the Stop hook logic behind `hooks/checks.mjs` (runs only when the git state changed since the last pass, blocks up to 3 identical failures), `--settings` file for `claudeLine`, per-session `checks/<id>.json` for the row's chip |
 | `tmux.mjs` | tmux plumbing: socket override, session names, `/clear` aliases, keystroke steps |
 | `control.mjs` | POST actions: send, interrupt, `/clear` |
 | `startup.mjs` | Blocking Claude Code startup dialogs and AskUserQuestion prompts in a `cc-*` tmux pane: parse the capture, answer an option, trust the new project's own folder |
@@ -36,8 +37,8 @@
 | `static.mjs` | App file map, build hash, CSP, `public/vendor` serving, revalidation, the Vue islands (`/web/main.js` and `/web/main.css` from `web/dist`, their tags in `index.html` only once built; see `web/README.md`) |
 
 Imports only go one way, with no cycles:
-`saver`, `tmux`, `security`, `pairing`, `static`, `uploads`, `tracked`, `push`, `reload`, `limits` and `usage` import no other module; `forge` neither.
-`tmux` → saver.
+`saver`, `checks`, `security`, `pairing`, `static`, `uploads`, `tracked`, `push`, `reload`, `limits` and `usage` import no other module; `forge` neither.
+`tmux` → saver, checks.
 `entries` → tmux.
 `summaries` → entries.
 `asks` → summaries.
@@ -45,7 +46,7 @@ Imports only go one way, with no cycles:
 `turns` → entries, tmux, startup.
 `transcripts` → entries, feed, turns (and re-exports all six).
 `items` → entries, usage, forge.
-`sessions` → entries, summaries, feed, turns, usage, forge, items, tmux.
+`sessions` → checks, entries, summaries, feed, turns, usage, forge, items, tmux.
 `milestones` → forge, items, sessions.
 `reviews` → forge, account.
 `log` → entries, summaries, usage, forge, sessions.

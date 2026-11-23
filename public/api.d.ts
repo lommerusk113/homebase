@@ -163,6 +163,8 @@ interface WorkItem {
     next: string;
     action: RowAction | null;
     gate: Gate | null;
+    /** the Stop hook's last run of the project's check commands in the row's chat (server/checks.mjs) */
+    checks: { state: 'pass' | 'fail' | 'running'; at: number } | null;
     tokens: string | null;
     tokensTitle: string | null;
     time: string | null;

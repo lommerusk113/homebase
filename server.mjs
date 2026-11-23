@@ -26,6 +26,7 @@ import { saveUpload, readUpload } from './server/uploads.mjs';
 import { saveSeen } from './server/rules.mjs';
 import { readTracked, saveTracked } from './server/tracked.mjs';
 import { saveSaver, syncSaver } from './server/saver.mjs';
+import { readChecks, saveChecks } from './server/checks.mjs';
 import { loadHandled, markHandled } from './server/handled.mjs';
 import { loadDismissed, dismiss } from './server/dismissed.mjs';
 import { loadReviewers, startReviewer, markFindingsSent } from './server/reviewer.mjs';
@@ -243,6 +244,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             }
             if (isPost('/api/saver')) {
                 return json(await saveSaver(await readBody(req, 1024), DATA_DIR, await limits()));
+            }
+            // Check commands the Stop hook runs before a chat may finish (server/checks.mjs); set with POST {commands: [...]}
+            if (url.pathname === '/api/checks' && req.method === 'GET') {
+                return json({ commands: readChecks(url.searchParams.get('project'), DATA_DIR) });
+            }
+            if (isPost('/api/checks')) {
+                return json(saveChecks(url.searchParams.get('project'), await readBody(req, 16 * 1024), DATA_DIR));
             }
             // A reply that wrongly says "needs you", marked as handled; an open question or permission prompt is not one
             if (isPost('/api/handled')) {

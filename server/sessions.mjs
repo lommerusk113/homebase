@@ -20,6 +20,7 @@ import { contextOf } from './limits.mjs';
 import { workItems, milestoneOf, sameRepo } from './items.mjs';
 import { plainCommand } from '../web/src/lib/text.ts';
 import { rulesStale, readSeen } from './rules.mjs';
+import { checksStatus } from './checks.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor, linkClears, liveTmux, mapNewProjects, startingProjects } from './tmux.mjs';
 
 const run = promisify(execFile);
@@ -618,7 +619,7 @@ async function readSession({ dir, file, path, st }, now, live) {
     diedFrom ??= diedSince();
     s.died &&= (s.lastActivity ?? st.mtimeMs) > diedFrom; // only turns that died since the feature first ran here
 
-    return { ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, context: ctx?.percent ?? null, contextSize: ctx?.size ?? null, contextAt: ctx?.at ?? null, agents: subagents };
+    return { ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, context: ctx?.percent ?? null, contextSize: ctx?.size ?? null, contextAt: ctx?.at ?? null, checks: checksStatus(id), agents: subagents };
 }
 
 // The work items of all sessions (their PRs/MRs and agents), with PR/MR state, human comments and milestone.

@@ -63,10 +63,10 @@ import { join } from 'node:path';
     const { claudeLine } = await import('../../server/tmux.mjs');
     const { MANUAL_RULE, markManual, isManual } = await import('../../server/manual.mjs');
     const { mkdtempSync } = await import('node:fs');
-    assert.ok(!claudeLine('', '/none', false).includes('Manual mode'));
-    assert.ok(!claudeLine('', '/none', false, false).includes('Manual mode'));
-    assert.match(claudeLine(' --resume x', '/none', false, true), /^claude --append-system-prompt 'Manual mode: .*' --resume x$/);
-    assert.ok(claudeLine('', '/none', false, true).includes(MANUAL_RULE));
+    assert.ok(!claudeLine('', '/none', { saver: false, checks: '' }).includes('Manual mode'));
+    assert.ok(!claudeLine('', '/none', { saver: false, manual: false, checks: '' }).includes('Manual mode'));
+    assert.match(claudeLine(' --resume x', '/none', { saver: false, manual: true, checks: '' }), /^claude --append-system-prompt 'Manual mode: .*' --resume x$/);
+    assert.ok(claudeLine('', '/none', { saver: false, manual: true, checks: '' }).includes(MANUAL_RULE));
 
     process.env.HOMEBASE_DIR = mkdtempSync(join(tmpdir(), 'hb-manual-'));
     markManual('aaaaaaaa-1111');

@@ -8,10 +8,7 @@ const visible = `import('/core.js').then(c => c.visibleSessions().length + ' cha
 export default {
     // the bridge (web/src/old.ts): the island reads the old state and calls an old action, and follows the change
     '?vue=1 mounts the demo island, which follows the old state and calls an old action': async ({ page, open, base }) => {
-        if (!BUILT) {
-            console.log('     skipped: web/ is not built (cd web && npm ci && npm run build)');
-            return;
-        }
+        assert.ok(BUILT, 'web/ is built (run.mjs builds it; cd web && npm ci)');
         await open({ project: 'alpha' });
         await page.goto(`${base}?vue=1`);
         await page.waitFor(`document.querySelector('#masters tr[data-key]') && ${badge}`, { what: 'the board and the island' });

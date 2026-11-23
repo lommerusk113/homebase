@@ -16,6 +16,13 @@ const REPO = join(HERE, '..', '..');
 const CHROME = process.env.CHROME ?? ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/usr/bin/google-chrome', '/usr/bin/chromium'].find(existsSync);
 const TEST_TIMEOUT_MS = 45_000;
 
+// The Vue islands are part of the page: build web/ first, so the suite always tests the current source.
+// ponytail: a full build each run (~1s); skip with HOMEBASE_SKIP_WEB_BUILD=1 when iterating on old-page code only
+if (!process.env.HOMEBASE_SKIP_WEB_BUILD) {
+    const { execFileSync } = await import('node:child_process');
+    execFileSync('npm', ['run', '--silent', 'build'], { cwd: join(REPO, 'web'), stdio: ['ignore', 'ignore', 'inherit'] });
+}
+
 const freePort = () => new Promise((ok, fail) => {
     const s = createServer().once('error', fail).listen(0, '127.0.0.1', () => {
         const { port } = s.address();

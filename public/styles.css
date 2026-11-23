@@ -521,6 +521,10 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .body p, .body ul, .body ol, .body pre, .body table, .body blockquote { margin:10px 0; }
 .body ul, .body ol { padding-left:22px; }
 .body h1, .body h2, .body h3, .body h4 { font-size:var(--fs-l); margin:14px 0 6px; }
+/* the browser's own, spelled out: inside a Vue island (web/src/style.css) a reset takes the defaults away */
+.body h5 { margin:1.67em 0; }
+.body h6 { margin:2.33em 0; }
+.body hr { margin:8px 0; border:1px inset; }
 .body code { font-family:var(--wa-font-family-code); font-size:var(--fs-s); background:var(--chip); padding:1px 5px; border-radius:var(--r-xs); }
 .body pre { background:var(--canvas); border:1px solid var(--line-soft); border-radius:var(--r-s); padding:10px 12px; white-space:pre-wrap; overflow-wrap:anywhere; } /* wraps, never scrolls sideways */
 .body pre code { background:none; padding:0; }

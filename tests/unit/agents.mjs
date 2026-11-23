@@ -73,8 +73,8 @@ assert.equal(st([call('a', 'b'), result('a')], 25 * MIN).status, 'running'); // 
 assert.equal(st([call('a'), result('a')], 9 * MIN).status, 'running'); // thinking
 assert.equal(st([call('a'), result('a')], 11 * MIN).status, 'stopped');
 assert.equal(st([call('a'), result('a'), ended], 1 * MIN).status, 'running');
-assert.equal(st([call('a'), result('a'), ended], 3 * MIN).status, 'stopped'); // ended its turn without handing back
-assert.equal(st([call('old'), result('x'), ended], 3 * MIN).status, 'stopped'); // an unanswered call from an earlier turn is not pending
+assert.equal(st([call('a'), result('a'), ended], 3 * MIN).status, 'done'); // a resumed helper that ends its turn with text finished
+assert.equal(st([call('old'), result('x'), ended], 3 * MIN).status, 'done'); // an unanswered call from an earlier turn is not pending
 // a thinking-only entry is mid-reply (a stalled stream is retried after minutes), not a turn that ended
 const thinking = { type: 'assistant', message: { content: [{ type: 'thinking', thinking: '' }], stop_reason: null } };
 assert.equal(st([call('a'), result('a'), thinking], 8 * MIN).status, 'running');
@@ -102,7 +102,7 @@ for (const launch of [
 ]) {
     const r = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: launch }] } };
     assert.equal(st([call('a'), r, onHold('Waiting for the notification.')], 3 * MIN).status, 'running', launch);
-    assert.equal(st([call('a'), r, told('bt9p1x'), ended], 3 * MIN).status, 'stopped', launch);
+    assert.equal(st([call('a'), r, told('bt9p1x'), ended], 3 * MIN).status, 'done', launch);
 }
 // a timed-out Bash prints its output before the notice
 const late = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'a', content: 'Feature: EHF\n  1 passed\nCommand was moved to the background (ID: bt9p1x) after running for 180s.' }] } };
@@ -118,7 +118,16 @@ for (const quoted of ['75\tconst bg = \'Command running in background with ID: b
     const event = { type: 'attachment', attachment: { type: 'queued_command', prompt: '<task-notification>\n<task-id>bt9p1x</task-id>\n<summary>Monitor event: "ci"</summary>\n<event>red</event>\n</task-notification>' } };
     assert.equal(st([call('a'), mon, event, onHold('Watching CI.')], 11 * MIN).status, 'running', 'event notice keeps the watch open');
     assert.equal(st([call('a'), mon, event, onHold('Watching CI.')], 3 * 60 * MIN).status, 'running', 'no silence cap while it waits');
-    assert.equal(st([call('a'), mon, told('bt9p1x'), onHold('Done watching.')], 11 * MIN).status, 'stopped', 'the closing notice ends it');
+    assert.equal(st([call('a'), mon, told('bt9p1x'), onHold('Done watching.')], 11 * MIN).status, 'done', 'the closing notice ends it');
+}
+{
+    const end = { type: 'assistant', message: { stop_reason: 'end_turn', content: [{ type: 'text', text: 'TLDR: Nothing left to push, both MRs are already up to date.\n\nDetails follow.' }] } };
+    assert.equal(summarizeAgent({}, [call('a'), result('a'), end], 5 * MIN).outcome, 'Nothing left to push, both MRs are already up to date.');
+    assert.equal(summarizeAgent({}, [call('a'), result('a'), end], 5 * MIN).status, 'done');
+    const limit = { type: 'assistant', isApiErrorMessage: true, error: 'rate_limit', message: { content: [{ type: 'text', text: "You've hit your limit" }] } };
+    assert.deepEqual(st([call('a'), result('a'), limit], 1_000), { status: 'stopped', stopReason: 'rate-limit' });
+    const cut = { type: 'user', message: { content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } };
+    assert.deepEqual(st([call('a'), cut], 1_000), { status: 'stopped', stopReason: 'interrupted' });
 }
 console.log('ok agents');
 

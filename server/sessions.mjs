@@ -186,14 +186,19 @@ export function agentStatus(meta, entries, ageMs) {
     const turns = entries.filter(e => e.type === 'assistant' || e.type === 'user');
     const last = turns.at(-1);
     if (last?.isApiErrorMessage) {
-        return { status: 'stopped', stopReason: 'api-error' };
+        const limited = last.error === 'rate_limit' || /rate.?limit|hit your limit|usage limit/i.test(textOf(last));
+        return { status: 'stopped', stopReason: limited ? 'rate-limit' : 'api-error' };
     }
+    // the user cut off a running tool call: a real stop, Continue resumes it
+    if (last?.type === 'user' && /^\[Request interrupted by user for tool use\]$/.test(textOf(last).trim())) {
+        return { status: 'stopped', stopReason: 'interrupted' };
+    }
+
     // the chat stopped it on purpose (TaskStop): finished, nothing to continue. A /clear or a crash leaves no such entry,
     // and a message sent to it afterwards adds turns after this one.
     if (last?.type === 'user' && INTERRUPTED.test(textOf(last).trim())) {
         return { status: 'done', stopReason: 'killed' };
     }
-
     // the hand-back call is the agent's last act and gets no result, so it would read as a pending call for half an hour;
     // a message sent to it afterwards resumes it, so only a hand-back with no assistant turn after it counts
     const handback = turns.findLastIndex(e => e.type === 'assistant' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_use' && b.name === 'SubagentHandback'));
@@ -226,7 +231,12 @@ export function agentStatus(meta, entries, ageMs) {
         return { status: 'running' };
     }
 
-    const limit = pending.size ? AGENT_TOOL_MS : last?.type === 'assistant' && textOf(last) ? AGENT_IDLE_MS : AGENT_THINK_MS;
+    // its last turn ended with text and no tool call (a resumed helper that answers without handing back): it finished
+    const endedTurn = !pending.size && last?.type === 'assistant' && !!textOf(last);
+    if (endedTurn) {
+        return { status: ageMs < AGENT_IDLE_MS ? 'running' : 'done' };
+    }
+    const limit = pending.size ? AGENT_TOOL_MS : AGENT_THINK_MS;
 
     return { status: ageMs < limit ? 'running' : 'stopped' };
 }
@@ -250,6 +260,15 @@ export function stepOf(use) {
     return say ? say() : `using ${use.name}`;
 }
 
+// The helper's conclusion in a line: the first sentence, at most 120 characters.
+export function outcomeOf(text) {
+
+    const line = String(text ?? '').replace(/^#+\s*|\*\*|`/gm, '').trim().split('\n').find(l => l.trim())?.trim() ?? '';
+    const first = line.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? line;
+
+    return first.length > 120 ? `${first.slice(0, 119)}…` : first;
+}
+
 export function summarizeAgent(meta, entries, ageMs, id) {
 
     const uses = entries.flatMap(e => (e.type === 'assistant' && Array.isArray(e.message?.content) ? e.message.content : []))
@@ -258,6 +277,7 @@ export function summarizeAgent(meta, entries, ageMs, id) {
     const report = handback ?? textOf(entries.findLast(e => e.type === 'assistant' && textOf(e))) ?? '';
     const { status, stopReason } = agentStatus(meta, entries, ageMs);
     const { tldr, text: body } = splitTldr(report);
+    const outcome = status === 'done' ? outcomeOf(tldr || body) : null;
     const stage = Math.max(agentStage(uses, report, status === 'done'), stagePeak.get(id) ?? 0);
     const lastCall = entries.findLast(e => e.type === 'assistant' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_use'));
     if (id) {
@@ -268,6 +288,7 @@ export function summarizeAgent(meta, entries, ageMs, id) {
         description: meta.description ?? meta.agentType,
         status,
         stopReason,
+        outcome,
         stage,
         stageLabel: STAGES[stage],
         step: uses.length ? stepOf(uses.at(-1)) : null, // the newest tool call, as what it is doing now

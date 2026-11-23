@@ -27,7 +27,12 @@ assert.equal(nextStep(open(), { status: 'running', stage: 2, description: 'Rebas
     assert.equal(stepOf({ name: 'mcp__x__y', input: {} }), 'using mcp__x__y');
 }
 assert.equal(nextStep(null, { status: 'stopped' }), 'Agent stopped — check the chat');
-assert.equal(nextStep(null, { status: 'stopped', stopReason: 'api-error' }), 'Agent hit an API error — continue it');
+const at = new Date(Date.UTC(2026, 0, 1, 12, 0)).getTime();
+const hm = new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+assert.equal(nextStep(null, { status: 'stopped', stopReason: 'api-error', updated: at }), `Helper stopped: API error at ${hm} — Continue resumes it`);
+assert.equal(nextStep(null, { status: 'stopped', stopReason: 'rate-limit', updated: at }), `Helper stopped: rate limit hit at ${hm} — Continue resumes it`);
+assert.equal(nextStep(null, { status: 'done', outcome: 'Nothing left to push.', updated: at }).startsWith(`Helper finished: Nothing left to push (${hm})`), true);
+assert.equal(nextStep(open({ ready: true }), { status: 'done', outcome: 'Nothing left to push.', updated: at }).startsWith(`Helper finished: Nothing left to push (${hm}) · `), true);
 assert.equal(nextStep(open({ changes: true, reviewers: ['Ann'] }), null), 'Address review comments from Ann');
 assert.equal(nextStep(open({ changes: true, reviewers: ['Ann'], changesBy: ['bob'] }), null), 'Address review comments from bob');
 assert.equal(nextStep(open({ reviewers: ['Ann', 'Bo'] }), { status: 'done' }), 'Waiting for review by Ann, Bo');

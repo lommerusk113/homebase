@@ -89,6 +89,8 @@ export function itemColumn(prState, agent, hasPr) {
 
 const BLOCKED_STEP = { conflict: 'Merge conflicts — rebase it', rebase: 'Needs a rebase onto its target', blocked: 'Blocked by another MR', checks: 'Waiting for external status checks' }; // blocked and checks are GitLab's
 
+const clock = ms => (ms ? new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '');
+
 // What has to happen next for a work item, as one deterministic line. mr: the forge's word for it (forgeWords).
 export function nextStep(prState, agent, mr = 'MR') {
 
@@ -102,7 +104,16 @@ export function nextStep(prState, agent, mr = 'MR') {
         return agent.step ? agent.step : `${agent.description} is ${VERB[agent.stage] ?? 'working'}…`;
     }
     if (agent?.status === 'stopped') {
-        return agent.stopReason === 'api-error' ? 'Agent hit an API error — continue it' : 'Agent stopped — check the chat';
+        const why = { 'api-error': 'API error', 'rate-limit': 'rate limit hit', interrupted: 'interrupted' }[agent.stopReason];
+        const at = clock(agent.updated);
+
+        return why ? `Helper stopped: ${why}${at ? ` at ${at}` : ''} — Continue resumes it` : 'Agent stopped — check the chat';
+    }
+    if (agent?.status === 'done' && agent.outcome && agent.stopReason !== 'killed') {
+        const at = clock(agent.updated);
+        const then = nextStep(prState, null, mr);
+
+        return `Helper finished: ${agent.outcome.replace(/[.!]$/, '')}${at ? ` (${at})` : ''}${then.startsWith('Open the ') ? '' : ` · ${then}`}`;
     }
     if (!prState) {
         return `Open the ${mr} to check its state`;

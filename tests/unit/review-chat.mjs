@@ -55,6 +55,7 @@ console.log('ok review rows');
     reviewers.clear();
     assert.equal(await startReviewer(dir, { key: mr(4), cwd: '/x/alpha', gitlab: true }, { tm, now, newId: () => id }), id);
     assert.deepEqual(calls[0].slice(0, 6), ['new-session', '-d', '-s', 'cc-11111111', '-c', '/x/alpha']);
+    assert.ok(calls[0].at(-1).includes(`--disallowedTools 'Edit Write NotebookEdit' --session-id ${id} '${REVIEW_PROMPT.work}'`), 'edit tools denied, prompt still last');
     assert.ok(calls[0].at(-1).includes(`--session-id ${id} '${REVIEW_PROMPT.work}'`));
     assert.ok(REVIEW_PROMPT.work.startsWith('Run review-gate on this branch against its MR target. Read-only'));
     await startReviewer(dir, { key: 'gh', cwd: '/x/t', gitlab: false }, { tm, now, newId: () => id });

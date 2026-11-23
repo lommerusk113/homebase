@@ -10,6 +10,8 @@ import { keepAside } from './account.mjs';
 import { tmux, tmuxName, claudeLine, loginShell, quoted } from './tmux.mjs';
 
 const MAX = 200;
+// Real read-only, not just the prompt. Variadic flag: it comes before --session-id so the prompt after it stays the prompt.
+export const READ_ONLY = 'Edit Write NotebookEdit';
 const ID = /^[0-9a-f-]{36}$/;
 const KEY = /^.{1,300}$/;
 
@@ -61,7 +63,7 @@ export async function startReviewer(dir, { key, cwd, gitlab }, { tm = tmux, now 
 
     const id = newId();
     // --session-id names the chat up front, so its tmux (cc-<id8>) is known before its transcript exists; the prompt is its first message
-    await tm(['new-session', '-d', '-s', tmuxName(id), '-c', cwd, loginShell(), '-lic', claudeLine(` --session-id ${id} ${quoted(REVIEW_PROMPT[gitlab ? 'work' : 'hobby'])}`)]);
+    await tm(['new-session', '-d', '-s', tmuxName(id), '-c', cwd, loginShell(), '-lic', claudeLine(` --disallowedTools ${quoted(READ_ONLY)} --session-id ${id} ${quoted(REVIEW_PROMPT[gitlab ? 'work' : 'hobby'])}`)]);
     reviewers.set(key, { id, at: now, sent: false });
     await save(dir);
 

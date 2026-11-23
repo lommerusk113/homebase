@@ -156,11 +156,11 @@ export function deriveKind(ps, agent, hasPr, requested = false) {
         : ps.ci === 'failing' ? 'failing'
         : ps.blocked === 'conflict' || ps.blocked === 'rebase' ? 'conflict'
         : ps.blocked ? 'blocked'
+        : ps.draft && ps.ci !== 'running' ? 'draft' // nothing blocks it but the draft flag: the user takes it out of draft
         : ps.notReady === GATE_STEP ? 'gate'
         : ps.notReady ? 'threads'
         : ps.replied && !ps.ready ? 'replied'
         : ps.ci === 'running' ? 'pipeline'
-        : ps.draft ? 'draft'
         : ps.ready ? 'ready'
         : ps.reviewers?.length ? 'in-review' : 'needs-reviewer';
 
@@ -209,21 +209,16 @@ export const KINDS = {
     threads: mrKind('review'),
     replied: mrKind('review'),
     pipeline: mrKind('review'),
-    draft: mrKind('needs-you', c => canned('ready', mrRefOf(c))),
+    draft: { ...mrKind('needs-you', c => canned('ready', mrRefOf(c))), next: () => 'Ready except draft: mark ready' },
     ready: mrKind('ready', c => canned('merge', mrRefOf(c))),
     'in-review': mrKind('review'),
     'needs-reviewer': mrKind('review', c => canned('review', mrRefOf(c)))
 };
 
-// The group of a row: a draft MR that isn't running its pipeline waits on you, whatever else blocks it.
-export function columnOf(kind, ps) {
+// The group of a row. A draft MR that isn't running its pipeline and has no other blocker is kind 'draft' (see deriveKind), so it waits on you.
+export const columnOf = kind => KINDS[kind].column;
 
-    const col = KINDS[kind].column;
-
-    return col === 'review' && ps?.draft && ps.ci !== 'running' ? 'needs-you' : col;
-}
-
-// A row's column, next text, action and stage from its kind. A finished helper's outcome leads the text of an MR row.
+// A row's column, next text, action and stage from its kind. A finished helper's outcome follows the reason in the text of an MR row.
 export function rowOf(ps, agent, { pr = null, title = null, mr = 'MR', aMr = 'a MR', requested = false, now = Date.now(), error = null } = {}) {
 
     const { kind, reason } = deriveKind(ps, agent, !!pr, requested);
@@ -232,10 +227,12 @@ export function rowOf(ps, agent, { pr = null, title = null, mr = 'MR', aMr = 'a 
     let next = k.next(c);
     if (agent?.status === 'done' && agent.outcome && agent.stopReason !== 'killed' && k.column !== 'finished' && !['merged', 'abandoned', 'requested'].includes(kind)) {
         const at = clock(agent.updated);
-        next = `Helper finished: ${agent.outcome.replace(/[.!]$/, '')}${at ? ` (${at})` : ''}${kind === 'unknown' ? '' : ` · ${next}`}`;
+        // the reason leads, so a truncated line still says why the row needs you
+        const outcome = `Helper finished: ${agent.outcome.replace(/[.!]$/, '')}${at ? ` (${at})` : ''}`;
+        next = kind === 'unknown' ? outcome : `${next} · ${outcome}`;
     }
 
-    return { state: { kind, reason }, column: columnOf(kind, ps), next, action: k.action(c), stage: k.stage(c) };
+    return { state: { kind, reason }, column: columnOf(kind), next, action: k.action(c), stage: k.stage(c) };
 }
 
 // Review chats (server/reviewer.mjs keeps them on disk): row key -> { id, at, sent }.

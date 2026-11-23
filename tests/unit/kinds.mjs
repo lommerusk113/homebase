@@ -39,3 +39,41 @@ assert.equal(rowOf(everything, null, opts).next, 'Address review comments from A
 assert.equal(rowOf({ ...everything, changes: false, blocked: 'checks', notReady: GATE }, null, opts).next, `Pipeline failing · Waiting for external status checks · ${GATE}`);
 assert.equal(rowOf({ state: 'open', ci: 'failing' }, null, opts).next, 'Pipeline failing');
 console.log('ok next lists every blocker');
+
+// every kind in Needs you says why before any helper text, and has a button
+const done = { status: 'done', outcome: 'Verdict: ready on MR !1.', updated: 0 };
+const stopped = r => ({ status: 'stopped', stopReason: r, updated: 0 });
+const needsYou = {
+    stopped: [null, stopped(undefined)],
+    'api-error': [null, stopped('api-error')],
+    'rate-limit': [null, stopped('rate-limit')],
+    interrupted: [null, stopped('interrupted')],
+    closed: [null, stopped('closed')],
+    silent: [null, stopped('silent')],
+    changes: [{ state: 'open', unresolved: 1 }, done],
+    failing: [{ state: 'open', ci: 'failing' }, done],
+    conflict: [{ state: 'open', blocked: 'conflict' }, done],
+    draft: [{ state: 'open', draft: true, ci: 'passed', reviewers: [] }, done]
+};
+assert.deepEqual(Object.keys(needsYou).toSorted(), Object.keys(KINDS).filter(k => KINDS[k].column === 'needs-you').toSorted(), 'every Needs-you kind has a case');
+for (const [kind, [ps, agent]] of Object.entries(needsYou)) {
+    const row = rowOf(ps, agent, opts);
+    assert.equal(row.state.kind, kind);
+    assert.equal(row.column, 'needs-you');
+    assert.ok(row.next && !row.next.startsWith('Helper finished'), `${kind} leads with its reason: ${row.next}`);
+    assert.ok(row.action?.label, `${kind} has a button`);
+}
+console.log('ok every Needs-you kind leads with its reason and has a button');
+
+// a green draft: ready except the draft flag, whatever the helper said; blockers beat the draft reason
+const draft = { state: 'open', draft: true, ci: 'passed', reviewers: ['Ann'], approved: true };
+const green = rowOf(draft, done, opts);
+assert.equal(green.next, 'Ready except draft: mark ready · Helper finished: Verdict: ready on MR !1');
+assert.equal(green.action.label, 'Mark ready');
+assert.match(green.action.message, /^Run review-gate on !1 /);
+assert.equal(rowOf({ ...draft, replied: 1 }, null, opts).state.kind, 'draft', 'replied threads do not hide the draft');
+assert.equal(rowOf({ ...draft, ci: 'running' }, null, opts).column, 'review', 'a running pipeline is waited for');
+assert.equal(rowOf({ ...draft, ci: 'failing' }, null, opts).next, 'Pipeline failing');
+assert.equal(rowOf({ ...draft, unresolved: 2 }, null, opts).next, 'Address 2 unresolved comments');
+assert.equal(rowOf({ ...draft, blocked: 'checks' }, null, opts).next, 'Waiting for external status checks');
+console.log('ok green draft says Ready except draft with Mark ready');

@@ -39,7 +39,7 @@ assert.equal(nextOf(null, { status: 'stopped', stopReason: 'rate-limit', updated
     assert.match(next('api-error', at), /^Helper stopped: API error/);
 }
 assert.equal(nextOf(null, { status: 'done', outcome: 'Nothing left to push.', updated: at }).startsWith(`Helper finished: Nothing left to push (${hm})`), true);
-assert.equal(nextOf(open({ ready: true }), { status: 'done', outcome: 'Nothing left to push.', updated: at }).startsWith(`Helper finished: Nothing left to push (${hm}) · `), true);
+assert.equal(nextOf(open({ ready: true }), { status: 'done', outcome: 'Nothing left to push.', updated: at }).endsWith(` · Helper finished: Nothing left to push (${hm})`), true);
 assert.equal(nextOf(open({ changes: true, reviewers: ['Ann'] }), null), 'Address review comments from Ann');
 assert.equal(nextOf(open({ changes: true, reviewers: ['Ann'], changesBy: ['bob'] }), null), 'Address review comments from bob');
 assert.equal(nextOf(open({ reviewers: ['Ann', 'Bo'] }), { status: 'done' }), 'Waiting for review by Ann, Bo');
@@ -47,7 +47,7 @@ assert.equal(nextOf(open(), null), 'Needs a reviewer');
 assert.equal(nextOf(open({ ready: true }), null), 'Approved — merge it');
 assert.equal(nextOf(open({ ci: 'failing' }), null), 'Pipeline failing');
 assert.equal(nextOf(open({ ci: 'running' }), null), 'Pipeline running');
-assert.equal(nextOf(open({ draft: true }), null), 'Draft — mark it ready for review');
+assert.equal(nextOf(open({ draft: true }), null), 'Ready except draft: mark ready');
 console.log('ok next');
 
 const items = workItems([

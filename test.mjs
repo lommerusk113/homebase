@@ -1127,10 +1127,11 @@ assert.equal(worksOn({ title: '#2223 - Fix VAT', source_branch: 'x' }, 2223), tr
 assert.equal(worksOn({ title: 'Fix VAT', source_branch: '2223-fix-vat' }, 2223), true);
 assert.equal(worksOn({ title: '#2216 - Don\'t apply VAT code', source_branch: '2216-vat' }, 2223), false);
 assert.equal(worksOn({ title: '#22230 - Other', source_branch: 'x' }, 2223), false);
-const row = (pr, milestone) => ({ pr, milestone });
+const row = (pr, milestone) => ({ pr, milestone, prState: pr ? {} : null });
 assert.equal(inMilestone(row('u', { id: 7, title: 'S' }), { id: 7 }), true);
 assert.equal(inMilestone(row('u', { id: 8, title: 'R' }), { id: 7 }), false);
-assert.equal(inMilestone(row('u', null), { id: 7 }), true); // no milestone: always shown
+assert.equal(inMilestone(row('u', null), { id: 7 }), false); // an MR without a milestone is not in the picked one
+assert.equal(inMilestone({ pr: 'u', milestone: null, prState: null }, { id: 7 }), true); // not checked yet: milestone unknown, stays
 assert.equal(inMilestone({ ...row('u', { id: 8, title: 'R' }), column: 'needs-you' }, { id: 7 }), true);
 assert.equal(inMilestone({ ...row('u', { id: 8, title: 'R' }), column: 'ready' }, { id: 7 }), true);
 assert.equal(inMilestone(row(null, null), { id: 7 }), true); // an agent without an MR stays

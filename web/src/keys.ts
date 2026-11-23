@@ -10,6 +10,16 @@ import type { useSend } from '@/composables/useSend';
 import type { useUnfold } from '@/composables/useUnfold';
 import type { useUnread } from '@/composables/useUnread';
 
+import type { useComposer } from '@/composables/useComposer';
+import type { useAttachments } from '@/composables/useAttachments';
+import type { useNotice } from '@/composables/useNotice';
+import type { useStatus } from '@/composables/useStatus';
+import type { useModel } from '@/composables/useModel';
+import type { useChatActions } from '@/composables/useChatActions';
+import type { usePush } from '@/composables/usePush';
+import type { useAsk } from '@/composables/useAsk';
+import type { useBoot } from '@/composables/useBoot';
+
 export const SessionsKey: InjectionKey<ReturnType<typeof useSessions>> = Symbol('sessions');
 export const ProjectKey: InjectionKey<ReturnType<typeof useProject>> = Symbol('project');
 
@@ -61,3 +71,14 @@ export const ForgeNotesKey: InjectionKey<ReturnType<typeof useForgeNotes>> = Sym
 export const BoardGroupsKey: InjectionKey<ReturnType<typeof useBoardGroups>> = Symbol('boardGroups');
 /** The work item a row shows: provided by Board/ItemRows.vue to the row's own parts. */
 export const ItemKey: InjectionKey<Readonly<Ref<WorkItem>>> = Symbol('item');
+
+// The composer and the question cards (islands/Composer.vue, islands/Ask.vue)
+export const ComposerKey: InjectionKey<ReturnType<typeof useComposer>> = Symbol('composer');
+export const AttachmentsKey: InjectionKey<ReturnType<typeof useAttachments>> = Symbol('attachments');
+export const NoticeKey: InjectionKey<ReturnType<typeof useNotice>> = Symbol('notice');
+export const StatusKey: InjectionKey<ReturnType<typeof useStatus>> = Symbol('status');
+export const ModelKey: InjectionKey<ReturnType<typeof useModel>> = Symbol('model');
+export const ChatActionsKey: InjectionKey<ReturnType<typeof useChatActions>> = Symbol('chatActions');
+export const PushKey: InjectionKey<ReturnType<typeof usePush>> = Symbol('push');
+export const AskKey: InjectionKey<ReturnType<typeof useAsk>> = Symbol('ask');
+export const BootKey: InjectionKey<ReturnType<typeof useBoot>> = Symbol('boot');

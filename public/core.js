@@ -549,8 +549,21 @@ export const vue = {
     load: () => (document.querySelector(`script[src="${WEB}"]`) ? import(WEB) : Promise.resolve(null))
 };
 
+// The composer and the question cards are islands (web/src/islands/Composer.vue, Ask.vue). `composer` is what the old
+// chat code tells them (turn, ask, boot: what a refresh found) and asks of them (send),
+// set by their composables when web/dist/main.js loads. `push` is app.js's notification state, shown in the + menu.
+/**
+ * @type {{
+ *   turn: (data: (Partial<Transcript> & { error?: boolean }) | null) => void,
+ *   ask: (s: Session, data: Transcript) => Promise<void>,
+ *   boot: (tmux: string | null | undefined) => Promise<void>,
+ *   send: (sid: string, text: string, answerTo?: string, note?: string, canned?: boolean) => Promise<boolean> }}
+ */
+export const composer = { turn: () => {}, ask: async () => {}, boot: async () => {}, send: async () => false };
+export const push = { label: 'Enable notifications on this device', state: '' };
+
 /** @param {{ project: string }} x */
-export const isTracked = x => state.tracked.includes(x.project);
+export const isTracked =x => state.tracked.includes(x.project);
 // In a tracked project and in the selected one (or "All").
 /** @param {{ project: string }} x */
 export const inView = x => isTracked(x) && (state.project === 'all' || x.project === state.project);

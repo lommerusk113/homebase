@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseQuestion, answerQuestion, saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME, cancelQuestion, questionOpen } from '../../server.mjs';
 import { seenHash } from '../../public/core.js';
-import { pasteLabel, isLongPaste, expandPastes } from '../../public/chat.js';
+import { pasteLabel, isLongPaste, expandPastes } from '../../web/src/lib/draft.ts';
 import { claudeLine, rulesFile, loginShell } from '../../server/tmux.mjs';
 import { projectOf } from '../../server/sessions.mjs';
 

@@ -74,11 +74,10 @@ interface HTMLElementEventMap {
     'wa-after-hide': Event;
 }
 
-/** Elements in index.html that $() callers use beyond HTMLElement. */
+/** Elements of the page (index.html, or drawn by an island) that $() callers use beyond HTMLElement. */
 interface PageIds {
     project: HTMLButtonElement;
     dlg: WaDialog;
-    'clear-dlg': WaDialog;
     'new-dlg': WaDialog;
     'pair-dlg': WaDialog;
     'np-name': WaInput;
@@ -86,18 +85,8 @@ interface PageIds {
     'np-private': WaSwitch;
     'np-form': HTMLFormElement;
     'np-go': WaButton;
-    'compact-dlg': WaDialog;
     'restart-dlg': WaDialog;
     msg: WaTextarea;
-    'needs-only': WaDropdownItem;
-    'auto-compact': WaDropdownItem;
-    'compact-item': WaDropdownItem;
-    'compact-nudge': HTMLButtonElement;
-    send: HTMLFormElement;
-    attached: HTMLDivElement;
-    'attach-btn': HTMLButtonElement;
-    'plus-menu': WaDropdown;
-    'attach-input': HTMLInputElement;
 }
 
 // The DOM stringifies these (aria-pressed, aria-selected, aria-expanded take true/false).

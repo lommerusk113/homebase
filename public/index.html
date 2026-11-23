@@ -69,34 +69,12 @@
     <div class="c-feed" id="feed"></div>
     <div class="c-cards">
       <div class="c-note c-wait" id="wait" hidden><button class="c-wait-q" id="wait-q" type="button" title="Show the reply this is about"></button><div class="c-wait-ctx" id="wait-ctx" title="Show all" hidden></div><div class="c-opts" id="wait-opts"></div></div>
-      <div class="c-note c-ask" id="ask" hidden><div class="c-ask-label">Claude is asking</div><div class="c-ask-q" id="ask-q" role="heading" aria-level="3"></div><pre class="c-ask-detail mono" id="ask-detail" hidden></pre><wa-button size="s" appearance="plain" class="c-ask-more" id="ask-more" hidden></wa-button><div class="c-opts" id="ask-opts"></div><div class="c-term">Or type your answer below.<wa-button size="s" appearance="plain" id="ask-dismiss" title="Sends Esc: Claude moves on without an answer">Decline question</wa-button><wa-button size="s" appearance="plain" id="ask-term-toggle" aria-expanded="false" aria-controls="ask-term" hidden>Answer in a terminal</wa-button></div><div class="c-term" id="ask-term">In a terminal, run <code class="mono" id="ask-cmd"></code><wa-button size="s" appearance="plain" class="c-copy" data-copy="ask-cmd">Copy</wa-button></div></div>
-      <div class="c-note c-ask" id="boot" hidden><div class="c-ask-label">Claude is waiting on a startup question</div><div class="c-ask-q" id="boot-q" role="heading" aria-level="3"></div><div class="c-opts" id="boot-opts"></div><div class="c-term">Or answer in the terminal: <code class="mono" id="boot-cmd"></code><wa-button size="s" appearance="plain" class="c-copy" data-copy="boot-cmd">Copy</wa-button></div></div>
-      <div class="c-info" id="c-info" role="status"></div>
+      <!-- the question and startup cards and the info line: the Ask island (web/src/islands/Ask.vue) -->
+      <div id="asks"></div>
       <div class="c-rules" id="rules" role="status" hidden><span class="c-rules-text">New rules since this chat started</span><span class="c-rules-acts"><button class="show" id="rules-load" type="button">Load new rules</button><button class="show quiet-act" id="rules-restart" type="button" title="Reloads Claude fully; interrupts running agents">Restart chat</button><button class="c-x" id="rules-dismiss" type="button" aria-label="Dismiss" title="Dismiss">×</button></span></div>
     </div>
-    <form class="c-input" id="send">
-      <div class="error" id="c-err" role="alert"></div>
-      <div class="composer">
-      <div class="c-status idle" id="status"><span class="pulse"></span><span id="status-text">Connecting…</span><button class="c-compact" id="status-restart" type="button" hidden>Restart chat</button><wa-dropdown class="c-model" id="c-model" hidden placement="top-end">
-      <button class="c-chip" type="button" slot="trigger" id="c-model-btn" title="Model for this chat" aria-label="Model for this chat"></button>
-      <wa-dropdown-item type="checkbox" value="opus">Opus</wa-dropdown-item>
-      <wa-dropdown-item type="checkbox" value="sonnet">Sonnet</wa-dropdown-item>
-      <wa-dropdown-item type="checkbox" value="haiku">Haiku</wa-dropdown-item>
-      <wa-dropdown-item type="checkbox" value="fable">Fable</wa-dropdown-item>
-      <wa-dropdown-item type="checkbox" value="default">Default<span slot="details">your account's default</span></wa-dropdown-item>
-    </wa-dropdown><span class="c-ctx" id="status-ctx"></span><button class="c-compact" id="compact-nudge" type="button" hidden>Compact?</button></div>
-      <div class="c-attached" id="attached" hidden></div>
-      <div class="c-row"><wa-dropdown class="c-plus" id="plus-menu" placement="top-start"><button class="c-attach" id="attach-btn" type="button" slot="trigger" aria-label="Add files and chat options" title="Add files and chat options"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button><wa-dropdown-item value="files">Add files…</wa-dropdown-item><hr class="c-sep">
-      <wa-dropdown-item value="view">Hide earlier messages<span slot="details">Claude still remembers them</span></wa-dropdown-item>
-      <wa-dropdown-item value="new">Start a fresh conversation</wa-dropdown-item>
-      <wa-dropdown-item value="compact" id="compact-item" disabled>Compact conversation<span slot="details">frees up context</span></wa-dropdown-item>
-      <wa-dropdown-item value="restart" id="restart-item">Restart chat<span slot="details">reloads Claude</span></wa-dropdown-item>
-      <wa-dropdown-item value="auto-compact" type="checkbox" id="auto-compact">Auto-compact idle chats over 100k context</wa-dropdown-item>
-      <wa-dropdown-item value="needs-only" type="checkbox" id="needs-only">Show only messages that need me</wa-dropdown-item>
-      <wa-dropdown-item value="push" id="push-item"><span id="push-label">Enable notifications on this device</span><span slot="details" id="push-state"></span></wa-dropdown-item>
-    </wa-dropdown><input type="file" id="attach-input" accept="image/*" multiple hidden><wa-textarea id="msg" label="Message Claude" rows="1" resize="auto" placeholder="Message Claude…" title="Enter sends, Shift+Enter adds a new line"></wa-textarea><button class="c-attach c-send" id="send-btn" type="submit" aria-label="Send"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div>
-      </div>
-    </form>
+    <!-- the error line, status line, message box and the chat's dialogs: the Composer island (web/src/islands/Composer.vue) -->
+    <div id="composer"></div>
   </aside>
 </div>
 <!-- narrow windows only (styles.css ≤ 900px: phones, zoomed desktops): one pane at a time, the chat or one of the board's two views -->
@@ -105,21 +83,6 @@
   <button type="button" data-pane="work" aria-pressed="false">Work<span class="count hot work-n" id="pt-work-n" hidden></span></button>
   <button type="button" data-pane="issues" aria-pressed="false">Issues</button>
 </nav>
-<wa-dialog id="clear-dlg" label="Start a fresh conversation?">
-  Claude forgets this chat's context.
-  <wa-button slot="footer" size="s" appearance="outlined" data-dialog="close">Cancel</wa-button>
-  <wa-button slot="footer" size="s" variant="danger" id="clear-go">Start fresh</wa-button>
-</wa-dialog>
-<wa-dialog id="restart-dlg" label="Restart this chat?">
-  Claude is stopped and started again in the same session, so a running turn is lost. The conversation history stays.
-  <wa-button slot="footer" size="s" appearance="outlined" data-dialog="close">Cancel</wa-button>
-  <wa-button slot="footer" size="s" variant="danger" id="restart-go">Restart</wa-button>
-</wa-dialog>
-<wa-dialog id="compact-dlg" label="Compact this conversation?">
-  Claude summarises the chat to free up context, so each turn gets cheaper. The session stays the same.
-  <wa-button slot="footer" size="s" appearance="outlined" data-dialog="close">Cancel</wa-button>
-  <wa-button slot="footer" size="s" variant="brand" id="compact-go" autofocus>Compact</wa-button>
-</wa-dialog>
 <wa-dialog id="dlg" label="Projects on your board" light-dismiss>
   <div class="d-body" id="dlg-body"></div>
 </wa-dialog>

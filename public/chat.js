@@ -1,7 +1,6 @@
 // Chat column: bound to one master session, default the most recently active tracked one.
-import { api, $, el, state, store, touch, visibleSessions, updateTitle, rich, waButton, chatStatus, friendly, seenHash, setOffline, setFormatWarn, ctxLevel, canCompact, autoCompactDue, compactNudgeDue, modelName, NEEDS_ANSWER, openDecision, waitsOnYou, vue } from './core.js';
+import { api, $, el, state, store, visibleSessions, updateTitle, rich, waButton, setOffline, openDecision, waitsOnYou, composer, vue } from './core.js';
 import { renderBoard, sessionTopic } from './list.js';
-import { cannedLabel } from './canned.js';
 import { syncDiff } from './diff.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
@@ -42,9 +41,10 @@ const bindKey = () => `chat:${state.project}`;
 /** @returns {Session | null} */
 export const chatSession = () => (state.focus && visibleSessions().find(s => s.id === state.focus)) || pickChat(visibleSessions(), store.get(bindKey()), state.chat);
 // The tmux session of the selected project's chat while it is still starting (no transcript yet), else null.
-const startingTarget = () => (state.startingTmux === `cc-new-${state.project}` ? state.startingTmux : null);
+export const startingTarget = () => (state.startingTmux === `cc-new-${state.project}` ? state.startingTmux : null);
 let chatKey = null;
 let stick = false; // set by a send: the next render scrolls to the bottom even if the user had scrolled up
+export const stickFeed = () => { stick = true; };
 const FEED_STEP = 60; // items per load; "Show earlier" adds this many
 let feedMax = { sid: '', max: FEED_STEP };
 // "Show earlier" in the feed: one more step of older items.
@@ -70,104 +70,6 @@ export function clearState(raw) {
         return { at: 0, fresh: false };
     }
     return v && typeof v === 'object' ? { at: Number(v.at) || 0, fresh: v.mode === 'new' } : { at: Number(v) || 0, fresh: false };
-}
-
-// Retry on a bubble whose failed send gave its text back to the box: sent from the bubble, it must not wait there for a second Enter.
-/** @param {OutboxItem} o */
-export function forgetGivenBack(o) {
-    const ta = /** @type {WaTextarea} */ ($('msg'));
-    if (ta.value === o.text && (draftSid ?? startingTarget()) === o.sid) {
-        ta.value = '';
-        saveDraft(draftStorage(), o.sid, ta);
-    }
-}
-
-// The #msg draft and its selection per session in sessionStorage, so a reload doesn't lose typed text. Empty text
-// removes it. ta is a wa-textarea (selection lives on its inner .input) or anything with value/selectionStart/End.
-/** @param {Storage | null} storage @param {string | undefined} sid @param {WaTextarea | HTMLTextAreaElement} ta */
-export function saveDraft(storage, sid, ta) {
-    try {
-        if (!sid) {
-            return;
-        }
-        const sel = ('input' in ta && ta.input) || /** @type {HTMLTextAreaElement} */ (ta);
-        if (ta.value) {
-            storage.setItem(`draft:${sid}`, JSON.stringify({ text: ta.value, start: sel.selectionStart, end: sel.selectionEnd }));
-        } else {
-            storage.removeItem(`draft:${sid}`);
-        }
-    } catch {}
-}
-// Long pastes sit in the box as "[Pasted text #n +L lines]", like Claude Code, and expand on send. Kept in sessionStorage
-// so a restored draft still expands after a reload.
-const PASTE_LINES = 5, PASTE_CHARS = 800;
-export const pasteLabel = (n, text) => `[Pasted text #${n} +${text.split('\n').length} lines]`;
-export const isLongPaste = text => text.split('\n').length >= PASTE_LINES || text.length > PASTE_CHARS;
-/** @param {string} text @param {Record<string, string>} pastes */
-export const expandPastes = (text, pastes) => text.replace(/\[Pasted text #(\d+) \+\d+ lines\]/g, (m, n) => pastes[n] ?? m);
-/** @returns {Record<string, string>} */
-const loadPastes = () => {
-    try {
-        return JSON.parse(sessionStorage.getItem('pastes') ?? '{}') ?? {};
-    } catch {
-        return {};
-    }
-};
-/** @param {string} text @returns {string} the label to insert */
-function stashPaste(text) {
-    const pastes = loadPastes();
-    const n = Math.max(0, ...Object.keys(pastes).map(Number)) + 1;
-    pastes[n] = text;
-    try {
-        sessionStorage.setItem('pastes', JSON.stringify(pastes));
-    } catch {}
-
-    return pasteLabel(n, text);
-}
-// Fills an empty ta from the saved draft; the selection is set once the component has rendered the value.
-/** @param {Storage | null} storage @param {string} sid @param {WaTextarea} ta @returns {Promise<boolean>} */
-export async function restoreDraft(storage, sid, ta) {
-    try {
-        const d = JSON.parse(storage.getItem(`draft:${sid}`));
-        if (!d?.text || ta.value) {
-            return false;
-        }
-        ta.value = d.text;
-        await ta.updateComplete;
-        if (d.start != null) {
-            ta.setSelectionRange(d.start, d.end ?? d.start);
-        }
-        return true;
-    } catch {
-        return false;
-    }
-}
-const draftStorage = () => {
-    try {
-        return sessionStorage;
-    } catch {
-        return null;
-    }
-};
-let draftSid; // the chat the composer's text and error line belong to; null: a project still starting
-// The composer follows the chat: switching saves the old chat's draft, clears the box and the error line, and restores the
-// new chat's draft. A starting project's text stays for the session it becomes.
-/** @param {string | null} sid */
-function swapComposer(sid) {
-
-    if (sid === draftSid) {
-        return;
-    }
-    const ta = $('msg'), old = draftSid;
-    draftSid = sid;
-    if (old) {
-        saveDraft(draftStorage(), old, ta);
-        ta.value = '';
-        $('c-err').textContent = '';
-    }
-    if (sid) {
-        restoreDraft(draftStorage(), sid, ta);
-    }
 }
 
 /** @param {string} id */
@@ -206,7 +108,7 @@ function followFocus() {
 let returnTimer;
 let nextId = null;
 /** @param {string} sid */
-function answered(sid) {
+export function answered(sid) {
     if (sid !== state.focus) {
         return;
     }
@@ -245,18 +147,13 @@ export function topicHue(topic) {
     return ((h ^ (h >>> 16)) >>> 0) % TOPIC_HUES;
 }
 
-// A big option button, as in the needs-you card and the ask card: a number badge, the label (its "(Recommended)" shown as
-// a badge instead) and an optional description. ro: a read-only row (no pane to answer on). quiet: a plain text
-// button with no number, for "Chat about this".
-/** @param {string} label @param {number} n @param {{ desc?: string, ro?: boolean, quiet?: boolean }} [o] */
-function optButton(label, n, { desc, ro, quiet } = {}) {
+// A big option button on the strip above the composer: a number badge, the label (its "(Recommended)" shown as a badge
+// instead) and an optional description. The feed and the ask cards draw the same one in Vue.
+/** @param {string} label @param {number} n @param {{ desc?: string }} [o] */
+function optButton(label, n, { desc } = {}) {
 
-    if (quiet && !ro) {
-        return waButton(desc ? `${label} ${desc}` : label, 'c-opt quiet', { variant: 'neutral', appearance: 'plain' }); // a grant's scope stays readable
-    }
     const rec = /\(recommended\)/i.test(label);
-    const text = label.replace(/\s*\(recommended\)/i, '');
-    const b = ro ? el('div', 'c-opt ro', text) : waButton(text, `c-opt${rec ? ' primary' : ''}`, { variant: rec ? 'brand' : 'neutral', appearance: rec ? 'accent' : 'outlined' });
+    const b = waButton(label.replace(/\s*\(recommended\)/i, ''), `c-opt${rec ? ' primary' : ''}`, { variant: rec ? 'brand' : 'neutral', appearance: rec ? 'accent' : 'outlined' });
     const k = el('span', 'k', String(n + 1));
     k.slot = 'start';
     b.append(k);
@@ -337,32 +234,6 @@ function announceReply(s, data, items) {
     heard = { sid: s.id, id: last ? id : heard.sid === s.id ? heard.id : undefined };
 }
 
-// Fixed-height line at the top of the composer, with the context window use on the right.
-/** @param {Parameters<typeof chatStatus>[0]} data */
-function setStatus(data) {
-    const s = chatSession(), { kind, text } = chatStatus(data, undefined, s);
-    if (!$('status').classList.contains(kind) && (kind === 'error' || kind === 'stuck')) {
-        setText($('announce'), text); // the line itself is no live region: a working chat's step changes would be read out all day
-    }
-    $('status').className = `c-status ${kind}`;
-    if ($('status-text').textContent === text) {
-        // unchanged: not rewritten, so the nodes (and a focused "needs your answer" button) stay
-    } else if (kind === 'idle' && text.startsWith(NEEDS_ANSWER)) {
-        const go = el('button', 'show', NEEDS_ANSWER);
-        go.type = 'button';
-        go.onclick = jumpToNeeds;
-        $('status-text').replaceChildren(go, text.slice(NEEDS_ANSWER.length));
-    } else {
-        $('status-text').textContent = text;
-    }
-    $('status-restart').hidden = kind !== 'stuck';
-    $('status-ctx').className = `c-ctx ${ctxLevel(s?.context ?? 0)}`;
-    const ctx = s?.context != null ? `${Math.round(s.context)}%` : '';
-    if ($('status-ctx').textContent !== (ctx && `context ${ctx}`)) {
-        $('status-ctx').replaceChildren(...(ctx ? [el('span', 'w', 'context '), ctx] : [])); // phones hide the word
-    }
-}
-
 // Scrolls to and focuses what needs the user: the ask card when it shows, else the reply the pinned strip is about,
 // else the newest needs-you bubble.
 export function jumpToNeeds() {
@@ -413,7 +284,7 @@ function showRules(s) {
     }
 }
 
-// The chat card's top strip (back, branch chips, Changes) and the project in the input's placeholder.
+// The chat card's top strip (back, branch chips, Changes).
 /** @param {Session | null} s */
 function showHead(s) {
 
@@ -425,32 +296,7 @@ function showHead(s) {
     branch.classList.toggle('warn', /^(main|master)$/.test(s?.branch ?? '') && !s?.hobby);
     un.hidden = !(s?.unpushed > 0);
     un.textContent = `${s?.unpushed} unpushed`;
-    showModel(s);
     syncDiff(s);
-    $('msg').setAttribute('placeholder', s ? `Message Claude in ${s.project}…` : 'Message Claude…');
-    $('msg').setAttribute('label', s ? `Message Claude in ${s.project}` : 'Message Claude');
-}
-
-/** @type {{ sid: string, name: string, at: number } | null} */
-let pickedModel = null; // a /model sent, until the transcript shows that model (or MODEL_PENDING_MS passed)
-const MODEL_PENDING_MS = 60_000;
-
-// The model chip: the model of the chat's latest reply; "Sonnet…" while a picked one hasn't shown up there yet.
-/** @param {Session | null} s */
-function showModel(s) {
-
-    const name = modelName(s?.model);
-    if (pickedModel && (pickedModel.sid !== s?.id || name === pickedModel.name || Date.now() - pickedModel.at > MODEL_PENDING_MS)) {
-        pickedModel = null;
-    }
-
-    const btn = $('c-model-btn');
-    $('c-model').hidden = !s || s.id.startsWith('cc-new-') || !(name || pickedModel);
-    setText(btn, pickedModel ? `${pickedModel.name}…` : `${name ?? ''} ▾`);
-    btn.classList.toggle('pending', !!pickedModel);
-    for (const it of /** @type {NodeListOf<HTMLElement & { value: string, checked: boolean }>} */ ($('c-model').querySelectorAll('wa-dropdown-item'))) {
-        it.checked = modelName(it.value) === (pickedModel?.name ?? name); // from our state, not the item's own toggle
-    }
 }
 
 // Above a focused (not main) chat's question: what it is about, its title and linked MR, then its last reply's TLDR.
@@ -467,199 +313,6 @@ function showFocus(s, items) {
     const last = items.findLast(i => i.role === 'assistant' && !i.error);
     const say = last && (last.tldr || last.text.split('\n').find(l => l.trim()) || '').trim().slice(0, 220);
     box.replaceChildren(el('b', null, [s.title || s.topic, x && `${x.title} (${x.pr.split('/').pop()})`].filter(Boolean).join(' · ') || s.project), ...(say ? [el('div', null, say)] : []));
-}
-
-const DETAIL_LINES = 6;
-
-// The ask and startup cards: the question, an option per button (its description under it) that `answer` picks, else
-// read-only rows; and the tmux command to answer in the terminal. The ask card also shows a permission prompt's command
-// or diff (`detail`, its first lines and "+N more lines"), in red when the server flags it risky.
-/** @param {string} id @param {string} tmux @param {string} question @param {{ label: string, desc?: string, primary?: boolean, quiet?: boolean }[]} options @param {((i: number) => Promise<void>) | null} answer @param {{ detail?: string, risky?: boolean }} [prompt] */
-function fillCard(id, tmux, question, options, answer, { detail = '', risky = false } = {}) {
-
-    $(`${id}-q`).textContent = question;
-    $(`${id}-cmd`).textContent = `tmux attach -t ${tmux}`;
-    if (id === 'ask') {
-        // the terminal command is only the way out when there are no buttons; otherwise behind a toggle
-        const toggle = $('ask-term-toggle'), term = $('ask-term');
-        toggle.hidden = !answer;
-        term.hidden = !!answer;
-        toggle.setAttribute('aria-expanded', 'false');
-        toggle.onclick = () => {
-            term.hidden = !term.hidden;
-            toggle.setAttribute('aria-expanded', String(!term.hidden));
-        };
-        setText($('announce'), `Claude is asking: ${question}`);
-
-        const pre = $('ask-detail'), more = $('ask-more'), lines = detail ? detail.split('\n') : [], rest = lines.length - DETAIL_LINES;
-        pre.hidden = !detail;
-        pre.textContent = lines.slice(0, DETAIL_LINES).join('\n');
-        more.hidden = rest <= 0;
-        more.textContent = `+${rest} more line${rest === 1 ? '' : 's'}`;
-        more.onclick = () => {
-            pre.textContent = detail;
-            more.hidden = true;
-        };
-        $('ask').classList.toggle('risky', risky);
-    }
-    $(`${id}-opts`).replaceChildren(...options.map((o, i) => {
-        const b = optButton(o.label, i, { desc: o.desc, ro: !answer, quiet: o.quiet });
-        if (answer) {
-            b.onclick = async e => {
-                focusComposer(e);
-                $('c-err').textContent = '';
-                for (const x of $(`${id}-opts`).children) {
-                    x.setAttribute('disabled', '');
-                }
-                b.setAttribute('loading', '');
-                await answer(i).catch(err => { showErr(err.message); });
-            };
-        }
-
-        return b;
-    }));
-}
-
-// The red error line, with raw server and tmux errors turned into plain sentences.
-/** @param {string} msg */
-export const showErr = msg => { $('c-err').textContent = friendly(msg); };
-
-// POSTs an answer; a refusal's text is the error.
-/** @param {string} url */
-const postAnswer = async url => {
-    const r = await api(url, { method: 'POST' });
-    if (!r.ok) {
-        throw new Error(await r.text());
-    }
-};
-
-const TEXT_BOX = /^type something\.?$/i; // Claude's own text-box entry under a question: the chat input below covers it
-const CHAT = /^chat about this$/i; // declines the question as "the user wants to clarify"; Claude then asks what about
-const GRANT = /^yes, .*(?:don't ask again|auto mode|accept edits)/i; // a permission option that also approves what comes later
-let askKey = null;
-let answeredAsk = null; // data.asking of the question last answered on the pane, until the transcript stops asking it
-// The chat whose pane may show a dialog its transcript doesn't ask (Claude's "Switch model?" after a /model pick): set by
-// a pick and by a send refused for it, so the card shows it; cleared once the pane shows none.
-/** @type {string | null} */
-let paneCheck = null;
-
-// The "Claude is asking" card. The question on the tmux pane gets buttons (the server moves the ❯ there and confirms,
-// one question at a time); descriptions come from the transcript, else the pane. No question readable there: the transcript's, see below.
-/** @param {Session} s @param {Transcript} data */
-async function showAsk(s, data) {
-
-    state.asking = data.asking;
-    $('c-model-btn').toggleAttribute('disabled', !!data.asking); // /model goes through send, whose Esc would decline the question
-    updateTitle();
-    const hide = () => {
-        $('ask').hidden = true;
-        askKey = null;
-    };
-    if (!data.asking) {
-        setFormatWarn('pane', false);
-        answeredAsk = null;
-        if (paneCheck !== s.id) {
-            return hide();
-        }
-    }
-
-    const tmux = s.tmux ?? `cc-${s.id.slice(0, 8)}`;
-    /** @type {{ question: string, options: string[], descriptions: string[], selected: number, detail?: string, risky?: boolean } | null} */
-    let pane = null;
-    try {
-        const r = await api(`/api/question?tmux=${encodeURIComponent(tmux)}`);
-        pane = r.ok ? (await r.json()).question : null;
-    } catch {}
-    if (!data.asking && !pane) {
-        paneCheck = pickedModel?.sid === s.id ? paneCheck : null; // a pending pick: its dialog may still be drawing
-        return hide();
-    }
-    setFormatWarn('pane', !pane && data.asking !== answeredAsk); // the transcript asks but the screen shows no question we can parse
-    const key = JSON.stringify([tmux, data.questions, data.asking, pane && [pane.question, pane.detail, pane.options, pane.descriptions]]); // not the moving ❯
-    if (key === askKey) {
-        return;
-    }
-    askKey = key;
-    $('ask').hidden = false; // shown once filled, never empty
-    $('ask-dismiss').onclick = async () => {
-        $('ask').hidden = true; // Esc in the chat; the transcript then shows the question declined
-        try {
-            await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&dismiss=1`);
-        } catch (err) {
-            $('ask').hidden = false;
-            showErr(err.message);
-        } finally {
-            askKey = null;
-        }
-    };
-
-    const questions = data.questions?.length ? data.questions : data.asking ? [{ question: data.asking, options: [] }] : [];
-    if (!pane && data.asking === answeredAsk) {
-        $('ask').hidden = true; // answered, the transcript just hasn't caught up: never re-show its options
-        return;
-    }
-    if (!pane) {
-        // no question readable on the pane (not in tmux, or a screen this can't parse): one question's options still answer by
-        // click, typed as a message naming the question (the server declines the dialog first); several stay read-only
-        const one = questions.length === 1 && questions[0].options.length ? questions[0] : null;
-        fillCard('ask', tmux, questions.map(q => q.question).join(' · '), questions.flatMap(q => q.options.map((label, i) => ({ label, desc: q.descriptions?.[i] }))), one && (async n => {
-            if (await sendText(s.id, one.options[n], undefined, `(Answering your question: "${one.question}")`)) {
-                answeredAsk = data.asking;
-            }
-            askKey = null;
-            refreshChat();
-        }));
-        return;
-    }
-    const flat = t => t.replace(/\s+/g, ' ').trim();
-    const known = questions.find(q => flat(q.question).endsWith(pane.question)); // a question taller than the pane shows only its end
-    const options = pane.options.map((label, i) => ({ i, label, desc: known?.descriptions?.[known.options.indexOf(label)] || pane.descriptions[i], primary: /\(recommended\)/i.test(label), quiet: CHAT.test(label) || GRANT.test(label) }))
-        .filter(o => !TEXT_BOX.test(o.label))
-        .sort((a, b) => Number(a.quiet) - Number(b.quiet)); // quiet ones last: Yes and No stay the big pair
-    // not on a dialog that isn't the transcript's question ("Switch model?"): Esc there declines nothing
-    if (data.questions?.length && (known || /^Review your answers/.test(pane.question)) && !options.some(o => CHAT.test(o.label))) {
-        options.push({ i: -1, label: 'Chat about this', desc: '', primary: false, quiet: true }); // no such entry on the pane: Esc declines instead
-    }
-    fillCard('ask', tmux, known?.question ?? pane.question, options, async n => {
-        try {
-            await postAnswer(`/api/question?tmux=${encodeURIComponent(tmux)}&${options[n].i < 0 ? 'dismiss=1' : `option=${options[n].i}&label=${encodeURIComponent(options[n].label)}&seen=${seenHash(pane)}`}`);
-            answeredAsk = data.asking;
-            answered(s.id);
-            if (CHAT.test(options[n].label)) {
-                $('msg').focus(); // the user's turn to say what they want instead
-            }
-        } finally {
-            askKey = null;
-            refreshChat(); // fresh transcript: the pane shows the next question or none, and `data` still has the answered one
-        }
-    }, pane);
-}
-
-// A blocking Claude Code startup dialog (workspace trust, first run) read off the tmux pane: its question, an option per button.
-// Clicking one has the server move the ❯ selection there and confirm; while it is up, normal sends are blocked.
-/** @param {string | null | undefined} tmux */
-async function showBoot(tmux) {
-
-    let dialog = null;
-    try {
-        const r = tmux && await api(`/api/startup?tmux=${encodeURIComponent(tmux)}`);
-        dialog = r && r.ok ? (await r.json()).dialog : null;
-    } catch {}
-    if (state.boot !== undefined && JSON.stringify(dialog) === JSON.stringify(state.boot)) { // undefined: re-render
-        return;
-    }
-    state.boot = dialog;
-    $('boot').hidden = !dialog;
-    if (dialog) {
-        fillCard('boot', tmux, dialog.question, dialog.options.map(label => ({ label })), async i => {
-            try {
-                await postAnswer(`/api/startup?tmux=${encodeURIComponent(tmux)}&option=${i}&label=${encodeURIComponent(dialog.options[i])}`);
-            } finally {
-                state.boot = undefined;
-                showBoot(tmux);
-            }
-        });
-    }
 }
 
 const EXCERPT_CHARS = 150;
@@ -742,7 +395,7 @@ export async function refreshChat() {
     }
     followFocus();
     const s = chatSession();
-    swapComposer(s?.id ?? null);
+    vue.bump(); // the composer follows the chat
     // persist the binding, or a successor it moved to
     if (s && !state.focus && store.get(bindKey()) !== s.id) {
         store.set(bindKey(), s.id);
@@ -751,15 +404,13 @@ export async function refreshChat() {
     showNewer(state.focus ? null : s);
     showHead(s);
     showRules(s);
-    await showBoot(s ? null : state.startingTmux); // only a chat still starting: a running one's ❯ prompts and questions aren't startup dialogs
+    await composer.boot(s ? null : state.startingTmux); // only a chat still starting: a running one's ❯ prompts and questions aren't startup dialogs
     if (!s) {
-        $('compact-item').disabled = true;
-        $('compact-nudge').hidden = true;
         chatKey = null;
         state.asking = null;
         showWait(null, null, []);
         updateTitle();
-        setStatus(state.offline ? { error: true } : null);
+        composer.turn(state.offline ? { error: true } : null);
         // a message sent to a starting project (by tmux name) shows until its session binds
         const sent = state.outbox.filter(o => o.sid === startingTarget());
         return feedPort.show({ sid: startingTarget(), items: sent, starting: !!state.starting });
@@ -778,18 +429,19 @@ export async function refreshChat() {
         data = await r.json();
     } catch (e) {
         setOffline(true, e.status);
-        return setStatus({ error: true });
+        return composer.turn({ error: true });
     }
     if (chatSession()?.id !== s.id || seq !== refreshSeq) {
         return; // switched while loading, or a newer refresh took over
     }
 
-    setStatus(data);
-    await showAsk(s, data);
+    composer.turn(data);
+    state.asking = data.asking;
+    updateTitle();
+    await composer.ask(s, data);
     if (seq !== refreshSeq) {
         return;
     }
-    compactUi(s, data);
 
     const { items, hidden, cut } = feedPort.merge(s, data);
     announceReply(s, data, items);
@@ -808,369 +460,27 @@ export async function refreshChat() {
     stick = false;
 }
 
-// The menu item and the "Compact?" nudge follow the bound session; the auto mode piggybacks on the same poll.
-/** @param {Session} s @param {Transcript} data */
-function compactUi(s, data) {
-
-    const idle = canCompact(s) && !data.working && !data.asking;
-    $('compact-item').disabled = !idle;
-    $('compact-nudge').hidden = !(idle && compactNudgeDue(s));
-    if (idle && store.get('auto-compact') !== '0') {
-        const key = `auto-compacted:${s.id}`, now = Date.now();
-        if (autoCompactDue(s, now, Number(store.get(key)) || 0)) {
-            store.set(key, String(now)); // before the POST, so a slow or failed one is not retried within the hour
-            compact(s.id);
-        }
-    }
-}
-
-/** @param {string} sid */
-async function compact(sid) {
-    $('c-err').textContent = '';
-    try {
-        const r = await api(`/api/compact?id=${encodeURIComponent(sid)}`, { method: 'POST' });
-        if (!r.ok) {
-            throw new Error(await r.text());
-        }
-        setTimeout(refreshChat, 1000);
-    } catch (err) {
-        showErr(err.message);
-    }
-}
-
-/** @param {string} sid */
-async function restart(sid) {
-    $('c-err').textContent = '';
-    $('c-info').textContent = 'Restarting Claude…';
-    try {
-        const r = await api(`/api/restart?id=${encodeURIComponent(sid)}`, { method: 'POST' });
-        if (!r.ok) {
-            throw new Error(await r.text());
-        }
-    } catch (err) {
-        showErr(err.message);
-    }
-    $('c-info').textContent = '';
-    refreshChat();
-}
-
-// Images attached to the next message. Sent as "[Image: <path>]" lines after uploading; Claude reads them by path.
-const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
-/** @type {File[]} */
-let attached = [];
-let uploading = false;
-
-// data: URLs, as the CSP allows no blob: images. /api/upload/<name> needs the token header, so no plain <img src>.
-/** @param {Blob} blob @returns {Promise<string>} */
-const dataUrl = blob => new Promise((ok, fail) => {
-    const r = new FileReader();
-    r.onload = () => ok(String(r.result));
-    r.onerror = () => fail(r.error);
-    r.readAsDataURL(blob);
-});
-/** @param {Promise<string>} url @param {string} alt */
-function thumb(url, alt) {
-    const img = el('img');
-    img.alt = alt;
-    url.then(u => { if (u) { img.src = u; } else { img.remove(); } });
-    return img;
-}
-/** @param {Iterable<File>} files */
-function attach(files) {
-    const list = [...files];
-    const ok = list.filter(f => IMAGE_TYPES.includes(f.type));
-    if (ok.length < list.length) {
-        $('c-err').textContent = 'Only PNG, JPEG, GIF or WebP images can be attached';
-    }
-    attached = [...attached, ...ok];
-    showAttached();
-}
-function showAttached() {
-    $('attached').replaceChildren(...attached.map(f => {
-        const t = el('span', 'c-thumb'), x = el('button', '', '×');
-        x.type = 'button';
-        x.ariaLabel = `Remove ${f.name}`;
-        x.onclick = () => {
-            attached = attached.filter(a => a !== f);
-            showAttached();
-        };
-        t.append(thumb(dataUrl(f), f.name), x);
-        return t;
-    }));
-    $('attached').hidden = !attached.length;
-}
-// Uploads the attached images; their "[Image: <path>]" lines, one per image.
-/** @param {File[]} files @returns {Promise<string[]>} */
-async function upload(files) {
-    return Promise.all(files.map(async f => {
-        const r = await api('/api/upload', { method: 'POST', headers: { 'content-type': f.type }, body: f });
-        if (!r.ok) {
-            throw new Error(`${f.name}: ${await r.text()}`);
-        }
-        return `[Image: ${(await r.json()).path}]`;
-    }));
-}
-
-// Types text into a session as an outbox bubble ("sending…", then gone once the transcript has it); false if it failed.
-// note: appended to what is sent but not shown, so the chat shows just the label.
-// canned: a button's message, not typed by the user: the server refuses it while Claude asks, instead of declining the question.
+// Types text into a session as an outbox bubble; false if it failed. The composer's composable does it (web/src/composables/useSend.ts).
 /** @param {string} sid @param {string} text @param {string} [answerTo] @param {string} [note] @param {boolean} [canned] @returns {Promise<boolean>} */
-export async function sendText(sid, text, answerTo, note, canned) {
-    $('c-err').textContent = '';
-    /** @type {OutboxItem} */
-    const out = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo, note, canned, ...(canned && { label: cannedLabel(text) ?? undefined }) };
-    state.outbox = [...state.outbox.filter(o => !(o.error && o.sid === sid) && !(answerTo && o.answerTo === answerTo)), out];
-    stick = true;
-    refreshChat();
-    try {
-        const r = await api(`/api/send?${sid.startsWith('cc-new-') ? 'tmux' : 'id'}=${encodeURIComponent(sid)}${canned ? '&canned=1' : ''}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: note ? `${text}\n\n${note}` : text, signal: AbortSignal.timeout(45_000) }); // past control.mjs BOOT_MS: a chat that has to start first isn't "Not sent" while it still goes through
-        if (!r.ok) {
-            out.refused = r.status === 409;
-            throw new Error(await r.text());
-        }
-        out.okAt = Date.now();
-        // a slash command's panel or output (control.mjs settleCommand), shown under it as a reply
-        const result = /json/.test(r.headers.get('content-type') ?? '') ? await r.json() : null;
-        if (result) {
-            out.result = result;
-        }
-        const said = result ? result.warning ?? 'ok' : await r.text();
-        out.answered = said === 'answered'; // it went into the open question's text box (control.mjs send)
-        out.sending = !(out.answered || text.startsWith('/')); // those never land in the transcript as the user's: done once sent
-        if ((draftSid ?? startingTarget()) === sid) {
-            $('c-err').textContent = said === 'ok' || out.answered ? '' : said; // sent, with a warning (running twice)
-        }
-        answered(sid);
-        setTimeout(refreshChat, 1000);
-        return true;
-    } catch (err) {
-        if (err.name === 'TimeoutError') {
-            // no answer is not a refusal: the server may still type it. Not confirmed (the transcript drops the bubble
-            // once it has the text, and Retry looks there first), and the text is not handed back to be sent twice.
-            out.sending = false;
-            out.unconfirmed = true;
-            if ((draftSid ?? startingTarget()) === sid) {
-                $('c-err').textContent = 'Homebase did not answer in 45 s, so this may or may not have reached Claude.';
-            }
-            refreshChat();
-            return true;
-        }
-        if (/typing can't answer/.test(err.message)) { // control.mjs NEEDS_CLICK: the card gets that dialog
-            paneCheck = sid;
-            refreshChat();
-        }
-        out.error = friendly(err.message);
-        if ((draftSid ?? startingTarget()) === sid) {
-            $('c-err').textContent = out.error; // not on another chat switched to meanwhile
-        }
-        refreshChat();
-        return false;
-    }
-}
+export const sendText = (sid, text, answerTo, note, canned) => composer.send(sid, text, answerTo, note, canned);
 
 // Chat menu toggle: hides FYI bubbles (and tool lines), keeping needs-you, the user's own and the newest Claude bubble.
-function setNeedsOnly(on) {
+/** @param {boolean} on */
+export function setNeedsOnly(on) {
     store.set('needs-only', on ? '1' : '');
     $('feed').classList.toggle('needs-only', on);
-    $('needs-only').checked = on;
-}
-
-function setAutoCompact(on) {
-    store.set('auto-compact', on ? '1' : '0'); // explicit off is kept; unset means on
-    $('auto-compact').checked = on;
 }
 
 export function initChat() {
     setNeedsOnly(store.get('needs-only') === '1');
-    setAutoCompact(store.get('auto-compact') !== '0');
-    vue.load().then(m => m?.mount('Feed', $('feed'), { scroller: $('feed') }));
+    // the feed, the composer and the question cards
+    vue.load().then(m => {
+        m?.mount('Feed', $('feed'), { scroller: $('feed') });
+        m?.mount('Composer', $('composer'));
+        m?.mount('Ask', $('asks'));
+    });
     $('c-back').onclick = unfocusChat;
     $('c-next').onclick = () => nextId && focusChat(nextId);
     document.addEventListener('keydown', e => e.key === 'Escape' && state.focus && !e.composedPath().some(n => /^(INPUT|WA-TEXTAREA|TEXTAREA|WA-DIALOG|WA-DROPDOWN)$/.test(/** @type {Element} */ (n).nodeName || '')) && unfocusChat());
-    $('msg').addEventListener('input', () => {
-        saveDraft(draftStorage(), draftSid, $('msg'));
-    });
-    $('send').onsubmit = async e => {
-        e.preventDefault();
-        const s = chatSession(), ta = $('msg'), files = attached;
-        let text = expandPastes(ta.value.trim(), loadPastes());
-        if (!text && !files.length) {
-            return;
-        }
-        if (state.boot) {
-            $('c-err').textContent = 'Claude is waiting on a startup question above';
-            return;
-        }
-        const target = s?.id ?? startingTarget(); // a project that is still starting has no session id, only its tmux name
-        if (!target) {
-            return;
-        }
-        if (files.length) {
-            if (uploading) {
-                return; // a second Enter while the first upload runs
-            }
-            $('c-err').textContent = '';
-            uploading = true;
-            try {
-                text = [text, ...await upload(files)].filter(Boolean).join('\n');
-            } catch (err) {
-                showErr(err.message); // text and images stay for another try
-                return;
-            } finally {
-                uploading = false;
-            }
-            attached = attached.filter(f => !files.includes(f)); // keeps any attached while uploading
-            showAttached();
-        }
-        // clear at once; the "sending…" bubble shows progress
-        ta.value = '';
-        saveDraft(draftStorage(), target, ta); // the draft goes when the send starts: a reload during a slow send must not bring the sent text back
-        const ok = await sendText(target, text);
-        if (draftSid !== (s?.id ?? null)) {
-            // switched chats meanwhile: the box is the other chat's now, so a failed text goes back into its own chat's draft
-            if (!ok && s && !draftStorage()?.getItem(`draft:${s.id}`)) {
-                saveDraft(draftStorage(), s.id, /** @type {any} */ ({ value: text }));
-            }
-        } else if (!ok && !ta.value) {
-            // give the text back so it isn't lost
-            ta.value = text;
-            saveDraft(draftStorage(), target, ta);
-        } else {
-            saveDraft(draftStorage(), target, ta); // keeps whatever was typed meanwhile
-        }
-    };
-    $('plus-menu').addEventListener('wa-select', e => e.detail.item.value === 'files' && $('attach-input').click());
-    $('attach-input').onchange = () => {
-        attach($('attach-input').files ?? []);
-        $('attach-input').value = '';
-    };
-    $('send').addEventListener('paste', e => {
-        const files = [...e.clipboardData?.files ?? []].filter(f => f.type.startsWith('image/'));
-        if (files.length) {
-            e.preventDefault(); // not also the file's name as text
-            attach(files);
-            return;
-        }
-        const text = e.clipboardData?.getData('text/plain') ?? '';
-        if (isLongPaste(text)) {
-            e.preventDefault();
-            const ta = $('msg'), sel = /** @type {HTMLTextAreaElement} */ (('input' in ta && ta.input) || ta);
-            const label = stashPaste(text.replace(/\r\n?/g, '\n'));
-            const start = sel.selectionStart ?? ta.value.length, end = sel.selectionEnd ?? start;
-            ta.value = ta.value.slice(0, start) + label + ta.value.slice(end);
-            ta.updateComplete?.then(() => ta.setSelectionRange(start + label.length, start + label.length));
-            saveDraft(draftStorage(), chatSession()?.id, ta);
-        }
-    });
-    const row = $('send').querySelector('.c-row');
-    const hasFiles = /** @param {DragEvent} e */ e => !!e.dataTransfer?.types.includes('Files');
-    $('send').addEventListener('dragover', e => {
-        if (hasFiles(e)) {
-            e.preventDefault();
-            row?.classList.add('drop');
-        }
-    });
-    $('send').addEventListener('dragleave', () => row?.classList.remove('drop'));
-    $('send').addEventListener('drop', e => {
-        row?.classList.remove('drop');
-        if (hasFiles(e)) {
-            e.preventDefault();
-            attach(e.dataTransfer?.files ?? []);
-        }
-    });
-    // On a touch screen Enter adds a line, as its keyboard has no Shift+Enter; the send button (shown there only) sends.
-    $('msg').onkeydown = e => {
-        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && !touch()) {
-            e.preventDefault();
-            $('send').requestSubmit();
-        }
-    };
-    $('send-btn').onmousedown = e => e.preventDefault(); // the tap leaves the focus in the box, so the phone's keyboard stays up
-    // Claude Code takes /model <alias> as a normal message and switches at once (it also saves it as the default for new chats)
-    $('c-model').addEventListener('wa-select', async e => {
-        const s = chatSession(), alias = e.detail.item.value;
-        if (!s || state.asking) {
-            return;
-        }
-        pickedModel = { sid: s.id, name: alias === 'default' ? 'Default' : modelName(alias) ?? alias, at: Date.now() };
-        paneCheck = s.id; // Claude may ask "Switch model?" before it switches
-        showModel(s);
-        try {
-            const r = await api(`/api/send?id=${encodeURIComponent(s.id)}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: `/model ${alias}` });
-            if (!r.ok) {
-                throw new Error(await r.text());
-            }
-        } catch (err) {
-            pickedModel = null;
-            showModel(s);
-            $('c-err').textContent = friendly(err.message);
-        }
-    });
-    $('plus-menu').addEventListener('wa-select', e => {
-        if (e.detail.item.value === 'push' || e.detail.item.value === 'files') {
-            return; // app.js, and above
-        }
-        const s = chatSession();
-        if (!s) {
-            return;
-        }
-        if (e.detail.item.value === 'needs-only') {
-            return setNeedsOnly(store.get('needs-only') !== '1'); // from our state, not the item's own toggle
-        }
-        if (e.detail.item.value === 'auto-compact') {
-            return setAutoCompact(store.get('auto-compact') === '0');
-        }
-        if (e.detail.item.value === 'restart') {
-            return void ($('restart-dlg').open = true);
-        }
-        if (e.detail.item.value === 'compact') {
-            return void ($('compact-dlg').open = true);
-        }
-        if (e.detail.item.value === 'view') {
-            store.set(`cleared:${s.id}`, String(Date.now()));
-            refreshChat();
-        } else {
-            $('clear-dlg').open = true;
-        }
-    });
-    $('restart-go').onclick = () => {
-        $('restart-dlg').open = false;
-        const s = chatSession();
-        if (s) {
-            restart(s.id);
-        }
-    };
-    $('status-restart').onclick = $('rules-restart').onclick = () => { $('restart-dlg').open = true; };
-    $('compact-nudge').onclick = () => { $('compact-dlg').open = true; };
-    $('compact-go').onclick = () => {
-        $('compact-dlg').open = false;
-        const s = chatSession();
-        if (s) {
-            compact(s.id);
-        }
-    };
-    $('clear-go').onclick = async () => {
-        const s = chatSession();
-        $('clear-dlg').open = false;
-        $('c-err').textContent = '';
-        if (!s) {
-            return;
-        }
-        try {
-            const r = await api(`/api/clear?id=${encodeURIComponent(s.id)}`, { method: 'POST' });
-            if (!r.ok) {
-                throw new Error(await r.text());
-            }
-            store.set(`cleared:${s.id}`, JSON.stringify({ at: Date.now(), mode: 'new' }));
-            refreshChat();
-        } catch (err) {
-            showErr(err.message);
-        }
-    };
-    for (const b of /** @type {NodeListOf<HTMLElement>} */ (document.querySelectorAll('.c-copy'))) {
-        b.addEventListener('click', () => navigator.clipboard.writeText($(b.dataset.copy).textContent).then(() => {
-            b.textContent = 'Copied';
-            setTimeout(() => { b.textContent = 'Copy'; }, 1500);
-        }));
-    }
+    $('rules-restart').onclick = () => { $('restart-dlg').open = true; };
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { api, page, refreshToken } from '../../public/core.js';
-import { saveDraft, restoreDraft } from '../../public/chat.js';
+import { saveDraft, loadDraft } from '../../web/src/lib/draft.ts';
 
 {
     // A stub server: /api/* wants the current token, / serves the page with the token and build it has now.
@@ -45,20 +45,15 @@ import { saveDraft, restoreDraft } from '../../public/chat.js';
         assert.equal(page.updated, false);
     } finally { globalThis.fetch = real; }
 
-    // draft round trip with the selection; per session; never overwrites typed text; empty text removes it
+    // draft round trip with the selection; per session; never over typed text; empty text removes it
     const mem = new Map(), storage = { getItem: k => mem.get(k) ?? null, setItem: (k, v) => mem.set(k, String(v)), removeItem: k => mem.delete(k) };
-    const ta = (value = '', start = 0, end = 0) => ({ value, selectionStart: start, selectionEnd: end, setSelectionRange(s, e) { this.selectionStart = s; this.selectionEnd = e; } });
-    saveDraft(storage, 's1', ta('hello world', 6, 11));
-    const back = ta();
-    assert.equal(await restoreDraft(storage, 's1', back), true);
-    assert.deepEqual([back.value, back.selectionStart, back.selectionEnd], ['hello world', 6, 11]);
-    assert.equal(await restoreDraft(storage, 's2', ta()), false);
-    const typed = ta('new');
-    assert.equal(await restoreDraft(storage, 's1', typed), false);
-    assert.equal(typed.value, 'new');
-    saveDraft(storage, 's1', ta(''));
+    saveDraft(storage, 's1', { text: 'hello world', start: 6, end: 11 });
+    assert.deepEqual(loadDraft(storage, 's1'), { text: 'hello world', start: 6, end: 11 });
+    assert.equal(loadDraft(storage, 's2'), null);
+    assert.equal(loadDraft(storage, 's1', 'new'), null, 'a box with text in it keeps it');
+    saveDraft(storage, 's1', { text: '' });
     assert.equal(mem.has('draft:s1'), false);
-    saveDraft(null, 's1', ta('x')); // no storage: no throw
-    assert.equal(await restoreDraft(null, 's1', ta()), false);
+    saveDraft(null, 's1', { text: 'x' }); // no storage: no throw
+    assert.equal(loadDraft(null, 's1'), null);
     console.log('ok token refresh, draft');
 }

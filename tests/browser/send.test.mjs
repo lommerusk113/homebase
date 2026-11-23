@@ -100,7 +100,10 @@ export default {
         await page.waitFor(`document.querySelector('${asker}')`, { what: "the asker's row" });
         await page.click('#msg');
         await page.type('draft for main');
-        await page.ev(`document.getElementById('c-err').textContent = 'Claude is busy'`);
+        // an error on this chat's line: a file that is no image
+        await page.ev(`(() => { const dt = new DataTransfer(); dt.items.add(new File(['x'], 'notes.txt', { type: 'text/plain' }));
+            const i = document.getElementById('attach-input'); i.files = dt.files; i.dispatchEvent(new Event('change')); })()`);
+        await page.waitFor(`document.getElementById('c-err').textContent === 'Only PNG, JPEG, GIF or WebP images can be attached'`, { what: 'the error line' });
         await page.click(asker);
         await page.waitFor(`!document.getElementById('c-back').hidden`, { what: 'the focused chat' });
         assert.deepEqual(await page.ev(`[document.getElementById('msg').value, document.getElementById('c-err').textContent]`), ['', '']);

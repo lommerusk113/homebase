@@ -43,7 +43,12 @@ Each island is its own Vue app, so give `useId()` ids a section prefix (`feed-`,
 Composables are the only readers of `oldState`.
 They return getter refs, `toRef(() => oldState.value.x)`, not `computed`: a computed that returns the same (mutated) object again doesn't notify what depends on it, while a getter ref reads `oldState` on every access.
 Use `computed` only for a derived value whose getter itself reads `oldState.value`.
-Old actions are plain functions the composable wraps: `hooks.setProject`, `select` from `old/list.js`, `sendText` from `old/chat.js`, `openDiff` from `old/diff.js`.
+Old actions are plain functions the composable wraps: `hooks.setProject`, `select` from `old/list.js`, `refreshChat` from `old/chat.js`, `openDiff` from `old/diff.js`.
+
+The other way round, old code that needs a ported section goes through an object in `public/core.js` that the section's composables fill in when `main.js` loads.
+`feedPort` in `old/chat.js` is one, `composer` another: `refreshChat` hands the composer and the question cards what it found (`composer.turn`, `ask`, `boot`), and the old page's buttons send through `composer.send` (`sendText` in `old/chat.js` is only that call).
+State owned by a ported section lives at module level in its composable, so the chat's islands (`Feed`, `Composer`, `Ask`) and those calls share it.
+Pure helpers with a unit test sit in `src/lib/` without Vue or `old/` imports, so `tests/unit` imports the `.ts` file directly (Node 22.18 or newer).
 
 ## Rules for Vue code
 

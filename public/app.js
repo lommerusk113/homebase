@@ -1,5 +1,5 @@
 // Entry point: header (project picker, bell, projects dialog), polling, notifications, limits strip.
-import { api, $, el, state, store, syncClock, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary, waitsOnYou, vue } from './core.js';
+import { api, $, el, state, store, syncClock, saveTracked, isTracked, projectCounts, updateTitle, prLabel, waButton, ago, limitView, runOutIn, tooltip, hooks, page, setOffline, setFormatWarn, seenAt, authorSummary, waitsOnYou, vue, push } from './core.js';
 import { renderBoard, select, attentionEvents, askingEvents, sessionTopic } from './list.js';
 import { refreshChat, initChat, bindChat, focusChat, isMaster, chatSession } from './chat.js';
 import { openNewProject, initNewProject } from './newproject.js';
@@ -256,10 +256,11 @@ async function renderPush(error = '') {
     const reg = pushSupported && await navigator.serviceWorker.getRegistration().catch(() => null);
     pushNow = ios && !standalone ? 'home' : !pushSupported ? 'unsupported' : Notification.permission === 'denied' ? 'blocked'
         : (await reg?.pushManager.getSubscription().catch(() => null)) ? 'on' : 'off';
-    $('push-label').textContent = `${pushNow === 'on' ? 'Turn off' : 'Enable'} notifications on this device`;
-    $('push-state').textContent = error || {
+    push.label = `${pushNow === 'on' ? 'Turn off' : 'Enable'} notifications on this device`;
+    push.state = error || {
         on: 'On', off: 'Off', home: 'Add Homebase to your Home Screen first', unsupported: 'Not supported in this browser', blocked: 'Blocked in browser settings'
     }[pushNow];
+    vue.bump();
 }
 /** @param {string} b64 */
 const keyBytes = b64 => Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
@@ -290,7 +291,7 @@ async function togglePush() {
         await renderPush(`Failed: ${e.message}`);
     }
 }
-$('plus-menu').addEventListener('wa-select', e => {
+$('chat').addEventListener('wa-select', e => { // the + menu, drawn by the composer island
     if (e.detail.item.value === 'push') {
         togglePush();
     }

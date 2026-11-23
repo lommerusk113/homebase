@@ -1,6 +1,7 @@
 import { shallowRef } from 'vue';
 import { commandRun, markHandled, openDecision, state, store } from 'old/core.js';
-import { answerNote, clearState, feedPort, focusWanted, jumpToNeeds, refreshChat, showEarlier, showErr, type FeedInput } from 'old/chat.js';
+import { answerNote, clearState, feedPort, focusWanted, jumpToNeeds, refreshChat, showEarlier, type FeedInput } from 'old/chat.js';
+import { useNotice } from '@/composables/useNotice';
 import { pruneOutbox } from '@/composables/useOutbox';
 import { seenOf } from '@/composables/useUnread';
 
@@ -143,7 +144,7 @@ export function useFeed() {
         /** Scrolls to and focuses what needs the user. */
         jumpToNeeds: () => jumpToNeeds(),
         /** A "needs you" Claude got wrong: the reply stops needing you, here and on the board. */
-        markHandled: (reply: string) => markHandled(view.value.sid, reply).then(refreshChat, err => showErr(err.message)),
+        markHandled: (reply: string) => markHandled(view.value.sid, reply).then(refreshChat, err => useNotice().showError(err.message)),
         /** After a drawing: a question the keyboard asked for (Enter on a waiting row) takes the focus. */
         drawn: () => focusWanted(view.value.sid)
     };

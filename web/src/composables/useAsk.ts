@@ -19,6 +19,8 @@ export interface Card {
     /** a permission prompt's command or diff, in red when the server flags it risky */
     detail?: string;
     risky?: boolean;
+    /** a background helper's prompt: it runs in this chat's process, so only this pane can answer it */
+    helper?: boolean;
 }
 interface PaneQuestion { question: string; options: string[]; descriptions: string[]; selected: number; detail?: string; risky?: boolean }
 
@@ -104,7 +106,7 @@ async function check(s: Session, data: Transcript) {
         // click, typed as a message naming the question (the server declines the dialog first); several stay read-only
         const one = questions.length === 1 && questions[0].options.length ? questions[0] : null;
         card.value = {
-            tmux,
+            tmux, helper: data.helperAsking,
             question: questions.map(q => q.question).join(' · '),
             options: questions.flatMap(q => q.options.map((label, i) => ({ label, desc: q.descriptions?.[i] }))),
             answer: one && (async n => {
@@ -126,7 +128,7 @@ async function check(s: Session, data: Transcript) {
         options.push({ i: -1, label: 'Chat about this', desc: '', quiet: true }); // no such entry on the pane: Esc declines instead
     }
     card.value = {
-        tmux, options, question: known?.question ?? pane.question, detail: pane.detail, risky: pane.risky,
+        tmux, options, question: known?.question ?? pane.question, detail: pane.detail, risky: pane.risky, helper: data.helperAsking,
         async answer(n) {
             const o = options[n];
             try {

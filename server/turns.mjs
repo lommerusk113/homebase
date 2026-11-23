@@ -109,6 +109,19 @@ export function markerAsk(marker, entries, now = Date.now()) {
         : [{ question: String(marker.permission), options: [] }];
 }
 
+// A live permission prompt that no tool of the chat's own waits on: a background helper's, which runs inside this chat's
+// process and so prompts on its pane. Claude Code offers no way to answer it elsewhere. (An open Agent call is the helper itself.)
+export function helperAsk(marker, entries, now = Date.now()) {
+
+    if (!marker?.permission || !markerAsk(marker, entries, now)) {
+        return false;
+    }
+    const mine = entries.filter(e => !e.isSidechain && Array.isArray(e.message?.content)).flatMap(e => e.message.content);
+    const done = new Set(mine.filter(b => b.type === 'tool_result').map(b => b.tool_use_id));
+
+    return !mine.some(b => b.type === 'tool_use' && b.name !== 'Agent' && b.name !== 'Task' && !done.has(b.id));
+}
+
 // Turn state from the entries, not the mtime: thinking, long replies and long tool calls write nothing for minutes.
 // A turn starts at a user entry with `turnPosition` (human prompt, peer message, task notification; queued_command
 // attachments only land mid-turn) and ends at `turn_duration`, an API error, or an Esc interrupt. An interrupt

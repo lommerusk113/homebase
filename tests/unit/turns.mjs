@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'n
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { status, summarize, pendingQuestion, turnState, askMarker, markerAsk, findClearedSuccessor, tmuxFor, lastActivity, linkClears } from '../../server.mjs';
+import { status, summarize, pendingQuestion, turnState, askMarker, markerAsk, helperAsk, findClearedSuccessor, tmuxFor, lastActivity, linkClears } from '../../server.mjs';
 
 // Turn state, from real entry shapes (Claude Code 2.1.3xx).
 {
@@ -96,6 +96,13 @@ import { status, summarize, pendingQuestion, turnState, askMarker, markerAsk, fi
     const perm = { permission: 'Claude needs your permission to use Bash', at: at('26:05') };
     assert.deepEqual(markerAsk(perm, turn, now), [{ question: perm.permission, options: [] }]);
     assert.equal(markerAsk(perm, [...turn, result('b1', '41:00')], now), null);
+    // a permission prompt with no tool of the main chat's own waiting on it belongs to a background helper (they share the pane)
+    const bash = { type: 'assistant', timestamp: at('26:00'), message: { content: [{ type: 'tool_use', id: 'b1', name: 'Bash', input: {} }] } };
+    assert.equal(helperAsk(perm, turn, now), true, 'only an Agent call is open');
+    assert.equal(helperAsk(perm, [...turn, bash], now), false, 'the main chat\'s own Bash waits');
+    assert.equal(helperAsk(perm, [...turn, bash, result('b1', '26:01')], now), true, 'its Bash finished before the prompt');
+    assert.equal(helperAsk(ask, turn, now), false, 'a question is not a permission prompt');
+    assert.equal(helperAsk(null, turn, now), false);
     // a pending AskUserQuestion in the transcript wins over the marker
     const inTranscript = { type: 'assistant', timestamp: at('26:00'), message: { content: [{ type: 'tool_use', id: 'q9', name: 'AskUserQuestion', input: { questions: [{ question: 'Real?', options: [] }] } }] } };
     assert.equal(pendingQuestion([...turn, inTranscript], ask), 'Real?');

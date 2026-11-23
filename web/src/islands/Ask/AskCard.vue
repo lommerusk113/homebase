@@ -27,7 +27,7 @@ watch(card, c => {
         <wa-button size="s" appearance="plain" id="ask-undiscuss" @click="undiscuss">Back to the question</wa-button>
     </div>
     <div class="c-note c-ask" :class="{ risky: card?.risky }" id="ask" :hidden="!shown || discussing">
-        <div class="c-ask-label">Claude is asking</div>
+        <div class="c-ask-label">{{ card?.helper ? 'A background helper is asking' : 'Claude is asking' }}</div>
         <div class="c-ask-q" id="ask-q" role="heading" aria-level="3">{{ card?.question }}</div>
         <pre class="c-ask-detail mono" id="ask-detail" :hidden="!lines.length">{{ (all ? lines : lines.slice(0, DETAIL_LINES)).join('\n') }}</pre>
         <wa-button size="s" appearance="plain" class="c-ask-more" id="ask-more" :hidden="all || rest <= 0" @click="all = true">+{{ rest }} more line{{ rest === 1 ? '' : 's' }}</wa-button>

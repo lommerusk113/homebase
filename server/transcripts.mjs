@@ -4,7 +4,7 @@ import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ROOT, liveSessions, tailOf } from './entries.mjs';
 import { FEED_ITEMS, feedTail, chatFeed } from './feed.mjs';
-import { askMarker, turnState, pendingQuestion, pendingAsk } from './turns.mjs';
+import { askMarker, turnState, pendingQuestion, pendingAsk, helperAsk } from './turns.mjs';
 
 export * from './entries.mjs';
 export * from './summaries.mjs';
@@ -30,7 +30,7 @@ export async function transcript(dir, id, max) {
     const marker = await askMarker(id, { live });
     const turn = turnState(entries, Date.now() - st.mtimeMs, marker, live);
 
-    return { items, more, capped, asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), working: turn.state === 'working', stuck: turn.state === 'stuck', since: turn.since };
+    return { items, more, capped, asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), helperAsking: helperAsk(marker, entries), working: turn.state === 'working', stuck: turn.state === 'stuck', since: turn.since };
 }
 
 // GET /api/agent-feed: a helper's own conversation, in the transcript's shape. Both ids must be a session and one of its

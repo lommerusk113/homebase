@@ -205,6 +205,16 @@ export default {
         assert.deepEqual([u.searchParams.get('option'), u.searchParams.get('label')], ['3', 'No']);
     },
 
+    "a background helper's permission prompt is labelled as the helper's, not Claude's": async ({ page, open, IDS, answerPosts }) => {
+        const transcript = { items: [], working: false, asking: 'Claude needs your permission to use Bash', helperAsking: true };
+        const question = parseQuestion(readFileSync(new URL('../fixtures/permission-bash.txt', import.meta.url), 'utf8'));
+        await open({ project: 'beta', chat: IDS.asker });
+        page.route = q => (q.url.includes('/api/transcript') ? { body: JSON.stringify(transcript), headers: { 'content-type': 'application/json' } }
+            : q.url.includes('/api/question') && q.method !== 'POST' ? { body: JSON.stringify({ question }), headers: { 'content-type': 'application/json' } }
+                : answerPosts(q));
+        await page.waitFor(`document.querySelector('#ask .c-ask-label').textContent === 'A background helper is asking' && !document.getElementById('ask').hidden`, { what: 'the helper-labelled card' });
+    },
+
     'a long risky command is shown, its first lines then the rest on demand': async ({ page, open, IDS, answerPosts }) => {
         const transcript = { items: [], working: false, asking: 'Claude needs your permission to use Bash' };
         const question = parseQuestion(readFileSync(new URL('../fixtures/permission-bash-long.txt', import.meta.url), 'utf8'));

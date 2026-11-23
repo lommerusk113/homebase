@@ -231,6 +231,8 @@ interface Transcript {
     capped?: boolean; // older messages exist, but before the part of the transcript the server reads
     asking: string | null;
     questions: { question: string; options: string[]; descriptions?: string[] }[] | null;
+    /** the permission prompt is a background helper's, shown on this chat's pane (answerable only there) */
+    helperAsking?: boolean;
     working: boolean;
     /** an open turn with no write for 30 min */
     stuck?: boolean;

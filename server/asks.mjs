@@ -134,7 +134,12 @@ export const replyChips = i => {
         return asked.options.map(o => o.label);
     }
     const yesNo = quickReplies(i.tldr, withoutInFlight(i.text));
-    return yesNo.length || !i.needsYou ? yesNo : namedChoices(`${i.tldr ?? ''}\n${i.waiting ?? ''}`);
+    if (yesNo.length || !i.needsYou) {
+        return yesNo;
+    }
+    const named = namedChoices(`${i.tldr ?? ''}\n${i.waiting ?? ''}`);
+
+    return named.length > 1 ? named : []; // a lone chip reads as the only allowed answer; the composer is the answer
 };
 
 // "say go" → [Go]; a sentence that is just "A or B" ("…merge now? Yes or later.") → [A, B]; else [].

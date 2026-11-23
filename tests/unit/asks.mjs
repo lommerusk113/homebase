@@ -78,7 +78,11 @@ assert.deepEqual(namedChoices('Shipped the fix. Nothing else to do.'), []);
     const [a] = chatItems([say('Rebased.\n\n**TLDR:** Rebased **!12** onto main. Merge now? Yes or later.')]);
     assert.deepEqual(a.replies, ['Yes', 'Later']);
     const [b] = chatItems([say('Built it.\n\n**In flight**\n- Waiting on you: say go to deploy\n\n**TLDR:** Build is green.')]);
-    assert.deepEqual(b.replies, ['Go']);
+    assert.deepEqual(b.replies, [], 'a lone chip would look like the only answer');
+    for (const w of ["yes to all five (stop hook experiment, …), or name the ones you'd change.", "keep 2400 and reply so, or say keep"]) {
+        const [c] = chatItems([say(`Done.\n\n**Waiting on you:** ${w}\n\n**TLDR:** Say yes to all five, or name the ones you'd change.`)]);
+        assert.deepEqual(c.replies, [], w);
+    }
     assert.deepEqual(chatItems([say('Built it.\n\n**TLDR:** Build is green, say go to deploy when you like')])[0].replies, [], 'not a needs-you reply');
 }
 { // a Heads-up line leaves the body for its own field, shown next to the TLDR

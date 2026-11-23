@@ -1,5 +1,5 @@
 // Dashboard over Claude Code transcripts in ~/.claude/projects. Only types into its own tmux sessions.
-// Entry point: config, startup and the router. Everything else lives in server/ (see server/README.md); what test.mjs uses is re-exported here.
+// Entry point: config, startup and the router. Everything else lives in server/ (see server/README.md); what the unit tests (tests/unit/) use is re-exported here.
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';

@@ -279,7 +279,7 @@ A file's diff is cut off at 200 KB ("Diff too large"), a list at 300 files per g
 Every merge must pass these:
 
 ```sh
-node test.mjs                  # unit tests (also: npm test)
+node test.mjs                  # unit tests in tests/unit/, one file per area (also: npm test)
 node tests/browser/run.mjs     # headless browser tests (about 30 s)
 ./check-types.sh               # type-checks public/*.js, no build
 ```

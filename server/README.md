@@ -1,6 +1,6 @@
 # server/
 
-`../server.mjs` is the entry point: config (env vars), startup and the router. It re-exports every function the tests use, so `test.mjs` imports only from `./server.mjs`.
+`../server.mjs` is the entry point: config (env vars), startup and the router. It re-exports every function the tests use, so the unit tests in `tests/unit/` import mostly from `../../server.mjs`.
 
 | Module | What lives there |
 |---|---|

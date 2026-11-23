@@ -13,6 +13,7 @@ node tests/browser/run.mjs     # headless browser tests, a minute or two; needs 
 ./check-types.sh               # type-checks public/*.js; fetches TypeScript through npx, so it needs the network
 ```
 
+`node test.mjs` runs the files in `tests/unit/` (one per area, shared fixtures in `helpers.mjs`) in the order its list gives; add a test to its area's file, and a new file to that list.
 One line reading "items.json is corrupt" in the unit test output is expected.
 The checks never touch your Claude sessions, your tmux sessions, your `~/.claude/settings.json` or a running Homebase; keep it that way in new tests (`HOMEBASE_CLAUDE_SETTINGS` points the settings code at a temp file).
 The README's "Checks" section has the details.

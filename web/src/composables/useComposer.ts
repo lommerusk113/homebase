@@ -1,5 +1,7 @@
 import { toRef, watch } from 'vue';
 import { state, touch } from 'old/core.js';
+import { oldState } from '@/old';
+import { sessionTopic } from '@/lib/board';
 import { useChat } from './useChat';
 import { useComposerFocus } from './useComposerFocus';
 import { useDiscuss } from './useDiscuss';
@@ -81,6 +83,6 @@ export function useComposer() {
         entersLine: touch,
         label: toRef(() => (session.value ? `Message Claude in ${session.value.project}` : 'Message Claude')),
         /** the box's placeholder */
-        hint: toRef(() => (helper.value ? 'Message goes to this helper via its main chat' : discuss.discussing.value ? 'Discuss this question…' : `${session.value ? `Message Claude in ${session.value.project}` : 'Message Claude'}…`))
+        hint: toRef(() => (helper.value ? 'Message goes to this helper via its main chat' : discuss.discussing.value ? 'Discuss this question…' : `Message ${session.value && (oldState.value, state.focus === session.value.id) ? session.value.title || sessionTopic(session.value) : 'main chat'}…`))
     };
 }

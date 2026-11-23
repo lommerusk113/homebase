@@ -4,7 +4,7 @@ import { join, dirname } from 'node:path';
 
 const row = id => `#masters tr[data-key="asking:${id}"]`;
 const back = `document.getElementById('c-back')`;
-const title = `document.getElementById('msg').getAttribute('placeholder').replace(/^Message Claude in (.*)…$/, '$1')`;
+const title = `document.getElementById('msg').getAttribute('placeholder').replace(/^Message (.*)…$/, '$1')`;
 const focus = `document.getElementById('c-focus')`;
 
 export default {
@@ -13,11 +13,11 @@ export default {
         await page.waitFor(`document.querySelector('${row(IDS.master)}') && document.querySelector('${row(IDS.asker)}')`, { what: 'both needs-you rows' });
         assert.equal(await page.ev(`${back}.hidden && ${focus}.hidden`), true, 'no back button or context on the main chat');
         assert.equal(await page.ev(`document.getElementById('ask').hidden && document.getElementById('wait').hidden`), true, 'no foreign question in the pane');
-        assert.equal(await page.ev(title), 'alpha');
+        assert.equal(await page.ev(title), 'main chat');
 
         await page.click(row(IDS.asker));
         await page.waitFor(`!document.getElementById('ask').hidden && /Which database/.test(document.getElementById('ask-q').textContent)`, { what: "the asker's question" });
-        assert.equal(await page.ev(`${back}.textContent`), '← Main chat');
+        assert.equal(await page.ev(`${back}.textContent`), '← Back to main');
         assert.equal(await page.ev(`${back}.hidden`), false);
         await page.waitFor(`document.querySelectorAll('#ask-opts .c-opt').length >= 2`, { what: 'its answer buttons' });
         assert.equal(await page.ev(`localStorage.getItem('chat')`), IDS.worker, 'the main chat stays bound');
@@ -32,16 +32,36 @@ export default {
         assert.equal(await page.ev(`${back}.hidden`), false);
 
         await page.click('#c-back');
-        await page.waitFor(`${back}.hidden && ${focus}.hidden && ${title} === 'alpha' && document.getElementById('wait').hidden`, { what: 'the main chat back' });
+        await page.waitFor(`${back}.hidden && ${focus}.hidden && ${title} === 'main chat' && document.getElementById('wait').hidden`, { what: 'the main chat back' });
     },
 
-    'switching project leaves a helper': async ({ page, open, IDS }) => {
+    'the pane header names the chat, with the way back, an accent, the placeholder and the open row marked': async ({ page, open, IDS }) => {
+        const name = `document.getElementById('c-name').textContent`, msg = `document.getElementById('msg').getAttribute('placeholder')`;
+        await open({ project: 'all', chat: IDS.worker });
+        await page.waitFor(`document.querySelector('${row(IDS.asker)}')`, { what: 'the asking row' });
+        assert.equal(await page.ev(name), 'Main chat');
+        assert.equal(await page.ev(msg), 'Message main chat…');
+        assert.equal(await page.ev(`document.getElementById('chat').classList.contains('off-main')`), false);
+        await page.click(row(IDS.asker));
+        await page.waitFor(`${name} === 'Add SQLite support' && ${msg} === 'Message Add SQLite support…'`, { what: "the focused chat's name in header and placeholder" });
+        assert.equal(await page.ev(`${back}.hidden`), false);
+        assert.equal(await page.ev(`${back}.textContent`), '← Back to main');
+        assert.equal(await page.ev(`parseFloat(getComputedStyle(document.getElementById('chat')).borderLeftWidth)`), 3, 'accent border');
+        assert.equal(await page.ev(`document.querySelector('${row(IDS.asker)}').classList.contains('viewing')`), true);
+        assert.equal(await page.ev(`document.querySelector('${row(IDS.master)}').classList.contains('viewing')`), false);
+        await page.click('#c-back');
+        await page.waitFor(`${name} === 'Main chat' && ${msg} === 'Message main chat…' && !document.querySelector('${row(IDS.asker)}').classList.contains('viewing')`, { what: 'the main chat header back' });
+    },
+
+    'a helper is named in the header, and switching project leaves it': async ({ page, open, IDS }) => {
         await open({ project: 'all', chat: IDS.worker });
         await page.waitFor(`document.querySelector('${row(IDS.asker)}')`, { what: 'the row' });
         await page.ev(`import('/chat.js').then(m => m.focusChat(${JSON.stringify(IDS.asker)}, { id: 'agent-x', description: 'Port the header' }))`);
-        await page.waitFor(`import('/chat.js').then(m => m.activeHelper()?.id === 'agent-x')`, { what: 'the helper in the pane' });
-        await page.ev(`import('/core.js').then(m => m.hooks.setProject('alpha'))`);
-        await page.waitFor(`import('/core.js').then(m => m.state.helper === null)`, { what: 'the helper left behind' });
+        await page.waitFor(`document.getElementById('c-name').textContent === 'Helper · Port the header'`, { what: 'the helper in the header' });
+        assert.match(await page.ev(`${back}.textContent`), /^← Back to /);
+        await page.ev(`import('/app.js').catch(() => {}); import('/core.js').then(m => m.hooks.setProject('alpha'))`);
+        await page.waitFor(`document.getElementById('c-name').textContent === 'Main chat'`, { what: 'the main chat after the project switch' });
+        assert.equal(await page.ev(`import('/core.js').then(m => m.state.helper)`), null);
     },
 
     'focusing or leaving a chat ends a Discuss started on the one before': async ({ page, open, IDS }) => {

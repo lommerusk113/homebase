@@ -10,7 +10,7 @@ import NeedsYou from './NeedsYou.vue';
 import StepInChat from './StepInChat.vue';
 
 const props = defineProps<{ sid: string }>();
-const { byId, focus, replyOf, markDone, title, quietFor } = useInjected(ChatRowsKey);
+const { byId, focus, viewing, replyOf, markDone, title, quietFor } = useInjected(ChatRowsKey);
 const { project } = useInjected(ProjectKey);
 const s = toRef(() => byId.value.get(props.sid)!);
 
@@ -27,7 +27,7 @@ const label = computed(() => (asks.value != null
 </script>
 
 <template>
-    <tr class="asking" :data-key="`asking:${sid}`" role="button" :aria-label="label" @click="focus(sid)">
+    <tr class="asking" :class="{ viewing: viewing(sid) }" :data-key="`asking:${sid}`" role="button" :aria-label="label" @click="focus(sid)">
         <td class="what" colspan="6">
             <button v-if="replyOf(s)" type="button" class="need-done" title="Mark as handled" aria-label="Mark as handled" @click.stop="markDone(s)">✓</button>
             <template v-if="asks != null">

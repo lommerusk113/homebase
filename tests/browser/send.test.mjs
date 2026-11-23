@@ -117,7 +117,7 @@ export default {
         await page.waitFor(`document.getElementById('msg').value === ''`, { what: 'the box emptied by the send' });
         const sent = page.posts.filter(p => p.url.includes('/api/send'));
         assert.deepEqual(sent.map(p => p.body), ["Let's discuss this before choosing: what is the trade-off?"]);
-        assert.equal(await page.ev(`document.getElementById('msg').getAttribute('placeholder')`), 'Message Claude in beta…');
+        assert.equal(await page.ev(`document.getElementById('msg').getAttribute('placeholder')`), 'Message main chat…');
     },
 
     'the draft and the error line follow the chat: a focused chat starts empty, and going back restores the draft': async ({ page, open, IDS }) => {

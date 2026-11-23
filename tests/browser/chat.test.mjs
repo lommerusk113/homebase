@@ -144,10 +144,10 @@ export default {
         }
     },
 
-    'the input names the bound project': async ({ page, open }) => {
+    'the input says it talks to the main chat': async ({ page, open }) => {
         await open();
         await ready(page);
-        await page.waitFor(`document.getElementById('msg').getAttribute('placeholder') === 'Message Claude in alpha…'`, { what: 'the project in the placeholder' });
+        await page.waitFor(`document.getElementById('msg').getAttribute('placeholder') === 'Message main chat…'`, { what: 'the project in the placeholder' });
     },
 
     'TLDR folds the rest of the message': async ({ page, open }) => {

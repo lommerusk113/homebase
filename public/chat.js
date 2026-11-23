@@ -252,9 +252,12 @@ function showNewer(s) {
 /** @param {Session | null} s */
 function showHead(s) {
 
-    $('c-back').hidden = !(s && s.id === state.focus);
+    const off = !!s && s.id === state.focus; // not on the main chat: a focused chat or a helper
+    $('c-back').hidden = !off;
+    $('chat').classList.toggle('off-main', off);
     const helper = activeHelper();
-    $('c-back').textContent = helper ? `← Back to ${s.title || sessionTopic(s)}` : '← Main chat';
+    $('c-name').textContent = helper ? `Helper · ${helper.description}` : off ? s.title || sessionTopic(s) : 'Main chat';
+    $('c-back').textContent = helper ? `← Back to ${s.title || sessionTopic(s)}` : '← Back to main';
     const hash = helper ? `#chat=${encodeURIComponent(helper.sid)}&agent=${encodeURIComponent(helper.id)}` : '';
     if (location.hash !== hash) {
         history.replaceState(null, '', location.pathname + location.search + hash); // a reload comes back to the helper

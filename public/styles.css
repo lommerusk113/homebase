@@ -215,6 +215,10 @@ a.chip:hover { text-decoration:underline; }
 #chat { position:relative; width:33%; min-width:420px; max-width:720px; flex-shrink:0; display:flex; flex-direction:column; min-height:0; }
 /* no header bar: a slim strip in the card's top gutter, the chat's controls on the right (wa-dropdown is display:contents, so the trigger is the flex item) */
 .c-head { flex-shrink:0; height:32px; display:flex; align-items:center; justify-content:safe flex-end; gap:var(--sp-1); padding:var(--sp-1) var(--sp-1) 0 var(--sp-3); }
+.c-name { margin-right:auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:var(--fs-s); font-weight:600; color:var(--muted); }
+#chat.off-main { border-left:3px solid var(--accent); }
+#chat.off-main .c-head { background:var(--accent-bg); }
+#chat.off-main .c-name { color:var(--fg); }
 .c-back { flex-shrink:0; padding:3px 10px; border:1px solid var(--line); border-radius:var(--r-s); background:var(--bg); color:var(--fg); font:inherit; font-size:var(--fs-s); font-weight:500; cursor:pointer; white-space:nowrap; }
 .c-back:hover { background:var(--hover); }
 .c-back:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
@@ -568,7 +572,7 @@ wa-details.group::part(icon) { color:var(--muted); font-size:var(--fs-s); }
 .rows tr:first-child td { border-top:0; }
 .rows tr { cursor:pointer; }
 .rows tr:hover { background:var(--hover); }
-.rows tr.sel { background:var(--accent-bg); }
+.rows tr.sel, .rows tr.viewing { background:var(--accent-bg); }
 .rows .what { padding-left:40px; position:relative; } /* the gutter holds the dismiss X, on every row, so titles line up */
 .rows .what wa-button.dismiss-btn { position:absolute; left:6px; top:50%; transform:translateY(-50%); }
 .rows .what b, .rows .what .next { display:block; overflow:hidden; text-overflow:ellipsis; }

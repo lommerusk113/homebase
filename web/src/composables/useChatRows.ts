@@ -1,5 +1,5 @@
 import { computed, reactive } from 'vue';
-import { inView, markHandled, store } from 'old/core.js';
+import { inView, markHandled, state, store } from 'old/core.js';
 import { ago } from '@/lib/time';
 import { waitsOnYou } from '@/lib/waiting';
 import { isMaster, bindChat, focusChat } from 'old/chat.js';
@@ -42,12 +42,14 @@ export function useChatRows() {
         focusChat(s.id);
     };
 
+    /** the chat open in the pane (not the main chat): its row is marked */
+    const viewing = (sid: string) => (oldState.value, state.focus === sid);
     const title = (s: Session) => s.title || sessionTopic(s);
     // "now" or "3m ago": how long the chat has been quiet
     const quietFor = (s: Session) => ago(s.lastActivity ?? s.updated);
 
     return {
-        byId, asking, died, starting, working, replyOf, markDone, openDied, title, quietFor, workingTitle, workingLine,
+        byId, asking, died, starting, working, replyOf, markDone, openDied, viewing, title, quietFor, workingTitle, workingLine,
         focus: (id: string) => focusChat(id), bind: (id: string) => bindChat(id)
     };
 }

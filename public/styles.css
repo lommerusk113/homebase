@@ -246,6 +246,7 @@ a.chip:hover { text-decoration:underline; }
 .c-newer .show { flex-shrink:0; }
 /* overflow-anchor: chat.js keeps the reader's place itself (restorePlace); the browser's own correction would read as the user scrolling */
 .c-feed { flex:1; min-width:0; overflow:auto; overflow-anchor:none; overflow-wrap:anywhere; padding:var(--sp-3); display:flex; flex-direction:column; gap:var(--sp-2); background:var(--box-bg); }
+.c-feed > :first-child { margin-top:auto; } /* a short feed sits against the cards below it, no gap */
 .bubble { flex-shrink:0; max-width:92%; border-radius:var(--r-m); padding:2px var(--sp-3); font-size:var(--fs-l); line-height:1.55; overflow-wrap:anywhere; }
 /* only a bubble new since the last render (chat.js adds .enter), as the feed is redrawn whole */
 .bubble.enter { animation:rise .35s var(--ease) both; }

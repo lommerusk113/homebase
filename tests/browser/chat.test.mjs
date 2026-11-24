@@ -379,6 +379,20 @@ export default {
         assert.deepEqual(page.posts.map(p => [new URL(p.url).pathname + new URL(p.url).search, p.body]), [[`/api/send?id=${IDS.master}`, 'Redis']]);
     },
 
+    'a Waiting on you that is a yes/no question gets Yes and No chips': async ({ page, open, answerPosts }) => {
+        const items = chatItems([
+            { type: 'assistant', timestamp: '2026-11-14T10:00:00.000Z', message: { content: [{ type: 'text', text: '**▸ Commit**\n\n**In flight**\n- Waiting on you: Should I change the commit? I recommend rewording it; the other option is to leave it as is.\n\n**TLDR:** Commit message is off.' }] } }
+        ]);
+        await open();
+        await ready(page);
+        page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: false, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
+        await page.waitFor(`!document.getElementById('wait').hidden`, { what: 'the pinned strip' });
+        assert.deepEqual(await page.ev(`[...document.querySelectorAll('#wait-opts wa-button')].map(b => b.firstChild.textContent)`), ['Yes', 'No']);
+        await page.click('#wait-opts wa-button:first-child');
+        await page.waitFor(`document.getElementById('wait').hidden`, { what: 'the strip to go once answered' });
+        assert.equal(page.posts[0].body, 'Yes');
+    },
+
     'three replies waiting on the same thing: only the newest needs you, older ones stay quiet, the strip shows question, context and chips': async ({ page, open, answerPosts }) => {
         const say = (text, at) => ({ type: 'assistant', timestamp: at, message: { content: [{ type: 'text', text }] } });
         const turn = { type: 'user', message: { content: '<system-reminder>x</system-reminder>' } };

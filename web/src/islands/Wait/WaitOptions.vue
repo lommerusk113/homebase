@@ -7,11 +7,15 @@ import OptButton from '@/components/OptButton.vue';
 
 const { waiting, answer } = useInjected(WaitKey);
 const { focusComposer } = useInjected(SendKey);
+const YES_NO = /(?:^|[.!?:—–]\s+)(?:should|shall|do|does|did|is|are|can|could|will|would|want|may)\b[^?]*\?/i;
 const picked = ref<number | null>(null);
 const options = computed(() => {
     const r = waiting.value?.reply;
 
-    return r?.ask?.options ?? (r?.replies ?? []).map(label => ({ label, desc: '' }));
+    const named = r?.ask?.options ?? (r?.replies ?? []).map(label => ({ label, desc: '' }));
+
+    // ponytail: no listed options and a yes/no question ("Should I …?") → Yes / No; numbered options are not parsed
+    return named.length || !YES_NO.test(r?.ask?.question ?? r?.waiting ?? '') ? named : ['Yes', 'No'].map(label => ({ label, desc: '' }));
 });
 
 watch(() => waiting.value?.key, () => { picked.value = null; });

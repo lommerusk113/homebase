@@ -2,6 +2,8 @@ import { ref, shallowRef, toRef } from 'vue';
 import { composer } from 'old/core.js';
 import { activeHelper, chatSession, startingTarget, refreshChat, jumpToNeeds } from 'old/chat.js';
 import { oldState } from '@/old';
+import { staleCompactError } from '@/lib/compact';
+import { useNotice } from './useNotice';
 
 /** What a refresh of the open chat found: its transcript, a failed poll, or null with no chat. undefined: none yet. */
 export type Turn = (Partial<Transcript> & { error?: boolean }) | null | undefined;
@@ -10,7 +12,13 @@ const turn = shallowRef<Turn>();
 // The chat whose pane may show a dialog its transcript doesn't ask (Claude's "Switch model?" after a /model pick): set by
 // a pick and by a send refused for it, so the ask card shows it; cleared once the pane shows none.
 const dialogOn = ref<string | null>(null);
-composer.turn = data => { turn.value = data; };
+const { error } = useNotice();
+composer.turn = data => {
+    turn.value = data;
+    if (staleCompactError(error.value, data?.items)) {
+        error.value = ''; // compaction finished: "send again when it's done" no longer holds
+    }
+};
 
 /** The chat in the pane (old chat.js picks it and refreshes it), where a message goes, and what its last refresh found. */
 export function useChat() {

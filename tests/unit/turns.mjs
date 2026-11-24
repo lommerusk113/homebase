@@ -210,6 +210,10 @@ import { status, summarize, pendingQuestion, turnState, askMarker, markerAsk, he
     assert.equal(ss[0].needsYou, false, 'a cleared chat no longer needs you: its question went with the clear');
     assert.equal(ss[2].needsYou, true, 'a live chat in its own tmux keeps its question');
     assert.equal(ss[2].clearedFrom, undefined);
+    // an asking (marker) or MR-linked question of the cleared chat went with the clear too: no row may open its empty successor for it
+    const asked = [{ id: 'q-old', cwd: '/r', created: 0, asking: true, asks: 'Merge !1797?', question: { q: 'x' } }, { id: 'q-new', cwd: '/r', created: 5 }];
+    linkClears(asked, null, new Map([['q-new', { tmux: 'cc-q-old', from: 'q-old' }]]));
+    assert.deepEqual([asked[0].asking, asked[0].asks, asked[0].question], [false, null, null], 'a cleared chat asks nothing');
     const fresh = [{ id: 'x-old', cwd: '/r', created: 0, needsYou: true }, { id: 'y-new', cwd: '/r', created: 5 }];
     linkClears(fresh, null, new Map([['y-new', { tmux: 'cc-x-old', from: 'x-old' }]]));
     assert.deepEqual([fresh[1].clearedFrom, fresh[0].needsYou], ['x-old', false], 'a Homebase /clear still in memory too');

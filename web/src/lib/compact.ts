@@ -17,3 +17,7 @@ export const autoCompactDue = (s: Session, now: number, lastAt: number): boolean
     && (s.context ?? 0) >= tokenPercent(AUTO_COMPACT.tokens, s)
     && now - (s.lastActivity ?? s.updated) >= AUTO_COMPACT.idleMs
     && now - lastAt >= AUTO_COMPACT.everyMs;
+
+/** The refusal a send gets while Claude compacts (server/control.mjs): it says to send again, so once the feed's newest item is the
+ *  "Conversation compacted" divider the line above the box is stale and goes. */
+export const staleCompactError = (error: string, items: Pick<ChatItem, 'role'>[] | undefined): boolean => /is compacting the conversation/.test(error) && items?.at(-1)?.role === 'compact';

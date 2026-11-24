@@ -133,7 +133,7 @@ export function linkClears(sessions, live, map = aliases) {
         s.clearedFrom = from;
         const old = sessions.find(o => o.id === from);
         if (old) {
-            old.needsYou = false;
+            Object.assign(old, { needsYou: false, asking: false, asks: null, question: null }); // asks links it to an MR row (askerFor), which would open this empty successor
         }
     }
 }

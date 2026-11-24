@@ -212,7 +212,11 @@ import { say } from './helpers.mjs';
     const { tmpdir } = await import('node:os');
     const { join } = await import('node:path');
     const { ctxLevel } = await import('../../web/src/lib/chat.ts');
-    const { canCompact, autoCompactDue, compactNudgeDue, tokenPercent, AUTO_COMPACT } = await import('../../web/src/lib/compact.ts');
+    const { canCompact, autoCompactDue, compactNudgeDue, tokenPercent, AUTO_COMPACT, staleCompactError } = await import('../../web/src/lib/compact.ts');
+    const refusal = 'Claude is compacting the conversation: send again when it\'s done';
+    assert.equal(staleCompactError(refusal, [{ role: 'assistant' }, { role: 'compact' }]), true, 'compaction finished: the refusal is stale');
+    assert.equal(staleCompactError(refusal, [{ role: 'compact' }, { role: 'user' }]), false, 'still compacting or later: kept');
+    assert.equal(staleCompactError('Not sent', [{ role: 'compact' }]), false, 'other errors stay');
 
     const dir = mkdtempSync(join(tmpdir(), 'homebase-ctx-')), id = 'bbbbbbbb-0000-4000-8000-000000000001';
     writeFileSync(join(dir, `${id}.json`), JSON.stringify({ context_window: { used_percentage: 72.5 } }));

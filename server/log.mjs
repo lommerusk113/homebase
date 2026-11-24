@@ -74,7 +74,9 @@ export function chatMilestones(notes) {
 const SLACK_MS = 60_000;
 export function nestCommits(agents, commits) {
 
-    const byAge = [...agents].sort((a, b) => a.at - b.at);
+    // a.at is when the transcript was last written (it ended), so order by when the agent first became active instead
+    const began = a => a.spans?.[0]?.[0] ?? a.at;
+    const byAge = [...agents].sort((a, b) => began(a) - began(b));
     const left = [];
     for (const c of commits) {
         const named = new RegExp(`\\b${c.hash.slice(0, 7)}[0-9a-f]*\\b`);

@@ -192,6 +192,11 @@ import { say } from './helpers.mjs';
     nestCommits(resumed, [c('f', 10.5 * H + D, 'main'), c('f', 10.5 * H + 3 * D, 'main')]);
     assert.deepEqual(resumed[0].commits.map(x => x.at), [10.5 * H + 3 * D], 'a commit from the idle days between a resumed helper\'s active spans is not its own');
 
+    const long = { id: 'long', spans: [[10 * H, 12 * H]], at: 12 * H, branches: [], report: 'made `bbbbbbb`', commits: [] };
+    const short = { id: 'short', spans: [[11 * H, 11.5 * H]], at: 11.5 * H, branches: [], report: 'saw `bbbbbbb`', commits: [] };
+    nestCommits([short, long], [c('b', 11.2 * H, 'main')]);
+    assert.deepEqual([long.commits.length, short.commits.length], [1, 0], 'of two agents active at the commit that name it, the one that started first wins, not the one that finished first');
+
     const now = new Date(2026, 10, 13, 12).getTime(), at = (d, h) => new Date(2026, 10, d, h).getTime();
     const days = groupByDay([{ at: at(11, 9) }, { at: at(13, 8) }, { at: at(12, 23) }, { at: at(13, 11) }], now);
     assert.deepEqual(days.map(d => [d.label, d.entries.map(e => new Date(e.at).getHours())]), [['Today', [11, 8]], ['Yesterday', [23]], ['Wednesday 11 Nov', [9]]]);

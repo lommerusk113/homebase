@@ -156,6 +156,7 @@ console.log('ok helper close');
     const v = helperView(h, sess(), live);
     assert.equal(readOut(v), '00000001  T  [idle]  helper/t\nTLDR: all green');
     assert.ok(readOut(v, true).endsWith('Done.\nTLDR: all green'));
+assert.equal(readOut({ ...v, status: 'asking', question: 'Which?' }), '00000001  T  [asking]  helper/t\nT needs you: step into its row\nTLDR: all green', 'an asking helper says who needs you, not the question');
     // the token file is owner-only
     const dir = mkdtempSync(join(tmpdir(), 'hb-help-'));
     writeToken(dir, 'secret');

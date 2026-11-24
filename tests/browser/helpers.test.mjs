@@ -57,5 +57,21 @@ export default {
         await page.clickOn(`${row}.querySelector('wa-button.step-in')`);
         await page.waitFor(`document.getElementById('msg').getAttribute('placeholder') === ${JSON.stringify(note)}`, { what: "the composer's closed note" });
         assert.equal(await page.ev(`document.getElementById('msg').disabled`), true);
+    },
+
+    'a helper that is asking has a Needs you row that steps into the helper chat, not the parent': async ({ page, open, IDS }) => {
+        await open();
+        await page.ev(asHelper(IDS, null));
+        await page.ev(`(() => { const f = window.fetch; window.fetch = async (u, o) => {
+            const r = await f(u, o);
+            if (!String(u).startsWith('/api/sessions')) return r;
+            const j = await r.json();
+            Object.assign(j.find(s => s.id === '${IDS.other}'), { asking: true, question: 'Which option?' });
+            return new Response(JSON.stringify(j), { headers: { 'content-type': 'application/json' } });
+        }; })()`);
+        const ask = `document.querySelector('#masters tr[data-key="asking:${IDS.other}"]')`;
+        await page.waitFor(`!!${ask}`, { what: "the asking helper's Needs you row" });
+        await page.clickOn(ask);
+        await page.waitFor(`import('/core.js').then(m => m.state.focus === '${IDS.other}')`, { what: "the helper's chat, not the parent" });
     }
 };

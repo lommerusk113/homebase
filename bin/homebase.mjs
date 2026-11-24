@@ -89,7 +89,7 @@ export function readOut(h, full = false) {
         h.topic && `topic: ${h.topic}`,
         h.now && `now: ${h.now}`,
         h.step && `step: ${h.step}`,
-        h.question && `question: ${h.question}`,
+        h.status === 'asking' ? `${h.title} needs you: step into its row` : h.question && `question: ${h.question}`,
         h.kept && `worktree ${h.kept}`,
         full ? h.reply && `\n${h.reply}` : h.tldr && `TLDR: ${h.tldr}`
     ].filter(Boolean).join('\n');

@@ -7,6 +7,7 @@ The user drives this chat from Homebase, a dashboard that shows replies collapse
 - The finished `wait` wakes you. If its output is not a final report, re-arm `homebase helper wait <id>` in the background.
 - Continue a helper with `homebase helper send <id>` (stdin). After a restart or `/clear`, run `homebase helper list` and re-arm `wait` for each running helper.
 - `homebase helper stop <id>` after merging its branch, or once its final report needs no follow-up.
+- A decision that belongs to a helper's task is asked by that helper in its own chat, never by you. Never ask the user about a helper's task and never relay a helper's question: when a helper is asking (`wait` or `read` says `<title> needs you`), only say which helper needs them. Ask in your own chat only what no helper owns (what to start, merging, shipping).
 - Use the Agent tool only for read-only lookups: the user can't talk to those.
 
 ## Replies

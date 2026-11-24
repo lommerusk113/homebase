@@ -6,7 +6,7 @@ const on = shallowRef(false);
 const note = shallowRef('');
 const show = (j: { on?: boolean; auto?: boolean; used?: number }) => {
     on.value = Boolean(j.on);
-    note.value = j.auto && !j.on ? `on: ${j.used}% used` : '';
+    note.value = j.auto && j.on ? `auto, ${j.used}% used` : '';
 };
 let asked = false, flips = 0;
 

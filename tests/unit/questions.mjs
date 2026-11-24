@@ -262,20 +262,28 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     assert.equal(readFileSync(join(dir, 'token-saver.md'), 'utf8').trim(), SAVER_RULE, 'old text rewritten');
     await saveSaver('{"on":false}', dir);
     await assert.rejects(saveSaver('{"on":"yes"}', dir), e => e.status === 400);
-    // auto-on at 80% used, either window; the user's choice stays separate; the file changes only on a flip
+    // auto-on at 90% of the five-hour window (the weekly one is ignored); the switch shows it; an opt-out holds until usage drops
     const lim = (five, week) => ({ fiveHour: { used: five }, sevenDay: { used: week } });
-    assert.deepEqual(await syncSaver(lim(79, 10), dir), { on: false, auto: false, effective: false, used: 79 });
+    assert.deepEqual(await syncSaver(lim(89, 10), dir), { on: false, auto: false, effective: false, used: 89 });
     assert.equal(saverOn(dir), false);
-    assert.equal((await syncSaver(lim(10, 80), dir)).effective, true, 'weekly at 80 turns it on');
+    assert.equal((await syncSaver(lim(10, 99), dir)).effective, false, 'weekly alone does nothing');
+    assert.equal((await syncSaver(lim(90, 10), dir)).effective, true, 'five-hour at 90 turns it on');
     assert.equal(saverOn(dir), true);
     const at = statSync(join(dir, 'token-saver.md')).mtimeMs;
     await new Promise(r => setTimeout(r, 20));
-    assert.deepEqual(await syncSaver(lim(95, 10), dir), { on: false, auto: true, effective: true, used: 95 });
+    assert.deepEqual(await syncSaver(lim(95, 10), dir), { on: true, auto: true, effective: true, used: 95 });
     assert.equal(statSync(join(dir, 'token-saver.md')).mtimeMs, at, 'no rewrite without a flip');
+    assert.equal((await saveSaver('{"on":false}', dir, lim(95, 10))).effective, false, 'user opts out while auto');
+    assert.equal((await syncSaver(lim(97, 10), dir)).effective, false, 'the opt-out holds');
+    assert.equal((await syncSaver(lim(10, 10), dir)).effective, false);
+    assert.equal((await syncSaver(lim(91, 10), dir)).effective, true, 'next crossing turns it on again');
+    await syncSaver(lim(10, 10), dir);
+    assert.equal(saverOn(dir), false, 'auto ended');
     assert.equal((await saveSaver('{"on":true}', dir, lim(10, 10))).effective, true);
-    assert.equal((await syncSaver(lim(10, 10), dir)).auto, false);
     assert.equal(saverOn(dir), true, 'the user choice holds when usage drops');
     assert.equal((await saveSaver('{"on":false}', dir, lim(10, 10))).effective, false);
+    assert.equal((await syncSaver(lim(92, 10), dir)).effective, true, 'off while under 90 is no opt-out');
+    await syncSaver(lim(10, 10), dir);
     // unknown limits keep the last effective state: auto-on stays on, nothing is rewritten
     await syncSaver(lim(90, 10), dir);
     const onAt = statSync(join(dir, 'token-saver.md')).mtimeMs;

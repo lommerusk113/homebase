@@ -19,5 +19,5 @@ function text(x: WorkItem) {
 </script>
 
 <template>
-    <small class="next nl"><span class="nl-text"><span v-if="noReply(item)" class="no-reply">{{ 'No response yet — check the chat · ' }}</span>{{ text(item) }}</span><CommentBadge v-if="item.comments?.count" /></small>
+    <small class="next nl" :title="item.state?.reason"><span class="nl-text"><span v-if="noReply(item)" class="no-reply">{{ 'No reply yet — check the chat · ' }}</span>{{ text(item) }}</span><CommentBadge v-if="item.comments?.count" /></small>
 </template>

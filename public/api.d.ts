@@ -169,6 +169,7 @@ interface WorkItem {
     files: string[];
     activity: Activity[];
     requested: { at: number; text: string } | null;
+    state?: { kind: string; reason: string };
     next: string;
     action: RowAction | null;
     /** a quiet line in the button's slot when there is no button, e.g. 'Reviewed twice' */

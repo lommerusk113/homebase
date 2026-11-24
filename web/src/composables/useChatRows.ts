@@ -5,6 +5,7 @@ import { waitsOnYou } from '@/lib/waiting';
 import { isMaster, bindChat, focusChat } from 'old/chat.js';
 import { startingIssues, sessionTopic, workingTitle, workingLine } from '@/lib/board';
 import { oldState } from '@/old';
+import { useNotice } from '@/composables/useNotice';
 
 const handled = reactive(new Set<string>()); // replies marked as handled here, until the next poll has the server's word
 
@@ -34,7 +35,7 @@ export function useChatRows() {
     const markDone = (s: Session) => {
         const reply = replyOf(s);
         if (reply) {
-            markHandled(s.id, reply).then(() => handled.add(reply), () => {}); // the next poll has the server's word either way
+            markHandled(s.id, reply).then(() => handled.add(reply), err => useNotice().showError(err.message || 'Couldn’t mark this as handled')); // the next poll has the server's word either way
         }
     };
     const openDied = (s: Session) => {

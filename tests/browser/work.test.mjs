@@ -114,7 +114,7 @@ export default {
         await page.ev(`sessionStorage.removeItem('sent'); location.reload()`);
         await page.waitFor(`${btn}`, { what: 'the button again' });
         await page.ev(`${btn}.click()`);
-        await page.waitFor(`${btn}?.textContent.trim() === 'Already sent'`, { what: 'Already sent on the button' });
+        await page.waitFor(`${btn}?.textContent.trim() === 'Sent to Claude'`, { what: 'Already sent on the button' });
         assert.equal(sends().length, 2);
         assert.equal(await page.ev(`document.querySelectorAll('#feed .bubble.err, #feed .outbox.error').length`), 0, 'no error bubble');
     },
@@ -288,6 +288,30 @@ export default {
             utimesSync(file, was, was);
         }
         await page.waitFor(button, { what: 'the helper stopped again, and its row staying' });
+    },
+
+    'a failed Dismiss shows an error and keeps the row; a row\'s state reason is its tooltip': async ({ page, open }) => {
+        const button = `${row('agent-stopped')}?.querySelector('wa-button[aria-label="Dismiss"]')`;
+        await open();
+        await page.waitFor(button, { what: 'the Dismiss button' });
+        assert.ok(await page.ev(`!!${row('agent-stopped')}.querySelector('small.next').title`), 'the next line carries the state reason');
+        page.route = q => (q.url.includes('/api/dismissed') ? { status: 500, body: 'disk full', headers: { 'content-type': 'text/plain' } } : null);
+        await page.clickOn(button);
+        await page.waitFor(`document.getElementById('c-err').textContent.trim() !== ''`, { what: 'the error line' });
+        assert.ok(await page.ev(`!!${row('agent-stopped')}`), 'the row stays');
+        page.route = null;
+    },
+
+    'a failed Dismiss shows an error and keeps the row; a row\'s state reason is its tooltip': async ({ page, open }) => {
+        const button = `${row('agent-stopped')}?.querySelector('wa-button[aria-label="Dismiss"]')`;
+        await open();
+        await page.waitFor(button, { what: 'the Dismiss button' });
+        assert.ok(await page.ev(`!!${row('agent-stopped')}.querySelector('small.next').title`), 'the next line carries the state reason');
+        page.route = q => (q.url.includes('/api/dismissed') ? { status: 500, body: 'disk full', headers: { 'content-type': 'text/plain' } } : null);
+        await page.clickOn(button);
+        await page.waitFor(`document.getElementById('c-err').textContent.trim() !== ''`, { what: 'the error line' });
+        assert.ok(await page.ev(`!!${row('agent-stopped')}`), 'the row stays');
+        page.route = null;
     },
 
     'Step in opens a helper\'s own messages in the chat pane, Back returns': async ({ page, open, IDS }) => {

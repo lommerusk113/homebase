@@ -2,6 +2,7 @@ import { computed } from 'vue';
 import { api, hooks, inView } from 'old/core.js';
 import { renderBoard } from 'old/list.js';
 import { oldState } from '@/old';
+import { useNotice } from '@/composables/useNotice';
 import { useSentMarks } from '@/composables/useSentMarks';
 
 const gone = new Map<string, number>();
@@ -24,6 +25,8 @@ export function useWorkItems(marks = useSentMarks()) {
 
         const r = await api(`/api/dismissed?key=${encodeURIComponent(x.key)}`, { method: 'POST' }).catch(() => null);
         if (!r?.ok) {
+            useNotice().showError(r ? await r.text() : 'Couldn’t reach Homebase to dismiss this row');
+
             return;
         }
 

@@ -20,6 +20,7 @@ export const saverOn = (d = dir()) => {
     }
 };
 
+let writes = 0;
 const choiceFile = d => join(d, 'token-saver-choice');
 const userOn = d => {
     try {
@@ -64,8 +65,10 @@ export async function syncSaver(lim, d = dir()) {
     if (effective !== saverOn(d) || !existsSync(saverFile(d))) {
         const file = saverFile(d);
         await mkdir(d, { recursive: true });
-        await writeFile(`${file}.tmp`, `${saverRules(effective)}\n`, { mode: 0o600 });
-        await rename(`${file}.tmp`, file);
+        // A tmp name per call: the client's GET poll and a POST can sync at once, and a shared tmp made the loser's rename throw ENOENT (a 500).
+        const tmp = `${file}.${process.pid}.${++writes}.tmp`;
+        await writeFile(tmp, `${saverRules(effective)}\n`, { mode: 0o600 });
+        await rename(tmp, file);
         await writeFile(historyFile(d), JSON.stringify([...history(d), [Date.now(), effective]].slice(-50)), { mode: 0o600 });
     }
 

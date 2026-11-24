@@ -11,7 +11,8 @@ export default {
         assert.ok(BUILT, 'web/ is built (run.mjs builds it; cd web && npm ci)');
         await open({ project: 'alpha' });
         await page.goto(`${base}?vue=1`);
-        await page.waitFor(`document.querySelector('#masters tr[data-key]') && ${badge}`, { what: 'the board and the island' });
+        // the milestone pill's "Loading…" turning into the sprint widens the header and moves the island's button
+        await page.waitFor(`document.querySelector('#masters tr[data-key]') && ${badge} && document.querySelector('#milestone-slot .ms-pick') && !document.querySelector('#milestone-slot .ld')`, { what: 'the board, the island and the loaded milestone pill' });
         const alpha = await page.ev(visible);
         await page.waitFor(`${badge} === ${JSON.stringify(alpha)}`, { what: `the badge to say ${alpha}` });
         await page.click('[data-island="demo"] [data-slot="button"]');

@@ -88,15 +88,27 @@ export async function connect(port) {
         type: text => page.cmd('Input.insertText', { text }),
         // A real mouse click in the middle of the first element matching selector (scrolled into view first).
         click: selector => page.clickOn(`document.querySelector(${JSON.stringify(selector)})`, selector),
-        // The same for the element a page expression returns.
+        // The same for the element a page expression returns. Its middle is taken once it has stood still for two frames
+        // and is not covered: islands and late data still move things after a test's waitFor, and a click measured
+        // mid-move lands on whatever slid under it. One that moved between press and release fails here, naming what it hit.
         async clickOn(expression, what = expression) {
-            const box = await page.ev(`(() => { const e = ${expression}; if (!e) return null;
-                e.scrollIntoView({ block: 'center' }); const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`);
+            const box = await page.ev(`new Promise(ok => { const e = ${expression}; if (!e) return ok(null);
+                window.__clickMiss = null;
+                addEventListener('click', c => { window.__clickMiss = c.composedPath().includes(e) ? null : c.target.outerHTML.slice(0, 80); }, { capture: true, once: true });
+                e.scrollIntoView({ block: 'center' });
+                const mid = () => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
+                const settled = (a, end) => requestAnimationFrame(() => requestAnimationFrame(() => { const b = mid(), hit = e.getRootNode().elementFromPoint(b.x, b.y);
+                    return (a.x === b.x && a.y === b.y && (e === hit || e.contains(hit))) || Date.now() > end ? ok(b) : settled(b, end); }));
+                settled(mid(), Date.now() + 3000); })`);
             if (!box) {
                 throw new Error(`nothing to click at ${what}`);
             }
             for (const type of ['mousePressed', 'mouseReleased']) {
                 await page.cmd('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left', clickCount: 1 });
+            }
+            const miss = await page.ev('window.__clickMiss ?? null').catch(() => null); // null too when the click navigated away
+            if (miss) {
+                throw new Error(`the click on ${what} moved before it landed: it hit ${miss}`);
             }
         },
         close: () => ws.close()

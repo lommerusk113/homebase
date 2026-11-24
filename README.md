@@ -1,8 +1,8 @@
 # Homebase
 
-Homebase is a local web page for driving several Claude Code sessions at once.
+Homebase is a local web page for running several Claude Code sessions at once.
 Each Claude runs in its own tmux session on your Mac; Homebase reads their transcripts and shows, per project, what needs you, what is being worked on and what is in review, next to a chat with the session you picked.
-You answer questions with a click, send messages from the page, and look at diffs without opening an editor.
+Tell one main chat what you want and it starts helpers, each a Claude of its own in its own worktree; you answer their questions with a click, review the diffs and merge, from your desk or your phone.
 It is one Node process with no npm dependencies and no build step; the few browser libraries it uses are checked in under `public/vendor`.
 
 ![The work page of a project on the left, the chat with its Claude on the right](docs/screenshots/board.png)
@@ -25,7 +25,8 @@ Ctrl+C stops it and removes the temp folder.
 
 ## What you get
 
-* **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested", "Doing" and "In review", and the Issues tab shows the milestone's issues. Merge requests and pull requests come from `glab` and `gh`. A row with no MR or PR to act on (a helper that stopped or finished) has a Dismiss button, which puts it away on every device until that helper works again.
+* **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested", "Doing", "In review" and "Ready to merge", and the Issues tab shows the milestone's issues. A milestone picked in the header limits the board to its issues; a chat waiting on you is shown whatever the milestone. Merge requests and pull requests come from `glab` and `gh`. A row with no MR or PR to act on (a helper that stopped or finished) has a Dismiss button, which puts it away on every device until that helper works again.
+* **Helpers as rows.** A chat starts helpers with `homebase helper start`; each is its own Claude in its own tmux and worktree, and shows as a row under the chat that started it. Open chat steps into it and what you type goes straight to it; Stop closes it. See "Helper in its own chat" below.
 * **A chat view.** The transcript of one session, with each reply collapsed to its `TLDR:` line; "Show more" opens the full reply.
 
   ![A chat with one reply opened and one collapsed](docs/screenshots/chat.png)
@@ -40,6 +41,7 @@ Ctrl+C stops it and removes the temp folder.
 
   ![The + menu above the message box](docs/screenshots/composer.png)
 * **Auto-compact.** A chat that has been idle for 2 minutes with more than 100k tokens of context, and no subagent running, gets `/compact` typed for it, at most once an hour. From 70k the chat offers "Compact?". It is on by default, the + menu switches it off, and it only happens while a Homebase page is open.
+* **Token saver.** A switch under the board that tells the main chat to run fewer helpers and keep them on cheaper models. It turns itself on at 90% of the five-hour usage limit and stays off after you switch it off until usage drops back under 90%.
 * **Remote access.** The same page on your phone through Tailscale, with every device paired by a one-time code, and Web Push when a chat needs you. See [Security](#security) and [Use from your phone](#use-from-your-phone-tailscale).
 
   <img src="docs/screenshots/phone.png" width="300" alt="The chat at phone width">

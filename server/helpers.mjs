@@ -9,7 +9,7 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { keepAside } from './account.mjs';
 import { slug } from './items.mjs';
-import { tmux, tmuxName, claudeLine, loginShell, quoted, helpers, withLock, MAX_SEND, RULES_FILE } from './tmux.mjs';
+import { tmux, tmuxName, claudeLine, loginShell, quoted, helpers, withLock, MAX_SEND, rulesFile } from './tmux.mjs';
 import { trustNewProject } from './startup.mjs';
 import { splitTldr } from './summaries.mjs';
 
@@ -123,7 +123,7 @@ export async function startHelper(dir, parent, { brief, title, model = 'sonnet',
         // --session-id names the chat up front (cc-<id8> is known before its transcript exists); -n is the row title; the brief is the first message
         try {
             await tm(['new-session', '-d', '-s', name, '-c', cwd, loginShell(), '-lic',
-                claudeLine(` --model ${quoted(model)} -n ${quoted(title)} --session-id ${id} -- ${quoted(text)}`, RULES_FILE, { helper: true })]);
+                claudeLine(` --model ${quoted(model)} -n ${quoted(title)} --session-id ${id} -- ${quoted(text)}`, rulesFile(), { helper: true })]);
         } catch (e) {
             if (worktree) { // the fresh, empty worktree and branch go again
                 await git(['-C', top, 'worktree', 'remove', cwd]).then(() => git(['-C', top, 'branch', '-d', br])).catch(() => {});

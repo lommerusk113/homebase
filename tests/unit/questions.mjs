@@ -226,9 +226,15 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     assert.match(claudeLine(' --resume x', undefined, { saver: false, checks: '' }), /^PATH='.*\/bin':\$PATH claude --append-system-prompt-file '.*\/homebase-rules(\.local)?\.md' --resume x$/);
     assert.match(claudeLine(' --resume x', undefined, { saver: true, checks: ' --settings /s.json' }), /--append-system-prompt 'Token saver.* --settings \/s\.json --resume x$/, 'saver and checks flags both stay');
     const d = mkdtempSync(join(tmpdir(), 'rf-'));
-    assert.equal(rulesFile(d), join(d, 'homebase-rules.md'), 'tracked file by default');
+    const out = mkdtempSync(join(tmpdir(), 'rfo-'));
+    writeFileSync(join(d, 'homebase-rules.md'), 'tracked\n');
+    assert.equal(rulesFile(d, out), join(d, 'homebase-rules.md'), 'tracked file alone by default');
     writeFileSync(join(d, 'homebase-rules.local.md'), 'mine');
-    assert.equal(rulesFile(d), join(d, 'homebase-rules.local.md'), 'the local file wins when it exists');
+    assert.equal(rulesFile(d, out), join(out, 'rules-combined.md'), 'with a local file, one combined file');
+    assert.equal(readFileSync(join(out, 'rules-combined.md'), 'utf8'), 'tracked\n\nmine\n', 'tracked first, local appended');
+    writeFileSync(join(d, 'homebase-rules.local.md'), 'mine2');
+    rulesFile(d, out);
+    assert.equal(readFileSync(join(out, 'rules-combined.md'), 'utf8'), 'tracked\n\nmine2\n', 'a changed local file is picked up');
     assert.ok(claudeLine('').startsWith(PFX), 'homebase bin/ leads PATH');
     assert.ok(existsSync(join(BIN_DIR, 'homebase')), 'bin/homebase exists');
     console.log('ok claude line');
@@ -236,7 +242,7 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
 
 {
     // Token saver: the one rule chats get, on and off
-    assert.match(saverRules(true), /^Token saver is on: start every helper \(Agent tool\) with model: sonnet, unless the user names another model\. Run at most two helpers at a time; do small jobs \(a lookup, a few-line fix\) yourself instead of starting a helper\. Queue further work and start it when a helper finishes\.$/);
+    assert.match(saverRules(true), /^Token saver is on\. Main chat: run at most two helpers at a time and never pass --model opus unless the user names it; .*read-only Agent lookups use model haiku\. Helper: keep steps few and command output short\.$/);
     assert.ok(!saverRules(false).includes('sonnet') && saverRules(false).startsWith('Token saver is off'));
     const on = claudeLine(' --resume x', '/nope/rules.md', { saver: true, checks: '' });
     assert.equal(on, `${PFX}claude --append-system-prompt '${SAVER_RULE}' --resume x`, 'on: the rule is added as text');
@@ -248,6 +254,13 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     assert.equal(readFileSync(join(dir, 'token-saver.md'), 'utf8').trim(), SAVER_RULE, 'the file a stale chat re-reads says the rule');
     await saveSaver('{"on":false}', dir);
     assert.equal(saverOn(dir), false);
+    // an old rule text still reads as on, and a sync rewrites it
+    const OLD = 'Token saver is on: start every helper (Agent tool) with model: sonnet, unless the user names another model. Run at most two helpers at a time; do small jobs (a lookup, a few-line fix) yourself instead of starting a helper. Queue further work and start it when a helper finishes.';
+    writeFileSync(join(dir, 'token-saver.md'), OLD + '\n');
+    assert.equal(saverOn(dir), true, 'old text: still on');
+    await saveSaver('{"on":true}', dir);
+    assert.equal(readFileSync(join(dir, 'token-saver.md'), 'utf8').trim(), SAVER_RULE, 'old text rewritten');
+    await saveSaver('{"on":false}', dir);
     await assert.rejects(saveSaver('{"on":"yes"}', dir), e => e.status === 400);
     // auto-on at 80% used, either window; the user's choice stays separate; the file changes only on a flip
     const lim = (five, week) => ({ fiveHour: { used: five }, sevenDay: { used: week } });

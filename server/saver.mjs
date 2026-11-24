@@ -5,7 +5,9 @@ import { writeFile, rename, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-export const SAVER_RULE = 'Token saver is on: start every helper (Agent tool) with model: sonnet, unless the user names another model. Run at most two helpers at a time; do small jobs (a lookup, a few-line fix) yourself instead of starting a helper. Queue further work and start it when a helper finishes.';
+export const SAVER_RULE = 'Token saver is on. Main chat: run at most two helpers at a time and never pass --model opus unless the user names it; batch small fixes into one helper and start queued work when a helper finishes; read-only Agent lookups use model haiku. Helper: keep steps few and command output short.';
+// Earlier texts of the rule: a token-saver.md holding one still means on, and syncSaver rewrites it to the current text
+const OLD_SAVER_RULES = ['Token saver is on: start every helper (Agent tool) with model: sonnet, unless the user names another model. Run at most two helpers at a time; do small jobs (a lookup, a few-line fix) yourself instead of starting a helper. Queue further work and start it when a helper finishes.'];
 export const AUTO_SAVER_PERCENT = 80; // the saver turns itself on when the five-hour or weekly window is this used
 export const saverRules = on => (on ? SAVER_RULE : 'Token saver is off: pick helper models as usual.');
 
@@ -14,7 +16,9 @@ export const saverFile = (d = dir()) => join(d, 'token-saver.md');
 
 export const saverOn = (d = dir()) => {
     try {
-        return readFileSync(saverFile(d), 'utf8').trim() === SAVER_RULE;
+        const t = readFileSync(saverFile(d), 'utf8').trim();
+
+        return t === SAVER_RULE || OLD_SAVER_RULES.includes(t);
     } catch {
         return false;
     }
@@ -62,14 +66,17 @@ export async function syncSaver(lim, d = dir()) {
     }
     const effective = on || auto;
 
-    if (effective !== saverOn(d) || !existsSync(saverFile(d))) {
+    const stale = effective && saverOn(d) && readFileSync(saverFile(d), 'utf8').trim() !== SAVER_RULE; // on, but with an old rule text
+    if (effective !== saverOn(d) || !existsSync(saverFile(d)) || stale) {
         const file = saverFile(d);
         await mkdir(d, { recursive: true });
         // A tmp name per call: the client's GET poll and a POST can sync at once, and a shared tmp made the loser's rename throw ENOENT (a 500).
         const tmp = `${file}.${process.pid}.${++writes}.tmp`;
         await writeFile(tmp, `${saverRules(effective)}\n`, { mode: 0o600 });
         await rename(tmp, file);
-        await writeFile(historyFile(d), JSON.stringify([...history(d), [Date.now(), effective]].slice(-50)), { mode: 0o600 });
+        if (!stale) { // a rewrite to the current text is no flip
+            await writeFile(historyFile(d), JSON.stringify([...history(d), [Date.now(), effective]].slice(-50)), { mode: 0o600 });
+        }
     }
 
     return { on, auto, effective, used: Math.round(used) };

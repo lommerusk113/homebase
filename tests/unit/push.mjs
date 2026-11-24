@@ -7,7 +7,7 @@ import { runOutIn } from '../../web/src/lib/limits.ts';
 import { chatMessage } from '../../web/src/lib/issues.ts';
 import { reviewNote } from '../../web/src/lib/board.ts';
 import { rulesStale, reloadMessage } from '../../server/rules.mjs';
-import { RULES_FILE } from '../../server/tmux.mjs';
+import { RULES_FILE, rulesSources } from '../../server/tmux.mjs';
 import { encrypt, vapidKeys, vapidJwt, pushTo, validSub, readSubs, addSub, removeSub, removeDeviceSubs, pushEvents, watchSessions, pageFocused } from '../../server/push.mjs';
 import { codeDir } from './helpers.mjs';
 
@@ -44,7 +44,7 @@ assert.equal(reviewNote([]), '');
     const r = await stale(1_500_000, 1e14); // past the 10s cache, so the files are re-read; the real homebase-rules.md is listed too
     assert.ok(r.names.includes('CLAUDE.md') && r.at >= 2_000_000);
     assert.ok(r.reload.startsWith('The rules changed. Re-read /') && r.reload.includes(`${RULES_FILE.split("/").pop()}, ~/.claude/CLAUDE.md and ${join(cwd, 'CLAUDE.md')} now and follow them`), r.reload);
-    assert.equal(reloadMessage(), `The rules changed. Re-read ${RULES_FILE} and ~/.claude/CLAUDE.md now and follow them from here on (they override your earlier instructions where they differ).`);
+    assert.equal(reloadMessage(), `The rules changed. Re-read ${rulesSources().join(' and ')} and ~/.claude/CLAUDE.md now and follow them from here on (they override your earlier instructions where they differ).`);
     touch(join(cwd, 'AGENTS.md'), 5_000_000);
     assert.ok(!(await stale(1_500_000, 1e14 + 1000)).names.includes('AGENTS.md'), 'mtimes are cached for 10s');
     assert.ok((await stale(1_500_000, 1e14 + 20_000)).names.includes('AGENTS.md'));

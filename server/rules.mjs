@@ -1,8 +1,8 @@
 // Claude Code reads its instruction files only when a process starts, so a chat started before they changed runs old rules.
 import { stat, readFile, writeFile, rename, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
-import { RULES_FILE } from './tmux.mjs';
+import { basename, dirname, join } from 'node:path';
+import { RULES_FILE, rulesSources } from './tmux.mjs';
 import { saverFile, saverOn, saverOnAt } from './saver.mjs';
 import { canned } from '../web/src/lib/canned.ts';
 
@@ -12,6 +12,7 @@ const mtimes = new Map(); // path -> { at, mtime }
 // [name shown, path] of the files whose change makes a running chat stale
 export const watched = (cwd, home = homedir()) => [
     [basename(RULES_FILE), RULES_FILE],
+    ['homebase-rules.local.md', join(dirname(RULES_FILE), 'homebase-rules.local.md')], // watched even before it exists
     ['CLAUDE.md', join(home, '.claude', 'CLAUDE.md')],
     ['CLAUDE.md', join(cwd, 'CLAUDE.md')],
     ['AGENTS.md', join(cwd, 'AGENTS.md')],
@@ -56,7 +57,7 @@ export async function rulesStale(startedAt, cwd, now = Date.now(), home = homedi
 }
 
 // What "Load new rules" types into the chat: re-read the global rules, plus the project's own files that changed.
-export const reloadMessage = (project = []) => canned('rules', [RULES_FILE, '~/.claude/CLAUDE.md', ...project].join(' and ').replace(/ and (?=.* and )/g, ', ')).message;
+export const reloadMessage = (project = []) => canned('rules', [...rulesSources(), '~/.claude/CLAUDE.md', ...project].join(' and ').replace(/ and (?=.* and )/g, ', ')).message;
 
 // Which rules a chat has been told about (loaded or dismissed) is a fact about the chat, so it lives here (rules-seen.json: id -> newest mtime), not in each browser.
 const SEEN_DIR = () => process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase');

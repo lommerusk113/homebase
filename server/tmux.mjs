@@ -1,8 +1,8 @@
 // tmux plumbing: the socket override, session names, /clear aliases, and the keystroke steps for a message.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync, realpathSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, realpathSync, readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs';
+import { tmpdir, homedir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { saverOn, SAVER_RULE } from './saver.mjs';
@@ -31,13 +31,33 @@ export const tmux = args => {
     return run('tmux', tmuxArgs(args), { timeout: 5000 }); // a hung tmux fails instead of freezing the board
 };
 
-// Homebase's own rules (homebase-rules.md: how replies and questions fit its UI), added to every Claude it starts or resumes
-// A gitignored homebase-rules.local.md next to it replaces the tracked file, so your own rules survive a git pull.
-export const rulesFile = (dir = fileURLToPath(new URL('..', import.meta.url))) => {
-    const local = join(dir, 'homebase-rules.local.md');
-    return existsSync(local) ? local : join(dir, 'homebase-rules.md');
+// Homebase's own rules (homebase-rules.md: how replies and questions fit its UI), added to every Claude it starts or resumes.
+// A gitignored homebase-rules.local.md next to it is appended after it, so your own rules survive a git pull and the tracked ones still apply.
+const REPO = fileURLToPath(new URL('..', import.meta.url));
+export const RULES_FILE = join(REPO, 'homebase-rules.md');
+// The rules files that exist, tracked first, local after it
+export const rulesSources = (dir = REPO) => ['homebase-rules.md', 'homebase-rules.local.md'].map(f => join(dir, f)).filter(f => existsSync(f));
+// The one file --append-system-prompt-file gets: the tracked file alone, or both joined into rules-combined.md in the Homebase dir
+// (one flag, because a repeated flag may keep only the last). Rewritten only when the text changed.
+export const rulesFile = (dir = REPO, out = process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase')) => {
+    const src = rulesSources(dir);
+    if (src.length < 2) {
+        return src[0] ?? join(dir, 'homebase-rules.md');
+    }
+
+    const file = join(out, 'rules-combined.md'), text = src.map(f => readFileSync(f, 'utf8').trimEnd()).join('\n\n') + '\n';
+    try {
+        if (!existsSync(file) || readFileSync(file, 'utf8') !== text) {
+            mkdirSync(out, { recursive: true });
+            writeFileSync(`${file}.tmp`, text);
+            renameSync(`${file}.tmp`, file);
+        }
+    } catch {
+        return src[0];
+    }
+
+    return file;
 };
-export const RULES_FILE = rulesFile();
 // Homebase's own bin/ goes first on PATH for every Claude it starts, so `homebase` works in each chat without touching your PATH
 export const BIN_DIR = fileURLToPath(new URL('../bin', import.meta.url));
 export const quoted = t => `'${t.replace(/'/g, `'\\''`)}'`;
@@ -45,9 +65,9 @@ export const quoted = t => `'${t.replace(/'/g, `'\\''`)}'`;
 // manual: a manual-mode chat adds its rule the same way
 // checks: --settings is Homebase's own file with the Stop hook that runs the project's checks (server/checks.mjs), never ~/.claude/settings.json
 // helper: a work helper Homebase started in its own tmux (server/helpers.mjs) adds HELPER_RULE the same way
-export const claudeLine = (extra = '', rules = RULES_FILE, { saver = saverOn(), manual = false, helper = false, checks = settingsFlag() } = {}) => `PATH=${quoted(BIN_DIR)}:$PATH ${process.env.HOMEBASE_CLAUDE_BIN ? quoted(process.env.HOMEBASE_CLAUDE_BIN) : 'claude'}${existsSync(rules) ? ` --append-system-prompt-file ${quoted(rules)}` : ''}${saver ? ` --append-system-prompt ${quoted(SAVER_RULE)}` : ''}${manual ? ` --append-system-prompt ${quoted(MANUAL_RULE)}` : ''}${helper ? ` --append-system-prompt ${quoted(HELPER_RULE)}` : ''}${checks}${extra}`;
+export const claudeLine = (extra = '', rules = rulesFile(), { saver = saverOn(), manual = false, helper = false, checks = settingsFlag() } = {}) => `PATH=${quoted(BIN_DIR)}:$PATH ${process.env.HOMEBASE_CLAUDE_BIN ? quoted(process.env.HOMEBASE_CLAUDE_BIN) : 'claude'}${existsSync(rules) ? ` --append-system-prompt-file ${quoted(rules)}` : ''}${saver ? ` --append-system-prompt ${quoted(SAVER_RULE)}` : ''}${manual ? ` --append-system-prompt ${quoted(MANUAL_RULE)}` : ''}${helper ? ` --append-system-prompt ${quoted(HELPER_RULE)}` : ''}${checks}${extra}`;
 
-export const HELPER_RULE = 'You are a work helper the main chat started in your own chat. Start no helpers or subagents of your own. Commit on your branch; do not push, merge or restart anything. When you need a decision from the user, ask it yourself in your own chat (AskUserQuestion when there are options): first a brief plain summary of what the task is and does and what you have done so far, then the question with your recommended option. Never end your turn with a report that leaves the decision to the main chat. End with a final report of at most 10 lines whose last line is a TLDR. The user may step in and talk to you directly.';
+export const HELPER_RULE = 'You are a work helper the main chat started in your own chat. Skip the main-chat sections of the Homebase rules and do the work yourself; start no helpers or subagents. Commit on your branch; do not push, merge, open or edit MRs, or restart anything. When you need a decision from the user, ask it yourself in your own chat (AskUserQuestion when there are options): first a brief plain summary of the task and what you have done so far, then the question with your recommended option. Never end your turn with a report that leaves the decision to the main chat. End with a final report of at most 10 lines whose last line is a TLDR. The user may step in and talk to you directly.';
 // The helper registry (server/helpers.mjs loads and saves it): session id -> { id, parent, model, ... }. Here so a resume keeps the rule and model.
 export const helpers = new Map();
 
@@ -57,7 +77,7 @@ export const loginShell = (shell = process.env.SHELL, exists = existsSync) => sh
 const claudeCmd = id => {
     const h = helpers.get(id);
 
-    return [loginShell(), '-lic', claudeLine(`${h ? ` --model ${quoted(h.model)}` : ''} --resume ${id}`, RULES_FILE, { manual: isManual(id), helper: !!h })];
+    return [loginShell(), '-lic', claudeLine(`${h ? ` --model ${quoted(h.model)}` : ''} --resume ${id}`, rulesFile(), { manual: isManual(id), helper: !!h })];
 };
 
 // tmux keeps Claude running between messages; `tmux attach -t cc-<id8>` reaches it from any terminal.

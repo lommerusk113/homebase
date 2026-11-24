@@ -21,6 +21,8 @@ interface Session {
     status: string;
     lastPrompt: string;
     lastReply: string;
+    /** when that reply was written, ms; null without one */
+    lastReplyAt?: number | null;
     /** topic of Claude's newest reply that has one (▸ header) */
     topic: string | null;
     /** false: a recent transcript has no turn markers, so Claude Code's format probably changed */

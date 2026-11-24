@@ -106,18 +106,22 @@ const readStdin = async () => {
     return s;
 };
 
-// Polls every `every` ms until a helper ends a turn (or closes, or its claude exits) without asking or waiting on the user,
-// then prints the read output of each one that did. Run as a background command, its exit is the main chat's notice.
-// ponytail: the first look is one interval in, so a send's prompt has reached the transcript; a turn that starts later than that reads as ended
-export async function wait(ids, env = process.env, { every = 5000, get = id => api(`/api/helpers/${encodeURIComponent(id)}`, { env }), print = console.log } = {}) {
+// Polls every `every` ms until a helper ends a turn without asking or waiting on the user, then prints the read output of each
+// one that did. Run as a background command, its exit is the main chat's notice. A turn counts as ended only once the helper
+// was seen at it (working, asking, needing you) or wrote a reply after the wait began, so an idle helper whose sent prompt
+// hasn't started a turn yet doesn't read as finished; a closed or exited helper returns at once.
+export async function wait(ids, env = process.env, { every = 5000, get = id => api(`/api/helpers/${encodeURIComponent(id)}`, { env }), print = console.log, now = Date.now } = {}) {
 
+    const began = now(), seen = new Set();
     for (;;) {
-        await new Promise(r => setTimeout(r, every));
-        const done = (await Promise.all(ids.map(get))).filter(h => h.done);
+        const all = await Promise.all(ids.map(get));
+        all.filter(h => !h.done && h.status !== 'starting').forEach(h => seen.add(h.id));
+        const done = all.filter(h => h.done && (seen.has(h.id) || h.replyAt > began || ['closed', 'exited'].includes(h.status)));
         if (done.length) {
             print(done.map(h => readOut(h)).join('\n\n'));
             return done;
         }
+        await new Promise(r => setTimeout(r, every));
     }
 }
 

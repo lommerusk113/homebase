@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadHelpers, startHelper, closeHelper, parentOf, findHelper, helperView, writeToken, PER_PARENT, TOTAL } from '../../server/helpers.mjs';
+import { loadHelpers, startHelper, closeHelper, parentOf, findHelper, helperView, writeToken, PER_PARENT, TOTAL, START_MS } from '../../server/helpers.mjs';
 import { helpers, HELPER_RULE, tmuxSession } from '../../server/tmux.mjs';
 import { callerTmux, parseArgs, readOut, wait } from '../../bin/homebase.mjs';
 import { now } from './helpers.mjs';
@@ -146,6 +146,9 @@ console.log('ok helper close');
     assert.equal(helperView(h, sess({ needsYou: true }), live).done, false, 'waits on the user: keep waiting');
     assert.deepEqual([helperView(h, sess(), live).done, helperView(h, sess(), live).tldr], [true, 'all green']);
     assert.equal(helperView(h, sess({ status: 'working' }), new Set()).status, 'exited');
+    // just started: the live-tmux cache may not have its tmux yet, which is not an exit
+    assert.deepEqual([helperView(h, [], new Set(), now + 2000).status, helperView(h, [], new Set(), now + 2000).done], ['starting', false]);
+    assert.equal(helperView(h, [], new Set(), now + START_MS).status, 'exited');
     assert.equal(helperView({ ...h, closedAt: now }, sess(), live).status, 'closed');
     const v = helperView(h, sess(), live);
     assert.equal(readOut(v), '00000001  T  [idle]  helper/t\nTLDR: all green');
@@ -172,5 +175,21 @@ console.log('ok helper view');
     assert.deepEqual(done.map(h => h.title), ['b']);
     assert.equal(polls, 3, 'kept polling while working');
     assert.deepEqual(printed, ['b0000000  b  [idle]\nTLDR: ok']);
+}
+// wait: an idle helper whose sent prompt hasn't started a turn yet is not finished; it is once seen working, or once a reply
+// newer than the wait shows up; a closed one returns at once
+{
+    const run = async (seq, t0 = 1000) => {
+        let i = 0;
+        const done = await wait(['h'], {}, { every: 1, now: () => t0, print: () => {}, get: async () => {
+            const [status, replyAt = 500] = seq[Math.min(i++, seq.length - 1)];
+            return { id: 'h0000000', title: 'h', status, replyAt, done: ['idle', 'waiting', 'closed', 'exited'].includes(status) };
+        } });
+        return [done[0].status, i];
+    };
+    assert.deepEqual(await run([['idle'], ['idle'], ['starting'], ['working'], ['idle']]), ['idle', 5], 'old idle and starting polls are not the end');
+    assert.deepEqual(await run([['idle'], ['idle', 2000]]), ['idle', 2], 'a reply newer than the wait ends it');
+    assert.deepEqual(await run([['closed']]), ['closed', 1]);
+    assert.deepEqual(await run([['idle'], ['exited']]), ['exited', 2]);
 }
 console.log('ok helper wait');

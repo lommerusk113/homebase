@@ -169,16 +169,18 @@ export async function closeHelper(dir, ref, { keepWorktree = false } = {}, { tm 
 
 // What `homebase helper read/list/wait` show: the entry plus its chat's state. live: the names of running tmux sessions.
 // done: its turn ended (or it closed or exited) and it neither asks nor waits on the user, so a `wait` on it returns.
-export function helperView(h, list, live) {
+// A tmux missing within START_MS of the start is the 2 s live-tmux cache not having it yet: starting, not exited.
+export const START_MS = 15_000;
+export function helperView(h, list, live, now = Date.now()) {
 
     const s = list.find(x => x.id === h.id);
-    const status = h.closedAt ? 'closed' : !live.has(tmuxName(h.id)) ? 'exited' : !s ? 'starting'
+    const status = h.closedAt ? 'closed' : !live.has(tmuxName(h.id)) ? (now - h.at < START_MS ? 'starting' : 'exited') : !s ? 'starting'
         : s.asking ? 'asking' : s.needsYou ? 'needs you' : s.status;
 
     return {
         ...h, status, done: ['closed', 'exited', 'idle', 'waiting'].includes(status),
         topic: s?.topic ?? null, now: s?.now ?? null, step: s?.step ?? null, question: s?.question ?? null,
-        tldr: splitTldr(s?.lastReply ?? '').tldr, reply: s?.lastReply ?? null, lastActivity: s?.lastActivity ?? null
+        tldr: splitTldr(s?.lastReply ?? '').tldr, reply: s?.lastReply ?? null, replyAt: s?.lastReplyAt ?? null, lastActivity: s?.lastActivity ?? null
     };
 }
 

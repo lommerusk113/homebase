@@ -23,6 +23,8 @@ export function useComposer() {
     const discuss = useDiscuss();
 
     // a helper's box has a draft of its own, apart from the chat that started it
+    /** a closed helper's chat is read-only: what its box says instead */
+    const closed = toRef(() => session.value?.helper?.closed ?? null);
     const key = () => (session.value && helper.value ? `${session.value.id}:${helper.value.id}` : session.value?.id ?? null);
     watch(key, draft.follow, { immediate: true });
 
@@ -38,6 +40,10 @@ export function useComposer() {
             return;
         }
         if (!to) {
+            return;
+        }
+        if (closed.value) {
+            error.value = closed.value; // a closed helper is read-only
             return;
         }
 
@@ -77,12 +83,12 @@ export function useComposer() {
     }
 
     return {
-        ...draft, submit,
+        ...draft, submit, closed,
         focusAsked: useComposerFocus().focusAsked,
         /** a touch screen: no hover, and a keyboard whose Enter can only add a line */
         entersLine: touch,
         label: toRef(() => (session.value ? `Message Claude in ${session.value.project}` : 'Message Claude')),
         /** the box's placeholder */
-        hint: toRef(() => (helper.value ? 'Message goes to this helper via its main chat' : discuss.discussing.value ? 'Discuss this question…' : `Message ${session.value && (oldState.value, state.focus === session.value.id) ? session.value.title || sessionTopic(session.value) : 'main chat'}…`))
+        hint: toRef(() => closed.value ?? (helper.value ? 'Message goes to this helper via its main chat' : discuss.discussing.value ? 'Discuss this question…' : `Message ${session.value && (oldState.value, state.focus === session.value.id) ? session.value.title || sessionTopic(session.value) : 'main chat'}…`))
     };
 }

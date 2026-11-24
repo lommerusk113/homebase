@@ -79,6 +79,10 @@ interface Session {
     /** when that dump was written, ms */
     contextAt: number | null;
     tmux?: string;
+    /** a work helper in its own chat (server/helpers.mjs): the chat that started it; absent otherwise */
+    parentId?: string;
+    /** that helper: closed is the composer's note once it is closed (read-only), else null; tmux is its cc-<id8> */
+    helper?: { closed: string | null; tmux: string };
     /** watched instruction files changed since this chat's Claude started; absent when none */
     rulesStale?: string[];
     /** newest mtime among them, ms; a dismissed notice stays hidden until this grows */
@@ -161,6 +165,9 @@ interface WorkItem {
     /** the helper behind the row, for Step in; null when it has no transcript left */
     agentId: string | null;
     agentDescription: string | null;
+    /** the helper is a chat of its own (server/helpers.mjs): Step in opens it, and the row can stop it; null otherwise */
+    helperSession?: string | null;
+    helperClosed?: boolean;
     /** when a running agent started its current step (`next` names it); null otherwise */
     stepAt: number | null;
     updated: number;

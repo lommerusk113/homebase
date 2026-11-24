@@ -4,7 +4,7 @@
 import { useTemplateRef, watch } from 'vue';
 import { AttachmentsKey, ComposerKey, useInjected } from '@/keys';
 
-const { text, caret, label, hint, typed, paste, submit, entersLine, focusAsked } = useInjected(ComposerKey);
+const { text, caret, label, hint, closed, typed, paste, submit, entersLine, focusAsked } = useInjected(ComposerKey);
 const { attach } = useInjected(AttachmentsKey);
 const box = useTemplateRef<WaTextarea>('box');
 // the selection lives on the component's inner <textarea>
@@ -48,6 +48,6 @@ watch(caret, async c => {
 </script>
 
 <template>
-    <wa-textarea ref="box" id="msg" :label.attr="label" rows="1" resize="auto" :placeholder.attr="hint" title="Enter sends, Shift+Enter adds a new line"
+    <wa-textarea ref="box" id="msg" :label.attr="label" rows="1" resize="auto" :placeholder.attr="hint" :disabled="!!closed || undefined" title="Enter sends, Shift+Enter adds a new line"
         .value="text" @input="input" @keydown="keydown" @paste="pasted"></wa-textarea>
 </template>

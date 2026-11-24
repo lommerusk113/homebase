@@ -2,9 +2,10 @@
 import { stat, readFile, writeFile } from 'node:fs/promises';
 import { sessions } from './sessions.mjs';
 import { liveSessions } from './entries.mjs';
+import { closedNote } from './helpers.mjs';
 import { versionWarning, settingsPath, backupSettings } from './setup.mjs';
 import { refuseIfTrustDialog, cancelQuestion, parseDialog, parseQuestion, questionOpen, capture, inputLine, promptBack, freeTextOption, typeAnswer } from './startup.mjs';
-import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, ELSEWHERE, sleep, NEW_TMUX, OUR_TMUX, withLock } from './tmux.mjs';
+import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, ELSEWHERE, sleep, NEW_TMUX, OUR_TMUX, withLock, helpers } from './tmux.mjs';
 
 // Only known sessions, only their recorded cwd.
 async function resumable(id) {
@@ -86,6 +87,10 @@ export const ANSWER_FIRST = 'Claude is asking a question: answer it in the chat 
 // A question with a text box ("Type something.") is answered there by one typed line; answered() tells the caller so.
 export async function send(id, text, session = null, { tm = tmux, nap = sleep, reg = liveSessions, waitMs = BOOT_MS, after = null, typed = false, answered = null } = {}) {
 
+    const h = helpers.get(id);
+    if (h?.closedAt) { // a closed helper is read-only: a send would resume it
+        throw conflict(closedNote(h));
+    }
     session ??= await resumable(id);
     const live = await reg();
     const first = targetOf(id, live);

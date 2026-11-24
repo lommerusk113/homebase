@@ -54,6 +54,7 @@ Words used below:
 * **Needs you**: a chat that waits on your answer, a permission or a decision.
 * **MR, PR, pipeline, milestone, forge**: a merge request (GitLab) is a pull request (GitHub); a pipeline is its CI run; a milestone is a named set of issues; a forge is GitLab or GitHub.
 * **Subagent** (also "helper"): a second Claude that a chat starts for a part of the work. A **worktree** is the separate checkout of the repo it may work in. A **work item** is one row on the Work tab.
+* **Helper in its own chat**: one started with `homebase helper start` (bin/homebase.mjs) runs as its own Claude in its own tmux. Its row sits under the chat that started it; Open chat steps into it (Back returns to that chat) and Stop closes it, asking first while it works. A closed helper's chat stays readable but takes no messages.
 
 ## How it works
 

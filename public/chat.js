@@ -5,7 +5,7 @@ import { syncDiff } from './diff.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
 /** @param {Session} s */
-export const isMaster = s => !s.sidechain && !/\/\.(claude\/)?worktrees\//.test(s.cwd || '');
+export const isMaster = s => !s.sidechain && !s.parentId && !/\/\.(claude\/)?worktrees\//.test(s.cwd || ''); // a work helper's chat (parentId) is not a main chat
 // The chat sticks to the bound session (chat:<project>, else the legacy global pick) and only moves on its own to a
 // Homebase /clear successor (clearedFrom). Nothing bound yet: the master with the latest real activity (lastActivity,
 // from the server), never file mtime, which an idle claude process still bumps with bookkeeping lines.
@@ -143,6 +143,10 @@ export function unfocusChat() {
     if (helper) {
         return focusChat(helper.sid); // back to the chat that started it
     }
+    const parent = state.focus && state.sessions.find(s => s.id === state.focus)?.parentId;
+    if (parent) {
+        return focusChat(parent); // a helper in its own chat: back to its parent (the main chat, when that is the parent, ends the focus)
+    }
     if (state.focus) {
         composer.endDiscuss();
         state.focus = null;
@@ -262,8 +266,9 @@ function showHead(s) {
     $('c-back').hidden = !off;
     $('chat').classList.toggle('off-main', off);
     const helper = activeHelper();
-    $('c-name').textContent = helper ? `Helper · ${helper.description}` : off ? s.title || sessionTopic(s) : s ? `Main chat · ${s.title || sessionTopic(s)}` : 'Main chat';
-    $('c-back').textContent = helper ? `← Back to ${s.title || sessionTopic(s)}` : '← Back to main';
+    $('c-name').textContent = helper ? `Helper · ${helper.description}` : off ? `${s.parentId ? 'Helper · ' : ''}${s.title || sessionTopic(s)}` : s ? `Main chat · ${s.title || sessionTopic(s)}` : 'Main chat';
+    const parent = s?.parentId && state.sessions.find(o => o.id === s.parentId);
+    $('c-back').textContent = helper ? `← Back to ${s.title || sessionTopic(s)}` : parent ? `← Back to ${parent.title || sessionTopic(parent)}` : '← Back to main';
     const hash = helper ? `#chat=${encodeURIComponent(helper.sid)}&agent=${encodeURIComponent(helper.id)}` : '';
     if (location.hash !== hash) {
         history.replaceState(null, '', location.pathname + location.search + hash); // a reload comes back to the helper

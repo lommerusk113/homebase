@@ -23,6 +23,7 @@ import { plainCommand } from '../web/src/lib/text.ts';
 import { rulesStale, readSeen } from './rules.mjs';
 import { checksStatus } from './checks.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor, linkClears, liveTmux, mapNewProjects, startingProjects } from './tmux.mjs';
+import { nestHelpers } from './helpers.mjs';
 
 const run = promisify(execFile);
 
@@ -803,6 +804,7 @@ export async function sessions() {
     }));
 
     await attachTmux(out, now, live); // first: it sets clearedFrom, which attachItems follows
+    nestHelpers(out, new Set((await liveTmux()).map(t => t.name)), now); // before the items: a helper's row is an agent of its parent
     attachItems(out, await itemsOf(out), now);
     for (const s of out) {
         s.manual = isManual(s.id);

@@ -184,6 +184,37 @@ export function helperView(h, list, live, now = Date.now()) {
     };
 }
 
+// What a closed helper's composer says, and a send to it answers.
+export const closedNote = h => `Closed — ask the main chat to start a new helper${h.branch ? ` on branch ${h.branch}` : ''}`;
+
+// Board nesting: a registered helper's chat gets parentId (left out of the chat list; Back returns to the parent) and helper,
+// and its parent gets it as an agent, so the work-item code nests its row as it does a subagent's; the row carries helperSession.
+// A closed helper whose transcript aged out has no row. live: the names of running tmux sessions.
+export function nestHelpers(list, live, now = Date.now(), registry = helpers) {
+
+    for (const h of registry.values()) {
+        const s = list.find(x => x.id === h.id), parent = list.find(x => x.id === h.parent);
+        if (s) {
+            s.parentId = h.parent;
+            s.helper = { closed: h.closedAt ? closedNote(h) : null, tmux: tmuxName(h.id) };
+        }
+        if (!parent || (!s && h.closedAt)) {
+            continue;
+        }
+        const v = helperView(h, list, live, now), running = !v.done;
+        const { tldr, text: body } = splitTldr(s?.lastReply ?? '');
+        const waits = v.status === 'asking' || v.status === 'needs you';
+        (parent.agents ??= []).push({
+            id: h.id, helperSession: h.id, helperClosed: !!h.closedAt, description: h.title,
+            status: running ? 'running' : 'done', stopReason: null,
+            outcome: running ? null : (tldr || body).split('\n').find(l => l.trim())?.slice(0, 120) ?? null,
+            stage: running ? 1 : 4, step: waits ? `Needs you: ${s?.question ?? s?.needsText ?? 'see its chat'}` : s?.step ?? null, stepAt: s?.stepAt ?? null,
+            tldr: tldr || null, body, branch: h.branch ?? null, branches: [h.branch].filter(Boolean), prs: (s?.prs ?? []).map(p => p.url),
+            worktreePath: h.branch ? h.cwd : null, files: s?.files ?? [], updated: s?.lastActivity ?? s?.updated ?? h.at, started: h.at
+        });
+    }
+}
+
 // Commits on the helper's branch since its base, for `list`; null without a worktree or once closed.
 export const ahead = (h, git = gitRun) => (h.branch && !h.closedAt
     ? git(['-C', h.cwd, 'rev-list', '--count', `${h.base}..HEAD`]).then(r => Number(r.stdout.trim()), () => null)

@@ -454,6 +454,8 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             agentStatus: agent?.status ?? null,
             agentId: agent && !agent.stored ? agent.id : null, // "Step in" opens its transcript; one that scrolled out of every tail has none
             agentDescription: agent?.description ?? null,
+            helperSession: agent?.helperSession ?? null, // a helper in its own chat (server/helpers.mjs): Step in opens that chat
+            helperClosed: !!agent?.helperClosed,
             updated: itemUpdated(agent, it.linkedAt, prState),
             branch: [prState?.branch, agent?.branch].find(b => b && b !== 'HEAD') ?? null, // transcript gitBranch is unreliable inside worktrees; HEAD is a detached checkout
             stepAt: agent?.status === 'running' ? agent.stepAt ?? null : null,

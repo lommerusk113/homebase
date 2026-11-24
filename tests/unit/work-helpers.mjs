@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadHelpers, startHelper, closeHelper, parentOf, findHelper, helperView, writeToken, PER_PARENT, TOTAL, START_MS } from '../../server/helpers.mjs';
+import { loadHelpers, startHelper, closeHelper, parentOf, findHelper, helperView, writeToken, nestHelpers, PER_PARENT, TOTAL, START_MS } from '../../server/helpers.mjs';
 import { helpers, HELPER_RULE, tmuxSession } from '../../server/tmux.mjs';
 import { callerTmux, parseArgs, readOut, wait } from '../../bin/homebase.mjs';
 import { now } from './helpers.mjs';
+import { workItems } from '../../server/items.mjs';
+import { send } from '../../server/control.mjs';
 
 const uuid = n => `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555`;
 const P = uuid(90), Q = uuid(91);
@@ -193,3 +195,32 @@ console.log('ok helper view');
     assert.deepEqual(await run([['idle'], ['exited']]), ['exited', 2]);
 }
 console.log('ok helper wait');
+
+// board nesting: the helper's chat names its parent; the parent gets it as an agent, so its row nests there with helperSession
+{
+    helpers.clear();
+    const open = { id: uuid(1), parent: P, title: 'Fix it', at: now, closedAt: null, branch: 'helper/fix-it', cwd: '/x/alpha/.claude/worktrees/fix-it' };
+    const shut = { id: uuid(2), parent: P, title: 'Old one', at: now, closedAt: now + 1, branch: null, cwd: '/x/alpha' };
+    const gone = { id: uuid(3), parent: P, title: 'Aged out', at: now, closedAt: now + 1, branch: null, cwd: '/x/alpha' };
+    [open, shut, gone].forEach(h => helpers.set(h.id, h));
+    const list = [
+        { id: P, project: 'alpha', agents: [] },
+        { id: uuid(1), project: 'alpha', status: 'working', step: 'running npm test', lastActivity: now + 5, prs: [], files: [] },
+        { id: uuid(2), project: 'alpha', status: 'idle', lastReply: 'Looked.\nTLDR: nothing wrong', prs: [] }
+    ];
+    nestHelpers(list, new Set(['cc-00000001']), now + 10);
+    assert.deepEqual([list[1].parentId, list[1].helper], [P, { closed: null, tmux: 'cc-00000001' }]);
+    assert.equal(list[2].helper.closed, 'Closed — ask the main chat to start a new helper');
+    assert.deepEqual(list[0].agents.map(a => [a.id, a.status, a.helperClosed]), [[uuid(1), 'running', false], [uuid(2), 'done', true]], 'an aged-out closed helper has no row');
+    assert.equal(list[0].agents[0].step, 'running npm test');
+    assert.equal(list[0].agents[1].tldr, 'nothing wrong');
+    const items = workItems(list.map(s => ({ ...s, lastActivity: now })), () => null, now + 10);
+    const row = items.find(i => i.key === uuid(1));
+    assert.deepEqual([row.sessionId, row.helperSession, row.helperClosed, row.agentStatus], [P, uuid(1), false, 'running']);
+    assert.equal(items.find(i => i.key === uuid(2)).helperClosed, true);
+    // a closed helper is read-only: a send is refused before any tmux is touched (it would resume it)
+    await assert.rejects(send(uuid(2), 'hi', { cwd: '/x', updated: now }, { tm: async () => { throw new Error('touched tmux'); }, reg: async () => new Map() }),
+        { status: 409, message: 'Closed — ask the main chat to start a new helper' });
+    helpers.clear();
+}
+console.log('ok helper nesting');

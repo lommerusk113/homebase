@@ -26,9 +26,9 @@ const hasClaude = () => onPath('claude') || runs(loginShell(), ['-lic', 'command
 
 // The newest Claude Code whose screen (server/startup.mjs) and transcript (server/entries.mjs, feed.mjs, turns.mjs) Homebase's parsing was
 // checked against: the suites pass and a real chat was driven with it. Bump it after checking a newer one (CONTRIBUTING.md).
-export const VERIFIED_CLAUDE = '2.1.330';
+export const VERIFIED_CLAUDE = '2.1.331';
 let installed = null;
-// Read once (server start, --doctor), through the login shell chats start claude with. -> '2.1.330', or null when it can't be read
+// Read once (server start, --doctor), through the login shell chats start claude with. -> '2.1.331', or null when it can't be read
 export function readClaudeVersion(read = () => execFileSync(loginShell(), ['-lic', 'claude --version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 10_000 })) {
     try {
         installed = /(\d+\.\d+\.\d+) \(Claude Code\)/.exec(read())?.[1] ?? null;

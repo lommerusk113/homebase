@@ -87,7 +87,7 @@ What that buys:
 
 What it costs: Claude Code offers no interface for this, so Homebase reads its screen (`tmux capture-pane`) and its transcript files, and neither format is documented. A Claude Code update can break status, questions or sends.
 
-How that is contained: `VERIFIED_CLAUDE` in `server/setup.mjs` names the newest Claude Code the parsing was checked with (2.1.330 now). When the installed one is newer, the page header, `node server.mjs --doctor` and the server's start-up output say so. The header also warns when a transcript has no turn markers or a question is asked that the screen parser cannot read. `tests/fixtures/` holds screens captured from a real Claude Code, which the unit tests parse.
+How that is contained: `VERIFIED_CLAUDE` in `server/setup.mjs` names the newest Claude Code the parsing was checked with (2.1.331 now). When the installed one is newer, the page header, `node server.mjs --doctor` and the server's start-up output say so. The header also warns when a transcript has no turn markers or a question is asked that the screen parser cannot read. `tests/fixtures/` holds screens captured from a real Claude Code, which the unit tests parse.
 
 ## The rules file changes how Claude replies
 

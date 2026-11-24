@@ -37,7 +37,7 @@ import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, wat
 import { diff } from './server/diff.mjs';
 import { claim, release } from './server/once.mjs';
 import { pushSession } from './server/gitpush.mjs';
-import { doctor, setup, unsetup, missingTools, readClaudeVersion, versionWarning } from './server/setup.mjs';
+import { doctor, setup, linkHomebase, unsetup, missingTools, readClaudeVersion, versionWarning } from './server/setup.mjs';
 
 export { readTail, filesTouched, unwrapPasted } from './server/entries.mjs';
 export { splitTopic, splitTldr, gateRuns, toolSummary, RISKY, latestTopic, queuedPrompts } from './server/summaries.mjs';
@@ -99,6 +99,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     if (process.argv.includes('--setup')) {
         console.log(await setup());
+        console.log(linkHomebase());
         process.exit(0);
     }
     if (process.argv.includes('--unsetup')) {

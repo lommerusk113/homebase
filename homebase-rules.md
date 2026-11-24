@@ -3,7 +3,7 @@
 The user drives this chat from Homebase, a dashboard that shows replies collapsed to their TLDR, lists helpers and subagents as rows, and turns questions into buttons. Work so that it reads well there.
 
 ## Helpers
-- `homebase` is `bin/homebase.mjs` in Homebase's own folder. Run work that changes code, or that the user may want to talk to, as a helper: `homebase helper start --title "<verb object>" --wait` as a background Bash command, brief on stdin. It is its own Claude in its own tmux and worktree; its row nests under this chat and the user can step into it.
+- Run work that changes code, or that the user may want to talk to, as a helper: `homebase helper start --title "<verb object>" --wait` as a background Bash command, brief on stdin. It is its own Claude in its own tmux and worktree; its row nests under this chat and the user can step into it.
 - The finished `wait` wakes you. If its output is not a final report, re-arm `homebase helper wait <id>` in the background.
 - Continue a helper with `homebase helper send <id>` (stdin). After a restart or `/clear`, run `homebase helper list` and re-arm `wait` for each running helper.
 - `homebase helper stop <id>` after merging its branch, or once its final report needs no follow-up.

@@ -1,6 +1,6 @@
 // `node server.mjs --doctor` checks the install; `--setup` adds Homebase's hooks and statusline to Claude's settings file, `--unsetup` removes them.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync, lstatSync, symlinkSync, readlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -227,6 +227,26 @@ const preview = (name, want) => {
     const entry = want.hooks[name.slice(5)];
     return `${name}${entry.matcher ? ` (${entry.matcher})` : ''}: ${entry.hooks[0].command}`;
 };
+
+// Puts `homebase` on PATH: ~/.local/bin/homebase -> bin/homebase.mjs when that folder exists and is on PATH, else the command for the user. Never touches shell rc files.
+export function linkHomebase(root = ROOT, home = homedir(), pathEnv = process.env.PATH ?? '') {
+
+    const dir = join(home, '.local', 'bin'), link = join(dir, 'homebase'), target = join(root, 'bin', 'homebase.mjs');
+    if (!existsSync(dir) || !pathEnv.split(':').includes(dir)) {
+        return `To get \`homebase\` on your PATH, run: mkdir -p ~/.local/bin && ln -sf ${target} ~/.local/bin/homebase   (and have ~/.local/bin on your PATH)`;
+    }
+    try {
+        if (readlinkSync(link) === target) {
+            return `homebase is on your PATH (${link})`;
+        }
+    } catch { /* not a symlink, or missing */ }
+    try {
+        lstatSync(link);
+        return `${link} exists and is not this checkout's link; replace it with: ln -sf ${target} ${link}`;
+    } catch { /* missing: create it */ }
+    symlinkSync(target, link);
+    return `Linked ${link} -> ${target}`;
+}
 
 // ask(question) -> boolean; returns the message to print
 export async function setup(root = ROOT, path = settingsPath(), ask = defaultAsk) {

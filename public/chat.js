@@ -84,13 +84,12 @@ export function bindChat(id) {
 
 // Shows another chat's question in the pane (the "Needs you" rows, n, a chip) without rebinding the main chat;
 // "← Main chat" (or Esc) goes back. The main chat itself just shows.
-/** @param {string} id @param {{ id: string, description: string } | null} [helper] a helper of that chat to step in on @param {string | null} [askedFor] the helper whose question this chat relays */
-export function focusChat(id, helper = null, askedFor = null) {
+/** @param {string} id @param {{ id: string, description: string } | null} [helper] a helper of that chat to step in on */
+export function focusChat(id, helper = null) {
     clearTimeout(returnTimer);
     const shown = !activeHelper() && chatSession()?.id;
     composer.endDiscuss(); // a Discuss started on the chat we leave is not about this one
     state.helper = helper && { sid: id, ...helper };
-    state.askedFor = askedFor;
     nextId = null;
     $('c-next').hidden = true;
     state.focus = id;
@@ -326,10 +325,6 @@ function showFocus(s, items) {
     const helper = activeHelper();
     if (helper) {
         return box.replaceChildren(el('b', null, `Helper: ${helper.description}`));
-    }
-    if (state.askedFor) {
-        box.replaceChildren(el('b', null, `Asked for helper '${state.askedFor}'`), el('div', null, s.title || s.topic || ''));
-        return;
     }
 
     const x = state.sessions.flatMap(o => o.items || []).find(i => i.sessionId === s.id && i.pr);

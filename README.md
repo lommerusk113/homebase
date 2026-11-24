@@ -53,8 +53,8 @@ Words used below:
 * **`TLDR:` line**: a one-line summary Claude puts in each reply, because the rules file asks for it.
 * **Needs you**: a chat that waits on your answer, a permission or a decision.
 * **MR, PR, pipeline, milestone, forge**: a merge request (GitLab) is a pull request (GitHub); a pipeline is its CI run; a milestone is a named set of issues; a forge is GitLab or GitHub.
-* **Subagent** (also "helper"): a second Claude that a chat starts for a part of the work. A **worktree** is the separate checkout of the repo it may work in. A **work item** is one row on the Work tab.
-* **Helper in its own chat**: one started with `homebase helper start` (bin/homebase.mjs) runs as its own Claude in its own tmux. Its row sits under the chat that started it; Open chat steps into it (Back returns to that chat) and Stop closes it, asking first while it works. Homebase closes a helper by itself when its Claude exits, when the chat that started it is gone for 10 minutes and it isn't working, after 30 minutes idle, or after waiting on you for a day; its transcript, and its branch unless merged, are kept. A closed helper's chat stays readable but takes no messages.
+* **Subagent**: a second Claude that a chat starts inside its own process (the Agent tool), for read-only lookups; its row opens its conversation read-only, as you can't message it. A **worktree** is the separate checkout of the repo it may work in. A **work item** is one row on the Work tab.
+* **Helper in its own chat**: one started with `homebase helper start` (bin/homebase.mjs) runs as its own Claude in its own tmux. Its row sits under the chat that started it; Open chat steps into it, and what you type there goes straight to it (Back returns to that chat); Stop closes it, asking first while it works. The chat that started it keeps it across `/clear`. Homebase closes a helper by itself when its Claude exits, when the chat that started it is gone for 10 minutes and it isn't working, after 30 minutes idle, or after waiting on you for a day; its transcript, and its branch unless merged, are kept. A closed helper's chat stays readable but takes no messages.
 
 ## How it works
 
@@ -62,7 +62,7 @@ Words used below:
 * The server reads the transcripts Claude Code writes under `~/.claude/projects`. It keeps no copy of them. The page asks the server for the current state every 1.5 seconds.
 * A message you send is typed into the tmux session with `tmux send-keys` (several lines go in as one paste), then Enter. A chat with no tmux session gets one started with `claude --resume <id>`. A session that is still open in a terminal outside Homebase shows on the page, but a send is refused with "Quit it there (/exit), then send again", so Homebase does not start a second Claude on it.
 * `hooks/asking.mjs` is a Claude Code hook. It writes a small marker file while a session waits on a question or a permission prompt, because Claude Code writes some questions to the transcript only once they are answered. The options are also read from the tmux pane, and a click selects one there.
-* `homebase-rules.md` is appended to the system prompt of every Claude that Homebase starts or resumes (`--append-system-prompt-file`). It tells Claude how replies, subagents and questions fit Homebase.
+* `homebase-rules.md` is appended to the system prompt of every Claude that Homebase starts or resumes (`--append-system-prompt-file`). It tells Claude how replies, helpers and questions fit Homebase.
 
 ```mermaid
 flowchart LR
@@ -177,7 +177,7 @@ The entries hold the absolute path of the checkout. To move it, run `npm run uns
 
 * **Reads**: the transcripts under `~/.claude/projects` and the list of running sessions under `~/.claude/sessions`, the screen of its tmux sessions, and git state (status, diffs, branches) in the folders of the sessions it shows. It keeps no copy of the transcripts.
 * **Changes in Claude Code's settings**: setup adds the hooks and the statusline to `~/.claude/settings.json`, which applies to every Claude Code session on this Mac. The hook only writes and removes a marker file in the Homebase dir. Picking a model in a chat makes Claude Code save it as your default, so Homebase puts the `model` key in that file back to what it was.
-* **Changes in your chats**: `homebase-rules.md` is appended to the system prompt of every chat Homebase starts or resumes; it asks for a topic line, a `TLDR:` line, short replies and a certain use of subagents and questions. A chat you start yourself in a terminal gets it only once Homebase resumes it. [Auto-compact](#what-you-get) is on by default.
+* **Changes in your chats**: `homebase-rules.md` is appended to the system prompt of every chat Homebase starts or resumes; it asks for a topic line, a `TLDR:` line, short replies and a certain use of helpers and questions. A chat you start yourself in a terminal gets it only once Homebase resumes it. [Auto-compact](#what-you-get) is on by default.
 * **Writes**: its own files in the Homebase dir (see [Configuration](#configuration)). "New project" creates a GitHub repo and clones it.
 * **Sends**: Homebase has no telemetry and calls no server of its own. What leaves the Mac is what Claude Code sends, what `gh` and `glab` send when Homebase asks them for your MRs, PRs, pipelines and issues, and, only after you enable notifications on a device, an encrypted Web Push through that browser's push service with the project name and up to 300 characters of the question or last reply.
 

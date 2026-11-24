@@ -318,7 +318,7 @@ export default {
         page.route = null;
     },
 
-    'Step in opens a helper\'s own messages in the chat pane, Back returns': async ({ page, open, IDS }) => {
+    'Step in opens a helper\'s own messages in the chat pane, read-only; Back returns': async ({ page, open, IDS }) => {
         const step = `${row('agent-stopped')}?.querySelector('wa-button.step-in')`;
         await open();
         await page.waitFor(step, { what: 'the helper row with its Open chat icon' });
@@ -327,7 +327,7 @@ export default {
         await page.waitFor(`document.getElementById('feed').textContent.includes('Find out why the auth test is flaky')`, { what: "the helper's own message in the feed" });
         assert.equal(await page.ev(`document.getElementById('c-focus').textContent`), 'Helper: Investigate flaky test');
         assert.match(await page.ev(`document.getElementById('c-back').textContent`), /^← Back to /);
-        assert.match(await page.ev(`document.getElementById('msg').getAttribute('placeholder')`), /^Message goes to this helper via its main chat$/);
+        assert.ok(await page.ev(`document.getElementById('msg').hasAttribute('disabled')`), 'an in-process lookup is read-only');
         assert.equal(await page.ev(`location.hash`), `#chat=${IDS.master}&agent=agent-stopped`, 'deep link');
         await page.clickOn(`document.getElementById('c-back')`);
         await page.waitFor(`document.getElementById('c-back').hidden && !document.getElementById('feed').textContent.includes('Find out why the auth test is flaky') && location.hash === ''`, { what: 'the chat back' });

@@ -6,12 +6,12 @@ import ChatIcon from '@/components/ChatIcon.vue';
 import NeedsYou from './NeedsYou.vue';
 
 const item = useInjected(ItemKey);
-const { canStepIn, relayed, asking, stepIn } = useStepIn();
+const { canStepIn, asking, stepIn } = useStepIn();
 </script>
 
 <template>
     <template v-if="canStepIn(item)">
-        <NeedsYou v-if="relayed(item) || asking(item)" />
+        <NeedsYou v-if="asking(item)" />
         <ChatIcon @click="stepIn(item)" />
     </template>
 </template>

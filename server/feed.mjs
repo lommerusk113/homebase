@@ -137,6 +137,9 @@ function localCommand(e) {
 
 // "The coordinator sent a message while you were working:\n<text>\n\nAddress this before completing your current task." (the only wording in 137 transcripts)
 const COORDINATOR_WRAP = /^The coordinator sent a message while you were working:\n([\s\S]*?)(?:\n\nAddress this before completing your current task\.)?$/;
+// The framing Homebase's Step in adds around what the user typed (useComposer.ts): the helper's view shows only the typed text
+const STEP_IN_WRAP = /^\[The user stepped into your chat and is talking to you directly\.\] ([\s\S]*?)(?: — Answer them as you would in a normal chat:[\s\S]*)?$/;
+export const unwrapRelay = s => s.replace(COORDINATOR_WRAP, '$1').trim().replace(STEP_IN_WRAP, '$1').trim();
 
 function entryKind(e) {
 
@@ -158,7 +161,7 @@ function entryKind(e) {
 
     // a message the coordinator sent a helper mid-work (the main chat's SendMessage): the user's own words, minus Claude Code's wrapper
     if (e.type === 'user' && e.origin?.kind === 'coordinator' && typeof e.message?.content === 'string') {
-        return { kind: 'prompt', text: e.message.content.replace(COORDINATOR_WRAP, '$1').trim(), src: 'typed' };
+        return { kind: 'prompt', text: unwrapRelay(e.message.content), src: 'typed' };
     }
 
     const human = e.type === 'user' && !e.isMeta ? unwrapPasted(textOf(e)) : '';
@@ -171,7 +174,7 @@ function entryKind(e) {
 
     const a = e.type === 'attachment' ? e.attachment : null;
     if (a?.type === 'queued_command' && a.origin?.kind === 'human') {
-        return { kind: 'prompt', text: unwrapPasted(textOf({ message: { content: a.prompt } })), src: 'queued' };
+        return { kind: 'prompt', text: unwrapRelay(unwrapPasted(textOf({ message: { content: a.prompt } }))), src: 'queued' };
     }
     // a notification absorbed mid-turn: its line, but the turn goes on
     if (a?.type === 'queued_command' && a.origin?.kind === 'task-notification') {

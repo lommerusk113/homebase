@@ -269,9 +269,10 @@ import { say } from './helpers.mjs';
         { type: 'user', isMeta: true, origin: { kind: 'coordinator' }, message: { role: 'user', content: wrap('hey') }, timestamp: '2026-11-24T08:34:39.830Z' },
         { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'h1', name: 'SubagentHandback', input: { message: 'All **done**.' } }] }, timestamp: '2026-11-24T08:34:42.000Z' },
         { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'h1', content: [{ type: 'text', text: '{"success":true,"message":"Report delivered to your caller."}' }] }] }, timestamp: '2026-11-24T08:34:43.000Z' },
-        { type: 'user', isMeta: true, origin: { kind: 'coordinator' }, message: { role: 'user', content: wrap('two\nlines') }, timestamp: '2026-11-24T08:36:09.000Z' }
+        { type: 'user', isMeta: true, origin: { kind: 'coordinator' }, message: { role: 'user', content: wrap('two\nlines') }, timestamp: '2026-11-24T08:36:09.000Z' },
+        { type: 'user', isMeta: true, origin: { kind: 'coordinator' }, message: { role: 'user', content: wrap("[The user stepped into your chat and is talking to you directly.] why?\nmore — Answer them as you would in a normal chat: explain fully. Don't treat this as a status request unless they ask for status.") }, timestamp: '2026-11-24T08:37:00.000Z' }
     ];
-    assert.deepEqual(chatItems(entries).map(i => [i.role, i.text]), [['user', 'hey'], ['assistant', 'All **done**.'], ['user', 'two\nlines']]);
+    assert.deepEqual(chatItems(entries).map(i => [i.role, i.text]), [['user', 'hey'], ['assistant', 'All **done**.'], ['user', 'two\nlines'], ['user', 'why?\nmore']]);
     console.log('ok helper chat coordinator message and handback');
 }
 

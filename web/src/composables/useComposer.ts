@@ -63,7 +63,7 @@ export function useComposer() {
         draft.put(id!, '');
         text = discuss.take(text); // a failed send gives the wrapped text back, which is not wrapped twice
         // a helper can't be typed into: its chat is asked to pass the text on
-        const ok = await send(to, helper.value ? `Send this to helper '${helper.value.description}' (SendMessage to ${helper.value.id}), verbatim: ${text}` : text);
+        const ok = await send(to, helper.value ? `Relay this to helper '${helper.value.description}' now: SendMessage to ${helper.value.id} with exactly this message, unchanged. Then stop: no commentary or analysis of your own, say nothing beyond a one-line ack (or relay the helper's reply).\n\n[The user stepped into your chat and is talking to you directly.] ${text} — Answer them as you would in a normal chat: explain fully in plain words, with reasons and context; your hand-back message is shown to them verbatim as your reply. Don't treat this as a status request unless they ask for status.` : text);
         if (draft.chat() !== id) {
             // switched chats meanwhile: the box is the other chat's now, so a failed text goes back into its own chat's draft
             if (!ok && id && !draft.saved(id)) {

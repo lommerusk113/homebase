@@ -478,6 +478,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
 
     const step = turn.state === 'working' ? turnStep(turns, turn.since) : null;
     const needsYou = turn.state === 'idle' && lastItem?.role === 'assistant' && !!lastItem.needsYou && !lastItem.answer && !lastItem.error;
+    const question = turn.state === 'asking' ? pendingQuestion(entries, marker) : null;
 
     return {
         id: meta.sessionId,
@@ -491,10 +492,11 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         known: hasTurnMarkers(entries), // false: no turn markers in a recent transcript, so the status is only a guess
         asking: turn.state === 'asking',
         died: !!turn.died, // its turn never ended and nothing works on it: the board keeps a row until the user has looked
-        question: turn.state === 'asking' ? pendingQuestion(entries, marker) : null,
+        question,
         needsYou,
         needsId: needsYou ? lastItem?.id ?? null : null, // that reply's id, to mark it as handled (POST /api/handled)
         needsText: needsYou ? firstLine(lastItem?.ask?.question ?? waitingQuestion(lastItem?.waiting) ?? lastItem?.tldr, 140) || null : null, // what it asks, for the Needs you row's title
+        asks: question ?? (needsYou ? lastItem?.ask?.question ?? waitingQuestion(lastItem?.waiting) ?? null : null), // what it waits on you about, never a TLDR: links it to the MR it names (askerFor)
         since: turn.since,
         topic: latestTopic(entries),
         openPrompts,

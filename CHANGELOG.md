@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A chat asking about an MR ("MR !1856 … force-push?") puts that MR's row in Needs you, also from a main chat checked out on another issue; a chat waiting on you is never hidden by the milestone filter
 * The Token saver now turns itself on at 90% of the five-hour (session) limit, ignoring the weekly one, and the switch shows ON with a note like "auto, 91% used"; switching it off holds until session usage drops back under 90%.
 * Switching to a project with a stored milestone now holds the board back until its issues load, like a page load does, instead of flashing rows outside the milestone and then dropping them
 * Opening a helper's chat from its row no longer fails with "Homebase hit an error" when its parent chat was cleared or compacted after the helper started; a vanished helper transcript now answers 404.

@@ -7,8 +7,11 @@ import { waitsOnYou } from '@/lib/waiting';
 export function useStepIn() {
 
     const parent = (x: WorkItem) => oldState.value.sessions.find(s => s.id === x.sessionId);
-    /** A running helper's own question or permission prompt waits on you: step in to answer it. */
+    /** A chat's question about the row (askedBy), or its running helper's own question or permission prompt, waits on you: step in to answer it. */
     const asking = (x: WorkItem) => {
+        if (x.askedBy) {
+            return true;
+        }
         const own = x.helperSession && oldState.value.sessions.find(s => s.id === x.helperSession);
         return own ? waitsOnYou(own) : !!x.agentId && parent(x)?.askingAgent === x.agentId;
     };
@@ -16,7 +19,7 @@ export function useStepIn() {
     return {
         canStepIn: (x: WorkItem) => !!x.sessionId,
         asking,
-        stepIn: (x: WorkItem) => (x.helperSession
+        stepIn: (x: WorkItem) => (x.askedBy ? focusChat(x.askedBy) : x.helperSession
             ? focusChat(x.helperSession)
             : focusChat(x.sessionId, x.agentId ? { id: x.agentId, description: x.agentDescription ?? x.title } : null))
     };

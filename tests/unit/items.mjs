@@ -338,3 +338,23 @@ console.log('ok same repo');
     assert.match(claudeLine('', '/none', { saver: false, checks: '' }), / '\/my fake\/claude'$/);
     delete process.env.HOMEBASE_CLAUDE_BIN;
 }
+{
+    // a main chat (checked out on another issue's worktree) asks about !1856, whose row has a helper that does not ask: the row needs you
+    const helper = agent('h', 1, { description: 'Rebase MR 1856', helperSession: 'h' });
+    const chat = (asks, extra) => ({ id: 'm', project: 'p', branch: '2263-dimension-links-only', status: 'waiting', asking: true, question: asks, asks, prs: [{ url: mr(1856), at: 1 }, { url: mr(1849), at: 1 }], agents: [helper], ...extra });
+    const rows = (s, state = 'open') => workItems([s], () => open({ state, issue: '2283', branch: '2283-supplier-change' }), 0, new Map());
+    const row = (s, n = 1856, state) => rows(s, state).find(x => x.pr === mr(n));
+    const asked = row(chat('MR !1856 (#2283, …) passed the gate. Force-push 2283-supplier-change → origin (6 commits)?'));
+    assert.equal(asked.column, 'needs-you');
+    assert.equal(asked.askedBy, 'm');
+    assert.match(asked.next, /^Asks: MR !1856/);
+    // only the question's lead MR: "!1856 … like !1849" moves !1856, never both
+    const two = chat('Force-push !1856 the way !1849 was?');
+    assert.deepEqual([row(two).askedBy, row(two, 1849).askedBy], ['m', null]);
+    // an idle reply that needs you moves the row only by its question, never by MRs its TLDR lists
+    assert.equal(row(chat(null, { asking: false, question: null, needsYou: true, status: 'idle', needsText: 'Merged !1856; pick a name?' })).askedBy, null);
+    // a merged MR stays Done, and a chat that only works (not waiting) moves nothing
+    assert.equal(row(chat('Delete !1856\'s branch?'), 1856, 'merged').column, 'done');
+    assert.equal(row(chat('!1856?', { asking: false, status: 'working' })).askedBy, null);
+    console.log('ok asked rows');
+}

@@ -41,6 +41,8 @@ interface Session {
     needsYou: boolean;
     /** what that reply asks, one line (its Waiting on you question, else its TLDR); null unless needsYou */
     needsText?: string | null;
+    /** what it waits on you about (the question, or the reply's Waiting on you question; never its TLDR); links it to the MR it names */
+    asks?: string | null;
     /** that reply's id, to mark it as handled (POST /api/handled); null unless needsYou */
     needsId?: string | null;
     /** start of the running turn; null when idle or unknown */
@@ -167,6 +169,8 @@ interface WorkItem {
     agentDescription: string | null;
     /** the helper is a chat of its own (server/helpers.mjs): Step in opens it, and the row can stop it; null otherwise */
     helperSession?: string | null;
+    /** the chat waiting on you about this MR (its question's lead MR is it): the row is in Needs you and stands for that chat's question */
+    askedBy?: string | null;
     helperClosed?: boolean;
     /** when a running agent started its current step (`next` names it); null otherwise */
     stepAt: number | null;

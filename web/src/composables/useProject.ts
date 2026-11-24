@@ -1,6 +1,6 @@
 import { computed, toRef } from 'vue';
 import { hooks, isTracked } from 'old/core.js';
-import { projectCounts, waitsOnYou } from '@/lib/waiting';
+import { projectCounts, waitingCount } from '@/lib/waiting';
 import { oldState } from '@/old';
 import type { PickItem } from '@/composables/usePicker';
 import { openNewProject } from './useNewProject';
@@ -10,7 +10,7 @@ import { showProjects } from './useProjects';
 function pickItem(value: string, name: string, mine: Session[]): PickItem {
 
     const chats = mine.filter(s => !s.sidechain);
-    const waiting = mine.flatMap(s => s.items || []).filter(x => x.column === 'needs-you').length + mine.filter(waitsOnYou).length; // as projectCounts
+    const waiting = waitingCount(mine);
     const working = chats.filter(s => s.status === 'working').length;
     const parts = [waiting && `${waiting} waiting on you`, working && `${working} working`, chats.some(s => s.rulesStale) && 'old rules', `${chats.length || 'No'} chat${chats.length === 1 ? '' : 's'}`];
 

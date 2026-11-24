@@ -1,7 +1,8 @@
 // Work-item rules (pure): one item per MR or loose agent, its column, lifecycle stage, next step, row action, gate badge and milestone.
 import { PR_URL } from './entries.mjs';
 import { USAGE_KEYS, IDLE_CUTOFF_MS, formatDuration, formatTokens } from './usage.mjs';
-import { mentionsMr, namesMr, mrRef, forgeWords } from './forge.mjs';
+import { mentionsMr, namesMr, mrRef, mrNumber, forgeWords } from './forge.mjs';
+import { waitsOnYou } from '../web/src/lib/waiting.ts';
 import { canned } from '../web/src/lib/canned.ts';
 
 const RECENT_DONE_MS = 2 * 3600_000;
@@ -308,6 +309,17 @@ export function requestFor(sessions, project, url, prState) {
     return hits.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
 }
 
+// The MR a question is about: its first MR URL, `!N` or "MR N" / "PR #N", whichever comes first; a later one is context.
+const LEAD_MR = new RegExp(`${PR_URL.source}(?!\\d)|(?<![\\w&!#])!\\d+(?!\\d)|\\b(?:MR|PR) #?\\d+(?!\\d)`);
+const isMr = (ref, url) => (ref.startsWith('https://') ? ref === url : ref.match(/\d+$/)[0] === mrNumber(url) && !(ref.startsWith('!') && url.includes('/pull/')));
+
+// The chat of the project that waits on you about the MR (its question's lead MR is it), else null. Linked by what the
+// question names, never by where the chat is checked out or which helper it started: a main chat asks about many MRs.
+// ponytail: an issue-only question ("#2283?") links nothing and keeps its own chat row; match the MR's issue when that misses
+export function askerFor(sessions, project, url) {
+    return sessions.find(s => s.project === project && waitsOnYou(s) && (r => !!r && isMr(r, url))(s.asks?.match(LEAD_MR)?.[0])) ?? null;
+}
+
 // The work items' raw groups: one per PR/MR (deduped across sessions and agents), plus running or stopped agents with
 // no MR yet. Agents whose description names a known MR (!123) count as work on it; finished agents without an MR stay
 // for RECENT_DONE_MS, then drop out. `seeds` are { url, project, sessionId?, agents? } MRs no transcript need mention:
@@ -421,7 +433,9 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
     // a reviewer chat is not work on the MR it reviews: it never becomes a row or its working chat
     const reviewerIds = new Set([...reviews.values()].map(r => r.id));
 
-    return itemGroups(sessions.filter(s => !reviewerIds.has(s.id)), prOf, now, seeds).map(it => {
+    const live = sessions.filter(s => !reviewerIds.has(s.id));
+
+    return itemGroups(live, prOf, now, seeds).map(it => {
 
         const agents = it.agents.toSorted((a, b) => b.updated - a.updated);
         const agent = agents[0] ?? null;
@@ -437,6 +451,11 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const w = forgeWords(it.project, it.pr);
         const row = rowOf(ps, agent, { pr: it.pr, title, mr: w.mr, aMr: w.aMr, requested: !!requested, now, error: it.pr ? errorOf(it.pr, it.project) : null });
 
+        // a chat waiting on you about the open MR puts its row in Needs you, its question before the row's own reason
+        const asker = prState?.state === 'open' ? askerFor(live, it.project, it.pr) : null;
+        if (asker) {
+            Object.assign(row, { column: 'needs-you', next: `Asks: ${asker.asks.split('\n')[0]} · ${row.next}` });
+        }
         const rev = !row.action && row.column === 'review' ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now, prState?.sha) : null;
 
         return {
@@ -449,6 +468,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             prState,
             state: row.state,
             column: row.column,
+            askedBy: asker?.id ?? null, // the chat whose question this row stands for (useChatRows drops its own row)
             stage: row.stage,
             stageLabel: prState?.state === 'closed' ? 'Closed' : LIFECYCLE[row.stage],
             agentStatus: agent?.status ?? null,

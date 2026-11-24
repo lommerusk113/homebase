@@ -50,6 +50,8 @@ console.log('ok attention');
         { project: 'alpha', waiting: 2 } // beta is working and its sidechain's question isn't the user's; gamma has nothing: both left out
     ]);
     assert.deepEqual(projectCounts([], ['alpha']), []);
+    // a chat asking about an MR whose row is in Needs you counts once (its row stands for it)
+    assert.deepEqual(projectCounts([{ id: 'e', project: 'p', status: 'waiting', asking: true, items: [{ key: 'k', column: 'needs-you', askedBy: 'e' }] }], ['p']), [{ project: 'p', waiting: 1 }]);
     console.log('ok project counts');
 }
 const c3 = { items: [{ at: CT(3), author: 'Børre Stellander' }, { at: CT(2), author: 'Ann Lee' }, { at: CT(1), author: 'Børre Stellander' }] };

@@ -21,7 +21,7 @@ import OpenGroup from './Board/OpenGroup.vue';
 import FoldGroup from './Board/FoldGroup.vue';
 import ReviewGroup from './Board/ReviewGroup.vue';
 
-const marks = useSentMarks(), work = useWorkItems(marks), chats = useChatRows(), reviews = useReviews(), folds = useFolds();
+const marks = useSentMarks(), work = useWorkItems(marks), chats = useChatRows(work), reviews = useReviews(), folds = useFolds();
 const { hasProjects, groups, empty, needsCount } = provideAll();
 
 function provideAll() {

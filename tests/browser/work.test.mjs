@@ -196,21 +196,22 @@ export default {
     },
 
     'a chat only the hook marker says is asking gets a Needs you row that opens it': async ({ page, open, homebase }) => {
-        // worker's transcript shows an open turn and no question (the late-write case); only hooks/asking.mjs's marker knows
+        // worker's transcript shows an open turn and no question (the late-write case); only hooks/asking.mjs's marker knows.
+        // The question names no MR, so it keeps a row of its own (one naming an open MR puts that MR's row in Needs you instead)
         const dir = join(homebase, 'asking'), file = join(dir, `${IDS.worker}.json`);
         mkdirSync(dir, { recursive: true });
-        writeFileSync(file, JSON.stringify({ questions: [{ question: 'Merge !101 now?', options: ['Yes', 'No'] }], toolUseId: 'q1', at: new Date().toISOString() }));
+        writeFileSync(file, JSON.stringify({ questions: [{ question: 'Merge it now?', options: ['Yes', 'No'] }], toolUseId: 'q1', at: new Date().toISOString() }));
         try {
             await open();
             const ask = row(`asking:${IDS.worker}`);
             await page.waitFor(`document.querySelector('#masters .g-needs-you tr[data-key="asking:${IDS.worker}"]')`, { what: 'the asking row in Needs you' });
             assert.equal(await page.ev(`${ask}.querySelector('b').textContent.trim()`), 'Refactor the session store is asking');
-            assert.equal(await page.ev(`${ask}.querySelector('.next').textContent`), 'Merge !101 now? · click to answer in the chat');
+            assert.equal(await page.ev(`${ask}.querySelector('.next').textContent`), 'Merge it now? · click to answer in the chat');
             assert.equal(await page.ev(`document.querySelector('#masters .g-needs-you .g-head').textContent`), 'Needs you · 4');
             await page.click(`#masters tr[data-key="asking:${IDS.worker}"]`);
             await page.waitFor(`document.getElementById('status-text').textContent.startsWith('Claude is asking')`, { what: 'the chat status to say asking' });
             assert.equal(await page.ev(`document.getElementById('c-back').hidden`), false);
-            await page.waitFor(`/Merge !101 now\\?/.test(document.getElementById('ask-q').textContent)`, { what: 'the question in the card' });
+            await page.waitFor(`/Merge it now\\?/.test(document.getElementById('ask-q').textContent)`, { what: 'the question in the card' });
             assert.match(await page.ev('document.title'), /^\(\d+\) Homebase$/);
         } finally {
             rmSync(file, { force: true });

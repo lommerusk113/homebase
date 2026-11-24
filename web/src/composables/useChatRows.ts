@@ -1,11 +1,12 @@
 import { computed, reactive } from 'vue';
 import { hooks, inView, markHandled, state, store } from 'old/core.js';
 import { ago } from '@/lib/time';
-import { waitsOnYou } from '@/lib/waiting';
+import { askedIds, waitsOnYou } from '@/lib/waiting';
 import { isMaster, bindChat, focusChat } from 'old/chat.js';
 import { startingIssues, sessionTopic, workingTitle, workingLine } from '@/lib/board';
 import { oldState } from '@/old';
 import { useNotice } from '@/composables/useNotice';
+import type { useWorkItems } from '@/composables/useWorkItems';
 
 const handled = reactive(new Set<string>()); // replies marked as handled here, until the next poll has the server's word
 
@@ -14,15 +15,18 @@ const handled = reactive(new Set<string>()); // replies marked as handled here, 
 const diedMark = (s: Session) => String(s.lastActivity ?? s.updated);
 
 /** The board's rows for the chats themselves: waiting on you, stopped mid-turn, working, or starting on an issue. */
-export function useChatRows() {
+export function useChatRows(work: ReturnType<typeof useWorkItems>) {
 
     const visible = computed(() => oldState.value.sessions.filter(inView));
     const byId = computed(() => new Map(visible.value.map(s => [s.id, s])));
 
-    // with a milestone picked, a chat on another milestone's issue branch/worktree (2263-…) is hidden like its work item; no ref stays
+    // with a milestone picked, a chat on another milestone's issue branch/worktree (2263-…) is hidden like its work item; no ref stays.
+    // Never for a chat waiting on you: where it is checked out says nothing about what it asks (a main chat asks about many MRs).
     const inMs = (s: Session) => hooks.inMilestone({ branch: s.branch, worktreePath: s.cwd } as WorkItem);
 
-    const asking = computed(() => visible.value.filter(s => inMs(s) && waitsOnYou(s) && !(s.needsId && !s.asking && handled.has(s.needsId))));
+    // a chat whose question names an MR shown in Needs you is that row (askedBy), else it gets its own row
+    const asked = computed(() => askedIds(work.items.value));
+    const asking = computed(() => visible.value.filter(s => waitsOnYou(s) && !asked.value.has(s.id) && !(s.needsId && !s.asking && handled.has(s.needsId))));
     const died = computed(() => visible.value.filter(s => inMs(s) && !!s.died && isMaster(s) && s.status !== 'working' && !waitsOnYou(s) && store.get(`died-seen:${s.id}`) !== diedMark(s)));
     // "#N · starting…": the main chat took the issue on, but no subagent or MR shows it yet
     const starting = computed(() => visible.value.filter(isMaster).flatMap(s => {

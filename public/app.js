@@ -466,7 +466,7 @@ setInterval(poll, 1500); // /api/sessions costs ~40ms warm (GitLab stays behind 
 // ?vue=1 adds the demo island (web/src/islands/Demo.vue) to the header.
 vue.load().then(m => {
     const header = $('header-island');
-    m?.mount('Header', header, { version: header.dataset.version });
+    m?.mount('Header', header);
     m?.mount('Issues', $('issues'));
     m?.mount('TokenSaver', $('saver'));
     m?.mount('Bell', $('bell-host'));

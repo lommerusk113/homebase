@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The header's live parts, laid out as the header's own children: the project picker, the milestone pill, and the
-// update, offline and format notes. version: the server's Claude Code version warning ('' for none).
+// update, offline and format notes.
 import { provide } from 'vue';
 import { hooks } from 'old/core.js';
 import { ConnectionKey, FormatWarnKey, MilestoneFilterKey, PickerKey, ProjectKey, UpdateKey } from '@/keys';
@@ -16,8 +16,6 @@ import UpdateNote from './Header/UpdateNote.vue';
 import OfflineNote from './Header/OfflineNote.vue';
 import FormatWarn from './Header/FormatWarn.vue';
 
-const props = defineProps<{ version?: string }>();
-
 const project = useProject();
 const picker = usePicker('pp', project.items, project.project, project.setProject);
 hooks.openProjects = picker.open; // keys.js: g then p
@@ -27,7 +25,7 @@ provide(PickerKey, picker);
 provide(MilestoneFilterKey, useMilestoneFilter());
 provide(UpdateKey, useUpdate());
 provide(ConnectionKey, useConnection());
-provide(FormatWarnKey, useFormatWarn(props.version ?? ''));
+provide(FormatWarnKey, useFormatWarn());
 </script>
 
 <template>

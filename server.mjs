@@ -194,7 +194,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 // data-remote: a paired device, so the page leaves out what only the Mac can do (pairing).
                 res.setHeader('content-security-policy', CSP);
                 res.setHeader('cache-control', 'no-store');
-                return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN).replace('__HOMEBASE_BUILD__', BUILD).replace('__HOMEBASE_CLAUDE_WARN__', versionWarning()).replace('data-demo hidden', DEMO ? 'data-demo' : 'data-demo hidden').replace('<html ', remote ? '<html data-remote ' : '<html ').replace('<!-- homebase-web -->', webTags()));
+                return res.end(String(body).replace('__HOMEBASE_TOKEN__', TOKEN).replace('__HOMEBASE_BUILD__', BUILD).replace('data-demo hidden', DEMO ? 'data-demo' : 'data-demo hidden').replace('<html ', remote ? '<html data-remote ' : '<html ').replace('<!-- homebase-web -->', webTags()));
             }
             if (await serveWeb(url.pathname, req, res)) {
                 return;

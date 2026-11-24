@@ -423,6 +423,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 #msg::part(label) { position:absolute; width:1px; height:1px; margin:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; } /* a name for screen readers; the placeholder is what shows */
 #msg::part(textarea) { box-sizing:border-box; min-height:var(--c-h); max-height:180px; line-height:20px; padding-block:calc((var(--c-h) - 20px) / 2); overflow:auto; }
 .c-sep { border:0; border-top:1px solid var(--line); margin:4px 0; }
+.c-plus wa-dropdown-item::part(details) { color:var(--fg); opacity:.75; font-size:12px; }
 .c-attach { flex-shrink:0; width:var(--c-h); height:var(--c-h); border:0; border-radius:var(--r-s); padding:0; display:grid; place-items:center; cursor:pointer; }
 .c-attach { background:none; color:var(--muted); }
 .c-attach:hover { color:var(--fg); background:var(--hover); }

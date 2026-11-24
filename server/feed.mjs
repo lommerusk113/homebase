@@ -135,6 +135,9 @@ function localCommand(e) {
     return { kind: 'local', cmd, out: clip(out) };
 }
 
+// "The coordinator sent a message while you were working:\n<text>\n\nAddress this before completing your current task." (the only wording in 137 transcripts)
+const COORDINATOR_WRAP = /^The coordinator sent a message while you were working:\n([\s\S]*?)(?:\n\nAddress this before completing your current task\.)?$/;
+
 function entryKind(e) {
 
     if (e.isSidechain) {
@@ -151,6 +154,11 @@ function entryKind(e) {
     const local = localCommand(e);
     if (local) {
         return local;
+    }
+
+    // a message the coordinator sent a helper mid-work (the main chat's SendMessage): the user's own words, minus Claude Code's wrapper
+    if (e.type === 'user' && e.origin?.kind === 'coordinator' && typeof e.message?.content === 'string') {
+        return { kind: 'prompt', text: e.message.content.replace(COORDINATOR_WRAP, '$1').trim(), src: 'typed' };
     }
 
     const human = e.type === 'user' && !e.isMeta ? unwrapPasted(textOf(e)) : '';
@@ -181,7 +189,11 @@ function entryKind(e) {
         return { kind: 'error', text: textOf(e) };
     }
 
-    return { kind: 'assistant', text: textOf(e), uses: Array.isArray(e.message?.content) ? e.message.content.filter(b => b.type === 'tool_use') : [] };
+    // a helper's report to its caller is its reply: SubagentHandback's message, not a tool line
+    const calls = Array.isArray(e.message?.content) ? e.message.content.filter(b => b.type === 'tool_use') : [];
+    const report = calls.filter(b => b.name === 'SubagentHandback' && typeof b.input?.message === 'string').map(b => b.input.message);
+
+    return { kind: 'assistant', text: [textOf(e), ...report].filter(Boolean).join('\n\n'), uses: calls.filter(b => b.name !== 'SubagentHandback') };
 }
 
 // Bubbles in entry order: one per Claude text chunk, marked `continues` unless a new turn started before it, and one

@@ -262,6 +262,19 @@ import { say } from './helpers.mjs';
     console.log('ok context and compact');
 }
 
+// a helper's chat: the coordinator's message is the user's own "hey", and SubagentHandback's message is the helper's reply
+{
+    const wrap = text => `The coordinator sent a message while you were working:\n${text}\n\nAddress this before completing your current task.`;
+    const entries = [
+        { type: 'user', isMeta: true, origin: { kind: 'coordinator' }, message: { role: 'user', content: wrap('hey') }, timestamp: '2026-11-24T08:34:39.830Z' },
+        { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'h1', name: 'SubagentHandback', input: { message: 'All **done**.' } }] }, timestamp: '2026-11-24T08:34:42.000Z' },
+        { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'h1', content: [{ type: 'text', text: '{"success":true,"message":"Report delivered to your caller."}' }] }] }, timestamp: '2026-11-24T08:34:43.000Z' },
+        { type: 'user', isMeta: true, origin: { kind: 'coordinator' }, message: { role: 'user', content: wrap('two\nlines') }, timestamp: '2026-11-24T08:36:09.000Z' }
+    ];
+    assert.deepEqual(chatItems(entries).map(i => [i.role, i.text]), [['user', 'hey'], ['assistant', 'All **done**.'], ['user', 'two\nlines']]);
+    console.log('ok helper chat coordinator message and handback');
+}
+
 // /api/agent-feed: the helper's own messages, only for a session and helper Homebase listed; the path never comes from the request
 {
     const home = mkdtempSync(join(tmpdir(), 'hb-home-'));

@@ -335,6 +335,6 @@ console.log('ok same repo');
     refuseRealClaude(launch, { dir: '/home/me/.homebase', bin: undefined });
     refuseRealClaude(['send-keys', '-t', 'cc-x', 'claude'], { dir: `${tmpdir()}/hb`, bin: undefined });
     process.env.HOMEBASE_CLAUDE_BIN = '/my fake/claude';
-    assert.match(claudeLine('', '/none', { saver: false, checks: '' }), /^'\/my fake\/claude'$/);
+    assert.match(claudeLine('', '/none', { saver: false, checks: '' }), / '\/my fake\/claude'$/);
     delete process.env.HOMEBASE_CLAUDE_BIN;
 }

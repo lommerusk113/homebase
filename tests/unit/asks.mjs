@@ -98,6 +98,11 @@ assert.deepEqual(waitingAsk(multi), { question: 'Which cache?', context: 'Cache 
 assert.equal(waitingOn('- Waiting on you — nothing'), null);
 assert.equal(waitingOn('- Waiting on you: none, all done'), null);
 assert.equal(waitingOn('Waiting on your review is not a line'), null);
+assert.equal(waitingOn('- **Waiting on you card:** it gets Yes/No buttons'), null);
+assert.equal(waitingOn('**Waiting on you card:** x'), null);
+assert.equal(waitingOn('**Waiting on you**: pick one'), 'pick one');
+assert.equal(waitingOn('Waiting on you: x'), 'x');
+assert.equal(waitingOn('- Waiting on you — which one?'), 'which one?');
 { // an open decision outlives a later message: the newest reply's Waiting on you, with the chips of its list
     const ask = '**▸ Cache layer**\n\n**Options**\n1. **Redis** — shared\n2. **In-memory** — simplest\n\n**In flight**\n- Waiting on you: which cache\n\n**TLDR:** Which cache?';
     const items = chatItems([say(ask), { type: 'user', message: { content: 'also fix the typo in the README' } }, say('Fixed the typo.\n\n**In flight**\n- Nothing running\n- Waiting on you: which cache (Redis or in-memory)\n\n**TLDR:** Typo fixed.')]);

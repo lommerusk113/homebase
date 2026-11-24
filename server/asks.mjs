@@ -31,7 +31,7 @@ export function topicAndTldr(i) {
 
 // What a reply says waits on the user ("- Waiting on you: <question>" in its In flight list, or a "**Waiting on you:**"
 // line), else null; "nothing" / "none" count as nothing.
-const WAITING = /^[ \t]*(?:[-*+][ \t]+)?\**Waiting on you\b[*:]*[ \t—–-]*(.*(?:\n[ \t]*\d+[.)][ \t]+.*)*)$/gim; // the question line, then its numbered option lines
+const WAITING = /^[ \t]*(?:[-*+][ \t]+)?\**Waiting on you\**[ \t]*[:—–-][*:]*[ \t—–-]*(.*(?:\n[ \t]*\d+[.)][ \t]+.*)*)$/gim; // the question line, then its numbered option lines
 export function waitingOn(text) {
 
     let said = [...(text ?? '').matchAll(WAITING)].at(-1)?.[1].trim();

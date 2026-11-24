@@ -192,7 +192,7 @@ const agentKind = (column, next, action = noButton) => ({ column, next, action, 
 export const KINDS = {
     merged: { column: 'done', next: () => 'Merged', action: noButton, stage: () => 4 },
     abandoned: { column: 'closed', next: () => 'Closed without merging', action: noButton, stage: () => 4 },
-    requested: agentKind('doing', () => 'Claude is on it…'),
+    requested: agentKind('doing', () => 'Sent to Claude…'),
     running: agentKind('doing', c => c.agent.step ?? `${c.agent.description} is ${VERB[c.agent.stage] ?? 'working'}…`),
     stopped: agentKind('needs-you', () => 'Agent stopped — check the chat', continueIt),
     'api-error': agentKind('needs-you', stoppedText('API error'), continueIt),

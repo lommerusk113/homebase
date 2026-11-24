@@ -36,7 +36,7 @@ import { workItems, issueOf, mentionsMr, turnPrompts, spawnPrompts, worksOnMr, r
     const master = (openPrompts, agents = []) => ({ id: 'm', project: 'pracsys', prs: [{ url, at: 1 }], agents, openPrompts });
     const one = (s, prOf = () => pr) => workItems([s], prOf, 0, new Map())[0];
     const req = one(master(turnPrompts([td('11:00'), ask, tool('12:05')], 1_000)));
-    assert.deepEqual([req.column, req.next, req.action, req.requested.at], ['doing', 'Claude is on it…', null, at('12:00')]);
+    assert.deepEqual([req.column, req.next, req.action, req.requested.at], ['doing', 'Sent to Claude…', null, at('12:00')]);
     const idle = one(master([]));
     assert.deepEqual([idle.column, idle.requested, idle.action.label], ['needs-you', null, 'Fix & reply']);
     // another project's session asking about the same number doesn't count

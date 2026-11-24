@@ -39,7 +39,7 @@ function optimistic(x: WorkItem, now = Date.now()): WorkItem {
         return x;
     }
 
-    return { ...x, sent: at, column: 'doing', next: `Sent — waiting for the chat (${new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })})` };
+    return { ...x, sent: at, column: 'doing', next: `Sent to Claude (${new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })})` };
 }
 
 const reviewing = new Set<string>(); // rows whose Review POST is in flight, so a double click starts one reviewer

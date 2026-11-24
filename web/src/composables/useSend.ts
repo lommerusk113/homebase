@@ -8,7 +8,7 @@ import { useComposerFocus } from './useComposerFocus';
 import { useDraft } from './useDraft';
 import { useNotice } from './useNotice';
 
-/** Row keys whose button the server refused as already sent (here or on another device): shown as "Already sent" for a moment. */
+/** Row keys whose button the server refused as already sent (here or on another device): shown as "Sent to Claude" for a moment. */
 export const alreadySent = reactive(new Set<string>());
 
 /** True (and the button says so for a moment) when the response is the server's once-guard refusal. */
@@ -43,7 +43,7 @@ export function useSend() {
      * Types text into a session as an outbox bubble ("sending…", then gone once the transcript has it); false if it failed.
      * note: appended to what is sent but not shown, so the chat shows just the label.
      * canned: a button's message, not typed by the user: the server refuses it while Claude asks, instead of declining the question.
-     * once: a row button's row key; the server refuses a repeat (409, "Already sent") until the row's state changes.
+     * once: a row button's row key; the server refuses a repeat (409, "Sent to Claude") until the row's state changes.
      */
     async function send(sid: string, text: string, answerTo?: string, note?: string, canned?: boolean, once?: string): Promise<boolean> {
 

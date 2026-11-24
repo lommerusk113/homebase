@@ -92,7 +92,7 @@ console.log('ok refreshAll, cached');
         if (config) {
             writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
         }
-        const child = spawn(process.execPath, ['server.mjs'], { cwd: new URL('../../', import.meta.url).pathname, env: { ...process.env, HOME: dir, PORT: String(port), HOMEBASE_DIR: dir, HOMEBASE_CODE_DIR: codeDir(join(dir, 'code')), HOMEBASE_STATUSLINE_DIR: dir, HOMEBASE_TMUX_SOCKET: 'homebase-test-none', ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
+        const child = spawn(process.execPath, ['server.mjs'], { cwd: new URL('../../', import.meta.url).pathname, env: { ...process.env, HOME: dir, PORT: String(port), HOMEBASE_DIR: dir, HOMEBASE_CODE_DIR: codeDir(join(dir, 'code')), HOMEBASE_STATUSLINE_DIR: dir, HOMEBASE_TMUX_SOCKET: 'homebase-test-none', HOMEBASE_CLAUDE_BIN: join(import.meta.dirname, '../fixtures/fake-claude.sh'), ...env }, stdio: ['ignore', 'pipe', 'inherit'] });
         let out = '';
         await new Promise((ok, fail) => { child.stdout.on('data', c => { out += c; if (out.includes('Homebase on')) ok(); }); child.on('exit', fail); });
         return { port, dir, out, stop: () => { child.kill(); rmSync(dir, { recursive: true, force: true }); } };

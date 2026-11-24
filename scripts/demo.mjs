@@ -72,7 +72,7 @@ export function buildDemo(tmp) {
     }
     const env = port => {
         const e = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}`, PORT: String(port), HOMEBASE_DIR: data, HOMEBASE_STATUSLINE_DIR: join(tmp, 'statusline'),
-            HOMEBASE_TMUX_SOCKET: `homebase-demo-${process.pid}`, HOMEBASE_STUB_LOG: join(tmp, 'forge.log'), HOMEBASE_CODE_DIR: code };
+            HOMEBASE_TMUX_SOCKET: `homebase-demo-${process.pid}`, HOMEBASE_CLAUDE_BIN: join(import.meta.dirname, '../tests/fixtures/fake-claude.sh'), HOMEBASE_STUB_LOG: join(tmp, 'forge.log'), HOMEBASE_CODE_DIR: code };
         delete e.HOMEBASE_LAN;
 
         return e;

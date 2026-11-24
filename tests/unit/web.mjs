@@ -16,7 +16,7 @@ import { codeDir } from './helpers.mjs';
         res.on('data', c => { body += c; });
         res.on('end', () => ok({ status: res.statusCode, type: res.headers['content-type'], body }));
     }).on('error', fail).end());
-    const child = spawn(process.execPath, ['server.mjs'], { cwd: join(import.meta.dirname, '../..'), env: { ...process.env, HOME: dir, PORT: String(port), HOMEBASE_DIR: dir, HOMEBASE_CODE_DIR: codeDir(join(dir, 'code')), HOMEBASE_STATUSLINE_DIR: dir, HOMEBASE_TMUX_SOCKET: 'homebase-test-none', HOMEBASE_WEB_DIST: dist }, stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = spawn(process.execPath, ['server.mjs'], { cwd: join(import.meta.dirname, '../..'), env: { ...process.env, HOME: dir, PORT: String(port), HOMEBASE_DIR: dir, HOMEBASE_CODE_DIR: codeDir(join(dir, 'code')), HOMEBASE_STATUSLINE_DIR: dir, HOMEBASE_TMUX_SOCKET: 'homebase-test-none', HOMEBASE_CLAUDE_BIN: join(import.meta.dirname, '../fixtures/fake-claude.sh'), HOMEBASE_WEB_DIST: dist }, stdio: ['ignore', 'pipe', 'inherit'] });
     try {
         await new Promise((ok, fail) => { let out = ''; child.stdout.on('data', c => { out += c; if (out.includes('Homebase on')) ok(); }); child.on('exit', fail); });
         assert.doesNotMatch((await get('/')).body, /\/web\/main/, 'not built: the page loads no island files');

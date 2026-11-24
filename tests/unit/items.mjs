@@ -324,3 +324,17 @@ console.log('ok same repo');
     assert.equal(toGate(run, 'bbb222', new Map(), Date.now()).stale, true);
     rmSync(dir, { recursive: true });
 }
+
+// the guard: a test run (HOMEBASE_DIR under the temp dir) may not start the real claude; a fake claude or a real dir passes
+{
+    const { refuseRealClaude, claudeLine } = await import('../../server/tmux.mjs');
+    const { tmpdir } = await import('node:os');
+    const launch = ['new-session', '-d', '-s', 'cc-x', 'zsh', '-lic', 'claude --resume x'];
+    assert.throws(() => refuseRealClaude(launch, { dir: `${tmpdir()}/hb`, bin: undefined }), /refusing to start the real claude/);
+    refuseRealClaude(launch, { dir: `${tmpdir()}/hb`, bin: '/fake' });
+    refuseRealClaude(launch, { dir: '/home/me/.homebase', bin: undefined });
+    refuseRealClaude(['send-keys', '-t', 'cc-x', 'claude'], { dir: `${tmpdir()}/hb`, bin: undefined });
+    process.env.HOMEBASE_CLAUDE_BIN = '/my fake/claude';
+    assert.match(claudeLine('', '/none', { saver: false, checks: '' }), /^'\/my fake\/claude'$/);
+    delete process.env.HOMEBASE_CLAUDE_BIN;
+}

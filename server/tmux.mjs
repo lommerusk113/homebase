@@ -1,8 +1,9 @@
 // tmux plumbing: the socket override, session names, /clear aliases, and the keystroke steps for a message.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { saverOn, SAVER_RULE } from './saver.mjs';
 import { isManual, MANUAL_RULE } from './manual.mjs';
@@ -12,7 +13,23 @@ const run = promisify(execFile);
 
 // HOMEBASE_TMUX_SOCKET points every tmux call at a separate server (tmux -L), so tests never touch real sessions.
 export const tmuxArgs = (args, socket = process.env.HOMEBASE_TMUX_SOCKET) => (socket ? ['-L', socket, ...args] : args);
-export const tmux = args => run('tmux', tmuxArgs(args), { timeout: 5000 }); // a hung tmux fails instead of freezing the board
+// A test run (HOMEBASE_DIR under the OS temp dir) must never start the real claude: it needs HOMEBASE_CLAUDE_BIN (a fake).
+const LAUNCHES = new Set(['new-session', 'new-window', 'split-window', 'respawn-pane', 'respawn-window']);
+export const refuseRealClaude = (args, { dir = process.env.HOMEBASE_DIR, bin = process.env.HOMEBASE_CLAUDE_BIN } = {}) => {
+    if (bin || !dir || !LAUNCHES.has(args[0]) || !args.some(a => /(^|\s)claude\b/.test(a))) {
+        return;
+    }
+    const real = p => { try { return realpathSync(p); } catch { return resolve(p); } };
+    const under = [tmpdir(), real(tmpdir())].some(t => [resolve(dir), real(dir)].some(d => d === t || d.startsWith(t + sep)));
+    if (under) {
+        throw new Error('refusing to start the real claude from a test run (HOMEBASE_DIR is under the temp dir): set HOMEBASE_CLAUDE_BIN to a fake');
+    }
+};
+export const tmux = args => {
+    refuseRealClaude(args);
+
+    return run('tmux', tmuxArgs(args), { timeout: 5000 }); // a hung tmux fails instead of freezing the board
+};
 
 // Homebase's own rules (homebase-rules.md: how replies and questions fit its UI), added to every Claude it starts or resumes
 // A gitignored homebase-rules.local.md next to it replaces the tracked file, so your own rules survive a git pull.
@@ -26,7 +43,7 @@ export const quoted = t => `'${t.replace(/'/g, `'\\''`)}'`;
 // manual: a manual-mode chat adds its rule the same way
 // checks: --settings is Homebase's own file with the Stop hook that runs the project's checks (server/checks.mjs), never ~/.claude/settings.json
 // helper: a work helper Homebase started in its own tmux (server/helpers.mjs) adds HELPER_RULE the same way
-export const claudeLine = (extra = '', rules = RULES_FILE, { saver = saverOn(), manual = false, helper = false, checks = settingsFlag() } = {}) => `claude${existsSync(rules) ? ` --append-system-prompt-file ${quoted(rules)}` : ''}${saver ? ` --append-system-prompt ${quoted(SAVER_RULE)}` : ''}${manual ? ` --append-system-prompt ${quoted(MANUAL_RULE)}` : ''}${helper ? ` --append-system-prompt ${quoted(HELPER_RULE)}` : ''}${checks}${extra}`;
+export const claudeLine = (extra = '', rules = RULES_FILE, { saver = saverOn(), manual = false, helper = false, checks = settingsFlag() } = {}) => `${process.env.HOMEBASE_CLAUDE_BIN ? quoted(process.env.HOMEBASE_CLAUDE_BIN) : 'claude'}${existsSync(rules) ? ` --append-system-prompt-file ${quoted(rules)}` : ''}${saver ? ` --append-system-prompt ${quoted(SAVER_RULE)}` : ''}${manual ? ` --append-system-prompt ${quoted(MANUAL_RULE)}` : ''}${helper ? ` --append-system-prompt ${quoted(HELPER_RULE)}` : ''}${checks}${extra}`;
 
 export const HELPER_RULE = 'You are a work helper the main chat started in your own chat. Start no helpers or subagents of your own. Commit on your branch; do not push, merge or restart anything. End with a final report of at most 10 lines whose last line is a TLDR. The user may step in and talk to you directly.';
 // The helper registry (server/helpers.mjs loads and saves it): session id -> { id, parent, model, ... }. Here so a resume keeps the rule and model.

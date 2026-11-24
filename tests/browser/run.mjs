@@ -109,6 +109,7 @@ const env = {
     HOMEBASE_DIR: join(tmp, 'homebase'),
     HOMEBASE_STATUSLINE_DIR: join(tmp, 'statusline'),
     HOMEBASE_TMUX_SOCKET: `homebase-browser-test-${process.pid}`, // a tmux server that never exists
+    HOMEBASE_CLAUDE_BIN: join(import.meta.dirname, '../fixtures/fake-claude.sh'), // a started chat or helper runs this, never the real claude
     HOMEBASE_STUB_LOG: join(tmp, 'forge.log'),
     HOMEBASE_CODE_DIR: join(tmp, 'code') // the restart test touches these stand-ins, never the real files other runs share
 };

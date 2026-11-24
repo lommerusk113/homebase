@@ -202,3 +202,11 @@ assert.deepEqual(twice.map(i => i.text), ['continue', 'ok', 'continue', 'yes', '
     assert.deepEqual(queuedPrompts([{ type: 'queue-operation', operation: 'enqueue', content: '<b>bold</b> please', timestamp: T('41.000') }]).map(q => q.text), ['<b>bold</b> please']);
 }
 console.log('ok pasted + dedupe');
+{ // an agent's task notification after a reply that waits on you neither answers it nor ends Needs you; a user message does
+    const { summarize } = await import('../../server.mjs');
+    const ask = { type: 'assistant', uuid: 'r1', message: { content: [{ type: 'text', text: 'Done.\n\n**Waiting on you:** should I change the commit?' }] } };
+    const s = summarize([{ type: 'user', message: { content: 'go' } }, ask, taskNote('completed', 'Agent "Explain" finished')], 60_000);
+    assert.deepEqual([s.needsYou, s.needsId], [true, 'r1'], 'a hand-back notice keeps the question open');
+    assert.equal(summarize([{ type: 'user', message: { content: 'go' } }, ask, taskNote('completed', 'Agent "Explain" finished'), { type: 'user', message: { content: 'yes' } }], 60_000).needsYou, false, 'a user message ends it');
+    console.log('ok notice keeps needs you');
+}

@@ -473,7 +473,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
     const lastTurn = turns.at(-1);
     const turn = turnState(entries, ageMs, marker, live);
     const openPrompts = turnPrompts(entries, ageMs, marker, live);
-    const lastItem = chatItems(entries, 1).at(-1); // the chat's newest bubble, so the Work tab and the chat agree on "needs you"
+    const lastItem = chatItems(entries, 1).findLast(i => !i.notice); // the chat's newest bubble past agent notices, so the Work tab and the chat agree on "needs you"
 
     const step = turn.state === 'working' ? turnStep(turns, turn.since) : null;
     const needsYou = turn.state === 'idle' && lastItem?.role === 'assistant' && !!lastItem.needsYou && !lastItem.answer && !lastItem.error;

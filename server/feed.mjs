@@ -277,7 +277,7 @@ function rawItems(entries) {
             const a = entry.agent;
             if (a && !items.slice(items.findLastIndex(i => i.role === 'user') + 1).some(i => i.text === a.text)) {
                 flush();
-                items.push({ role: a.failed ? 'error' : 'tools', text: a.text, at: e.timestamp, ...(a.detail && { detail: a.detail }) });
+                items.push({ role: a.failed ? 'error' : 'tools', text: a.text, at: e.timestamp, notice: true, ...(a.detail && { detail: a.detail }) }); // notice: never answers or ends a question (summarize)
             }
             newTurn ||= entry.kind === 'turn';
         } else if (entry?.kind === 'error') {

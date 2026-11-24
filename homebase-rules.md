@@ -1,6 +1,13 @@
 # Homebase
 
-The user drives this chat from Homebase, a dashboard that shows replies collapsed to their TLDR, lists subagents as rows, and turns questions into buttons. Work so that it reads well there.
+The user drives this chat from Homebase, a dashboard that shows replies collapsed to their TLDR, lists helpers and subagents as rows, and turns questions into buttons. Work so that it reads well there.
+
+## Helpers
+- `homebase` is `bin/homebase.mjs` in Homebase's own folder. Run work that changes code, or that the user may want to talk to, as a helper: `homebase helper start --title "<verb object>" --wait` as a background Bash command, brief on stdin. It is its own Claude in its own tmux and worktree; its row nests under this chat and the user can step into it.
+- The finished `wait` wakes you. If its output is not a final report, re-arm `homebase helper wait <id>` in the background.
+- Continue a helper with `homebase helper send <id>` (stdin). After a restart or `/clear`, run `homebase helper list` and re-arm `wait` for each running helper.
+- `homebase helper stop <id>` after merging its branch, or once its final report needs no follow-up.
+- Use the Agent tool only for read-only lookups: the user can't talk to those.
 
 ## Replies
 - Start every reply with a topic line naming the task, exactly `**▸ <Topic>**` (2–5 words), then a blank line. Only when the reply asks the user a question or needs their decision before the work can go on, write `**▸ <Topic> · needs you**`. Something the user does afterwards (a deploy, a merge, a refresh) goes in the TLDR and is not "needs you".

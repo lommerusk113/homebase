@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseQuestion, answerQuestion, saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME, cancelQuestion, questionOpen } from '../../server.mjs';
 import { seenHash } from '../../web/src/lib/text.ts';
 import { pasteLabel, isLongPaste, expandPastes } from '../../web/src/lib/draft.ts';
-import { claudeLine, rulesFile, loginShell } from '../../server/tmux.mjs';
+import { claudeLine, rulesFile, loginShell, BIN_DIR } from '../../server/tmux.mjs';
+const PFX = `PATH='${BIN_DIR}':$PATH `;
 import { saverOn, saveSaver, saverRules, syncSaver, SAVER_RULE } from '../../server/saver.mjs';
 import { projectOf } from '../../server/sessions.mjs';
 
@@ -221,13 +222,15 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     assert.equal(loginShell('/usr/bin/fish'), '/usr/bin/fish', '$SHELL wins');
     assert.equal(loginShell('', p => p === '/bin/bash'), '/bin/bash', 'no $SHELL and no zsh: bash');
     assert.equal(loginShell('', () => false), '/bin/sh', 'sh as the last resort');
-    assert.equal(claudeLine(' --resume x', '/nope/rules.md', { saver: false, checks: '' }), 'claude --resume x', 'no rules file: plain claude');
-    assert.match(claudeLine(' --resume x', undefined, { saver: false, checks: '' }), /^claude --append-system-prompt-file '.*\/homebase-rules(\.local)?\.md' --resume x$/);
+    assert.equal(claudeLine(' --resume x', '/nope/rules.md', { saver: false, checks: '' }), `${PFX}claude --resume x`, 'no rules file: plain claude');
+    assert.match(claudeLine(' --resume x', undefined, { saver: false, checks: '' }), /^PATH='.*\/bin':\$PATH claude --append-system-prompt-file '.*\/homebase-rules(\.local)?\.md' --resume x$/);
     assert.match(claudeLine(' --resume x', undefined, { saver: true, checks: ' --settings /s.json' }), /--append-system-prompt 'Token saver.* --settings \/s\.json --resume x$/, 'saver and checks flags both stay');
     const d = mkdtempSync(join(tmpdir(), 'rf-'));
     assert.equal(rulesFile(d), join(d, 'homebase-rules.md'), 'tracked file by default');
     writeFileSync(join(d, 'homebase-rules.local.md'), 'mine');
     assert.equal(rulesFile(d), join(d, 'homebase-rules.local.md'), 'the local file wins when it exists');
+    assert.ok(claudeLine('').startsWith(PFX), 'homebase bin/ leads PATH');
+    assert.ok(existsSync(join(BIN_DIR, 'homebase')), 'bin/homebase exists');
     console.log('ok claude line');
 }
 
@@ -236,8 +239,8 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     assert.match(saverRules(true), /^Token saver is on: start every helper \(Agent tool\) with model: sonnet, unless the user names another model\. Run at most two helpers at a time; do small jobs \(a lookup, a few-line fix\) yourself instead of starting a helper\. Queue further work and start it when a helper finishes\.$/);
     assert.ok(!saverRules(false).includes('sonnet') && saverRules(false).startsWith('Token saver is off'));
     const on = claudeLine(' --resume x', '/nope/rules.md', { saver: true, checks: '' });
-    assert.equal(on, `claude --append-system-prompt '${SAVER_RULE}' --resume x`, 'on: the rule is added as text');
-    assert.equal(claudeLine(' --resume x', '/nope/rules.md', { saver: false, checks: '' }), 'claude --resume x', 'off: nothing added');
+    assert.equal(on, `${PFX}claude --append-system-prompt '${SAVER_RULE}' --resume x`, 'on: the rule is added as text');
+    assert.equal(claudeLine(' --resume x', '/nope/rules.md', { saver: false, checks: '' }), `${PFX}claude --resume x`, 'off: nothing added');
     const dir = mkdtempSync(join(tmpdir(), 'saver-'));
     assert.equal(saverOn(dir), false, 'off by default');
     await saveSaver('{"on":true}', dir);

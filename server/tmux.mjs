@@ -38,12 +38,14 @@ export const rulesFile = (dir = fileURLToPath(new URL('..', import.meta.url))) =
     return existsSync(local) ? local : join(dir, 'homebase-rules.md');
 };
 export const RULES_FILE = rulesFile();
+// Homebase's own bin/ goes first on PATH for every Claude it starts, so `homebase` works in each chat without touching your PATH
+export const BIN_DIR = fileURLToPath(new URL('../bin', import.meta.url));
 export const quoted = t => `'${t.replace(/'/g, `'\\''`)}'`;
 // saver: Token saver on adds its one rule as text (the file flag takes only the rules file)
 // manual: a manual-mode chat adds its rule the same way
 // checks: --settings is Homebase's own file with the Stop hook that runs the project's checks (server/checks.mjs), never ~/.claude/settings.json
 // helper: a work helper Homebase started in its own tmux (server/helpers.mjs) adds HELPER_RULE the same way
-export const claudeLine = (extra = '', rules = RULES_FILE, { saver = saverOn(), manual = false, helper = false, checks = settingsFlag() } = {}) => `${process.env.HOMEBASE_CLAUDE_BIN ? quoted(process.env.HOMEBASE_CLAUDE_BIN) : 'claude'}${existsSync(rules) ? ` --append-system-prompt-file ${quoted(rules)}` : ''}${saver ? ` --append-system-prompt ${quoted(SAVER_RULE)}` : ''}${manual ? ` --append-system-prompt ${quoted(MANUAL_RULE)}` : ''}${helper ? ` --append-system-prompt ${quoted(HELPER_RULE)}` : ''}${checks}${extra}`;
+export const claudeLine = (extra = '', rules = RULES_FILE, { saver = saverOn(), manual = false, helper = false, checks = settingsFlag() } = {}) => `PATH=${quoted(BIN_DIR)}:$PATH ${process.env.HOMEBASE_CLAUDE_BIN ? quoted(process.env.HOMEBASE_CLAUDE_BIN) : 'claude'}${existsSync(rules) ? ` --append-system-prompt-file ${quoted(rules)}` : ''}${saver ? ` --append-system-prompt ${quoted(SAVER_RULE)}` : ''}${manual ? ` --append-system-prompt ${quoted(MANUAL_RULE)}` : ''}${helper ? ` --append-system-prompt ${quoted(HELPER_RULE)}` : ''}${checks}${extra}`;
 
 export const HELPER_RULE = 'You are a work helper the main chat started in your own chat. Start no helpers or subagents of your own. Commit on your branch; do not push, merge or restart anything. End with a final report of at most 10 lines whose last line is a TLDR. The user may step in and talk to you directly.';
 // The helper registry (server/helpers.mjs loads and saves it): session id -> { id, parent, model, ... }. Here so a resume keeps the rule and model.

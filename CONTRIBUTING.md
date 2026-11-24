@@ -50,4 +50,4 @@ Screens used as test fixtures go in `tests/fixtures/`, captured from a real Clau
   It refuses unless the main checkout is on a clean `main`, and with "needs a rebase onto main" when the branch is not a fast-forward; rebase it yourself.
   On a failing ship, `main` stays at the new tip and the output is printed.
   `land` and `ship` share one lock in `.git`, so two of them queue.
-- `npm run setup` links `~/.local/bin/homebase` to `bin/homebase.mjs` when `~/.local/bin` exists and is on your PATH, and otherwise prints the command. It never edits shell rc files.
+- Every Claude Homebase starts has `bin/` first on its PATH (`BIN_DIR` in `server/tmux.mjs`), so `homebase` works in each chat; `bin/homebase` is a symlink to `homebase.mjs`.

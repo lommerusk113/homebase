@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn, execFileSync } from 'node:child_process';
-import { linkHomebase, merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from '../../server/setup.mjs';
+import { merge, unmerge, otherRoots, setup, unsetup, settingsPath, wanted } from '../../server/setup.mjs';
 
 {
     const root = '/opt/hb';
@@ -226,16 +226,4 @@ import { linkHomebase, merge, unmerge, otherRoots, setup, unsetup, settingsPath,
     ownerOnly(join(dir, 'missing')); // first start: nothing there yet
     rmSync(dir, { recursive: true });
     console.log('ok file modes');
-}
-
-{
-    const home = mkdtempSync(join(tmpdir(), 'hb-link-')), bin = join(home, '.local', 'bin');
-    assert.match(linkHomebase('/opt/hb', home, bin), /run: mkdir -p/, 'no ~/.local/bin: prints the command');
-    mkdirSync(bin, { recursive: true });
-    assert.match(linkHomebase('/opt/hb', home, '/usr/bin'), /run: mkdir -p/, 'not on PATH: prints the command');
-    assert.match(linkHomebase('/opt/hb', home, bin), /^Linked /);
-    assert.equal(readlinkSync(join(bin, 'homebase')), '/opt/hb/bin/homebase.mjs');
-    assert.match(linkHomebase('/opt/hb', home, bin), /is on your PATH/, 'idempotent');
-    assert.match(linkHomebase('/other', home, bin), /not this checkout's link/, 'another checkout\'s link is kept');
-    rmSync(home, { recursive: true });
 }

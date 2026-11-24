@@ -65,7 +65,7 @@ import { join } from 'node:path';
     const { mkdtempSync } = await import('node:fs');
     assert.ok(!claudeLine('', '/none', { saver: false, checks: '' }).includes('Manual mode'));
     assert.ok(!claudeLine('', '/none', { saver: false, manual: false, checks: '' }).includes('Manual mode'));
-    assert.match(claudeLine(' --resume x', '/none', { saver: false, manual: true, checks: '' }), /^claude --append-system-prompt 'Manual mode: .*' --resume x$/);
+    assert.match(claudeLine(' --resume x', '/none', { saver: false, manual: true, checks: '' }), /^PATH='.*\/bin':\$PATH claude --append-system-prompt 'Manual mode: .*' --resume x$/);
     assert.ok(claudeLine('', '/none', { saver: false, manual: true, checks: '' }).includes(MANUAL_RULE));
 
     process.env.HOMEBASE_DIR = mkdtempSync(join(tmpdir(), 'hb-manual-'));

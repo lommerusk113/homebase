@@ -11,6 +11,7 @@
     "demo": "node server.mjs --demo",
     "test": "node test.mjs",
     "ship": "bash scripts/ship.sh",
+    "land": "bash scripts/land.sh",
     "doctor": "node server.mjs --doctor",
     "setup": "node server.mjs --setup",
     "unsetup": "node server.mjs --unsetup"

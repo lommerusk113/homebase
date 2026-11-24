@@ -43,3 +43,11 @@ When behaviour described in the README changes, update the README in the same co
 Homebase reads Claude Code's screen and transcripts, which can change with any release (README, "Why tmux, not the Agent SDK").
 When you have run the checks and driven a real chat (send, answer a question, a permission prompt, `/model`, `/compact`) on a newer Claude Code, set `VERIFIED_CLAUDE` in `server/setup.mjs` to that version.
 Screens used as test fixtures go in `tests/fixtures/`, captured from a real Claude Code with `tmux capture-pane -p`.
+
+## Landing and the `homebase` command
+
+- `npm run land <branch> [--no-browser] [--dry-run]` lands a helper branch: fast-forward `main`, `scripts/ship.sh`, then remove the branch's worktree and branch (or `homebase helper stop <id>` for a registered helper).
+  It refuses unless the main checkout is on a clean `main`, and with "needs a rebase onto main" when the branch is not a fast-forward; rebase it yourself.
+  On a failing ship, `main` stays at the new tip and the output is printed.
+  `land` and `ship` share one lock in `.git`, so two of them queue.
+- `npm run setup` links `~/.local/bin/homebase` to `bin/homebase.mjs` when `~/.local/bin` exists and is on your PATH, and otherwise prints the command. It never edits shell rc files.

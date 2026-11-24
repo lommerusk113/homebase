@@ -189,7 +189,9 @@ npm run doctor
 ```
 
 A running server notices the new code: the page header offers "Reload server". Otherwise restart `npm start`.
-Maintainers: `npm run ship [-- --no-browser]` on a clean `main` runs the unit, type and browser checks, pushes to origin and reloads the running server (honours `PORT`).
+Maintainers: `npm run ship [-- --no-browser]` on a clean `main` runs the unit, type and browser checks, pushes to origin and reloads the running server (honours `PORT`; `--dry-run` skips push and reload).
+`npm run land <branch>` fast-forwards a clean `main` to a helper branch (refuses with "needs a rebase onto main" otherwise), runs ship, then removes the branch's worktree and branch, or stops it if it is a registered helper. Land and ship queue on one lock in `.git`; a failed ship leaves main at the new tip.
+`npm run setup` also links `homebase` into `~/.local/bin` when that is on your PATH, else it prints the command.
 Run `npm run setup` again when doctor reports something missing. Your own `homebase-rules.local.md` and the Homebase dir are not touched by a pull.
 
 ## Uninstall

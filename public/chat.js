@@ -87,6 +87,7 @@ export function bindChat(id) {
 /** @param {string} id @param {{ id: string, description: string } | null} [helper] a helper of that chat to step in on @param {string | null} [askedFor] the helper whose question this chat relays */
 export function focusChat(id, helper = null, askedFor = null) {
     clearTimeout(returnTimer);
+    const shown = !activeHelper() && chatSession()?.id;
     composer.endDiscuss(); // a Discuss started on the chat we leave is not about this one
     state.helper = helper && { sid: id, ...helper };
     state.askedFor = askedFor;
@@ -96,6 +97,10 @@ export function focusChat(id, helper = null, askedFor = null) {
     followFocus();
     renderBoard();
     refreshChat();
+    // the pane already showed this chat (the main chat's own row, or a second click): nothing would change, so its question comes into view
+    if (!helper && shown && chatSession()?.id === shown) {
+        jumpToNeeds();
+    }
     document.dispatchEvent(new Event('chat-focused')); // the phone layout shows the chat pane (app.js)
 }
 // Step in: a helper's own conversation in the pane, over the chat that started it (its sid); null when not showing one.

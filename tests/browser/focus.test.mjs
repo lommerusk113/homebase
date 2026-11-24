@@ -35,6 +35,15 @@ export default {
         await page.waitFor(`${back}.hidden && ${focus}.hidden && ${title} === 'main chat' && document.getElementById('wait').hidden`, { what: 'the main chat back' });
     },
 
+    "clicking the main chat's own Needs you row takes you to its question, though the pane already shows that chat": async ({ page, open, IDS }) => {
+        await open();
+        await page.waitFor(`document.querySelector('${row(IDS.master)}') && document.querySelector('#feed .bubble.needs')`, { what: "the main chat's row and its question" });
+        await page.ev(`document.activeElement.blur(), document.getElementById('feed').scrollTop = 0`);
+        await page.click(row(IDS.master));
+        await page.waitFor(`(() => { const a = document.activeElement, f = document.getElementById('feed').getBoundingClientRect(), r = a.getBoundingClientRect();
+            return (a.id === 'wait' || a.closest('#wait') || a.matches('.bubble.needs')) && r.top < f.bottom && r.bottom > f.top; })()`, { what: 'the question focused and in view' });
+    },
+
     'the pane header names the chat, with the way back, an accent, the placeholder and the open row marked': async ({ page, open, IDS }) => {
         const name = `document.getElementById('c-name').textContent`, msg = `document.getElementById('msg').getAttribute('placeholder')`;
         await open({ project: 'all', chat: IDS.worker });

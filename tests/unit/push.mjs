@@ -43,8 +43,8 @@ assert.equal(reviewNote([]), '');
     assert.equal(await stale(undefined, 1e13), undefined, 'unknown start: nothing inferred');
     const r = await stale(1_500_000, 1e14); // past the 10s cache, so the files are re-read; the real homebase-rules.md is listed too
     assert.ok(r.names.includes('CLAUDE.md') && r.at >= 2_000_000);
-    assert.ok(r.reload.startsWith('The rules changed. Re-read /') && r.reload.includes(`${RULES_FILE.split("/").pop()}, ~/.claude/CLAUDE.md and ${join(cwd, 'CLAUDE.md')} now and follow them`), r.reload);
-    assert.equal(reloadMessage(), `The rules changed. Re-read ${rulesSources().join(' and ')} and ~/.claude/CLAUDE.md now and follow them from here on (they override your earlier instructions where they differ).`);
+    assert.ok(r.reload.startsWith('The rules changed. Re-read /') && r.reload.includes(`${rulesSources().at(-1).split("/").pop()}, ~/.claude/CLAUDE.md and ${join(cwd, 'CLAUDE.md')} now and follow them`), r.reload);
+    assert.equal(reloadMessage(), `The rules changed. Re-read ${[...rulesSources(), '~/.claude/CLAUDE.md'].join(' and ').replace(/ and (?=.* and )/g, ', ')} now and follow them from here on (they override your earlier instructions where they differ).`);
     touch(join(cwd, 'AGENTS.md'), 5_000_000);
     assert.ok(!(await stale(1_500_000, 1e14 + 1000)).names.includes('AGENTS.md'), 'mtimes are cached for 10s');
     assert.ok((await stale(1_500_000, 1e14 + 20_000)).names.includes('AGENTS.md'));

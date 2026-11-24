@@ -223,7 +223,7 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     assert.equal(loginShell('', p => p === '/bin/bash'), '/bin/bash', 'no $SHELL and no zsh: bash');
     assert.equal(loginShell('', () => false), '/bin/sh', 'sh as the last resort');
     assert.equal(claudeLine(' --resume x', '/nope/rules.md', { saver: false, checks: '' }), `${PFX}claude --resume x`, 'no rules file: plain claude');
-    assert.match(claudeLine(' --resume x', undefined, { saver: false, checks: '' }), /^PATH='.*\/bin':\$PATH claude --append-system-prompt-file '.*\/homebase-rules(\.local)?\.md' --resume x$/);
+    assert.match(claudeLine(' --resume x', undefined, { saver: false, checks: '' }), /^PATH='.*\/bin':\$PATH claude --append-system-prompt-file '.*\/(homebase-rules\.md|rules-combined\.md)' --resume x$/);
     assert.match(claudeLine(' --resume x', undefined, { saver: true, checks: ' --settings /s.json' }), /--append-system-prompt 'Token saver.* --settings \/s\.json --resume x$/, 'saver and checks flags both stay');
     const d = mkdtempSync(join(tmpdir(), 'rf-'));
     const out = mkdtempSync(join(tmpdir(), 'rfo-'));

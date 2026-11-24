@@ -31,7 +31,7 @@ export function topicAndTldr(i) {
 
 // What a reply says waits on the user ("- Waiting on you: <question>" in its In flight list, or a "**Waiting on you:**"
 // line), else null; "nothing" / "none" count as nothing.
-const WAITING = /^[ \t]*(?:[-*+][ \t]+)?\**Waiting on you\b[*:]*[ \t—–-]*(.*)$/gim;
+const WAITING = /^[ \t]*(?:[-*+][ \t]+)?\**Waiting on you\b[*:]*[ \t—–-]*(.*(?:\n[ \t]*\d+[.)][ \t]+.*)*)$/gim; // the question line, then its numbered option lines
 export function waitingOn(text) {
 
     let said = [...(text ?? '').matchAll(WAITING)].at(-1)?.[1].trim();
@@ -42,7 +42,8 @@ export function waitingOn(text) {
     return said && !/^(?:nothing|none|n\/a)\b/i.test(said) ? said : null;
 }
 
-// A "Waiting on you" line as homebase-rules.md writes it, "<issue> — <what led here> — <question> — (1) <option>; (2) …"
+// A "Waiting on you" as homebase-rules.md writes it: "<about>. <what happened>. <question>" then one "1. <option>" line each
+// (or the older one-liner "<issue> — <what led here> — <question> — (1) <option>; (2) …")
 // (also "1. …" or "A) …"), as { question, context, options: [{ label, desc }] } (label: the option up to its first
 // ": " or " — ", plus "(recommended)" when it says so), else null when it lists fewer than 2 options.
 // ponytail: options split on their markers only; a marker-like "(2)" inside an option's own text cuts it short.
@@ -68,9 +69,10 @@ export function waitingAsk(text) {
 
             return { label: rec ? `${label} (recommended)` : label, desc: rest.join(': ') };
         });
-        const head = text.slice(0, marks[0].index).replace(/[\s—–:;,-]+$/, '').split(/\s+[—–]\s+/);
+        const lead = text.slice(0, marks[0].index).replace(/[\s—–:;,-]+$/, '');
+        const dashed = /\s[—–]\s/.test(lead), head = lead.split(dashed ? /\s+[—–]\s+/ : /(?<=[.?!])\s+/);
 
-        return { question: head.at(-1), context: head.slice(0, -1).join(' — '), options };
+        return { question: head.at(-1), context: head.slice(0, -1).join(dashed ? ' — ' : ' '), options };
     }
 
     return null;

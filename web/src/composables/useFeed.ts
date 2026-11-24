@@ -72,6 +72,34 @@ function repliesOf(data: Transcript, items: ChatItem[], n: number): Replies | nu
     return { labels: q.replies, note: answerNote(items, n) };
 }
 
+// What the feed shows of a turn (up to the next message of the user): only its last reply. Its tools lines, agent
+// notices and earlier replies are dropped; errors, dividers and a reply that waits on the user stay. A message a
+// button sent (it has a label) is dropped too, but still ends the turn before it.
+function hideSteps(rows: FeedRow[]): FeedRow[] {
+
+    const out: FeedRow[] = [];
+    let turn: FeedRow[] = [];
+    const isReply = (r: FeedRow): r is BubbleRow => r.kind === 'bubble' && r.item.role === 'assistant';
+    const flush = () => {
+        const last = turn.findLastIndex(isReply);
+        out.push(...turn.filter((r, n) => n >= last || !(r.kind === 'line' ? r.item.role === 'tools' : isReply(r) && !r.item.needsYou && !r.item.waiting && !r.replies)));
+        turn = [];
+    };
+    for (const r of rows) {
+        if (r.kind === 'bubble' && r.item.role === 'user') {
+            flush();
+            if (!r.item.label) {
+                out.push(r);
+            }
+        } else {
+            turn.push(r);
+        }
+    }
+    flush();
+
+    return out;
+}
+
 function rowsOf(v: FeedInput): FeedRow[] {
 
     const { items, data } = v, sid = v.sid ?? '';
@@ -87,7 +115,7 @@ function rowsOf(v: FeedInput): FeedRow[] {
     };
     let topic: string | null = null;
 
-    return items.flatMap((item, n): FeedRow[] => {
+    return hideSteps(items.flatMap((item, n): FeedRow[] => {
         const prevTopic = topic;
         if (item.role === 'assistant') {
             topic = item.topic ?? null;
@@ -103,7 +131,7 @@ function rowsOf(v: FeedInput): FeedRow[] {
             : { kind: 'bubble', key: unique(`${sid}:${item.at}`), item, prevTopic, latest: n === latest, unread, replies: data ? repliesOf(data, items, n) : null };
 
         return n === firstNew ? [{ kind: 'new', key: 'new' }, row] : [row];
-    });
+    }));
 }
 
 const NO_CHAT = 'No session to chat with yet. Use ☰ → Open existing folder… to start one in a project, or ☰ → New project.';

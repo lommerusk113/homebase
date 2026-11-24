@@ -93,6 +93,8 @@ assert.deepEqual(namedChoices('Shipped the fix. Nothing else to do.'), []);
 assert.equal(waitingOn('**In flight**\n- Nothing running\n- Waiting on you: which cache'), 'which cache');
 assert.equal(waitingOn('**Waiting on you:** merge **!12**'), 'merge **!12**');
 assert.equal(waitingOn('**Waiting on you: pick a port**'), 'pick a port');
+const multi = waitingOn('**Waiting on you:** Cache choice. Redis is slower to set up. Which cache?\n1. Redis (recommended): shared\n2. In-memory: simple\n\nnext');
+assert.deepEqual(waitingAsk(multi), { question: 'Which cache?', context: 'Cache choice. Redis is slower to set up.', options: [{ label: 'Redis (recommended)', desc: 'shared' }, { label: 'In-memory', desc: 'simple' }] });
 assert.equal(waitingOn('- Waiting on you — nothing'), null);
 assert.equal(waitingOn('- Waiting on you: none, all done'), null);
 assert.equal(waitingOn('Waiting on your review is not a line'), null);

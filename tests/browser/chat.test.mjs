@@ -98,7 +98,7 @@ export default {
         await open();
         await ready(page);
         assert.ok(await page.ev(`!!${bubble('Fix the login redirect bug')}?.classList.contains('user')`), 'first prompt, before the 2 MB line');
-        assert.ok(await page.ev(`[...document.querySelectorAll('#feed .tools')].some(t => t.textContent === 'Ran 1 command')`), 'tool summary line');
+        assert.equal(await page.ev(`[...document.querySelectorAll('#feed .tools')].some(t => t.textContent === 'Ran 1 command')`), false, 'in-between tool lines are not shown');
         assert.equal(await page.ev(`document.getElementById('feed').scrollHeight - document.getElementById('feed').scrollTop - document.getElementById('feed').clientHeight < 40`), true, 'scrolled to the bottom');
     },
 
@@ -279,12 +279,11 @@ export default {
         await open();
         await ready(page);
         page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: false, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
-        await page.waitFor(`document.querySelector('#feed .bubble.canned')`, { what: 'the button message' });
+        await page.waitFor(`document.querySelector('#feed > .tools.command')`, { what: 'the command line' });
+        assert.equal(await page.ev(`!!document.querySelector('#feed .bubble.canned') || !!${bubble('Re-read ~/rules.md')}`), false, 'a button message is no bubble');
+        assert.equal(await page.ev(`!!document.querySelector('#feed .tools.risky')`), false, 'the in-between Ran line is not shown');
+        assert.ok(await page.ev(`!!${bubble('Merged.')}`), 'the final reply stays');
         const hidden = (sel, text) => `[...document.querySelectorAll('#feed ${sel} *')].find(n => n.textContent === ${JSON.stringify(text)}).closest('[hidden]') !== null`;
-        assert.equal(await page.ev(hidden('.bubble.canned', rules)), true, 'only the action shows');
-        await page.ev(`document.querySelector('#feed .bubble.canned button.show').focus()`);
-        await page.key('Enter');
-        assert.equal(await page.ev(hidden('.bubble.canned', rules)), false, 'Enter opens the text it typed');
 
         // two commands in a row: one line, opening to the two, of which the longer opens to its output
         assert.equal(await page.ev(`document.querySelectorAll('#feed > .tools.command').length`), 1);
@@ -293,24 +292,6 @@ export default {
         assert.equal(await page.ev(`document.querySelectorAll('#feed .c-cmds:not([hidden]) > .tools.command').length`), 2);
         await page.click('#feed .c-cmds .tools.command button.show');
         assert.equal(await page.ev(hidden('.tools.command', 'a.txt\nb.txt\nc.txt')), false);
-
-        // a phone: the named command stays on one line with its failed mark, and opens to the whole command
-        await page.cmd('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
-        try {
-            const ran = `document.querySelector('#feed .tools.risky')`;
-            await page.waitFor(`${ran} && !${ran}.querySelector('button.show').hidden`, { what: 'the cut command with its Show more' });
-            const shut = await page.ev(`(() => { const r = ${ran}, f = r.querySelector('.c-failed').getBoundingClientRect(), s = r.querySelector('.c-ran'); return { h: r.offsetHeight, cut: s.scrollWidth > s.clientWidth, failedIn: f.width > 0 && f.right <= innerWidth, oneLine: r.offsetHeight < 2 * f.height }; })()`);
-            assert.deepEqual([shut.cut, shut.failedIn, shut.oneLine], [true, true, true]);
-            await page.ev(`${ran}.querySelector('button.show').click()`);
-            const opened = await page.ev(`(() => { const r = ${ran}, f = r.querySelector('.c-failed').getBoundingClientRect(); return { h: r.offsetHeight, text: r.querySelector('.c-ran-full').textContent, failedIn: f.width > 0 }; })()`);
-            assert.deepEqual([opened.h > shut.h, opened.text, opened.failedIn], [true, `Ran: ${long}`, true]);
-            await page.ev(`window.dispatchEvent(new Event('focus'))`);
-            await sleep(1500); // a redraw or two
-            assert.equal(await page.ev(`${ran}.querySelector('.c-ran-full').hidden`), false, 'still open after the feed redraws');
-            assert.equal(await page.ev(hidden('.bubble.canned', rules)), false);
-        } finally {
-            await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-        }
     },
 
     'a short reply becomes the answer tag of the question before it': async ({ page, open }) => {
@@ -322,8 +303,8 @@ export default {
 
     '"Show earlier" loads 60 more items above, keeping the view where it was': async ({ page, open, answerPosts }) => {
         const say = (text, n) => ({ type: 'assistant', timestamp: new Date(Date.UTC(2026, 10, 14, 10, n)).toISOString(), message: { content: [{ type: 'text', text }] } });
-        const turn = { type: 'user', message: { content: '<system-reminder>x</system-reminder>' } };
-        const entries = Array.from({ length: 70 }, (_, n) => [turn, say(`message ${n}`, n)]).flat();
+        const turn = n => ({ type: 'user', timestamp: new Date(Date.UTC(2026, 10, 14, 10, n, 0)).toISOString(), message: { content: `prompt ${n}` } });
+        const entries = Array.from({ length: 40 }, (_, n) => [turn(n), say(`message ${n}`, n)]).flat();
         const asked = [];
         await open();
         await ready(page);
@@ -336,7 +317,7 @@ export default {
             const { items, earlier } = chatFeed(entries, max);
             return { status: 200, body: JSON.stringify({ items, more: earlier > 0, working: false, asking: null }), headers: { 'content-type': 'application/json' } };
         };
-        await page.waitFor(`${bubble('message 69')} && document.querySelector('#feed').firstElementChild.matches('.c-earlier')`, { what: 'the newest 60 under a Show earlier line' });
+        await page.waitFor(`${bubble('message 39')} && document.querySelector('#feed').firstElementChild.matches('.c-earlier')`, { what: 'the newest 60 under a Show earlier line' });
         assert.equal(await page.ev(`!!${bubble('message 9')}`), false, 'the 61st newest is not loaded');
         assert.equal(asked.at(-1), 60);
         await page.click('#feed .c-earlier button');
@@ -350,13 +331,13 @@ export default {
 
     'a New divider marks what came since you left, until you scroll back to the bottom': async ({ page, open, IDS, answerPosts }) => {
         const say = (text, n) => ({ type: 'assistant', timestamp: new Date(Date.UTC(2026, 10, 14, 10, n)).toISOString(), message: { content: [{ type: 'text', text }] } });
-        const turn = { type: 'user', message: { content: '<system-reminder>x</system-reminder>' } };
-        const { items } = chatFeed(Array.from({ length: 40 }, (_, n) => [turn, say(`message ${n}`, n)]).flat());
+        const turn = n => ({ type: 'user', timestamp: new Date(Date.UTC(2026, 10, 14, 10, n, 0)).toISOString(), message: { content: `prompt ${n}` } });
+        const { items } = chatFeed(Array.from({ length: 40 }, (_, n) => [turn(n), say(`message ${n}`, n)]).flat());
         const key = `last-seen:${IDS.master}`;
         await open({ [key]: String(Date.UTC(2026, 10, 14, 10, 35, 30)) });
         page.route = q => (q.url.includes('/api/transcript') ? { status: 200, body: JSON.stringify({ items, working: false, asking: null }), headers: { 'content-type': 'application/json' } } : answerPosts(q));
         await page.waitFor(`${bubble('message 39')}`, { what: 'the routed feed' });
-        await page.waitFor(`document.querySelector('#feed .c-new')?.nextElementSibling === ${bubble('message 36')}`, { what: 'the New divider above the first later item' });
+        await page.waitFor(`document.querySelector('#feed .c-new')?.nextElementSibling?.nextElementSibling === ${bubble('message 36')}`, { what: 'the New divider above the first later item' });
         assert.equal(await page.ev(`document.querySelectorAll('#feed .c-new').length`), 1);
         assert.equal(await page.ev(`document.querySelector('#feed .c-new').matches('.tools.compact') && document.querySelector('#feed .c-new').textContent`), 'New');
         await page.ev(`document.getElementById('feed').scrollTop = 0`);

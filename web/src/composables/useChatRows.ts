@@ -1,5 +1,5 @@
 import { computed, reactive } from 'vue';
-import { inView, markHandled, state, store } from 'old/core.js';
+import { hooks, inView, markHandled, state, store } from 'old/core.js';
 import { ago } from '@/lib/time';
 import { waitsOnYou } from '@/lib/waiting';
 import { isMaster, bindChat, focusChat } from 'old/chat.js';
@@ -19,8 +19,11 @@ export function useChatRows() {
     const visible = computed(() => oldState.value.sessions.filter(inView));
     const byId = computed(() => new Map(visible.value.map(s => [s.id, s])));
 
-    const asking = computed(() => visible.value.filter(s => waitsOnYou(s) && !(s.needsId && !s.asking && handled.has(s.needsId))));
-    const died = computed(() => visible.value.filter(s => !!s.died && isMaster(s) && s.status !== 'working' && !waitsOnYou(s) && store.get(`died-seen:${s.id}`) !== diedMark(s)));
+    // with a milestone picked, a chat on another milestone's issue branch/worktree (2263-…) is hidden like its work item; no ref stays
+    const inMs = (s: Session) => hooks.inMilestone({ branch: s.branch, worktreePath: s.cwd } as WorkItem);
+
+    const asking = computed(() => visible.value.filter(s => inMs(s) && waitsOnYou(s) && !(s.needsId && !s.asking && handled.has(s.needsId))));
+    const died = computed(() => visible.value.filter(s => inMs(s) && !!s.died && isMaster(s) && s.status !== 'working' && !waitsOnYou(s) && store.get(`died-seen:${s.id}`) !== diedMark(s)));
     // "#N · starting…": the main chat took the issue on, but no subagent or MR shows it yet
     const starting = computed(() => visible.value.filter(isMaster).flatMap(s => {
         const items = visible.value.filter(o => o.project === s.project).flatMap(o => o.items || []);
@@ -28,7 +31,7 @@ export function useChatRows() {
         return startingIssues(s, items).map(n => ({ key: `starting:${s.id}:${n}`, sid: s.id, n }));
     }));
     // one row per session: a "starting #N" placeholder already stands for a working chat
-    const working = computed(() => visible.value.filter(s => isMaster(s) && s.status === 'working' && !waitsOnYou(s) && !starting.value.some(p => p.sid === s.id)));
+    const working = computed(() => visible.value.filter(s => inMs(s) && isMaster(s) && s.status === 'working' && !waitsOnYou(s) && !starting.value.some(p => p.sid === s.id)));
 
     /** A reply that wrongly needs you can be marked as handled; a question or permission prompt is answered in the chat (null). */
     const replyOf = (s: Session) => (s.asking ? null : s.needsId ?? null);

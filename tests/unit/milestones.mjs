@@ -158,3 +158,6 @@ assert.equal(chatStatus({ working: true, items: [] }, now).text, 'Claude is work
 assert.equal(chatStatus({ working: true, items: [] }, now, { needsYou: false, subagents: { running: 0, finished: 0 }, step: 'running npm test' }).text, 'Claude is working… · running npm test');
 assert.equal(chatStatus({ working: true, since: now - 2 * 60_000, items: [{ role: 'user', at: askedAt }] }, now).text, 'Claude is working… · 2m'); // turn start wins
 console.log('ok chat status');
+// a chat row (session: branch + cwd, no MR) on an issue branch of another milestone is hidden too
+assert.equal(inMilestone({ branch: '2263-dimension-links-only', worktreePath: '/p/.claude/worktrees/2263-dimension-links-only' }, { id: 7, issues: new Set([5]) }), false);
+assert.equal(inMilestone({ branch: 'main', worktreePath: '/p' }, { id: 7, issues: new Set([5]) }), true);

@@ -37,7 +37,7 @@ export async function connect(port) {
         external: [], // requests that would have left localhost (failed instead)
         posts: [], // { url, body } of every POST, answered by route or passed through
         navigations: 0, // main-frame navigations
-        route: null, // (request) => { status, body, headers } to answer it here, { delay } to pass it on after delay ms, or null to pass it on
+        route: null, // (request) => { status, body, headers } to answer it here (with delay: after delay ms), { delay } to pass it on after delay ms, or null to pass it on
 
         cmd(method, params = {}) {
             return new Promise((ok, fail) => {
@@ -133,7 +133,7 @@ export async function connect(port) {
                 page.posts.push({ url: q.url, body: q.postData ?? '' });
             }
             const r = page.route?.(q);
-            if (r?.delay) {
+            if (r?.delay && r.body == null) {
                 return sleep(r.delay).then(() => page.cmd('Fetch.continueRequest', { requestId: p.requestId })).catch(() => {});
             }
             if (!r) {
@@ -141,7 +141,7 @@ export async function connect(port) {
             }
             const responseHeaders = Object.entries(r.headers ?? { 'content-type': 'text/plain' }).map(([name, value]) => ({ name, value }));
             const body = Buffer.from(r.body ?? '').toString('base64');
-            return page.cmd('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: r.status ?? 200, responseHeaders, body }).catch(() => {});
+            return sleep(r.delay ?? 0).then(() => page.cmd('Fetch.fulfillRequest', { requestId: p.requestId, responseCode: r.status ?? 200, responseHeaders, body })).catch(() => {});
         }
         if (d.method === 'Runtime.exceptionThrown') {
             page.errors.push(p.exceptionDetails.exception?.description ?? p.exceptionDetails.text);

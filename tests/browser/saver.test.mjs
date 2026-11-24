@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { sleep } from './cdp.mjs';
 
 const sw = `document.getElementById('saver-switch')`;
 
@@ -24,6 +25,23 @@ export default {
         await page.waitFor(`${sw}.checked === false`, { what: 'the switch off again' });
         await page.waitFor(`import('/core.js').then(c => c.api('/api/saver')).then(r => r.json()).then(j => !j.on)`, { what: 'the server to know' });
         assert.deepEqual(page.errors, []);
+        rmSync(file, { force: true });
+    },
+
+    'a flip before the switch has loaded is not undone by the late load': async ({ page, open, base, answerPosts, homebase }) => {
+        const file = join(homebase, 'token-saver.md');
+        rmSync(file, { force: true });
+        rmSync(join(homebase, 'token-saver-choice'), { force: true });
+        await open();
+        let held = 0; // the page's own first GET /api/saver answers "off" 1.5 s late, after the click
+        page.route = q => (q.url.includes('/api/saver') ? (q.method === 'GET' && !held++ ? { delay: 1500, body: '{"on":false}', headers: { 'content-type': 'application/json' } } : null) : answerPosts(q));
+        await page.goto(base);
+        await page.waitFor(`${sw}`, { what: 'the switch' });
+        assert.equal(held, 1, 'its load is still held back');
+        await page.click('#saver-switch');
+        await page.waitFor(`import('/core.js').then(c => c.api('/api/saver')).then(r => r.json()).then(j => j.on)`, { what: 'the server to know' });
+        await sleep(2000); // past the held-back load
+        assert.equal(await page.ev(`${sw}.checked`), true, 'still on');
         rmSync(file, { force: true });
     }
 };

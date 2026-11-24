@@ -8,17 +8,19 @@ const show = (j: { on?: boolean; auto?: boolean; used?: number }) => {
     on.value = Boolean(j.on);
     note.value = j.auto && !j.on ? `on: ${j.used}% used` : '';
 };
-let asked = false;
+let asked = false, flips = 0;
 
 export function useTokenSaver() {
 
     if (!asked) {
         asked = true;
-        api('/api/saver').then(r => r.json()).then(show, () => { asked = false; });
+        const at = flips; // a flip made while this is on its way is newer than its answer
+        api('/api/saver').then(r => r.json()).then(j => flips === at && show(j), () => { asked = false; });
     }
 
     async function set(value: boolean) {
 
+        flips++;
         const before = on.value;
         on.value = value;
         try {

@@ -208,7 +208,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return;
             }
             // The demo types nothing anywhere; a 409's text is what the chat shows under the unsent message or answer.
-            if (DEMO && req.method === 'POST' && /^\/api\/(send|startup|question|handled|dismissed|clear|compact|restart|interrupt|projects\/|server\/reload)/.test(url.pathname)) {
+            if (DEMO && req.method === 'POST' && /^\/api\/(send|startup|question|handled|dismissed|clear|compact|restart|interrupt|projects\/|helpers\/|server\/reload)/.test(url.pathname)) {
                 throw Object.assign(new Error('This is the demo: nothing is sent to Claude'), { status: 409 });
             }
             // Pairing is managed on the Mac only, never by a remote device.
@@ -254,6 +254,18 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     const out = await closeHelper(DATA_DIR, q.get('id'), { keepWorktree: q.has('keep-worktree') });
                     polledSessions.stale();
                     return json(out);
+                }
+                // to the caller's own running helper, through send()'s checks; a button-like send, so an open question is not declined
+                if (isPost('/api/helpers/send')) {
+                    const h = findHelper(q.get('id'));
+                    if (h.parent !== parentOf(list, q.get('parent')).id) {
+                        return deny(403, 'not a helper of this chat');
+                    }
+                    if (h.closedAt) {
+                        return deny(409, 'closed: start a new helper');
+                    }
+                    await send(h.id, await readBody(req, MAX_SEND));
+                    return res.end('sent');
                 }
                 if (url.pathname === '/api/helpers' && req.method === 'GET') {
                     const parent = q.has('all') ? null : parentOf(list, q.get('parent'));

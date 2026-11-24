@@ -12,7 +12,9 @@ const USAGE = `usage: homebase helper <command>
   start --title "<verb object>" [--model sonnet] [--base <ref>] [--branch <name>] [--no-worktree] [--wait]   (brief on stdin)
   read <id> [--full]
   list [--all]
-  stop <id> [--keep-worktree]`;
+  stop <id> [--keep-worktree]
+  send <id>... | --all          (message on stdin)
+  wait <id>...                  (returns when one ends a turn or closes, with its read output)`;
 
 const fail = (msg, code = 1) => {
     process.stderr.write(`${msg}\n`);
@@ -104,6 +106,21 @@ const readStdin = async () => {
     return s;
 };
 
+// Polls every `every` ms until a helper ends a turn (or closes, or its claude exits) without asking or waiting on the user,
+// then prints the read output of each one that did. Run as a background command, its exit is the main chat's notice.
+// ponytail: the first look is one interval in, so a send's prompt has reached the transcript; a turn that starts later than that reads as ended
+export async function wait(ids, env = process.env, { every = 5000, get = id => api(`/api/helpers/${encodeURIComponent(id)}`, { env }), print = console.log } = {}) {
+
+    for (;;) {
+        await new Promise(r => setTimeout(r, every));
+        const done = (await Promise.all(ids.map(get))).filter(h => h.done);
+        if (done.length) {
+            print(done.map(h => readOut(h)).join('\n\n'));
+            return done;
+        }
+    }
+}
+
 export async function main(argv = process.argv.slice(2), env = process.env) {
 
     const [group, cmd, ...rest] = argv;
@@ -121,7 +138,36 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
         }
         const h = await api(`/api/helpers/start?${q({ parent: needParent(), title: flags.title, model: flags.model, base: flags.base, branch: flags.branch, 'no-worktree': flags['no-worktree'] })}`, { method: 'POST', body: await readStdin(), env });
         console.log(`started ${h.id.slice(0, 8)} (${h.title})${h.branch ? ` on ${h.branch} in ${h.cwd}` : ` in ${h.cwd}`}; tmux attach -t cc-${h.id.slice(0, 8)}`);
+        if (flags.wait) {
+            await wait([h.id], env);
+        }
         return h.id;
+    }
+    if (cmd === 'send') {
+        const ids = flags.all ? (await api(`/api/helpers?${q({ parent: needParent() })}`, { env })).map(h => h.id) : words;
+        if (!ids.length) {
+            fail(flags.all ? 'no running helpers' : USAGE, flags.all ? 1 : 2);
+        }
+        const text = await readStdin();
+        let failed = false;
+        for (const id of ids) {
+            try {
+                await api(`/api/helpers/send?${q({ id, parent: needParent() })}`, { method: 'POST', body: text, env });
+                console.log(`sent ${id.slice(0, 8)}`);
+            } catch (e) {
+                failed = true;
+                console.log(`${id.slice(0, 8)}: not sent: ${e.message}`);
+            }
+        }
+        process.exitCode = failed ? 1 : 0;
+        return;
+    }
+    if (cmd === 'wait') {
+        if (!words.length) {
+            fail(USAGE, 2);
+        }
+        await wait(words, env);
+        return;
     }
     if (cmd === 'read') {
         console.log(readOut(await api(`/api/helpers/${encodeURIComponent(words[0] ?? '')}`, { env }), !!flags.full));

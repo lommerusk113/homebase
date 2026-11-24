@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadHelpers, startHelper, closeHelper, parentOf, findHelper, helperView, writeToken, PER_PARENT, TOTAL } from '../../server/helpers.mjs';
 import { helpers, HELPER_RULE, tmuxSession } from '../../server/tmux.mjs';
-import { callerTmux, parseArgs, readOut } from '../../bin/homebase.mjs';
+import { callerTmux, parseArgs, readOut, wait } from '../../bin/homebase.mjs';
 import { now } from './helpers.mjs';
 
 const uuid = n => `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555`;
@@ -158,3 +158,19 @@ console.log('ok helper close');
     helpers.clear();
 }
 console.log('ok helper view');
+
+// wait: polls until one helper's turn ended, keeps going while it works or asks, prints what ended
+{
+    const states = { a: ['working', 'working', 'asking'], b: ['working', 'working', 'idle'] };
+    let polls = 0;
+    const printed = [];
+    const get = async id => {
+        const status = states[id][Math.min(polls, 2)];
+        return { id: `${id}0000000`, title: id, status, done: status === 'idle', tldr: 'ok' };
+    };
+    const done = await wait(['a', 'b'], {}, { every: 1, get: async id => { const h = await get(id); if (id === 'b') { polls++; } return h; }, print: t => printed.push(t) });
+    assert.deepEqual(done.map(h => h.title), ['b']);
+    assert.equal(polls, 3, 'kept polling while working');
+    assert.deepEqual(printed, ['b0000000  b  [idle]\nTLDR: ok']);
+}
+console.log('ok helper wait');

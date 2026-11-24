@@ -194,6 +194,16 @@ console.log('ok helper view');
     assert.deepEqual(await run([['closed']]), ['closed', 1]);
     assert.deepEqual(await run([['idle'], ['exited']]), ['exited', 2]);
 }
+// wait: Homebase restarting mid-wait is retried; unbroken failures past patience end it
+{
+    const down = () => Object.assign(new Error('Homebase is not reachable: fetch failed'), { unreachable: true });
+    let i = 0, t = 0;
+    const base = { every: 1, print: () => {}, now: () => t++ };
+    const done = await wait(['h'], {}, { ...base, get: async () => { if (i++ < 3) { throw down(); } return { id: 'h0000000', title: 'h', status: 'closed', done: true }; } });
+    assert.equal(done[0].status, 'closed');
+    await assert.rejects(wait(['h'], {}, { ...base, patience: 5, get: async () => { throw down(); } }), /not reachable/);
+    await assert.rejects(wait(['h'], {}, { ...base, get: async () => { throw new Error('boom'); } }), /boom/);
+}
 console.log('ok helper wait');
 
 // board nesting: the helper's chat names its parent; the parent gets it as an agent, so its row nests there with helperSession
@@ -259,6 +269,13 @@ console.log('ok helper nesting');
     assert.deepEqual(reapDecisions(one, parentList(11 * M, 'idle'), new Set(['cc-00000003', 'cc-00000090']), T), [], 'parent alive');
     // a just-started helper whose tmux the cache doesn't list yet is not exited
     assert.deepEqual(reapDecisions(new Map([h(1, { at: T - 2000 })]), list, live, T), []);
+
+    // nothing loaded yet (empty sessions or tmux list after a restart) reaps nothing; an unknown activity is not idleness since the start
+    assert.deepEqual(reapDecisions(reg, [], live, T), [], 'no sessions loaded');
+    assert.deepEqual(reapDecisions(reg, list, new Set(), T), [], 'no tmux list');
+    const noActivity = new Map([h(2, { at: T - 5 * 3600_000 })]);
+    assert.deepEqual(reapDecisions(noActivity, [{ id: P, tmux: 'cc-00000090', lastActivity: T }, s(2, { lastActivity: null })], live, T), [], 'activity unknown: not idle since h.at');
+    assert.deepEqual(reapDecisions(noActivity, [{ id: P, tmux: 'cc-00000090', lastActivity: T }, s(2, { lastActivity: null, updated: T - 31 * M })], live, T), [{ id: uuid(2), why: 'idle for 30 min' }]);
 
     // reapHelpers closes each through the given close, keeps going past a failure, and returns the closed ids
     helpers.clear();

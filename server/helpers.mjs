@@ -143,7 +143,7 @@ export async function startHelper(dir, parent, { brief, title, model = 'sonnet',
 
 // Closes a helper: its tmux (=cc-<id8>, only a registered helper's), its worktree without --force (changes keep it), and its
 // branch only when merged (git branch -d). The transcript and the registry entry stay.
-export async function closeHelper(dir, ref, { keepWorktree = false } = {}, { tm = tmux, git = gitRun, now = Date.now() } = {}) {
+export async function closeHelper(dir, ref, { keepWorktree = false, reason = null } = {}, { tm = tmux, git = gitRun, now = Date.now() } = {}) {
 
     const h = findHelper(ref);
     const out = { id: h.id, worktree: null, branch: null };
@@ -168,6 +168,7 @@ export async function closeHelper(dir, ref, { keepWorktree = false } = {}, { tm 
     }
 
     h.closedAt ??= now;
+    h.closedReason ??= reason ?? 'closed on request';
     h.kept = out.worktree?.startsWith('kept') ? out.worktree : null;
     await save(dir);
 
@@ -197,11 +198,16 @@ export const PARENT_GONE_MS = 10 * 60_000, IDLE_MS = 30 * 60_000, WAITS_MS = 24 
 export function reapDecisions(registry, list, live, now = Date.now()) {
 
     const out = [];
+    // Nothing loaded yet (just after a server start, or tmux/sessions failed to answer): every helper would look gone or idle.
+    if (!list.length || !live.size) {
+        return out;
+    }
     for (const h of registry.values()) {
         if (h.closedAt) {
             continue;
         }
-        const v = helperView(h, list, live, now), quiet = now - (v.lastActivity ?? h.at);
+        const v = helperView(h, list, live, now), since = v.lastActivity ?? list.find(x => x.id === h.id)?.updated ?? null; // never h.at: a helper that ran for an hour isn't idle for it
+        const quiet = since == null ? 0 : now - since;
         const parent = chatIn(list, parentTmux(h));
         const parentGone = !live.has(parentTmux(h));
         const why = v.status === 'exited' ? 'its claude exited'
@@ -218,12 +224,12 @@ export function reapDecisions(registry, list, live, now = Date.now()) {
 }
 
 // Runs the reaper's decisions through closeHelper; a failed close is logged and tried again next time. Returns the closed ids.
-export async function reapHelpers(dir, list, live, now = Date.now(), close = (id) => closeHelper(dir, id, {}, { now })) {
+export async function reapHelpers(dir, list, live, now = Date.now(), close = (id, why) => closeHelper(dir, id, { reason: `reaper: ${why}` }, { now })) {
 
     const closed = [];
     for (const { id, why } of reapDecisions(helpers, list, live, now)) {
         try {
-            await close(id);
+            await close(id, why);
             closed.push(id);
             console.log(`helper ${id.slice(0, 8)} closed: ${why}`);
         } catch (e) {

@@ -63,7 +63,7 @@ async function api(path, { method = 'GET', body, env = process.env } = {}) {
     }
     const res = await fetch(`http://localhost:${env.HOMEBASE_PORT ?? 4321}${path}`, {
         method, body, headers: { 'x-homebase-token': token, ...(method === 'POST' && { 'x-codetool': '1' }) }
-    }).catch(e => fail(`Homebase is not reachable: ${e.message}`));
+    }).catch(e => { throw Object.assign(new Error(`Homebase is not reachable: ${e.message}`), { unreachable: true }); });
     const text = await res.text();
     if (!res.ok) {
         let err = text;
@@ -109,12 +109,24 @@ const readStdin = async () => {
 // Polls every `every` ms until a helper ends a turn without asking or waiting on the user, then prints the read output of each
 // one that did. Run as a background command, its exit is the main chat's notice. A turn counts as ended only once the helper
 // was seen at it (working, asking, needing you) or wrote a reply after the wait began, so an idle helper whose sent prompt
-// hasn't started a turn yet doesn't read as finished; a closed or exited helper returns at once.
-export async function wait(ids, env = process.env, { every = 5000, get = id => api(`/api/helpers/${encodeURIComponent(id)}`, { env }), print = console.log, now = Date.now } = {}) {
+// hasn't started a turn yet doesn't read as finished; a closed or exited helper returns at once. A Homebase restart during the wait
+// is retried quietly; only `patience` ms of unbroken failures end it.
+export async function wait(ids, env = process.env, { every = 5000, patience = 120_000, get = id => api(`/api/helpers/${encodeURIComponent(id)}`, { env }), print = console.log, now = Date.now } = {}) {
 
     const began = now(), seen = new Set();
+    let downSince = null;
     for (;;) {
-        const all = await Promise.all(ids.map(get));
+        let all;
+        try {
+            all = await Promise.all(ids.map(get));
+            downSince = null;
+        } catch (e) {
+            if (!e.unreachable || now() - (downSince ??= now()) > patience) {
+                throw e;
+            }
+            await new Promise(r => setTimeout(r, every));
+            continue;
+        }
         all.filter(h => !h.done && h.status !== 'starting').forEach(h => seen.add(h.id));
         const done = all.filter(h => h.done && (seen.has(h.id) || h.replyAt > began || ['closed', 'exited'].includes(h.status)));
         if (done.length) {

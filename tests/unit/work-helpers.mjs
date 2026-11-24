@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadHelpers, startHelper, closeHelper, parentOf, findHelper, helperView, writeToken, nestHelpers, PER_PARENT, TOTAL, START_MS } from '../../server/helpers.mjs';
+import { loadHelpers, startHelper, closeHelper, parentOf, findHelper, helperView, writeToken, nestHelpers, reapDecisions, reapHelpers, PER_PARENT, TOTAL, START_MS } from '../../server/helpers.mjs';
 import { helpers, HELPER_RULE, tmuxSession } from '../../server/tmux.mjs';
 import { callerTmux, parseArgs, readOut, wait } from '../../bin/homebase.mjs';
 import { now } from './helpers.mjs';
@@ -224,3 +224,54 @@ console.log('ok helper wait');
     helpers.clear();
 }
 console.log('ok helper nesting');
+
+// the reaper: which open registered helpers close, and why; everything else is left alone
+{
+    const M = 60_000, T = now + 48 * 3600_000;
+    const h = (n, extra = {}) => [uuid(n), { id: uuid(n), parent: P, title: `h${n}`, at: now, closedAt: null, branch: null, cwd: '/x', ...extra }];
+    const live = new Set(['cc-00000090', ...[2, 3, 4, 5, 6, 7, 8, 9].map(n => `cc-0000000${n}`)]); // h1's claude exited
+    const reg = new Map([h(1), h(2), h(3), h(4), h(5), h(6), h(7), h(8, { closedAt: now }), h(9, { parent: Q })]);
+    const s = (n, extra) => ({ id: uuid(n), status: 'idle', asking: false, needsYou: false, lastActivity: T - M, ...extra });
+    const list = [
+        { id: P, tmux: 'cc-00000090', lastActivity: T },
+        s(1, { status: 'working' }),
+        s(2, { lastActivity: T - 31 * M }), // idle 31 min
+        s(3, { lastActivity: T - 29 * M }), // idle 29 min: stays
+        s(4, { asking: true, status: 'waiting', lastActivity: T - 25 * 3600_000 }), // asks for 25 h
+        s(5, { needsYou: true, lastActivity: T - 23 * 3600_000 }), // waits on you for 23 h: stays
+        s(6, { needsYou: true, lastActivity: T - 31 * M }), // waits on you, quiet 31 min: not idle, stays
+        s(7, { status: 'working', lastActivity: T - 5 * 3600_000 }), // working: stays
+        s(8, { lastActivity: now }), // closed: never touched again
+        s(9, { lastActivity: T - 2 * M }) // parent Q has no session and no tmux: gone, and h9 is idle
+    ];
+    assert.deepEqual(reapDecisions(reg, list, live, T), [
+        { id: uuid(1), why: 'its claude exited' },
+        { id: uuid(2), why: 'idle for 30 min' },
+        { id: uuid(4), why: 'waited on you for 24 h' },
+        { id: uuid(9), why: 'its parent chat is gone' }
+    ]);
+    // parent gone: only after 10 min, and never while the helper works
+    const parentList = (ago, status) => [{ id: P, tmux: 'cc-00000090', lastActivity: T - ago }, s(3, { status, lastActivity: T - M })];
+    const one = new Map([h(3)]), noParent = new Set(['cc-00000003']);
+    assert.deepEqual(reapDecisions(one, parentList(11 * M, 'idle'), noParent, T), [{ id: uuid(3), why: 'its parent chat is gone' }]);
+    assert.deepEqual(reapDecisions(one, parentList(9 * M, 'idle'), noParent, T), [], 'gone for under 10 min');
+    assert.deepEqual(reapDecisions(one, parentList(11 * M, 'working'), noParent, T), [], 'still working');
+    assert.deepEqual(reapDecisions(one, parentList(11 * M, 'idle'), new Set(['cc-00000003', 'cc-00000090']), T), [], 'parent alive');
+    // a just-started helper whose tmux the cache doesn't list yet is not exited
+    assert.deepEqual(reapDecisions(new Map([h(1, { at: T - 2000 })]), list, live, T), []);
+
+    // reapHelpers closes each through the given close, keeps going past a failure, and returns the closed ids
+    helpers.clear();
+    reg.forEach((v, k) => helpers.set(k, v));
+    const tried = [];
+    const closed = await reapHelpers('/nowhere', list, live, T, async id => {
+        tried.push(id);
+        if (id === uuid(2)) {
+            throw new Error('git busy');
+        }
+    });
+    assert.deepEqual(tried, [uuid(1), uuid(2), uuid(4), uuid(9)]);
+    assert.deepEqual(closed, [uuid(1), uuid(4), uuid(9)]);
+    helpers.clear();
+}
+console.log('ok helper reaper');

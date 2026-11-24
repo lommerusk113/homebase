@@ -30,7 +30,7 @@ import { readChecks, saveChecks } from './server/checks.mjs';
 import { loadHandled, markHandled } from './server/handled.mjs';
 import { loadDismissed, dismiss } from './server/dismissed.mjs';
 import { loadReviewers, startReviewer, markFindingsSent } from './server/reviewer.mjs';
-import { loadHelpers, startHelper, closeHelper, parentOf, findHelper, helperView, ahead, writeToken } from './server/helpers.mjs';
+import { loadHelpers, startHelper, closeHelper, parentOf, findHelper, helperView, ahead, writeToken, reapHelpers } from './server/helpers.mjs';
 
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
@@ -578,6 +578,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
         });
     } else {
         listenLocal();
+    }
+    // The helper reaper (server/helpers.mjs): at start and every 60 s, closes the registered helpers that exited, lost their
+    // parent, idled or waited too long. The demo touches nothing.
+    const reap = async () => {
+        try {
+            if ((await reapHelpers(DATA_DIR, await polledSessions(), new Set((await liveTmux()).map(t => t.name)))).length) {
+                polledSessions.stale();
+            }
+        } catch (e) {
+            console.error(`helper reaper: ${e.message}`);
+        }
+    };
+    if (!DEMO) {
+        reap();
+        setInterval(reap, 60_000);
     }
     // With no page polling /api/sessions, the push watcher looks every 5s itself, and only while a device is subscribed.
     setInterval(async () => {

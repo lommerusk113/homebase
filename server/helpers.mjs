@@ -184,6 +184,49 @@ export function helperView(h, list, live, now = Date.now()) {
     };
 }
 
+// The reaper's rules, so no dead tmux or worktree lingers: which open registered helpers to close, as [{ id, why }].
+// Only registered helpers are ever looked at, never other cc-* chats. live: the names of running tmux sessions.
+export const PARENT_GONE_MS = 10 * 60_000, IDLE_MS = 30 * 60_000, WAITS_MS = 24 * 3600_000;
+export function reapDecisions(registry, list, live, now = Date.now()) {
+
+    const out = [];
+    for (const h of registry.values()) {
+        if (h.closedAt) {
+            continue;
+        }
+        const v = helperView(h, list, live, now), quiet = now - (v.lastActivity ?? h.at);
+        const parent = list.find(x => x.id === h.parent);
+        const parentGone = !parent || !live.has(parent.tmux ?? tmuxName(parent.id));
+        const why = v.status === 'exited' ? 'its claude exited'
+            : parentGone && now - (parent?.lastActivity ?? parent?.updated ?? 0) > PARENT_GONE_MS && !['working', 'starting'].includes(v.status) ? 'its parent chat is gone'
+                : ['idle', 'waiting'].includes(v.status) && quiet > IDLE_MS ? 'idle for 30 min'
+                    : ['asking', 'needs you'].includes(v.status) && quiet > WAITS_MS ? 'waited on you for 24 h'
+                        : null;
+        if (why) {
+            out.push({ id: h.id, why });
+        }
+    }
+
+    return out;
+}
+
+// Runs the reaper's decisions through closeHelper; a failed close is logged and tried again next time. Returns the closed ids.
+export async function reapHelpers(dir, list, live, now = Date.now(), close = (id) => closeHelper(dir, id, {}, { now })) {
+
+    const closed = [];
+    for (const { id, why } of reapDecisions(helpers, list, live, now)) {
+        try {
+            await close(id);
+            closed.push(id);
+            console.log(`helper ${id.slice(0, 8)} closed: ${why}`);
+        } catch (e) {
+            console.error(`helper ${id.slice(0, 8)}: could not close: ${e.message}`);
+        }
+    }
+
+    return closed;
+}
+
 // What a closed helper's composer says, and a send to it answers.
 export const closedNote = h => `Closed — ask the main chat to start a new helper${h.branch ? ` on branch ${h.branch}` : ''}`;
 

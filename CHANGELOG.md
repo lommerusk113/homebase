@@ -4,6 +4,8 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+
+* Loading new rules after a reply that asks you something no longer drops it from "needs you" (board, filter, notifications).
 * `homebase-rules.local.md` is now appended after `homebase-rules.md` instead of replacing it; both are watched for "Load new rules".
 
 ## 0.1.0 - 2026-11-21

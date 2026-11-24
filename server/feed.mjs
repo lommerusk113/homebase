@@ -3,7 +3,7 @@
 import { cache, tailOf, readTailInfo, TAIL_MAX_BYTES, textOf, isSystemText, unwrapPasted, INTERRUPTED } from './entries.mjs';
 import { RISKY, TOOL_KIND, toolSummary, queuedPrompts } from './summaries.mjs';
 import { topicAndTldr, replyChips } from './asks.mjs';
-import { cannedLabel } from '../web/src/lib/canned.ts';
+import { canned, cannedLabel } from '../web/src/lib/canned.ts';
 
 export const FEED_ITEMS = 60; // chat items per load; the page's "Show earlier" asks for more
 
@@ -36,6 +36,7 @@ export async function feedTail(path, st, max = FEED_ITEMS, cap = TAIL_MAX_BYTES)
 }
 
 const DUP_MS = 60_000;
+export const RULES_LABEL = canned('rules').label;
 
 // Ids of the replies the user marked as handled: they no longer need you (server/handled.mjs keeps them on disk).
 export const handled = new Set();
@@ -52,7 +53,7 @@ export function chatFeed(entries, max = 60) {
     // a question the user has answered or replied after no longer needs them
     let replied = false;
     for (const i of all.toReversed()) {
-        replied ||= i.role === 'user';
+        replied ||= i.role === 'user' && i.label !== RULES_LABEL; // "Load new rules" is Homebase's note, not an answer
         if (i.needsYou && (replied || i.answer)) {
             i.needsYou = false;
         }

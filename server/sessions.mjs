@@ -9,7 +9,7 @@ import { ROOT, projectDirs, cache, liveSessions, readTail, tailOf, textOf, isHum
 import { WORKING_MS, closedSession, turnState, hasTurnMarkers, turnPrompts, helperAsk, askingHelper, openToolUse, pendingQuestion, askMarker, spawnPrompts } from './turns.mjs';
 import { splitTldr, gateRuns, latestTopic, queuedPrompts } from './summaries.mjs';
 import { readUsage, usageCache } from './usage.mjs';
-import { chatItems } from './feed.mjs';
+import { chatItems, RULES_LABEL } from './feed.mjs';
 import { waitingQuestion } from './asks.mjs';
 import { loadStore, record, seeds, flush, gateHeadsOf, STORE_FILE } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
@@ -474,7 +474,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
     const lastTurn = turns.at(-1);
     const turn = turnState(entries, ageMs, marker, live);
     const openPrompts = turnPrompts(entries, ageMs, marker, live);
-    const lastItem = chatItems(entries, 1).findLast(i => !i.notice); // the chat's newest bubble past agent notices, so the Work tab and the chat agree on "needs you"
+    const lastItem = chatItems(entries, 1).findLast(i => !i.notice && i.label !== RULES_LABEL); // the chat's newest bubble past agent notices and the rules note, so the Work tab and the chat agree on "needs you"
 
     const step = turn.state === 'working' ? turnStep(turns, turn.since) : null;
     const needsYou = turn.state === 'idle' && lastItem?.role === 'assistant' && !!lastItem.needsYou && !lastItem.answer && !lastItem.error;

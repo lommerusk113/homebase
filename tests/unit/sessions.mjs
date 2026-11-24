@@ -177,3 +177,14 @@ import { liveSessions, closedSession, transcript } from '../../server/transcript
     assert.deepEqual([promptUp('❯ '), promptUp('loading'), promptUp('Do you trust?\n\n❯ 1. Yes\n  2. No\nEnter to confirm')], [true, false, false]);
     console.log('ok restart chat');
 }
+
+{
+    // Homebase's own "Load new rules" message typed after a reply that waits on you is not an answer: it still needs the user
+    const { reloadMessage } = await import('../../server/rules.mjs');
+    const reply = text => ({ type: 'assistant', uuid: 'r1', sessionId: 's', cwd: '/r', message: { content: [{ type: 'text', text }] } });
+    const you = text => ({ type: 'user', message: { content: text } });
+    const asked = [you('go'), reply('**▸ Deploy**\n\nWaiting on you: ship it? — 1. Yes — 2. No\n\nTLDR: ship it?')];
+    assert.equal(summarize([...asked, you(reloadMessage())], 60_000).needsYou, true, 'a rules note');
+    assert.equal(summarize([...asked, you('later')], 60_000).needsYou, false, 'a real message ends it');
+    console.log('ok rules note keeps needs you');
+}

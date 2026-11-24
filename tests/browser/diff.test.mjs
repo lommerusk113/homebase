@@ -107,18 +107,15 @@ export default {
         await page.waitFor(`!document.querySelector('.dv')`, { what: 'closed' });
     },
 
-    'Tab stays inside the open Changes panel, and closing gives the page back': async ({ page, open, IDS }) => {
+    'the Changes panel sits in the board card: the chat and its composer stay beside it, Esc closes it, nothing is inert': async ({ page, open, IDS }) => {
         await open(gamma(IDS));
         await page.waitFor(`document.getElementById('c-diff') && !document.getElementById('c-diff').hidden`, { what: 'the Changes button' });
         await page.click('#c-diff');
         await page.waitFor(`document.querySelector('.dv.empty .dv-note')`, { what: 'the panel' });
-        for (let i = 0; i < 8; i++) {
-            await page.key('Tab', 'Tab');
-            assert.ok(await page.ev(`!!document.activeElement.closest('.dv') || document.activeElement === document.body`), `Tab ${i + 1} left the panel`);
-        }
+        assert.equal(await page.ev(`!!document.querySelector('.left .dv') && document.getElementById('chat').offsetParent !== null && document.getElementById('msg').offsetParent !== null`), true, 'inside the board card, chat usable');
+        assert.equal(await page.ev(`document.querySelectorAll('[inert]').length`), 0, 'nothing inert');
         await page.key('Escape', 'Escape');
         await page.waitFor(`!document.querySelector('.dv')`, { what: 'closed' });
-        assert.equal(await page.ev(`document.querySelectorAll('[inert]').length`), 0, 'nothing stays inert');
     },
 
     'd opens the changes of the chat: grouped files with counts, the first diff, an untracked and a binary file, j/k, Esc': async ({ page, open, IDS, homebase }) => {

@@ -208,7 +208,7 @@ a.chip:hover { text-decoration:underline; }
 @keyframes pulse { 50% { opacity:.25; } }
 
 .main { flex:1; display:flex; min-height:0; }
-.left { flex:1; min-width:0; display:flex; flex-direction:column; container-type:inline-size; }
+.left { position:relative; flex:1; min-width:0; display:flex; flex-direction:column; container-type:inline-size; }
 /* the board and the chat each sit in one card, side by side with the same gutters: the board's Work | Issues title is its header, the body scrolls under it */
 .left, #chat { margin:var(--sp-2) var(--sp-3) var(--sp-3); background:var(--box-bg); border:1px solid var(--line); border-radius:var(--r-m); box-shadow:0 1px 2px rgba(31,35,40,.04); overflow:hidden; }
 .left { margin-right:0; }
@@ -449,8 +449,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .c-diff-icon { font-size:var(--fs-m); line-height:1; }
 .c-diff-n { padding:0 6px; border-radius:var(--r-pill); background:var(--chip); color:var(--fg); font-variant-numeric:tabular-nums; }
 .dv { --dv-add:color-mix(in srgb, var(--c-ready) 13%, var(--bg)); --dv-del:color-mix(in srgb, var(--c-danger) 11%, var(--bg));
-  position:fixed; inset:0; z-index:900; display:flex; flex-direction:column; background:var(--bg); color:var(--fg); font-size:var(--fs-m); outline:0;
-  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  position:absolute; inset:0; z-index:5; display:flex; flex-direction:column; background:var(--bg); color:var(--fg); font-size:var(--fs-m); outline:0; }
 .dv-head { flex-shrink:0; display:flex; align-items:center; gap:var(--sp-2); min-height:44px; padding:var(--sp-1) var(--sp-3); border-bottom:1px solid var(--line); }
 .dv-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
 .dv-title b { color:var(--fg); font-weight:600; margin-right:var(--sp-1); }
@@ -464,7 +463,7 @@ wa-button.c-opt.quiet:hover::part(base) { color:var(--fg); background:none; }
 .dv-back { display:none; }
 .dv.loading .dv-refresh { opacity:.5; }
 .dv-body { flex:1; min-height:0; display:flex; }
-.dv-files { flex:0 0 320px; min-width:0; overflow-y:auto; border-right:1px solid var(--line); background:var(--canvas); padding:var(--sp-1) 0 var(--sp-3); }
+.dv-files { flex:0 0 min(320px, 38cqw); min-width:0; overflow-y:auto; border-right:1px solid var(--line); background:var(--canvas); padding:var(--sp-1) 0 var(--sp-3); }
 .dv.empty .dv-files { display:none; }
 .dv-group { margin:0; padding:var(--sp-3) var(--sp-3) var(--sp-1); font-size:var(--fs-xs); font-weight:600; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); }
 .dv-file { display:flex; align-items:center; gap:var(--sp-2); width:100%; appearance:none; border:0; border-left:2px solid transparent; background:none; color:var(--fg); font:inherit; font-size:var(--fs-s); text-align:left; padding:5px var(--sp-3) 5px 10px; cursor:pointer; }

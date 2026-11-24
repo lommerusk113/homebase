@@ -6,23 +6,27 @@ import { el, hooks, vue } from './core.js';
 /** @param {string} name @param {HTMLElement} host @param {object} [props] @returns {Promise<(() => void) | null>} */
 const mount = (name, host, props) => vue.load().then(m => m?.mount(name, host, props) ?? null);
 
-// The panel is modal: the page behind it takes no focus and is not read while it is open. The dialogs and the
-// live region (#announce) stay as they are.
-/** @param {boolean} inert */
-const behind = inert => document.querySelectorAll('header.top, .main, #ptabs').forEach(n => { /** @type {HTMLElement} */ (n).inert = inert; });
+// The panel sits over the board card; on a phone the board pane is hidden while the chat shows, so opening switches to
+// it and closing goes back to the chat tab it came from.
+/** @param {string} pane */
+const pane = pane => /** @type {HTMLElement | null} */ (document.querySelector(`#ptabs button[data-pane="${pane}"]`))?.click();
+const phone = () => matchMedia('(max-width: 900px)').matches;
 
-/** @type {{ host: HTMLElement, back: Element | null, unmount: (() => void) | null } | null} */
+/** @type {{ host: HTMLElement, back: Element | null, chat: boolean, unmount: (() => void) | null } | null} */
 let panel = null;
 
 // Opens the panel for a session's folder, or with item (a work item's key) for that item's worktree.
 /** @param {string} sid @param {string | null} [item] */
 export function openDiff(sid, item = null) {
-    if (panel) { // modal: nothing behind it can ask for another
+    if (panel) { // one at a time
         return;
     }
-    const mine = panel = { host: el('div'), back: document.activeElement, unmount: null };
-    document.body.append(mine.host);
-    behind(true);
+    const chat = phone() && document.body.dataset.pane === 'chat';
+    const mine = panel = { host: el('div', 'dv-host'), back: document.activeElement, chat, unmount: null };
+    if (chat) {
+        pane('work');
+    }
+    document.querySelector('.left')?.append(mine.host);
     mount('Diff', mine.host, { sid, item }).then(unmount => {
         if (panel !== mine) { // closed before it was up
             unmount?.();
@@ -38,11 +42,13 @@ export function closeDiff() {
     if (!panel) {
         return;
     }
-    const { host, back, unmount } = panel;
+    const { host, back, chat, unmount } = panel;
     panel = null;
     unmount?.();
     host.remove();
-    behind(false);
+    if (chat) {
+        pane('chat');
+    }
     if (back instanceof HTMLElement && back.isConnected) {
         back.focus({ preventScroll: true });
     } else {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// The Changes view, a full-screen modal panel: the changed files left, the picked file's unified diff right; on a
-// phone the list first, then the diff with a back button. public/diff.js mounts it per opening and unmounts it on close.
+// The Changes view, a panel over the board card (the chat and its composer stay beside it): the changed files left, the
+// picked file's unified diff right; on a phone the list first, then the diff with a back button. public/diff.js mounts it
+// per opening and unmounts it on close.
 import { onMounted, provide, useTemplateRef } from 'vue';
 import { useEventListener } from '@vueuse/core';
 import { plainKeysOff } from 'old/core.js';
@@ -18,8 +19,11 @@ const STEPS: Record<string, 1 | -1> = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }
 
 provide(DiffKey, diff);
 
-// while the panel is up every key is its own: the board's shortcuts (keys.js) never see them
+// while the panel is up its keys are its own: the board's shortcuts (keys.js) never see them; typing in the chat is left alone
 useEventListener(window, 'keydown', (e: KeyboardEvent) => {
+    if ((e.target as Element).closest?.('input, textarea, select, [contenteditable], wa-input, wa-textarea')) {
+        return;
+    }
     e.stopPropagation();
     if (e.metaKey || e.ctrlKey || e.altKey || plainKeysOff(e)) {
         return;
@@ -43,7 +47,7 @@ onMounted(() => {
 </script>
 
 <template>
-    <div ref="panel" class="dv" :class="{ one, empty, loading }" role="dialog" aria-modal="true" aria-label="Changes" tabindex="-1">
+    <div ref="panel" class="dv" :class="{ one, empty, loading }" role="region" aria-label="Changes" tabindex="-1">
         <DiffHead />
         <div class="dv-body">
             <DiffFiles />

@@ -39,7 +39,7 @@ export default {
         const name = `document.getElementById('c-name').textContent`, msg = `document.getElementById('msg').getAttribute('placeholder')`;
         await open({ project: 'all', chat: IDS.worker });
         await page.waitFor(`document.querySelector('${row(IDS.asker)}')`, { what: 'the asking row' });
-        assert.equal(await page.ev(name), 'Main chat');
+        assert.match(await page.ev(name), /^Main chat( · .+)?$/);
         assert.equal(await page.ev(msg), 'Message main chat…');
         assert.equal(await page.ev(`document.getElementById('chat').classList.contains('off-main')`), false);
         await page.click(row(IDS.asker));
@@ -50,7 +50,7 @@ export default {
         assert.equal(await page.ev(`document.querySelector('${row(IDS.asker)}').classList.contains('viewing')`), true);
         assert.equal(await page.ev(`document.querySelector('${row(IDS.master)}').classList.contains('viewing')`), false);
         await page.click('#c-back');
-        await page.waitFor(`${name} === 'Main chat' && ${msg} === 'Message main chat…' && !document.querySelector('${row(IDS.asker)}').classList.contains('viewing')`, { what: 'the main chat header back' });
+        await page.waitFor(`${name}.startsWith('Main chat') && ${msg} === 'Message main chat…' && !document.querySelector('${row(IDS.asker)}').classList.contains('viewing')`, { what: 'the main chat header back' });
     },
 
     'a helper is named in the header, and switching project leaves it': async ({ page, open, IDS }) => {
@@ -60,7 +60,7 @@ export default {
         await page.waitFor(`document.getElementById('c-name').textContent === 'Helper · Port the header'`, { what: 'the helper in the header' });
         assert.match(await page.ev(`${back}.textContent`), /^← Back to /);
         await page.ev(`import('/app.js').catch(() => {}); import('/core.js').then(m => m.hooks.setProject('alpha'))`);
-        await page.waitFor(`document.getElementById('c-name').textContent === 'Main chat'`, { what: 'the main chat after the project switch' });
+        await page.waitFor(`document.getElementById('c-name').textContent.startsWith('Main chat')`, { what: 'the main chat after the project switch' });
         assert.equal(await page.ev(`import('/core.js').then(m => m.state.helper)`), null);
     },
 

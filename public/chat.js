@@ -257,7 +257,7 @@ function showHead(s) {
     $('c-back').hidden = !off;
     $('chat').classList.toggle('off-main', off);
     const helper = activeHelper();
-    $('c-name').textContent = helper ? `Helper · ${helper.description}` : off ? s.title || sessionTopic(s) : 'Main chat';
+    $('c-name').textContent = helper ? `Helper · ${helper.description}` : off ? s.title || sessionTopic(s) : s ? `Main chat · ${s.title || sessionTopic(s)}` : 'Main chat';
     $('c-back').textContent = helper ? `← Back to ${s.title || sessionTopic(s)}` : '← Back to main';
     const hash = helper ? `#chat=${encodeURIComponent(helper.sid)}&agent=${encodeURIComponent(helper.id)}` : '';
     if (location.hash !== hash) {

@@ -32,13 +32,33 @@ const userOn = d => {
 // The highest used % of the two windows from limits(), or 0 when unknown.
 export const usedPercent = lim => Math.max(0, lim?.fiveHour?.used ?? 0, lim?.sevenDay?.used ?? 0);
 
+// Every flip of token-saver.md as [time, on], newest last, so a chat is stale only when the rule differs from what it holds.
+const historyFile = d => join(d, 'token-saver-history.json');
+const history = d => {
+    try {
+        return JSON.parse(readFileSync(historyFile(d), 'utf8'));
+    } catch {
+        return [];
+    }
+};
+
+// Whether the saver was on at `ms`; undefined when the history doesn't reach back that far (then callers fall back to mtime).
+export const saverOnAt = (ms, d = dir()) => history(d).findLast(([at]) => at <= ms)?.[1];
+
 // { on: the user's switch, auto: usage forces it on, effective: what chats get }. Writes token-saver.md (the file a running
 // chat re-reads) only when the effective state changes, so "Load new rules" shows once per flip.
 export async function syncSaver(lim, d = dir()) {
 
     const on = userOn(d);
     const used = usedPercent(lim);
-    const auto = used >= AUTO_SAVER_PERCENT;
+    const known = [lim?.fiveHour?.used, lim?.sevenDay?.used].some(Number.isFinite);
+    const autoFile = join(d, 'token-saver-auto'); // the last auto state from known limits, kept while they are unknown
+    const lastAuto = () => { try { return readFileSync(autoFile, 'utf8').trim() === 'on'; } catch { return false; } };
+    const auto = known ? used >= AUTO_SAVER_PERCENT : lastAuto();
+    if (known && auto !== lastAuto()) {
+        await mkdir(d, { recursive: true });
+        await writeFile(autoFile, auto ? 'on\n' : 'off\n', { mode: 0o600 });
+    }
     const effective = on || auto;
 
     if (effective !== saverOn(d) || !existsSync(saverFile(d))) {
@@ -46,6 +66,7 @@ export async function syncSaver(lim, d = dir()) {
         await mkdir(d, { recursive: true });
         await writeFile(`${file}.tmp`, `${saverRules(effective)}\n`, { mode: 0o600 });
         await rename(`${file}.tmp`, file);
+        await writeFile(historyFile(d), JSON.stringify([...history(d), [Date.now(), effective]].slice(-50)), { mode: 0o600 });
     }
 
     return { on, auto, effective, used: Math.round(used) };

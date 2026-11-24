@@ -260,6 +260,14 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     assert.equal((await syncSaver(lim(10, 10), dir)).auto, false);
     assert.equal(saverOn(dir), true, 'the user choice holds when usage drops');
     assert.equal((await saveSaver('{"on":false}', dir, lim(10, 10))).effective, false);
+    // unknown limits keep the last effective state: auto-on stays on, nothing is rewritten
+    await syncSaver(lim(90, 10), dir);
+    const onAt = statSync(join(dir, 'token-saver.md')).mtimeMs;
+    for (const unknown of [null, {}, { fiveHour: {}, sevenDay: null }]) {
+        assert.equal((await syncSaver(unknown, dir)).effective, true, 'unknown limits: still on');
+    }
+    assert.equal(statSync(join(dir, 'token-saver.md')).mtimeMs, onAt);
+    assert.equal((await syncSaver(lim(10, 10), dir)).effective, false, 'known low usage turns it off');
     rmSync(dir, { recursive: true });
     console.log('ok token saver rules');
 }

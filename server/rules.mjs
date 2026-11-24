@@ -3,7 +3,7 @@ import { stat, readFile, writeFile, rename, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { RULES_FILE } from './tmux.mjs';
-import { saverFile } from './saver.mjs';
+import { saverFile, saverOn, saverOnAt } from './saver.mjs';
 import { canned } from '../web/src/lib/canned.ts';
 
 const TTL_MS = 10_000;
@@ -32,7 +32,7 @@ async function mtimeOf(path, now) {
 }
 
 // Names (once each) of the watched files modified after the process started, and the newest such mtime; undefined when none, or the start is unknown.
-export async function rulesStale(startedAt, cwd, now = Date.now(), home = homedir()) {
+export async function rulesStale(startedAt, cwd, now = Date.now(), home = homedir(), seenAt = 0) {
 
     if (!startedAt || !cwd) {
         return undefined;
@@ -42,7 +42,8 @@ export async function rulesStale(startedAt, cwd, now = Date.now(), home = homedi
     let at = 0;
     for (const [name, path] of watched(cwd, home)) {
         const m = await mtimeOf(path, now);
-        if (m > startedAt) {
+        // token-saver.md is stale only when its rule differs from what the chat started with or last loaded, not on mtime alone
+        if (m > startedAt && !(path === saverFile() && saverOnAt(Math.max(startedAt, seenAt)) === saverOn())) {
             names.add(name);
             at = Math.max(at, m);
             if (path.startsWith(join(cwd, '/')) || path === saverFile()) { // "Load new rules" names these two kinds

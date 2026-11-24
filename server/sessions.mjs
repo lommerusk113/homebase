@@ -742,7 +742,7 @@ async function attachTmux(out, now, live) {
     const seen = await readSeen();
     await Promise.all(out.map(async s => {
         const started = live?.started.get(s.id) ?? tmuxList.find(t => t.name === s.tmux)?.created;
-        const stale = await rulesStale(started, s.cwd, now);
+        const stale = await rulesStale(started, s.cwd, now, undefined, seen[s.id]);
         if (stale && !(seen[s.id] >= stale.at)) {
             s.rulesStale = stale.names;
             s.rulesAt = stale.at;

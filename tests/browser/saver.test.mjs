@@ -18,7 +18,7 @@ export default {
         await page.click('#saver-switch');
         await page.waitFor(`${sw}.checked === true`, { what: 'the switch on' });
         await page.waitFor(`import('/core.js').then(c => c.api('/api/saver')).then(r => r.json()).then(j => j.on)`, { what: 'the server to know' });
-        assert.match(readFileSync(file, 'utf8'), /^Token saver is on: start every helper \(Agent tool\) with model: sonnet/);
+        assert.match(readFileSync(file, 'utf8'), /^Token saver is on\. Main chat: run at most two helpers/);
         await page.goto(base);
         await page.waitFor(`${sw}?.checked === true`, { what: 'the switch still on after a reload' });
         await page.click('#saver-switch');

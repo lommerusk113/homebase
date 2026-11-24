@@ -96,6 +96,7 @@ export function focusChat(id, helper = null, askedFor = null) {
     followFocus();
     renderBoard();
     refreshChat();
+    document.dispatchEvent(new Event('chat-focused')); // the phone layout shows the chat pane (app.js)
 }
 // Step in: a helper's own conversation in the pane, over the chat that started it (its sid); null when not showing one.
 /** @returns {{ sid: string, id: string, description: string } | null} */

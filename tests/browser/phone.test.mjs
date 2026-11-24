@@ -42,6 +42,15 @@ export default {
         });
     },
 
+    'stepping in from the Work tab switches to the Chat tab': async ({ page, open, IDS }) => {
+        await asPhone(page, async () => {
+            await open({ project: 'all' });
+            await pane(page, 'work');
+            await page.clickOn(`document.querySelector('#masters tr[data-key="asking:${IDS.asker}"] wa-button.step-in')`);
+            await page.waitFor(`document.querySelector('#ptabs [data-pane="chat"]').getAttribute('aria-pressed') === 'true' && ${shown('feed')}`, { what: 'the Chat tab after stepping in' });
+        });
+    },
+
     'focus view at 390px: the back button stays on screen with the Next link showing': async ({ page, open, IDS }) => {
         await asPhone(page, async () => {
             await open({ project: 'all', chat: IDS.worker });

@@ -415,6 +415,7 @@ for (const b of /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySele
     b.onclick = () => showPane(b.dataset.pane);
 }
 showPane('chat');
+document.addEventListener('chat-focused', () => showPane('chat')); // stepping in from any caller
 // The on-screen keyboard on a phone. Android shrinks the page itself (interactive-widget in index.html). iOS only shrinks
 // the visual viewport and scrolls the page up to the input, which takes the header off screen: there the body gets the
 // visible height (--vvh, styles.css) and the page stays unscrolled. No keyboard, pinch-zoomed or wider: back to 100dvh.

@@ -47,7 +47,7 @@ const shot = async name => {
     writeFileSync(join(OUT, `${name}.png`), Buffer.from((await page.cmd('Page.captureScreenshot', { format: 'png' })).data, 'base64'));
 };
 mkdirSync(OUT, { recursive: true });
-await size(1400, 850);
+await size(1700, 900);
 
 await open();
 await shot('board');

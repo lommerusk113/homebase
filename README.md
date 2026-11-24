@@ -62,7 +62,7 @@ Words used below:
 * The server reads the transcripts Claude Code writes under `~/.claude/projects`. It keeps no copy of them. The page asks the server for the current state every 1.5 seconds.
 * A message you send is typed into the tmux session with `tmux send-keys` (several lines go in as one paste), then Enter. A chat with no tmux session gets one started with `claude --resume <id>`. A session that is still open in a terminal outside Homebase shows on the page, but a send is refused with "Quit it there (/exit), then send again", so Homebase does not start a second Claude on it.
 * `hooks/asking.mjs` is a Claude Code hook. It writes a small marker file while a session waits on a question or a permission prompt, because Claude Code writes some questions to the transcript only once they are answered. The options are also read from the tmux pane, and a click selects one there.
-* `homebase-rules.md` is appended to the system prompt of every Claude that Homebase starts or resumes (`--append-system-prompt-file`). It tells Claude how replies, helpers and questions fit Homebase.
+* `homebase-rules.md`, then your `homebase-rules.local.md` when it exists, is appended to the system prompt of every Claude that Homebase starts or resumes (`--append-system-prompt-file`). It tells Claude how replies, helpers and questions fit Homebase.
 
 ```mermaid
 flowchart LR
@@ -104,7 +104,7 @@ What it asks of Claude, and what the page does with it:
 It also holds advice on formatting, searching and images.
 A chat started in a terminal without Homebase does not get the file, and its replies still show, only without a topic and folded to their first sentence.
 
-To use your own rules, put them in `homebase-rules.local.md` next to it: that file is gitignored and replaces the tracked one (see Configuration).
+To add your own rules, put them in `homebase-rules.local.md` next to it: that file is gitignored and appended after the tracked one, so it only needs your own parts (see Configuration).
 Keep the three points above if you want the header, the fold and the buttons to work.
 
 ## What Homebase writes to Claude's settings file
@@ -225,7 +225,7 @@ Environment variables of the server:
 Optional settings live in `config.json` in the Homebase dir. Homebase never writes it. Its two keys are `newProject` (see [New project](#new-project)) and `remote` (see [Use from your phone](#use-from-your-phone-tailscale)).
 
 `homebase-rules.md` in this checkout is the text every Homebase chat gets.
-To use your own rules, put them in `homebase-rules.local.md` next to it. That file is gitignored and replaces the tracked one; it is not added to it. The server picks the file when it starts, so restart the server after creating or removing it.
+To add your own rules, put them in `homebase-rules.local.md` next to it. That file is gitignored and appended after the tracked one, so a chat gets both and yours win where they differ. Homebase joins them into `rules-combined.md` in the Homebase dir when a chat starts or resumes, so a new chat picks up a change without a server restart.
 Edit the rules file to change how all Homebase chats behave; chats already running show a strip whose "Load new rules" has Claude re-read it (and `~/.claude/CLAUDE.md`) without a restart; "Restart chat" reloads Claude fully.
 
 What Homebase stores, all in the Homebase dir:

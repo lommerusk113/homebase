@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* Opening a helper's chat from its row no longer fails with "Homebase hit an error" when its parent chat was cleared or compacted after the helper started; a vanished helper transcript now answers 404.
 * A helper titled "MR 1849 …" now counts as work on that MR, so its row stays in Doing after you click Fix & reply instead of falling back to Needs you.
 * Loading new rules after a reply that asks you something no longer drops it from "needs you" (board, filter, notifications).
 * `homebase-rules.local.md` is now appended after `homebase-rules.md` instead of replacing it; both are watched for "Load new rules".

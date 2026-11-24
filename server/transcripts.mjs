@@ -41,10 +41,11 @@ export async function agentFeed(list, sessionId, agentId, max) {
     if (!a) {
         throw Object.assign(new Error('no such helper'), { status: 404 });
     }
-    const path = join(ROOT, s.dir, s.id, 'subagents', `${a.agentId}.jsonl`);
+    const path = join(ROOT, s.dir, a.agentSession ?? s.id, 'subagents', `${a.agentId}.jsonl`); // the session it started in, not the chat's current one after a /clear
     // a helper's transcript is all sidechain entries, which the chat feed leaves out: read them as the helper's own conversation
     // ponytail: the cached tail only (no deeper read for "Show earlier"), which is the last ~512 KB of the helper
-    const entries = (await tailOf(path, await stat(path))).map(e => ({ ...e, isSidechain: false }));
+    const st = await stat(path).catch(() => { throw Object.assign(new Error('the helper\'s transcript is gone'), { status: 404 }); });
+    const entries = (await tailOf(path, st)).map(e => ({ ...e, isSidechain: false }));
     const feed = chatFeed(entries, Math.min(Math.max(Math.trunc(Number(max)) || FEED_ITEMS, 1), 10_000));
     const items = feed.items, more = feed.earlier > 0, capped = false;
 

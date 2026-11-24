@@ -297,3 +297,22 @@ import { say } from './helpers.mjs';
     rmSync(home, { recursive: true, force: true });
     console.log('ok agent feed');
 }
+
+// a helper started in an earlier session of a /clear-ed chat lives in that session's dir: read it there; a missing file is a 404
+{
+    const home = mkdtempSync(join(tmpdir(), 'hb-home-'));
+    const subs = join(home, '.claude', 'projects', 'p', 's-old', 'subagents');
+    mkdirSync(subs, { recursive: true });
+    writeFileSync(join(subs, 'agent-a.jsonl'), JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'from the old session' }] }, timestamp: new Date().toISOString() }) + '\n');
+    const code = `import { agentFeed } from './server/transcripts.mjs';
+        import { followClears } from './server/sessions.mjs';
+        const items = [{ sessionId: 's-old', agentId: 'agent-a', agentStatus: 'running' }, { sessionId: 's-old', agentId: 'agent-gone', agentStatus: 'running' }];
+        const list = [{ id: 's-old', dir: 'p' }, { id: 's-new', dir: 'p', clearedFrom: 's-old' }];
+        followClears(items, list);
+        list[1].items = items;
+        console.log(JSON.stringify([(await agentFeed(list, 's-new', 'agent-a')).items.map(i => i.text), await agentFeed(list, 's-new', 'agent-gone').catch(e => e.status)]));`;
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', code], { env: { ...process.env, HOME: home }, cwd: join(import.meta.dirname, '../..'), encoding: 'utf8' });
+    assert.deepEqual(JSON.parse(out), [['from the old session'], 404]);
+    rmSync(home, { recursive: true, force: true });
+    console.log('ok agent feed after the chat was cleared');
+}

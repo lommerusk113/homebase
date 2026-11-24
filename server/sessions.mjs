@@ -703,6 +703,7 @@ export function followClears(items, sessions) {
 
     const next = new Map(sessions.filter(s => s.clearedFrom).map(s => [s.clearedFrom, s.id]));
     for (const i of items) {
+        i.agentSession ??= i.sessionId; // where its helper's transcript lives (the chat's session id when the helper started)
         for (let hops = 0; next.has(i.sessionId) && hops < 50; hops++) {
             i.sessionId = next.get(i.sessionId);
         }

@@ -50,6 +50,18 @@ export default {
         assert.equal(await page.ev(keys), 0, 'nor after it');
     },
 
+    'switching to a project with a stored milestone and a slow answer shows no row outside it before the answer': async ({ page, open, base, answerPosts }) => {
+        const keys = `document.querySelectorAll('#masters tr[data-key^="https://gitlab.com/acme/alpha/"]').length`; // not the review rows, which no milestone filters
+        await open({ project: 'beta', 'milestone:alpha': '12' }); // Backlog: no MR of the fixture is in it
+        page.route = q => (q.url.includes('/api/milestones?project=alpha') ? { delay: 2500 } : answerPosts(q));
+        await page.goto(base);
+        await page.ev(`window.seen = 0; new MutationObserver(() => { window.seen = Math.max(window.seen, ${keys}); }).observe(document.body, { childList: true, subtree: true })`);
+        await page.click('#project');
+        await page.click('.pp-row[data-value="alpha"]');
+        await page.waitFor(`document.querySelector('#milestone-slot .ms-pick summary .t')?.textContent === 'Backlog'`, { what: 'the answer' });
+        assert.equal(await page.ev('window.seen'), 0, 'no MR row at any moment');
+    },
+
     'a slow answer for the old project never shows after switching': async ({ page, open, base, answerPosts }) => {
         await open({ tab: 'issues' });
         page.route = q => (q.url.includes('/api/milestones?project=alpha') ? { delay: 1500 } : answerPosts(q));

@@ -20,7 +20,16 @@ let stop = new AbortController();
 let fetchNow = () => {};
 let started = false;
 
-const pickedHere = () => (picked?.project === state.project ? picked : null);
+// Right after a project switch the board renders before follow() has run, so picked is still the old project's: answer
+// from the stored choice, held, the same way poll() will.
+const pickedHere = () => {
+    if (picked?.project === state.project) {
+        return picked;
+    }
+    const stored = state.project === 'all' ? 0 : Number(store.get(`milestone:${state.project}`));
+
+    return stored > 0 ? { project: state.project, id: stored, title: '', issues: null, hold: true } : null;
+};
 hooks.inMilestone = x => inMilestone(x, pickedHere());
 hooks.milestoneHolding = () => !!pickedHere()?.hold;
 hooks.milestoneId = () => pickedHere()?.id ?? null;

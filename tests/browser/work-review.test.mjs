@@ -68,6 +68,24 @@ export default {
         assert.deepEqual(out, [true, false]);
     },
 
+    'a row without an MR is judged by its issue\'s milestone, and kept when that is unknown': async ({ page, open }) => {
+        await open();
+        await page.waitFor(`${row('agent-stopped')} && document.querySelector('.ms-pick summary .t')?.textContent === 'Sprint 12'`, { what: 'the row and the pill' });
+        await page.waitFor(`import('/core.js').then(core => core.hooks.milestoneId() === 11)`, { what: 'Sprint 12 picked' });
+        const shownWith = o => page.ev(`(async () => {
+            const core = await import('/core.js'), list = await import('/list.js');
+            Object.assign(${items}.find(i => i.key === 'agent-stopped'), ${JSON.stringify(o)});
+            list.renderBoard();
+            await new Promise(r => setTimeout(r)); // the island draws a tick later
+            return !!${row('agent-stopped')};
+        })()`);
+        await page.waitFor(`document.querySelector('.ms-pick summary .ms-bar')`, { what: 'the Sprint 12 issues loaded' });
+        assert.equal(await shownWith({ branch: '99-elsewhere', title: 'Other work' }), false, 'issue #99 is not in Sprint 12');
+        assert.equal(await shownWith({ branch: '5-fix-login' }), true, 'issue #5 is in Sprint 12');
+        assert.equal(await shownWith({ branch: null, title: 'Fix #99 review comments' }), false, 'the issue named in the title');
+        assert.equal(await shownWith({ branch: 'tidy-up', title: 'Tidy up' }), true, 'no issue: unknown, kept');
+    },
+
     'a needs-you MR without a milestone is hidden under a picked milestone too': async ({ page, open }) => {
         await open();
         await page.waitFor(`${row(MR(104))}`);

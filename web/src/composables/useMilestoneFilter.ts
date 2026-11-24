@@ -14,7 +14,7 @@ const data = shallowRef<Milestones | null>();
 /** The menu entry being switched to, until its answer is in: the old data stays, dimmed. */
 const busy = ref<string | null>(null);
 /** The milestone the board is filtered by, with the project it belongs to: never applied to another project's rows. */
-let picked: { project: string, id: number, title: string } | null = null;
+let picked: { project: string, id: number, title: string, issues: Set<number> | null } | null = null;
 let stop = new AbortController();
 let fetchNow = () => {};
 let started = false;
@@ -31,7 +31,6 @@ function poll(project: string, signal: AbortSignal) {
     let json = ''; // the last answer shown
     let at = 0; // when the last successful fetch finished
     let asked: string | null = null; // the milestone that fetch was for
-    let selectedId: number | undefined;
     let pending = false;
     let loading = false;
 
@@ -59,13 +58,10 @@ function poll(project: string, signal: AbortSignal) {
                 json = text;
                 loading = isLoading(body);
                 data.value = body;
-                // "Assigned to me" is no milestone for the board
-                const sel = body.selected && typeof body.selected.id === 'number' ? { project, id: body.selected.id, title: body.selected.title } : null;
-                if (sel?.id !== selectedId) {
-                    selectedId = sel?.id;
-                    picked = sel;
-                    renderBoard();
-                }
+                // "Assigned to me" is no milestone for the board; issues: the numbers of its issues, once loaded
+                const ms = body.selected, g = ms?.groups;
+                picked = ms && typeof ms.id === 'number' ? { project, id: ms.id, title: ms.title, issues: g ? new Set(Object.values(g).flat().map(i => i.iid)) : null } : null;
+                renderBoard();
             }
         } catch {} finally {
             at = ok ? Date.now() : 0; // a failed call retries on the next tick

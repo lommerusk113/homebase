@@ -3,11 +3,30 @@
 /** "due 1 Dec 2026" for a date like "2026-12-01". */
 export const due = (d: string | null | undefined): string => (d ? `due ${new Date(d + 'T00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : 'no due date');
 
-// Whether a work item stays in the list for the selected milestone ({ id } or null): items with an MR of that
-// milestone, plus items without an MR (running or stopped agents), with an MR not checked yet (no prState, so its
-// milestone is unknown). An MR of another milestone or none is hidden, even when it waits on you. No selection keeps everything.
-export function inMilestone(item: WorkItem, selected: { id: number } | null): boolean {
-    return !selected || !item.pr || !item.prState || item.milestone?.id === selected.id;
+// The issue a row works on: its MR's, else the leading number of its branch or worktree (2263-dimension-links), else a #N in its title.
+export function issueOfItem(item: WorkItem): number | null {
+
+    const ref = item.prState?.issue ?? [item.branch, item.worktreePath?.split('/').pop()].map(b => b?.match(/^(\d+)-/)?.[1]).find(Boolean)
+        ?? item.title?.match(/#(\d+)(?!\d)/)?.[1];
+
+    return ref ? Number(ref) : null;
+}
+
+// Whether a work item stays in the list for the selected milestone ({ id, issues }, or null for none): an MR of that
+// milestone; a row without an MR whose issue is among the milestone's issues (issues: their numbers, null until loaded);
+// and every row whose milestone is unknown: an MR not checked yet (no prState), a row without an MR or issue ref, or
+// with the issues not loaded. An MR of another milestone or none is hidden, even when it waits on you.
+export function inMilestone(item: WorkItem, selected: { id: number, issues?: Set<number> | null } | null): boolean {
+
+    if (!selected) {
+        return true;
+    }
+    if (item.pr) {
+        return !item.prState || item.milestone?.id === selected.id;
+    }
+    const n = issueOfItem(item);
+
+    return n == null || !selected.issues || selected.issues.has(n);
 }
 
 // Pill text and tooltip for a selected milestone (groups from the server's groupIssues): "11 open", the full breakdown in the tooltip.

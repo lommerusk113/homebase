@@ -10,6 +10,7 @@ import { WORKING_MS, closedSession, turnState, hasTurnMarkers, turnPrompts, help
 import { splitTldr, gateRuns, latestTopic, queuedPrompts } from './summaries.mjs';
 import { readUsage, usageCache } from './usage.mjs';
 import { chatItems } from './feed.mjs';
+import { waitingQuestion } from './asks.mjs';
 import { loadStore, record, seeds, flush, gateHeadsOf, STORE_FILE } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { isManual } from './manual.mjs';
@@ -492,7 +493,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         question: turn.state === 'asking' ? pendingQuestion(entries, marker) : null,
         needsYou,
         needsId: needsYou ? lastItem?.id ?? null : null, // that reply's id, to mark it as handled (POST /api/handled)
-        needsText: needsYou ? firstLine(lastItem?.ask?.question ?? lastItem?.waiting ?? lastItem?.tldr, 140) || null : null, // what it asks, for the Needs you row's title
+        needsText: needsYou ? firstLine(lastItem?.ask?.question ?? waitingQuestion(lastItem?.waiting) ?? lastItem?.tldr, 140) || null : null, // what it asks, for the Needs you row's title
         since: turn.since,
         topic: latestTopic(entries),
         openPrompts,
@@ -735,7 +736,7 @@ async function attachTmux(out, now, live) {
     mapNewProjects(out, tmuxList);
 
     for (const s of out) {
-        s.tmux = tmuxFor(s.id);
+        s.tmux = tmuxFor(s.id, aliases, live); // the registry knows a /clear successor's tmux after a restart emptied the aliases
     }
     linkClears(out, live);
 

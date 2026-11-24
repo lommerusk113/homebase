@@ -78,7 +78,24 @@ export function waitingAsk(text) {
     return null;
 }
 
-const HEADS_UP = /^[ \t]*\*\*Heads-up:?\*\*:?[ \t]*(\S.*)$\n?/im;
+// The question of a Waiting on you without numbered options (waitingAsk's is null): the one-liner's part that ends in "?",
+// after its "<issue>" head, else the last sentence that asks, else the text as it is. The Needs you row's title.
+export function waitingQuestion(text) {
+
+    if (!text) {
+        return null;
+    }
+
+    const asks = s => /\?[*_"”')]*$/.test(s.trim());
+    const dashed = text.split(/\s+[—–]\s+/), q = dashed.length > 2 && dashed.slice(1).findLast(asks);
+    if (q) {
+        return `${dashed[0].trim()}: ${q.trim()}`;
+    }
+
+    return text.split(/(?<=[.?!])\s+/).findLast(asks)?.trim() ?? text;
+}
+
+const HEADS_UP =/^[ \t]*\*\*Heads-up:?\*\*:?[ \t]*(\S.*)$\n?/im;
 
 // The reply's closing "**In flight**" list (homebase-rules.md), cut off so its rows never read as options or the ask.
 const IN_FLIGHT = /(?:^|\n)[ \t]*(?:#+[ \t]*|\*\*)In flight\b[\s\S]*$/i;

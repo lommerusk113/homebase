@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chatItems, pendingQuestion, quickReplies, pendingAsk, askList, optionLabels, namedChoices, waitingOn, waitingAsk } from '../../server.mjs';
+import { chatItems, pendingQuestion, quickReplies, pendingAsk, askList, optionLabels, namedChoices, waitingOn, waitingAsk, waitingQuestion } from '../../server.mjs';
 import { tu, say } from './helpers.mjs';
 
 const YN = ['Yes', 'No'], YBN = ['Yes', 'Do both', 'No'];
@@ -155,6 +155,13 @@ assert.deepEqual([plainAsk.needsYou, plainAsk.tldr, plainAsk.text, plainAsk.repl
     assert.equal(r.ask.question, 'what do you want to clarify?');
     const [a, b] = chatItems([say(`Built it.\n\n**Waiting on you:** ${w}`), { type: 'user', message: { content: '<system-reminder>x</system-reminder>' } }, say(`Still waiting.\n\n**Waiting on you:** ${w}`)]);
     assert.deepEqual([a.replies, b.replies.length], [undefined, 3], 'a later Waiting on you takes the older one\'s chips');
+}
+{ // the Needs you row's title: the question in plain words, even when the reply lists no numbered options
+    const w = 'Waiting on you: !1855 (#2285) — its description says "Relates to", but commit 65ee4530 still says `Closes #2285`, so #2285 will close itself when supplier-automation reaches main — should I change the commit? — reword it and force-push (recommended), or leave it.';
+    assert.equal(waitingQuestion(waitingOn(w)), '!1855 (#2285): should I change the commit?');
+    assert.equal(waitingQuestion('Cache choice. Redis is slower to set up. Which cache should I use?'), 'Which cache should I use?');
+    assert.equal(waitingQuestion('your go-ahead on the release'), 'your go-ahead on the release', 'no question mark: the line as it is');
+    assert.equal(waitingQuestion(null), null);
 }
 console.log('ok ask list');
 console.log('ok quick replies');

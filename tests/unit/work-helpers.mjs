@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadHelpers, startHelper, closeHelper, parentOf, findHelper, helperView, writeToken, nestHelpers, reapDecisions, reapHelpers, PER_PARENT, TOTAL, START_MS } from '../../server/helpers.mjs';
+import { loadHelpers, startHelper, closeHelper, parentOf, parentTmux, findHelper, helperView, writeToken, nestHelpers, reapDecisions, reapHelpers, PER_PARENT, TOTAL, START_MS } from '../../server/helpers.mjs';
 import { helpers, HELPER_RULE, tmuxSession } from '../../server/tmux.mjs';
 import { callerTmux, parseArgs, readOut, wait } from '../../bin/homebase.mjs';
 import { now } from './helpers.mjs';
@@ -80,9 +80,9 @@ console.log('ok helper start');
     await closeHelper(dir, uuid(1), {}, opts);
     await startHelper(dir, parent, { brief: 'x', title: 'after close', worktree: false }, opts);
     for (let i = 0; i < TOTAL - PER_PARENT; i++) {
-        await startHelper(dir, { ...parent, id: Q }, { brief: 'x', title: `q${i}`, worktree: false }, opts);
+        await startHelper(dir, { ...parent, id: Q, tmux: 'cc-00000091' }, { brief: 'x', title: `q${i}`, worktree: false }, opts);
     }
-    await assert.rejects(startHelper(dir, { ...parent, id: uuid(92) }, { brief: 'x', title: 'ninth', worktree: false }, opts), { status: 429 });
+    await assert.rejects(startHelper(dir, { ...parent, id: uuid(92), tmux: 'cc-00000092' }, { brief: 'x', title: 'ninth', worktree: false }, opts), { status: 429 });
     // concurrent starts can't both pass the limit
     helpers.clear();
     const results = await Promise.allSettled(Array.from({ length: PER_PARENT + 2 }, (_, i) => startHelper(dir, parent, { brief: 'x', title: `c${i}`, worktree: false }, opts)));
@@ -204,7 +204,7 @@ console.log('ok helper wait');
     const gone = { id: uuid(3), parent: P, title: 'Aged out', at: now, closedAt: now + 1, branch: null, cwd: '/x/alpha' };
     [open, shut, gone].forEach(h => helpers.set(h.id, h));
     const list = [
-        { id: P, project: 'alpha', agents: [] },
+        { id: P, project: 'alpha', tmux: 'cc-00000090', agents: [] },
         { id: uuid(1), project: 'alpha', status: 'working', step: 'running npm test', lastActivity: now + 5, prs: [], files: [] },
         { id: uuid(2), project: 'alpha', status: 'idle', lastReply: 'Looked.\nTLDR: nothing wrong', prs: [] }
     ];
@@ -275,3 +275,27 @@ console.log('ok helper nesting');
     helpers.clear();
 }
 console.log('ok helper reaper');
+
+// /clear gives the main chat a new session id in the same tmux: its helpers follow it there (list, send, nesting, reaper)
+{
+    helpers.clear();
+    const dir = mkdtempSync(join(tmpdir(), 'hb-help-'));
+    const h = await startHelper(dir, parent, { brief: 'x', title: 'Survive clear', worktree: false }, fakes().opts);
+    assert.equal(h.parentTmux, 'cc-00000090');
+    const C = uuid(93), T = now + 3600_000;
+    const list = () => [
+        { id: P, tmux: 'cc-00000090', created: now - 1000, lastActivity: now - 1000, agents: [] }, // the cleared chat
+        { id: C, tmux: 'cc-00000090', created: now, lastActivity: T, agents: [], clearedFrom: P }, // its successor
+        { id: h.id, tmux: 'cc-00000001', status: 'idle', lastActivity: T - 60_000, agents: [] }
+    ];
+    assert.equal(parentOf(list(), 'cc-00000090').id, C, 'the caller is the chat now in that tmux');
+    assert.equal(parentTmux(h), parentOf(list(), 'cc-00000090').tmux, 'list and send still find the helper');
+    const l = list();
+    nestHelpers(l, new Set(['cc-00000090', 'cc-00000001']), T);
+    assert.deepEqual([l[2].parentId, l[0].agents.length, l[1].agents.map(a => a.id)], [C, 0, [h.id]], 'nested under the successor');
+    assert.deepEqual(reapDecisions(helpers, list(), new Set(['cc-00000090', 'cc-00000001']), T), [], 'the old id being quiet is not a gone parent');
+    // an entry saved before parentTmux falls back to the tmux named after its parent
+    assert.equal(parentTmux({ parent: P }), 'cc-00000090');
+    helpers.clear();
+}
+console.log('ok helper parent survives /clear');

@@ -52,10 +52,17 @@ async function save(dir) {
     await rename(tmp, file);
 }
 
+// A helper's parent is its chat's tmux, not its session id: /clear gives the chat a new id in the same tmux, and its helpers stay its own.
+// Entries from before parentTmux fall back to the tmux named after the parent's id.
+export const parentTmux = h => h.parentTmux ?? tmuxName(h.parent);
+
+// The chat now running in tmux `name`: the newest session there, so a /clear successor, not the chat it cleared.
+export const chatIn = (list, name) => list.filter(x => x.tmux === name).sort((a, b) => (b.created ?? 0) - (a.created ?? 0))[0];
+
 // The chat a caller's tmux belongs to: refused outside Homebase's chats and from a helper, so helpers don't start helpers.
 export function parentOf(list, name) {
 
-    const s = list.find(x => x.tmux === name);
+    const s = name ? chatIn(list, name) : null;
     if (!s) {
         throw bad(403, 'run this from a chat Homebase started (its tmux is not one of them)');
     }
@@ -93,7 +100,7 @@ export async function startHelper(dir, parent, { brief, title, model = 'sonnet',
     // one start at a time, so two can't both pass the limits
     return withLock('helpers:start', async () => {
 
-        const mine = running().filter(h => h.parent === parent.id);
+        const mine = running().filter(h => parentTmux(h) === parent.tmux);
         if (mine.length >= PER_PARENT || running().length >= TOTAL) {
             const error = `limit reached (${PER_PARENT} per chat, ${TOTAL} in all): stop a helper first`;
             throw bad(429, error, { body: { error, running: running().map(({ id, parent, title, branch }) => ({ id, parent, title, branch })) } });
@@ -123,7 +130,7 @@ export async function startHelper(dir, parent, { brief, title, model = 'sonnet',
             }
             throw e;
         }
-        const h = { id, parent: parent.id, project: parent.project ?? null, top, cwd, branch: br, base: from, slug: s, title, model, at: now, closedAt: null };
+        const h = { id, parent: parent.id, parentTmux: parent.tmux, project: parent.project ?? null, top, cwd, branch: br, base: from, slug: s, title, model, at: now, closedAt: null };
         helpers.set(id, h);
         await save(dir);
         if (worktree) {
@@ -195,8 +202,8 @@ export function reapDecisions(registry, list, live, now = Date.now()) {
             continue;
         }
         const v = helperView(h, list, live, now), quiet = now - (v.lastActivity ?? h.at);
-        const parent = list.find(x => x.id === h.parent);
-        const parentGone = !parent || !live.has(parent.tmux ?? tmuxName(parent.id));
+        const parent = chatIn(list, parentTmux(h));
+        const parentGone = !live.has(parentTmux(h));
         const why = v.status === 'exited' ? 'its claude exited'
             : parentGone && now - (parent?.lastActivity ?? parent?.updated ?? 0) > PARENT_GONE_MS && !['working', 'starting'].includes(v.status) ? 'its parent chat is gone'
                 : ['idle', 'waiting'].includes(v.status) && quiet > IDLE_MS ? 'idle for 30 min'
@@ -236,9 +243,9 @@ export const closedNote = h => `Closed — ask the main chat to start a new help
 export function nestHelpers(list, live, now = Date.now(), registry = helpers) {
 
     for (const h of registry.values()) {
-        const s = list.find(x => x.id === h.id), parent = list.find(x => x.id === h.parent);
+        const s = list.find(x => x.id === h.id), parent = chatIn(list, parentTmux(h));
         if (s) {
-            s.parentId = h.parent;
+            s.parentId = parent?.id ?? h.parent;
             s.helper = { closed: h.closedAt ? closedNote(h) : null, tmux: tmuxName(h.id) };
         }
         if (!parent || (!s && h.closedAt)) {

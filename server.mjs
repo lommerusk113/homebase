@@ -30,7 +30,7 @@ import { readChecks, saveChecks } from './server/checks.mjs';
 import { loadHandled, markHandled } from './server/handled.mjs';
 import { loadDismissed, dismiss } from './server/dismissed.mjs';
 import { loadReviewers, startReviewer, markFindingsSent } from './server/reviewer.mjs';
-import { loadHelpers, startHelper, closeHelper, parentOf, findHelper, helperView, ahead, writeToken, reapHelpers } from './server/helpers.mjs';
+import { loadHelpers, startHelper, closeHelper, parentOf, parentTmux, findHelper, helperView, ahead, writeToken, reapHelpers } from './server/helpers.mjs';
 
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
@@ -258,7 +258,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 // to the caller's own running helper, through send()'s checks; a button-like send, so an open question is not declined
                 if (isPost('/api/helpers/send')) {
                     const h = findHelper(q.get('id'));
-                    if (h.parent !== parentOf(list, q.get('parent')).id) {
+                    if (parentTmux(h) !== parentOf(list, q.get('parent')).tmux) {
                         return deny(403, 'not a helper of this chat');
                     }
                     if (h.closedAt) {
@@ -269,7 +269,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 }
                 if (url.pathname === '/api/helpers' && req.method === 'GET') {
                     const parent = q.has('all') ? null : parentOf(list, q.get('parent'));
-                    const mine = [...helpers.values()].filter(h => parent ? h.parent === parent.id && !h.closedAt : true);
+                    const mine = [...helpers.values()].filter(h => parent ? parentTmux(h) === parent.tmux && !h.closedAt : true);
                     return json(await Promise.all(mine.map(async h => ({ ...helperView(h, list, live), ahead: await ahead(h) }))));
                 }
                 const one = url.pathname.match(/^\/api\/helpers\/([\w-]{1,64})$/);

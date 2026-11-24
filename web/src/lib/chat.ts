@@ -3,10 +3,17 @@ import { hoursMinutes, serverNow } from './time.ts';
 
 export const NEEDS_ANSWER = 'Claude needs your answer';
 
-/** Claude's newest reply when it says something still waits on the user (its "Waiting on you: …") and that isn't answered. */
+/**
+ * Claude's newest reply when it says something still waits on the user (its "Waiting on you: …") and that isn't answered.
+ * A later user message that starts with one of its options answers it too, even when the transcript didn't pair them
+ * (something sat between): else the strip stays and the same answer goes out a second time.
+ */
 export const openDecision = (d: { items?: ChatItem[] } | null | undefined): ChatItem | null => {
-    const i = d?.items?.findLast(x => x.role === 'assistant');
-    return i?.waiting && !i.answer && !i.error ? i : null;
+    const items = d?.items ?? [], n = items.findLastIndex(x => x.role === 'assistant'), i = items[n];
+    const labels = [...(i?.replies ?? []), ...(i?.ask?.options.map(o => o.label) ?? [])];
+    const sent = items.slice(n + 1).some(x => x.role === 'user' && labels.some(l => (x.text ?? '').trim().startsWith(l)));
+
+    return i?.waiting && !i.answer && !i.error && !sent ? i : null;
 };
 
 // Chat status bar: a failed poll wins (never claim "Idle" on data we couldn't fetch), then asking over working

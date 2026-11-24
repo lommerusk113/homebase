@@ -43,20 +43,24 @@ export default {
         await page.cmd('Emulation.setDeviceMetricsOverride', { width: 1440, height: 420, deviceScaleFactor: 1, mobile: false });
         try {
             const m = `document.getElementById('masters')`, last = `[...document.querySelectorAll('#masters tr[data-key]')].filter(r => r.checkVisibility()).at(-1)`;
-            await page.waitFor(`${m}.scrollHeight > ${m}.clientHeight + 50`, { what: 'a board taller than its pane' });
+            const frames = 'new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))';
+            // the whole board first: forge rows and review requests landing later move the rows (scroll anchoring shifts scrollTop)
+            await page.waitFor(`${row(MR(106))} && document.querySelector('#masters tr[data-key^="review:"]') && ${m}.scrollHeight > ${m}.clientHeight + 50`, { what: 'the full board, taller than its pane' });
             await page.ev(`${m}.scrollTop = ${m}.scrollHeight`);
             const key = await page.ev(`(${last}.focus({ preventScroll: true }), ${last}.dataset.key)`);
             const before = await page.ev(`${m}.scrollTop`);
             assert.ok(before > 50, 'scrolled down');
             await page.key('Enter', 'Enter');
-            await sleep(300);
+            await page.waitFor(`document.querySelector('#masters tr.detail')`, { what: 'the detail to open' });
+            await page.ev(frames); // its scrollIntoView runs a frame after the draw
             assert.ok(await page.ev(`${m}.scrollTop`) >= before, 'opening the last row does not jump to the top');
             assert.equal(await page.ev(`document.activeElement?.dataset?.key ?? null`), key, 'the row keeps focus');
             await page.key('Enter', 'Enter');
-            await sleep(300);
+            await page.waitFor(`!document.querySelector('#masters tr.detail')`, { what: 'the detail to close' });
             await page.ev(`${m}.scrollTop = ${m}.scrollHeight`);
             const at = await page.ev(`${m}.scrollTop`);
-            await sleep(4000); // past a poll redraw
+            await page.ev(`import('/list.js').then(l => l.renderBoard())`); // what a poll does when the list changed
+            await page.ev(frames);
             assert.equal(await page.ev(`${m}.scrollTop`), at, 'a poll redraw keeps the position');
             assert.equal(await page.ev(`document.activeElement?.dataset?.key ?? null`), key, 'and the focused row');
         } finally {

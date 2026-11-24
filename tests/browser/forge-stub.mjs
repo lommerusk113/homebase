@@ -70,7 +70,7 @@ function glab(path) {
         return ids ? out(ids.map(i => MRS[i])) : fail(`stub: unexpected MR list ${path}`);
     }
     if (p === 'projects/acme%2Falpha/milestones') {
-        return out([{ ...sprint, web_url: `${GL}/-/milestones/11`, group_id: null }]);
+        return out([{ ...sprint, web_url: `${GL}/-/milestones/11`, group_id: null }, { id: 12, title: 'Backlog', due_date: null, web_url: `${GL}/-/milestones/12`, group_id: null }]);
     }
     if (p === 'projects/acme%2Falpha/issues_statistics') {
         return out({ statistics: { counts: { all: 5, closed: 1, opened: 4 } } });

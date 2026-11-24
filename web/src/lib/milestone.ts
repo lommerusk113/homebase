@@ -16,7 +16,7 @@ export function issueOfItem(item: WorkItem): number | null {
 // milestone; a row without an MR whose issue is among the milestone's issues (issues: their numbers, null until loaded);
 // and every row whose milestone is unknown: an MR not checked yet (no prState), a row without an MR or issue ref, or
 // with the issues not loaded. An MR of another milestone or none is hidden, even when it waits on you.
-export function inMilestone(item: WorkItem, selected: { id: number, issues?: Set<number> | null } | null): boolean {
+export function inMilestone(item: WorkItem, selected: { id: number, issues?: Set<number> | null, hold?: boolean } | null): boolean {
 
     if (!selected) {
         return true;
@@ -26,7 +26,8 @@ export function inMilestone(item: WorkItem, selected: { id: number, issues?: Set
     }
     const n = issueOfItem(item);
 
-    return n == null || !selected.issues || selected.issues.has(n);
+    // hold: the stored choice's issues are still on their way, so a row with an issue ref waits for them
+    return n == null || (selected.issues ? selected.issues.has(n) : !selected.hold);
 }
 
 // Pill text and tooltip for a selected milestone (groups from the server's groupIssues): "11 open", the full breakdown in the tooltip.

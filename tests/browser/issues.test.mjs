@@ -38,6 +38,18 @@ export default {
         await page.waitFor(`!document.querySelector('#issues .card.open')`, { what: 'the card to close' });
     },
 
+    'a stored milestone and a slow answer show no row outside it before the answer': async ({ page, open, base, answerPosts }) => {
+        const keys = `document.querySelectorAll('#masters tr[data-key^="https://"]').length`;
+        await open({ 'milestone:alpha': '12' }); // Backlog: no MR of the fixture is in it
+        page.route = q => (q.url.includes('/api/milestones?project=alpha') ? { delay: 2500 } : answerPosts(q));
+        await page.goto(base);
+        await page.waitFor(`document.querySelector('#milestone-slot .ms-pick')?.textContent.includes('Loading')`, { what: 'the pill loading' });
+        await new Promise(r => setTimeout(r, 1200));
+        assert.equal(await page.ev(keys), 0, 'no MR row before the answer');
+        await page.waitFor(`document.querySelector('#milestone-slot .ms-pick summary .t')?.textContent === 'Backlog'`, { what: 'the answer' });
+        assert.equal(await page.ev(keys), 0, 'nor after it');
+    },
+
     'a slow answer for the old project never shows after switching': async ({ page, open, base, answerPosts }) => {
         await open({ tab: 'issues' });
         page.route = q => (q.url.includes('/api/milestones?project=alpha') ? { delay: 1500 } : answerPosts(q));

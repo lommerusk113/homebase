@@ -1,5 +1,5 @@
 import { computed, toRef } from 'vue';
-import { COLUMNS, inView } from 'old/core.js';
+import { COLUMNS, hooks, inView } from 'old/core.js';
 import { forgeWords } from '@/lib/forge';
 import { reviewNote } from '@/lib/board';
 import { oldState } from '@/old';
@@ -32,6 +32,9 @@ export function useBoardGroups(work: ReturnType<typeof useWorkItems>,
     const empty = computed(() => {
         if (groups.value.some(g => !g.fold || g.key === 'review')) {
             return null;
+        }
+        if (hooks.milestoneHolding?.()) {
+            return { cls: groups.value.length ? 'd-empty' : 'welcome', text: 'Loading the milestone…' };
         }
         const mr = forgeWords(oldState.value.sessions.filter(inView).find(s => s.forge)?.forge?.name).mr;
 

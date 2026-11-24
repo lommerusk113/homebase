@@ -6,6 +6,7 @@ import { oldState } from '@/old';
 
 const FETCH_MS = 30_000; // the server caches the forge calls; this only bounds how stale the pill gets
 const POLL_MS = 3000;
+const HOLD_MS = 5000; // how long the board waits for the stored milestone's issues before showing every row
 const LOADING_MS = 1000; // while the server is still loading the issues, or refreshing stale ones
 
 // One per page: the Header island's pill and the Issues island are separate apps that show the same answer.
@@ -14,13 +15,14 @@ const data = shallowRef<Milestones | null>();
 /** The menu entry being switched to, until its answer is in: the old data stays, dimmed. */
 const busy = ref<string | null>(null);
 /** The milestone the board is filtered by, with the project it belongs to: never applied to another project's rows. */
-let picked: { project: string, id: number, title: string, issues: Set<number> | null } | null = null;
+let picked: { project: string, id: number, title: string, issues: Set<number> | null, hold?: boolean } | null = null;
 let stop = new AbortController();
 let fetchNow = () => {};
 let started = false;
 
 const pickedHere = () => (picked?.project === state.project ? picked : null);
 hooks.inMilestone = x => inMilestone(x, pickedHere());
+hooks.milestoneHolding = () => !!pickedHere()?.hold;
 hooks.milestoneId = () => pickedHere()?.id ?? null;
 
 // Polls /api/milestones for one project until signal aborts, which also cancels a fetch in flight: an answer for
@@ -33,6 +35,19 @@ function poll(project: string, signal: AbortSignal) {
     let asked: string | null = null; // the milestone that fetch was for
     let pending = false;
     let loading = false;
+
+    // A stored milestone id holds the rows of other milestones back until its issues are in (never past HOLD_MS).
+    const stored = Number(store.get(key));
+    if (stored > 0) {
+        picked = { project, id: stored, title: '', issues: null, hold: true };
+        const give = setTimeout(() => {
+            if (picked?.hold && picked.project === project) {
+                picked.hold = false;
+                renderBoard();
+            }
+        }, HOLD_MS);
+        signal.addEventListener('abort', () => clearTimeout(give));
+    }
 
     async function tick() {
 
@@ -60,7 +75,7 @@ function poll(project: string, signal: AbortSignal) {
                 data.value = body;
                 // "Assigned to me" is no milestone for the board; issues: the numbers of its issues, once loaded
                 const ms = body.selected, g = ms?.groups;
-                picked = ms && typeof ms.id === 'number' ? { project, id: ms.id, title: ms.title, issues: g ? new Set(Object.values(g).flat().map(i => i.iid)) : null } : null;
+                picked = ms && typeof ms.id === 'number' ? { project, id: ms.id, title: ms.title, issues: g ? new Set(Object.values(g).flat().map(i => i.iid)) : null, hold: !g && !!picked?.hold } : null;
                 renderBoard();
             }
         } catch {} finally {

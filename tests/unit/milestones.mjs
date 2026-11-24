@@ -77,6 +77,7 @@ assert.equal(inMilestone({ ...row(null, null), branch: '2263-links' }, { id: 7, 
 assert.equal(inMilestone({ ...row(null, null), worktreePath: '/w/5-fix' }, { id: 7, issues: new Set([5]) }), true);
 assert.equal(inMilestone({ ...row(null, null), title: 'Fix #2263 comments' }, { id: 7, issues: null }), true); // issues not loaded: unknown, stays
 assert.equal(inMilestone(row('u', null), null), true); // no milestone selected
+assert.equal(inMilestone({ ...row(null, null), branch: '2263-links' }, { id: 7, issues: null, hold: true }), false); // stored choice, issues not in yet: held back
 
 // A project without milestones to show gets a final answer, never loading: true.
 {

@@ -26,6 +26,7 @@ export default {
         // an inline SVG link: its <a> has a read-only target
         page.route = feedOf([
             { role: 'assistant', id: 'a1', at: at(1), text: 'svg-reply <svg><a href="https://example.com/"><text>svg-link</text></a></svg>' },
+            { role: 'user', text: 'next', at: at(1.5) },
             { role: 'assistant', id: 'a2', at: at(2), text: 'reply after the svg' }
         ]);
         await page.waitFor(`${texts}.includes('reply after the svg')`, { what: 'the feed with an SVG link' });
@@ -33,10 +34,11 @@ export default {
         // an item no renderer expects
         page.route = feedOf([
             { role: 'assistant', id: 'b1', at: at(3), text: { odd: 'shape' }, tldr: 7 },
+            { role: 'user', text: 'next', at: at(3.5) },
             { role: 'assistant', id: 'b2', at: at(4), text: 'reply after the odd one' }
         ]);
         await page.waitFor(`${texts}.includes('reply after the odd one')`, { what: 'the feed with an odd item' });
-        assert.equal(await page.ev(`document.querySelectorAll('#feed .bubble').length`), 2, 'the odd item keeps its place');
+        assert.equal(await page.ev(`document.querySelectorAll('#feed .bubble.assistant').length`), 2, 'the odd item keeps its place');
         assert.ok((await page.ev(texts)).includes('shape'), 'with its text');
     },
 
@@ -95,7 +97,7 @@ export default {
         assert.deepEqual([all[0], all[1] >= 5000, all[2]], [1500, true, 0], 'everything after the step');
         assert.ok(await page.ev(`!!document.querySelector('#feed tbody tr:last-child code')`), 'the late rows get the same file-path styling');
         // it stays shown over the next redraw
-        items.push({ role: 'assistant', id: 'next', at: new Date().toISOString(), text: 'a later reply' });
+        items.push({ role: 'user', text: 'go on', at: new Date().toISOString() }, { role: 'assistant', id: 'next', at: new Date().toISOString(), text: 'a later reply' });
         await page.waitFor(`document.getElementById('feed').textContent.includes('a later reply')`, { what: 'the redraw' });
         assert.equal((await page.ev(counts))[0], 1500, 'still all rows');
     },

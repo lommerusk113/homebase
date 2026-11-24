@@ -1,7 +1,7 @@
 // Work-item rules (pure): one item per MR or loose agent, its column, lifecycle stage, next step, row action, gate badge and milestone.
 import { PR_URL } from './entries.mjs';
 import { USAGE_KEYS, IDLE_CUTOFF_MS, formatDuration, formatTokens } from './usage.mjs';
-import { mentionsMr, mrRef, forgeWords } from './forge.mjs';
+import { mentionsMr, namesMr, mrRef, forgeWords } from './forge.mjs';
 import { canned } from '../web/src/lib/canned.ts';
 
 const RECENT_DONE_MS = 2 * 3600_000;
@@ -289,7 +289,7 @@ const leadRefs = text => [PR_URL, /(?<![\w&!#])!\d+/, /(?<![\w&!#])#\d+/].map(re
 // call that started it (`spawnedFor`) names it anywhere, as "merge !1784 and !1785" does both.
 export function worksOnMr(agent, url, prState) {
 
-    if (new RegExp(`(?<![\\w&!#])${mrRef(url)}(?!\\d)`).test(agent.description ?? '')) {
+    if (namesMr(agent.description, url)) {
         return true;
     }
     if (agent.status === 'done') {

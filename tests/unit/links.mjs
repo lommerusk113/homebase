@@ -50,6 +50,9 @@ import { workItems, issueOf, mentionsMr, turnPrompts, spawnPrompts, worksOnMr, r
     const ghPr = 'https://github.com/o/r/pull/12';
     assert.deepEqual(['Address comments on #12', 'Address comments on #123', 'Address comments on !12'].map(d => worksOnMr(ag({ status: 'done', description: d }), ghPr, null)), [true, false, false]);
     assert.equal(worksOnMr(ag({ status: 'done', description: 'Rebase !1785' }), url, pr), true);
+    // a helper titled "MR 1785 review fixes" (the main chat's name for it) works on the MR, so the row stays in Doing while it runs
+    assert.deepEqual(['MR 1785 review fixes', 'PR 1785 review fixes', 'MR 17850 review fixes', 'XMR 1785 fixes'].map(d => worksOnMr(ag({ description: d, branches: [] }), url, pr)), [true, true, false, false]);
+    assert.equal(one({ ...master([]), agents: [ag({ description: 'MR 1785 review fixes', branches: [], sessionId: 'm' })] }).column, 'doing');
     assert.equal(worksOnMr(ag({ prompt: 'Implement GitLab issue #2219 in pracsys' }), url, pr), true);
     assert.equal(worksOnMr(ag({ prompt: `Fix the comments on ${url}` }), url, pr), true);
     assert.equal(worksOnMr(ag({ prompt: 'Fix the comments on !1785' }), url, pr), true);
@@ -59,6 +62,9 @@ import { workItems, issueOf, mentionsMr, turnPrompts, spawnPrompts, worksOnMr, r
     assert.equal(worksOnMr(ag({ prompt: 'Simulate an accountant. Known bugs: #2217, #2218, #2219, #2220.' }), url, pr), false);
     assert.equal(worksOnMr(ag({ status: 'done', prompt: 'Implement #2219' }), url, pr), false);
     assert.equal(worksOnMr(ag({ status: 'done', description: 'Rebase !1785' }), url, pr), true);
+    // a helper titled "MR 1785 review fixes" (the main chat's name for it) works on the MR, so the row stays in Doing while it runs
+    assert.deepEqual(['MR 1785 review fixes', 'PR 1785 review fixes', 'MR 17850 review fixes', 'XMR 1785 fixes'].map(d => worksOnMr(ag({ description: d, branches: [] }), url, pr)), [true, true, false, false]);
+    assert.equal(one({ ...master([]), agents: [ag({ description: 'MR 1785 review fixes', branches: [], sessionId: 'm' })] }).column, 'doing');
     // a running linked agent takes over from requested: its stage line, no button
     const linked = one(master(turnPrompts([td('11:00'), ask, tool('12:05')], 1_000), [ag({ description: 'Fix #2219 review' })]));
     assert.deepEqual([linked.column, linked.next, linked.action, linked.requested, linked.agentStatus], ['doing', 'Fix #2219 review is implementing…', null, null, 'running']);

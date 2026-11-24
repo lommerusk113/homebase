@@ -1,0 +1,197 @@
+// Work helpers as their own chats: `homebase helper start` (bin/homebase.mjs) asks the server to start a separate Claude in
+// its own cc-<id8> tmux and, by default, its own worktree on helper/<slug> from the parent chat's HEAD. The registry
+// (`helpers` in tmux.mjs, so a resume keeps the rule and model) is kept in helpers.json in the Homebase dir.
+import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
+import { writeFile, rename, mkdir } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { randomUUID, randomBytes } from 'node:crypto';
+import { join } from 'node:path';
+import { keepAside } from './account.mjs';
+import { slug } from './items.mjs';
+import { tmux, tmuxName, claudeLine, loginShell, quoted, helpers, withLock, MAX_SEND, RULES_FILE } from './tmux.mjs';
+import { trustNewProject } from './startup.mjs';
+import { splitTldr } from './summaries.mjs';
+
+const run = promisify(execFile);
+const gitRun = (args) => run('git', args, { timeout: 30_000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+export const PER_PARENT = 4, TOTAL = 8;
+const MAX = 500;
+const ID = /^[0-9a-f-]{36}$/;
+const REF = /^(?!-)[\w./~^@-]{1,100}$/; // a branch or base ref: no leading dash, so never a git option
+const MODEL = /^[\w.-]{1,40}$/;
+const TITLE = /^[^\x00-\x1f\x7f]{1,80}$/;
+
+const bad = (status, message, extra) => Object.assign(new Error(message), { status }, extra);
+export const running = () => [...helpers.values()].filter(h => !h.closedAt);
+
+// At server start: what was saved, or nothing when the file is missing or broken (a broken one is set aside).
+export function loadHelpers(dir) {
+
+    let saved;
+    try {
+        saved = JSON.parse(readFileSync(join(dir, 'helpers.json'), 'utf8'));
+    } catch (e) {
+        if (e.code !== 'ENOENT') {
+            keepAside(join(dir, 'helpers.json'), e.message, 'helpers lose their registry');
+        }
+    }
+    helpers.clear();
+    for (const h of Array.isArray(saved) ? saved.slice(-MAX) : []) {
+        if (ID.test(h?.id ?? '') && ID.test(h.parent ?? '') && typeof h.cwd === 'string' && MODEL.test(h.model ?? '')) {
+            helpers.set(h.id, h);
+        }
+    }
+}
+
+async function save(dir) {
+
+    const file = join(dir, 'helpers.json'), tmp = `${file}.tmp`;
+    await mkdir(dir, { recursive: true });
+    await writeFile(tmp, JSON.stringify([...helpers.values()].slice(-MAX)), { mode: 0o600 });
+    await rename(tmp, file);
+}
+
+// The chat a caller's tmux belongs to: refused outside Homebase's chats and from a helper, so helpers don't start helpers.
+export function parentOf(list, name) {
+
+    const s = list.find(x => x.tmux === name);
+    if (!s) {
+        throw bad(403, 'run this from a chat Homebase started (its tmux is not one of them)');
+    }
+    if (helpers.has(s.id)) {
+        throw bad(403, 'a helper does not start helpers');
+    }
+
+    return s;
+}
+
+// A helper by its id, the start of its id (8+), or its slug.
+export function findHelper(ref) {
+
+    const r = String(ref ?? '');
+    const h = helpers.get(r) ?? (r.length >= 8 && [...helpers.values()].find(x => x.id.startsWith(r))) ?? [...helpers.values()].find(x => x.slug === r);
+    if (!h) {
+        throw bad(404, `no helper ${r}`);
+    }
+
+    return h;
+}
+
+// Starts a helper for parent session { id, cwd, project } with `brief` as its first message. Over the limits: 429 with the running list.
+export async function startHelper(dir, parent, { brief, title, model = 'sonnet', base = null, branch = null, worktree = true },
+                                  { tm = tmux, git = gitRun, now = Date.now(), newId = randomUUID, trust = trustNewProject, hex = () => randomBytes(2).toString('hex') } = {}) {
+
+    const text = String(brief ?? '').trim();
+    if (!text || text.length > MAX_SEND) {
+        throw bad(400, 'the brief (stdin) is empty or too long');
+    }
+    if (!TITLE.test(title ?? '') || !MODEL.test(model) || (base && !REF.test(base)) || (branch && !REF.test(branch))) {
+        throw bad(400, 'bad title, model, base or branch');
+    }
+
+    // one start at a time, so two can't both pass the limits
+    return withLock('helpers:start', async () => {
+
+        const mine = running().filter(h => h.parent === parent.id);
+        if (mine.length >= PER_PARENT || running().length >= TOTAL) {
+            const error = `limit reached (${PER_PARENT} per chat, ${TOTAL} in all): stop a helper first`;
+            throw bad(429, error, { body: { error, running: running().map(({ id, parent, title, branch }) => ({ id, parent, title, branch })) } });
+        }
+
+        const id = newId();
+        const s = `${slug(title).slice(0, 40).replace(/-$/, '') || 'helper'}-${hex()}`;
+        let cwd = parent.cwd, top = null, br = null, from = null;
+        if (worktree) {
+            top = (await git(['-C', parent.cwd, 'rev-parse', '--show-toplevel'])).stdout.trim();
+            from = base ?? (await git(['-C', parent.cwd, 'rev-parse', 'HEAD'])).stdout.trim();
+            br = branch ?? `helper/${s}`;
+            cwd = join(top, '.claude', 'worktrees', s);
+            await git(['-C', parent.cwd, 'worktree', 'add', '-b', br, cwd, from]).catch(e => {
+                throw bad(409, `git worktree add: ${(e.stderr || e.message).trim().split('\n')[0]}`);
+            });
+        }
+
+        const name = tmuxName(id);
+        // --session-id names the chat up front (cc-<id8> is known before its transcript exists); -n is the row title; the brief is the first message
+        try {
+            await tm(['new-session', '-d', '-s', name, '-c', cwd, loginShell(), '-lic',
+                claudeLine(` --model ${quoted(model)} -n ${quoted(title)} --session-id ${id} -- ${quoted(text)}`, RULES_FILE, { helper: true })]);
+        } catch (e) {
+            if (worktree) { // the fresh, empty worktree and branch go again
+                await git(['-C', top, 'worktree', 'remove', cwd]).then(() => git(['-C', top, 'branch', '-d', br])).catch(() => {});
+            }
+            throw e;
+        }
+        const h = { id, parent: parent.id, project: parent.project ?? null, top, cwd, branch: br, base: from, slug: s, title, model, at: now, closedAt: null };
+        helpers.set(id, h);
+        await save(dir);
+        if (worktree) {
+            trust(name, cwd).catch(() => {}); // the new worktree's trust dialog; never throws, anything else shows in the chat
+        }
+
+        return h;
+    });
+}
+
+// Closes a helper: its tmux (=cc-<id8>, only a registered helper's), its worktree without --force (changes keep it), and its
+// branch only when merged (git branch -d). The transcript and the registry entry stay.
+export async function closeHelper(dir, ref, { keepWorktree = false } = {}, { tm = tmux, git = gitRun, now = Date.now() } = {}) {
+
+    const h = findHelper(ref);
+    const out = { id: h.id, worktree: null, branch: null };
+    await tm(['kill-session', '-t', `=${tmuxName(h.id)}`]).catch(() => {}); // already gone: claude exited
+
+    if (h.branch && !keepWorktree) {
+        try {
+            await git(['-C', h.top, 'worktree', 'remove', h.cwd]);
+            out.worktree = 'removed';
+        } catch (e) {
+            out.worktree = `kept: ${(e.stderr || e.message).trim().split('\n')[0]}`;
+        }
+        try {
+            await git(['-C', h.top, 'branch', '-d', h.branch]);
+            out.branch = 'deleted';
+        } catch {
+            out.branch = 'kept: not merged';
+        }
+    } else if (h.branch) {
+        out.worktree = 'kept';
+        out.branch = 'kept';
+    }
+
+    h.closedAt ??= now;
+    h.kept = out.worktree?.startsWith('kept') ? out.worktree : null;
+    await save(dir);
+
+    return out;
+}
+
+// What `homebase helper read/list/wait` show: the entry plus its chat's state. live: the names of running tmux sessions.
+// done: its turn ended (or it closed or exited) and it neither asks nor waits on the user, so a `wait` on it returns.
+export function helperView(h, list, live) {
+
+    const s = list.find(x => x.id === h.id);
+    const status = h.closedAt ? 'closed' : !live.has(tmuxName(h.id)) ? 'exited' : !s ? 'starting'
+        : s.asking ? 'asking' : s.needsYou ? 'needs you' : s.status;
+
+    return {
+        ...h, status, done: ['closed', 'exited', 'idle', 'waiting'].includes(status),
+        topic: s?.topic ?? null, now: s?.now ?? null, step: s?.step ?? null, question: s?.question ?? null,
+        tldr: splitTldr(s?.lastReply ?? '').tldr, reply: s?.lastReply ?? null, lastActivity: s?.lastActivity ?? null
+    };
+}
+
+// Commits on the helper's branch since its base, for `list`; null without a worktree or once closed.
+export const ahead = (h, git = gitRun) => (h.branch && !h.closedAt
+    ? git(['-C', h.cwd, 'rev-list', '--count', `${h.base}..HEAD`]).then(r => Number(r.stdout.trim()), () => null)
+    : Promise.resolve(null));
+
+// The server's API token in <dir>/token (0600, through a temp file so it is never readable by others), for bin/homebase.mjs.
+export function writeToken(dir, token) {
+
+    const file = join(dir, 'token'), tmp = `${file}.${process.pid}.tmp`;
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    writeFileSync(tmp, token, { mode: 0o600 });
+    renameSync(tmp, file);
+}

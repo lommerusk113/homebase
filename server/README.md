@@ -19,6 +19,7 @@
 | `log.mjs` | Activity log (☰ → Activity log…): finished subagents, git commits, chat topics and closed MRs of a project's last 7 days, `log()` for `/api/log` |
 | `limits.mjs` | Rate limits from the status-line dumps |
 | `reviewer.mjs` | Review chats: POST `/api/reviewer?key=` starts a read-only reviewer Claude (own `cc-<id8>` tmux, fixed prompt) in an in-review row's checkout; `/api/reviewer/sent` marks its findings sent; `reviewers.json` in the Homebase dir maps row key to chat (the button states: `reviewAction` in `items.mjs`) |
+| `helpers.mjs` | Work helpers as their own chats, driven by `bin/homebase.mjs helper start/read/list/stop` from inside a chat's tmux: `/api/helpers` (POST `start` with the brief as body, GET list and `/<id>`, POST `stop`), `startHelper` (worktree `helper/<slug>` from the parent's HEAD, own `cc-<id8>` tmux, `HELPER_RULE`, 4 per parent and 8 in all), `closeHelper` (kills only its tmux, `git worktree remove` without `--force`, `git branch -d`), `helpers.json` and the owner-only `token` file in the Homebase dir |
 | `saver.mjs` | Token saver: GET/POST `/api/saver`, `token-saver.md` in the Homebase dir (the setting, and the rule a stale chat re-reads); `claudeLine` adds its rule so helpers run on Sonnet |
 | `checks.mjs` | Checks before done: GET/POST `/api/checks?project=` (`{commands: [...]}` in `checks.json` in the Homebase dir; set with `curl -X POST -H 'x-codetool: 1' -H 'x-homebase-token: <token>' -d '{"commands":["npm test"]}' 'localhost:<port>/api/checks?project=<repo>'`), the Stop hook logic behind `hooks/checks.mjs` (runs only when the git state changed since the last pass, blocks up to 3 identical failures), `--settings` file for `claudeLine`, per-session `checks/<id>.json` for the row's chip |
 | `tmux.mjs` | tmux plumbing: socket override, session names, `/clear` aliases, keystroke steps |
@@ -55,5 +56,6 @@ Imports only go one way, with no cycles:
 `gitpush` → sessions (and `sessions` → `gitpush`, for `pushBlocked`).
 `newproject` → entries, tmux, startup, sessions.
 `startup` → tmux, summaries.
+`helpers` → account, items, tmux, startup, summaries.
 
 Module state (caches, maps) lives in exactly one module and is imported, never copied.

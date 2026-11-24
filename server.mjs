@@ -13,7 +13,7 @@ import { milestones, warmMilestones } from './server/milestones.mjs';
 import { reviewRequests } from './server/reviews.mjs';
 import { limits } from './server/limits.mjs';
 import { log } from './server/log.mjs';
-import { MAX_SEND, withLock } from './server/tmux.mjs';
+import { MAX_SEND, withLock, liveTmux, helpers } from './server/tmux.mjs';
 import { startIssue } from './server/start.mjs';
 import { createProject, cloneProject, openProject, githubProjects, localProjects, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion, confirmModelSwitch } from './server/startup.mjs';
@@ -30,6 +30,8 @@ import { readChecks, saveChecks } from './server/checks.mjs';
 import { loadHandled, markHandled } from './server/handled.mjs';
 import { loadDismissed, dismiss } from './server/dismissed.mjs';
 import { loadReviewers, startReviewer, markFindingsSent } from './server/reviewer.mjs';
+import { loadHelpers, startHelper, closeHelper, parentOf, findHelper, helperView, ahead, writeToken } from './server/helpers.mjs';
+
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 import { diff } from './server/diff.mjs';
@@ -122,6 +124,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     loadHandled(DATA_DIR);
     loadDismissed(DATA_DIR);
     loadReviewers(DATA_DIR);
+    loadHelpers(DATA_DIR);
+    writeToken(DATA_DIR, TOKEN); // for bin/homebase.mjs, owner-only
     warmMilestones();
     const sentRows = new Map(); // rowKey -> { at, kind }: the row buttons' double-send guard (server/once.mjs)
     const kindOf = async key => (await polledSessions()).flatMap(s => s.items ?? []).find(i => i.key === key)?.state?.kind;
@@ -232,6 +236,34 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 const list = await polledSessions();
                 watchSessions(DATA_DIR, list).catch(e => console.error(`push: ${e.message}`));
                 return json(list);
+            }
+            // Work helpers (server/helpers.mjs), driven by bin/homebase.mjs from inside a chat's tmux; parent= is that tmux's name
+            if (url.pathname.startsWith('/api/helpers')) {
+                const q = url.searchParams, list = await polledSessions();
+                const live = new Set((await liveTmux()).map(t => t.name));
+                if (isPost('/api/helpers/start')) {
+                    if (remote) {
+                        return deny(403, 'start helpers from the Mac');
+                    }
+                    const parent = parentOf(list, q.get('parent'));
+                    const h = await startHelper(DATA_DIR, parent, { brief: await readBody(req, MAX_SEND), title: q.get('title'), model: q.get('model') ?? undefined, base: q.get('base'), branch: q.get('branch'), worktree: !q.has('no-worktree') });
+                    polledSessions.stale();
+                    return json(h);
+                }
+                if (isPost('/api/helpers/stop')) {
+                    const out = await closeHelper(DATA_DIR, q.get('id'), { keepWorktree: q.has('keep-worktree') });
+                    polledSessions.stale();
+                    return json(out);
+                }
+                if (url.pathname === '/api/helpers' && req.method === 'GET') {
+                    const parent = q.has('all') ? null : parentOf(list, q.get('parent'));
+                    const mine = [...helpers.values()].filter(h => parent ? h.parent === parent.id && !h.closedAt : true);
+                    return json(await Promise.all(mine.map(async h => ({ ...helperView(h, list, live), ahead: await ahead(h) }))));
+                }
+                const one = url.pathname.match(/^\/api\/helpers\/([\w-]{1,64})$/);
+                if (one && req.method === 'GET') {
+                    return json(helperView(findHelper(one[1]), list, live));
+                }
             }
             // The board's projects, shared by the Mac and its paired devices
             if (url.pathname === '/api/tracked' && req.method === 'GET') {

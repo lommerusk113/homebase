@@ -25,12 +25,21 @@ export const quoted = t => `'${t.replace(/'/g, `'\\''`)}'`;
 // saver: Token saver on adds its one rule as text (the file flag takes only the rules file)
 // manual: a manual-mode chat adds its rule the same way
 // checks: --settings is Homebase's own file with the Stop hook that runs the project's checks (server/checks.mjs), never ~/.claude/settings.json
-export const claudeLine = (extra = '', rules = RULES_FILE, { saver = saverOn(), manual = false, checks = settingsFlag() } = {}) => `claude${existsSync(rules) ? ` --append-system-prompt-file ${quoted(rules)}` : ''}${saver ? ` --append-system-prompt ${quoted(SAVER_RULE)}` : ''}${manual ? ` --append-system-prompt ${quoted(MANUAL_RULE)}` : ''}${checks}${extra}`;
+// helper: a work helper Homebase started in its own tmux (server/helpers.mjs) adds HELPER_RULE the same way
+export const claudeLine = (extra = '', rules = RULES_FILE, { saver = saverOn(), manual = false, helper = false, checks = settingsFlag() } = {}) => `claude${existsSync(rules) ? ` --append-system-prompt-file ${quoted(rules)}` : ''}${saver ? ` --append-system-prompt ${quoted(SAVER_RULE)}` : ''}${manual ? ` --append-system-prompt ${quoted(MANUAL_RULE)}` : ''}${helper ? ` --append-system-prompt ${quoted(HELPER_RULE)}` : ''}${checks}${extra}`;
+
+export const HELPER_RULE = 'You are a work helper the main chat started in your own chat. Start no helpers or subagents of your own. Commit on your branch; do not push, merge or restart anything. End with a final report of at most 10 lines whose last line is a TLDR. The user may step in and talk to you directly.';
+// The helper registry (server/helpers.mjs loads and saves it): session id -> { id, parent, model, ... }. Here so a resume keeps the rule and model.
+export const helpers = new Map();
 
 // Your $SHELL; without one the first of zsh, bash and sh that exists (a Linux box may have no zsh)
 export const loginShell = (shell = process.env.SHELL, exists = existsSync) => shell || ['/bin/zsh', '/bin/bash'].find(p => exists(p)) || '/bin/sh';
 // ponytail: login+interactive shell (zsh and bash both take -lic) so PATH matches your terminal; id is validated, cwd is passed as its own arg
-const claudeCmd = id => [loginShell(), '-lic', claudeLine(` --resume ${id}`, RULES_FILE, { manual: isManual(id) })];
+const claudeCmd = id => {
+    const h = helpers.get(id);
+
+    return [loginShell(), '-lic', claudeLine(`${h ? ` --model ${quoted(h.model)}` : ''} --resume ${id}`, RULES_FILE, { manual: isManual(id), helper: !!h })];
+};
 
 // tmux keeps Claude running between messages; `tmux attach -t cc-<id8>` reaches it from any terminal.
 export const tmuxName = id => `cc-${id.slice(0, 8)}`;

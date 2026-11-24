@@ -10,6 +10,7 @@
     "start": "node server.mjs",
     "demo": "node server.mjs --demo",
     "test": "node test.mjs",
+    "ship": "bash scripts/ship.sh",
     "doctor": "node server.mjs --doctor",
     "setup": "node server.mjs --setup",
     "unsetup": "node server.mjs --unsetup"

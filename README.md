@@ -188,6 +188,7 @@ npm run doctor
 ```
 
 A running server notices the new code: the page header offers "Reload server". Otherwise restart `npm start`.
+Maintainers: `npm run ship [-- --no-browser]` on a clean `main` runs the unit, type and browser checks, pushes to origin and reloads the running server (honours `PORT`).
 Run `npm run setup` again when doctor reports something missing. Your own `homebase-rules.local.md` and the Homebase dir are not touched by a pull.
 
 ## Uninstall

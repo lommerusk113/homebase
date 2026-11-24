@@ -118,6 +118,7 @@ console.log('ok helper parent');
     const h = await startHelper(dir, parent, { brief: 'x', title: 'Fix it' }, opts);
     tmuxCalls.length = gitCalls.length = 0;
     assert.deepEqual(await closeHelper(dir, h.id, {}, { ...opts, now: now + 5 }), { id: h.id, worktree: 'removed', branch: 'deleted' });
+    assert.equal(findHelper(h.id).closedReason, 'closed on request');
     assert.deepEqual(tmuxCalls, [['kill-session', '-t', '=cc-00000001']]);
     assert.deepEqual(gitCalls, [['-C', '/x/alpha', 'worktree', 'remove', h.cwd], ['-C', '/x/alpha', 'branch', '-d', 'helper/fix-it-beef']]);
     assert.equal(helpers.get(h.id).closedAt, now + 5);

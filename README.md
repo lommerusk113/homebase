@@ -25,7 +25,7 @@ Ctrl+C stops it and removes the temp folder.
 
 ## What you get
 
-* **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested", "Doing", "In review" and "Ready to merge", and the Issues tab shows the milestone's issues. A milestone picked in the header limits the board to its issues; a chat waiting on you, and a main chat's own row, is shown whatever the milestone. Merge requests and pull requests come from `glab` and `gh`. A row with no MR or PR to act on (a helper that stopped or finished) has a Dismiss button, which puts it away on every device until that helper works again.
+* **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested" (each row has a Review button that starts a chat reviewing the MR read-only), "Doing", "In review" and "Ready to merge", and the Issues tab shows the milestone's issues. A milestone picked in the header limits the board to its issues; a chat waiting on you, and a main chat's own row, is shown whatever the milestone. Merge requests and pull requests come from `glab` and `gh`. A row with no MR or PR to act on (a helper that stopped or finished) has a Dismiss button, which puts it away on every device until that helper works again.
 * **Helpers as rows.** A chat starts helpers with `homebase helper start`; each is its own Claude in its own tmux and worktree, and shows as a row under the chat that started it. Open chat steps into it and what you type goes straight to it; Stop closes it. See "Helper in its own chat" below.
 * **A chat view.** The transcript of one session, with each reply collapsed to its `TLDR:` line; "Show more" opens the full reply.
 

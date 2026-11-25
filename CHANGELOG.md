@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A "Review requested" row has a Review button that starts a new chat in that MR's project, reading the MR with `glab` and reviewing it read-only (no push, comment or approval), and opens it.
 * A message sent while Claude's input box still holds text (a prompt Claude put back after an Esc before it answered) is no longer glued onto that text and sent as one; Homebase erases what it typed and says what is in the box, to send or clear in the terminal.
 * A main chat that cd'd into an issue worktree stays the main chat and is never filed under that issue's milestone; "Start a fresh conversation" and "Restart chat" start Claude in the folder the chat was started in, not the worktree.
 * A helper started from a chat that has cd'd into a linked worktree now runs in the project's main checkout (and new worktrees are made under it, still branching from the chat's own HEAD), so its row is no longer filed under that worktree's issue milestone.

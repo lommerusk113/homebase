@@ -83,4 +83,14 @@ import { join } from 'node:path';
     assert.equal(cannedLabel(startPrompt(9, [], true)), 'Start #9');
     assert.deepEqual(canned('plan'), { label: 'Plan it', message: "/grill-me Let's make the plan for this issue together." });
     assert.equal(cannedLabel(canned('plan').message), 'Plan it');
+
+    // review button: only an MR on the review list starts, in the project's checkout
+    const { startReview, reviewPrompt } = await import('../../server.mjs');
+    const rr = { url: 'https://gitlab.com/acme/alpha/-/merge_requests/9', iid: 9, project: 'acme/alpha' };
+    const rbase = { requests: () => [rr], repos: new Map([['alpha', {}]]), dirOf: async () => '/tmp', tmux: async () => { throw new Error('no tmux'); } };
+    const none = await startReview({ url: 'https://evil.example/x' }, rbase).catch(x => x);
+    assert.equal(none.status, 404);
+    const noTmux = await startReview({ url: rr.url }, rbase).catch(x => x);
+    assert.match(noTmux.message, /Starting Claude/, 'a listed MR gets as far as starting the chat');
+    assert.match(reviewPrompt(rr), /!9 of acme\/alpha .*do not push, comment/);
 }

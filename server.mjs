@@ -14,7 +14,7 @@ import { reviewRequests } from './server/reviews.mjs';
 import { limits } from './server/limits.mjs';
 import { log } from './server/log.mjs';
 import { MAX_SEND, withLock, liveTmux, helpers } from './server/tmux.mjs';
-import { startIssue } from './server/start.mjs';
+import { startIssue, startReview } from './server/start.mjs';
 import { createProject, cloneProject, openProject, githubProjects, localProjects, publicConfig } from './server/newproject.mjs';
 import { startupDialog, answerStartup, paneQuestion, answerQuestion, cancelQuestion, confirmModelSwitch } from './server/startup.mjs';
 import { send, runningTwice, keepModelSetting, sendToNew, interrupt, clearChat, compactChat, restartChat, settleCommand } from './server/control.mjs';
@@ -60,7 +60,7 @@ export { refuseIfBusy, restartChat, promptUp, send, runningTwice, interrupt } fr
 export { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
 export { remoteFrom, setupPairing, newCode, pair, deviceOf, cookieOf, deviceCookie, pairedDevices, revoke, isRemote, loginOk, isPairedRequest, pairPage, CODE_TTL_MS, MAX_FAILS, FAIL_WINDOW_MS } from './server/pairing.mjs';
 export { validName, mergeConfig, loadConfig, createProject, cloneProject, openProject, allowedDir, githubProjects, localProjects, DEFAULTS as NEW_PROJECT_DEFAULTS } from './server/newproject.mjs';
-export { validateStart, branchSlug, takenBy, startPrompt, startIssue, prepareWorktree, targetOf } from './server/start.mjs';
+export { validateStart, branchSlug, takenBy, startPrompt, startIssue, startReview, reviewPrompt, prepareWorktree, targetOf } from './server/start.mjs';
 export { vendorPath } from './server/static.mjs';
 export { accountOf, readToken, ghRun, scrub } from './server/account.mjs';
 export { saveUpload, readUpload, UPLOAD_MAX, UPLOAD_NAME } from './server/uploads.mjs';
@@ -510,6 +510,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     return deny(400, 'expected a JSON body');
                 }
                 return json(await startIssue(input));
+            }
+            if (isPost('/api/reviews/start')) {
+                let input;
+                try {
+                    input = JSON.parse(await readBody(req, 1024));
+                } catch {
+                    return deny(400, 'expected a JSON body');
+                }
+                return json(await startReview(input));
             }
             if (url.pathname === '/api/projects/github') {
                 return json(await githubProjects());

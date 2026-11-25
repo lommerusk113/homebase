@@ -6,15 +6,18 @@ import { ReviewsKey, useInjected } from '@/keys';
 import CiPill from '@/components/CiPill.vue';
 
 const props = defineProps<{ url: string }>();
-const { byUrl, open } = useInjected(ReviewsKey);
+const { byUrl, open, review, starting } = useInjected(ReviewsKey);
 const r = toRef(() => byUrl.value.get(props.url)!);
 </script>
 
 <template>
     <tr class="rv" :data-key="`review:${url}`" :data-url="url" role="link" tabindex="0" @click="open(r)">
-        <td class="what" colspan="6">
+        <td class="what" colspan="5">
             <b>{{ r.title }}</b>
             <small class="next"><span class="chip mono">!{{ r.iid }}</span>{{ ` ${r.project} · ${r.author}${r.draft ? ' · draft' : ''} · ${ago(r.updatedAt)}` }}<template v-if="r.pipeline?.status">{{ ' ' }}<CiPill :pipeline="r.pipeline" /></template></small>
+        </td>
+        <td class="act">
+            <wa-button class="review-btn" size="s" appearance="outlined" :disabled="starting.has(url) || undefined" title="Start a chat that reviews this MR, read-only" @click.stop="review(r)">{{ starting.has(url) ? 'Starting…' : 'Review' }}</wa-button>
         </td>
     </tr>
 </template>

@@ -373,6 +373,9 @@ export async function trustNewProject(name, dir, { tm = tmux, nap = sleep, waitM
 
             return true;
         }
+        if (/^[│\s]*[❯>]/m.test(pane) && !dialog) {
+            return false; // Claude's prompt is up with no trust dialog: the folder is trusted already, nothing to wait for
+        }
         await nap(500);
     }
 

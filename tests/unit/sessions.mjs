@@ -141,6 +141,10 @@ import { liveSessions, closedSession, transcript } from '../../server/transcript
     const none = [];
     assert.equal(await trustNewProject('cc-new-league', '/base/league', { tm: async a => (none.push(a), { stdout: 'loading' }), nap: async () => {}, waitMs: 1000 }), false);
     assert.ok(none.every(a => a[0] === 'capture-pane'), 'no dialog: nothing is sent');
+    // an already trusted folder shows Claude's prompt with no dialog: it must not wait out waitMs (the route answers within the client's 15 s)
+    let naps = 0;
+    assert.equal(await trustNewProject('cc-new-x', '/base/league', { tm: async () => ({ stdout: '❯ Try "write a test"\n⏵⏵ auto mode on' }), nap: async () => { naps++; }, waitMs: 60_000 }), false);
+    assert.equal(naps, 0, 'prompt up, no dialog: returns at once');
     const { refuseIfTrustDialog } = await import('../../server/startup.mjs');
     assert.equal((await refuseIfTrustDialog('cc-new-league', { tm: async () => ({ stdout: trust(0) }) }).catch(e => e)).status, 409, 'send refused while trust dialog is up');
     assert.equal(await refuseIfTrustDialog('cc-new-league', { tm: async () => ({ stdout: '❯ pick\nEnter to select' }) }), undefined, 'other dialogs (questions) still take sends');

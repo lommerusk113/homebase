@@ -92,5 +92,21 @@ import { join } from 'node:path';
     assert.equal(none.status, 404);
     const noTmux = await startReview({ url: rr.url }, rbase).catch(x => x);
     assert.match(noTmux.message, /Starting Claude/, 'a listed MR gets as far as starting the chat');
+    // a session left by an earlier (timed-out) start is the chat: opened, never killed, and given the prompt if it never got it
+    const typed = [];
+    const left = pane => async a => {
+        if (a[0] === 'new-session') { throw new Error('Command failed: tmux new-session\nduplicate session: cc-new-alpha-review-9'); }
+        if (a[0] === 'display-message') { return { stdout: '/tmp\n' }; }
+        if (a[0] === 'capture-pane') { return { stdout: pane }; }
+        typed.push(a);
+    };
+    const resume = tm => startReview({ url: rr.url }, { ...rbase, tmux: tm, nap: async () => {}, waitMs: 1000, known: async () => [{ id: 'old1', tmux: 'cc-new-alpha-review-9' }], transcripts: async () => [] });
+    const again = await resume(left('❯ \n'));
+    assert.deepEqual([again.sessionId, again.reused], ['old1', true]);
+    assert.ok(typed.some(a => a.includes('-l') || a.some(x => String(x).includes('Review MR !9'))), 'an empty leftover gets the prompt');
+    typed.length = 0;
+    await resume(left('❯ Review MR !9 of acme/alpha\n'));
+    assert.equal(typed.length, 0, 'a leftover that has the prompt is left alone');
+    assert.ok(!typed.some(a => a[0] === 'kill-session'));
     assert.match(reviewPrompt(rr), /!9 of acme\/alpha .*do not push, comment/);
 }

@@ -157,8 +157,10 @@ export async function startIssue(body, deps = {}) {
 
         const steps = [{ id: 'chat', label: 'Starting chat', state: 'pending' }];
         const name = `${project}-${iid}`.replace(/[^A-Za-z0-9._-]/g, '-');
-        const started = await startChat({ name, dir, steps, fail: failer(steps), tm, nap, transcripts, waitMs, trustMs, before: new Set(await transcripts(dir)), manual }, 0, `Starting Claude in ${dir} failed:`);
-        await typePrompt(started.tmux, startPrompt(iid, assignees, manual), manual, { tm, nap, waitMs });
+        const started = await startChat({ name, dir, steps, fail: failer(steps), tm, nap, transcripts, waitMs, trustMs, before: new Set(await transcripts(dir)), manual, known }, 0, `Starting Claude in ${dir} failed:`);
+        if (!started.reused) { // a leftover chat of an earlier start keeps what it has
+            await typePrompt(started.tmux, startPrompt(iid, assignees, manual), manual, { tm, nap, waitMs });
+        }
 
         return { ok: true, dir, tmux: started.tmux, sessionId: started.sessionId, reused, manual };
     } finally {
@@ -169,10 +171,10 @@ export async function startIssue(body, deps = {}) {
 /** The prompt of a review chat: read-only, so nothing leaves the machine. */
 export const reviewPrompt = r => `Review MR !${r.iid} of ${r.project} (${r.url}) using the review-gate or code-review skill. Read it with glab (mr view, mr diff), do not check it out. Read-only: do not push, comment, approve or edit anything. End with the findings.`;
 
-/** POST /api/reviews/start { url }: a new chat in the MR's project, in its main checkout, with the review prompt sent. -> { ok, dir, tmux, sessionId }. */
+/** POST /api/reviews/start { url }: a new chat in the MR's project, in its main checkout, with the review prompt sent. -> { ok, dir, tmux, sessionId, reused? }. */
 export async function startReview(body, deps = {}) {
 
-    const { requests = reviewRequests, repos = repoPaths, dirOf = repoDirOf, tmux: tm = tmux, nap = sleep, transcripts = listTranscripts, waitMs = 20_000, trustMs = 60_000 } = deps;
+    const { requests = reviewRequests, repos = repoPaths, dirOf = repoDirOf, tmux: tm = tmux, nap = sleep, transcripts = listTranscripts, waitMs = 20_000, trustMs = 60_000, known = sessions } = deps;
     // only an MR on the review list: the url is never used for anything else
     const r = typeof body?.url === 'string' ? requests().find(x => x.url === body.url) : null;
     if (!r) {
@@ -193,10 +195,13 @@ export async function startReview(body, deps = {}) {
         const dir = await dirOf(project);
         const steps = [{ id: 'chat', label: 'Starting chat', state: 'pending' }];
         const name = `${project}-review-${r.iid}`.replace(/[^A-Za-z0-9._-]/g, '-');
-        const started = await startChat({ name, dir, steps, fail: failer(steps), tm, nap, transcripts, waitMs, trustMs, before: new Set(await transcripts(dir)) }, 0, `Starting Claude in ${dir} failed:`);
-        await typePrompt(started.tmux, reviewPrompt(r), true, { tm, nap, waitMs });
+        const started = await startChat({ name, dir, steps, fail: failer(steps), tm, nap, transcripts, waitMs, trustMs, before: new Set(await transcripts(dir)), known }, 0, `Starting Claude in ${dir} failed:`);
+        // a leftover chat that already got the prompt is opened as it is; one that never did (its start timed out) gets it now
+        if (!started.reused || !(await capture(started.tmux, tm)).includes(`Review MR !${r.iid}`)) {
+            await typePrompt(started.tmux, reviewPrompt(r), true, { tm, nap, waitMs });
+        }
 
-        return { ok: true, dir, tmux: started.tmux, sessionId: started.sessionId };
+        return { ok: true, dir, tmux: started.tmux, sessionId: started.sessionId, reused: !!started.reused };
     } finally {
         inFlight.delete(key);
     }

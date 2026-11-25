@@ -64,14 +64,21 @@ async function cloneAndStart(c, i, made) {
 // The start-chat step: Claude in tmux cc-new-<name> in dir, then wait for its session id; step `i`, `what` heads its error.
 export async function startChat(c, i, what) {
 
-    const { name, dir, steps, fail, tm, nap, transcripts, waitMs, trustMs, before = new Set(), manual = false } = c; // before: an existing folder's older sessions
+    const { name, dir, steps, fail, tm, nap, transcripts, waitMs, trustMs, before = new Set(), manual = false, known = async () => [] } = c; // before: an existing folder's older sessions
 
     // the session id is only known once Claude has written its transcript
     const tmuxName = `cc-new-${name}`;
     try {
         await tm(['new-session', '-d', '-s', tmuxName, '-x', '200', '-y', '50', '-c', dir, 'zsh', '-lic', claudeLine('', undefined, { manual })]);
     } catch (e) {
-        throw fail(i, e, what);
+        // a session left by an earlier start (one that timed out, or a click made twice) in this same folder is the chat: use it, never kill it
+        const there = /duplicate session/.test(`${e?.message} ${e?.stderr}`) && await tm(['display-message', '-p', '-t', `=${tmuxName}:`, '#{pane_current_path}']).then(r => r?.stdout?.trim() === dir, () => false);
+        if (!there) {
+            throw fail(i, e, what);
+        }
+        steps[i].state = 'done';
+
+        return { ok: true, name, dir, tmux: tmuxName, sessionId: (await known()).find(s => s.tmux === tmuxName)?.id ?? null, steps, reused: true };
     }
     steps[i].state = 'done';
 

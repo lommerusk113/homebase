@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A helper started from a chat that has cd'd into a linked worktree now runs in the project's main checkout (and new worktrees are made under it, still branching from the chat's own HEAD), so its row is no longer filed under that worktree's issue milestone.
 * A helper saved without a branch keeps its worktree path, so the milestone filter places its row by its issue instead of showing it under every milestone after a restart.
 
 * A chat asking about an MR ("MR !1856 … force-push?") puts that MR's row in Needs you, also from a main chat checked out on another issue; a chat waiting on you is never hidden by the milestone filter

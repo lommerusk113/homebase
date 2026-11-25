@@ -6,7 +6,7 @@ import { writeFile, rename, mkdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { join } from 'node:path';
+import { join, basename, dirname } from 'node:path';
 import { keepAside } from './account.mjs';
 import { slug } from './items.mjs';
 import { tmux, tmuxName, claudeLine, loginShell, quoted, helpers, withLock, MAX_SEND, rulesFile } from './tmux.mjs';
@@ -85,6 +85,14 @@ export function findHelper(ref) {
     return h;
 }
 
+// The main checkout of the repo `cwd` is in: the parent of the common git dir. Null outside git or for a bare repo.
+async function mainCheckout(git, cwd) {
+
+    const common = await git(['-C', cwd, 'rev-parse', '--path-format=absolute', '--git-common-dir']).then(r => r.stdout.trim(), () => '');
+
+    return basename(common) === '.git' ? dirname(common) : null;
+}
+
 // Starts a helper for parent session { id, cwd, project } with `brief` as its first message. Over the limits: 429 with the running list.
 export async function startHelper(dir, parent, { brief, title, model = 'sonnet', base = null, branch = null, worktree = true },
                                   { tm = tmux, git = gitRun, now = Date.now(), newId = randomUUID, trust = trustNewProject, hex = () => randomBytes(2).toString('hex') } = {}) {
@@ -108,13 +116,15 @@ export async function startHelper(dir, parent, { brief, title, model = 'sonnet',
 
         const id = newId();
         const s = `${slug(title).slice(0, 40).replace(/-$/, '') || 'helper'}-${hex()}`;
-        let cwd = parent.cwd, top = null, br = null, from = null;
+        // the project's main checkout, so a chat that cd'd into a linked worktree doesn't pull its helpers (and their board row) into it
+        const main = await mainCheckout(git, parent.cwd);
+        let cwd = main ?? parent.cwd, top = null, br = null, from = null;
         if (worktree) {
-            top = (await git(['-C', parent.cwd, 'rev-parse', '--show-toplevel'])).stdout.trim();
+            top = main ?? (await git(['-C', parent.cwd, 'rev-parse', '--show-toplevel'])).stdout.trim();
             from = base ?? (await git(['-C', parent.cwd, 'rev-parse', 'HEAD'])).stdout.trim();
             br = branch ?? `helper/${s}`;
             cwd = join(top, '.claude', 'worktrees', s);
-            await git(['-C', parent.cwd, 'worktree', 'add', '-b', br, cwd, from]).catch(e => {
+            await git(['-C', top, 'worktree', 'add', '-b', br, cwd, from]).catch(e => {
                 throw bad(409, `git worktree add: ${(e.stderr || e.message).trim().split('\n')[0]}`);
             });
         }

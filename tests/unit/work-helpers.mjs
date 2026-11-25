@@ -23,7 +23,14 @@ const fakes = () => {
             tm: async args => { tmuxCalls.push(args); },
             git: async args => {
                 gitCalls.push(args);
-                return { stdout: args.includes('--show-toplevel') ? '/x/alpha\n' : args.includes('HEAD') ? 'abc123\n' : '' };
+                if (args.includes('--git-common-dir')) {
+                    const cwd = args[1];
+                    if (cwd === '/nogit') {
+                        throw Object.assign(new Error('not a git repository'), { stderr: 'fatal: not a git repository' });
+                    }
+                    return { stdout: cwd.startsWith('/x/beta') ? '/x/beta/.git\n' : '/x/alpha/.git\n' };
+                }
+                return { stdout: args.includes('HEAD') ? 'abc123\n' : '' };
             },
             now, newId: () => uuid(++n), trust: async () => false, hex: () => 'beef'
         }
@@ -48,7 +55,7 @@ const fakes = () => {
     assert.ok(!tmuxSession(P, '/x').at(-1).includes(HELPER_RULE), 'a plain chat gets no helper rule');
     // no worktree: the parent's cwd, no git; given model, base and branch are used
     await startHelper(dir, parent, { brief: 'Look', title: 'Read only', worktree: false, model: 'haiku' }, opts);
-    assert.equal(gitCalls.length, 3);
+    assert.equal(gitCalls.length, 4);
     assert.equal(tmuxCalls[1][5], '/x/alpha');
     await startHelper(dir, parent, { brief: 'x', title: 'T', base: 'origin/main', branch: 'feat/x' }, opts);
     assert.deepEqual(gitCalls.at(-1).slice(-3), ['feat/x', '/x/alpha/.claude/worktrees/t-beef', 'origin/main']);
@@ -64,6 +71,24 @@ const fakes = () => {
     assert.equal(findHelper('00000001').id, uuid(1));
     assert.equal(findHelper('add-paste-labels-beef').id, uuid(1));
     assert.throws(() => findHelper('nope'), { status: 404 });
+}
+
+// start from inside a linked worktree: main checkout
+{
+    const dir = mkdtempSync(join(tmpdir(), 'hb-help-'));
+    helpers.clear();
+    const { tmuxCalls, gitCalls, opts } = fakes();
+    // a parent that cd'd into a linked worktree: the helper's cwd and the new worktree come from the main checkout, the base from the parent chat's own HEAD
+    const stray = { ...parent, cwd: '/x/alpha/.claude/worktrees/2263-dimension-links-only' };
+    const plain = await startHelper(dir, stray, { brief: 'Look', title: 'From stray', worktree: false }, opts);
+    assert.equal(plain.cwd, '/x/alpha');
+    assert.equal(tmuxCalls.at(-1)[5], '/x/alpha');
+    await startHelper(dir, stray, { brief: 'x', title: 'Stray tree' }, opts);
+    assert.deepEqual(gitCalls.at(-1), ['-C', '/x/alpha', 'worktree', 'add', '-b', 'helper/stray-tree-beef', '/x/alpha/.claude/worktrees/stray-tree-beef', 'abc123']);
+    assert.ok(gitCalls.some(c => c[1] === stray.cwd && c.includes('HEAD')), 'HEAD read in the parent chat\'s folder');
+    // outside git: the parent's cwd as before
+    const nogit = await startHelper(dir, { ...parent, cwd: '/nogit' }, { brief: 'x', title: 'No git', worktree: false }, opts);
+    assert.equal(nogit.cwd, '/nogit');
 }
 console.log('ok helper start');
 

@@ -4,7 +4,7 @@ import { sessions } from './sessions.mjs';
 import { liveSessions } from './entries.mjs';
 import { closedNote } from './helpers.mjs';
 import { versionWarning, settingsPath, backupSettings } from './setup.mjs';
-import { refuseIfTrustDialog, cancelQuestion, parseDialog, parseQuestion, questionOpen, capture, inputLine, promptBack, freeTextOption, typeAnswer } from './startup.mjs';
+import { refuseIfTrustDialog, cancelQuestion, parseDialog, parseQuestion, questionOpen, capture, inputLine, inputText, promptBack, freeTextOption, typeAnswer } from './startup.mjs';
 import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, ELSEWHERE, sleep, NEW_TMUX, OUR_TMUX, withLock, helpers, freshSession } from './tmux.mjs';
 
 // Only known sessions, only their recorded cwd.
@@ -169,8 +169,10 @@ export async function runningTwice(id, reg = liveSessions) {
 const leftTyped = new Map();
 
 // Enter goes separately, later, so Claude doesn't treat it as part of the typed/pasted text; and not into a dialog that
-// opened meanwhile (the text stays in the input box, and sending the same text again only presses Enter).
-// ponytail: a different text is typed after the leftover; clearing the box needs keys whose meaning varies by Claude version
+// opened meanwhile (the text stays in the input box, and sending the same text again only presses Enter); and not when the
+// box held text before ours (a prompt Claude put back after an Esc before its reply, or a leftover from typing in the
+// terminal): Enter would send both as one message. Ours is erased again and the send refused.
+// ponytail: a multi-line paste isn't erased; the leftover stays, as clearing it would lose text the user may want
 async function typeSteps(name, steps, { tm = tmux, nap = sleep } = {}) {
 
     const text = steps[0].at(-1);
@@ -183,14 +185,34 @@ async function typeSteps(name, steps, { tm = tmux, nap = sleep } = {}) {
     for (const args of steps) {
         if (args.at(-1) === 'Enter') {
             await nap(300);
-            if (questionOpen(await capture(name, tm))) {
+            const pane = await capture(name, tm);
+            if (questionOpen(pane)) {
                 leftTyped.set(name, text);
                 throw conflict('A question showed up while typing: check it, then send again');
+            }
+            let box = inputText(pane);
+            for (let tries = 0; box !== null && !oursFirst(box, text) && tries < 2; tries++) { // a busy Claude draws late
+                await nap(400);
+                box = inputText(await capture(name, tm));
+            }
+            if (box !== null && !oursFirst(box, text)) {
+                if (steps.length === 2) { // one typed line: one BSpace per character
+                    await tm(['send-keys', '-t', name, ...Array([...new Intl.Segmenter().segment(text.replace(/\\;$/, ';'))].length).fill('BSpace')]);
+                }
+                throw conflict(`Claude's input box already held text, so this was not sent (it would have merged with it): "${box.slice(0, 80)}". Send or clear that text in the terminal, then send again`);
             }
         }
         await tm(args);
     }
 }
+
+// Whether Claude's input box text starts with what was just typed, rather than with text that was there before; a long
+// paste shows as a placeholder, and a busy Claude may not have drawn all of it yet
+const squash = s => s.replace(/\\;$/, ';').replace(/\s+/g, '');
+const oursFirst = (box, text) => {
+    const shown = squash(box).slice(0, 30), ours = squash(text).slice(0, 30);
+    return /^\[Pastedtext/.test(shown) || ours.startsWith(shown) || shown.startsWith(ours);
+};
 
 // Polls until Claude's prompt (or a startup dialog, which the caller handles) shows. -> the pane; 504 after waitMs
 async function waitForPrompt(name, { tm = tmux, nap = sleep, waitMs = BOOT_MS } = {}) {

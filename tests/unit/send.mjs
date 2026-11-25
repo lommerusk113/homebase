@@ -142,6 +142,27 @@ import { readFileSync } from 'node:fs';
     f = fake();
     await send(sid, 'hi', session, f.opts(new Map()));
     assert.deepEqual(f.keys().slice(1), typed('cc-dddddddd', 'hi'), 'only the next send');
+    // Claude put an unanswered prompt back into its input box (an Esc before its reply): the next message is not typed after
+    // it and submitted as one merged message; what was typed is erased again and the send refused, naming the box's text
+    const box = text => `✻ Working…\n\n──────────\n❯ ${text}\n──────────\n  ⏵⏵ auto mode on\n`;
+    const old = 'i ment it is not visible, and it should be', next = 'why no review button?';
+    f = fake({ panes: calls => box(calls.some(c => c.includes('-l')) ? `${old}${next}` : old) });
+    const merged = await send(sid, next, session, f.opts(new Map())).catch(e => e);
+    assert.equal(merged.status, 409);
+    assert.match(merged.message, /i ment it is not visible/);
+    assert.ok(!f.calls.some(c => c.at(-1) === 'Enter'), 'no Enter');
+    assert.deepEqual(f.keys().at(-1), ['send-keys', '-t', 'cc-dddddddd', ...Array(next.length).fill('BSpace')]);
+    // drawn late by a busy Claude: its grey hint still shows on the first look
+    const afterTyping = calls => calls.slice(calls.findIndex(c => c.includes('-l'))).filter(c => c[0] === 'capture-pane').length;
+    f = fake({ panes: calls => box(afterTyping(calls) < 3 ? 'Press up to edit queued messages' : next) });
+    await send(sid, next, session, f.opts(new Map()));
+    assert.equal(f.keys().at(-1).at(-1), 'Enter');
+    // an empty box (its grey hint is gone once typing starts), a wrapped line, or a long paste shown as a placeholder: sent
+    for (const shown of [next, 'why no\n  review button?', '[Pasted text #1 +4 lines]']) {
+        f = fake({ panes: calls => box(calls.some(c => c.includes('-l') || c[0] === 'paste-buffer') ? shown : 'Press up to edit queued messages') });
+        await send(sid, shown.startsWith('[') ? `${next}\n1\n2\n3\n4` : next, session, f.opts(new Map()));
+        assert.equal(f.keys().at(-1).at(-1), 'Enter', shown);
+    }
 
     // Claude is compacting (tests/fixtures/pane-compacting.txt): nothing is typed, neither a message (Claude would queue it
     // with no text in the transcript, so the page could never show it) nor a second /compact from another page

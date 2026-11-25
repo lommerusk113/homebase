@@ -305,6 +305,20 @@ export function questionOpen(pane) {
 // Claude Code's input box: a ❯ or > line right under a ─ rule (a picker's ❯ selection has none). -> its line index, or -1
 export const inputLine = lines => lines.findLastIndex((l, i) => i > 0 && /^[│\s]*[❯>]/.test(l) && /^\s*[╭─]─{2,}/.test(lines[i - 1]));
 
+// The text in Claude Code's input box, its wrapped lines joined by spaces; null when no box shows. Without colours an empty
+// box's grey hint reads as text, so this tells only once something was typed.
+export function inputText(pane) {
+
+    const lines = String(pane ?? '').split('\n');
+    const at = inputLine(lines);
+    if (at < 0) {
+        return null;
+    }
+    const end = lines.findIndex((l, i) => i > at && /^\s*[╰─]─{2,}/.test(l));
+
+    return lines.slice(at, end < 0 ? undefined : end).map(l => l.replace(/^[│\s]*(?:[❯>]\s?)?/, '').replace(/│\s*$/, '').trim()).join(' ').trim();
+}
+
 // Nothing is being asked: the input box is on screen (a question or permission prompt takes its place) and no question is open.
 // Strict, as this lifts a refusal: the box must be the pane's last block (under its closing rule only a few status lines, none
 // with a ❯ selection), its rules and its ❯ at column 0. Printed text that looks like a box (indented tool output, or a box

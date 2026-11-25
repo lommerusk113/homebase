@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { NEW_TMUX, mapNewProjects, startingProjects, pipelineOf, ciOf } from '../../server.mjs';
-import { clearState, topicHue, TOPIC_HUES, pickChat, newerSession } from '../../public/chat.js';
+import { clearState, topicHue, TOPIC_HUES, pickChat, newerSession, isMaster } from '../../public/chat.js';
 import { keyAction, stepKey, cycleProject } from '../../public/keys.js';
 
 {
@@ -115,3 +115,13 @@ assert.equal(cycleProject(['a', 'b', 'c'], 'all', 1), 'a');
 assert.equal(cycleProject(['a', 'b', 'c'], 'all', -1), 'c');
 assert.equal(cycleProject([], 'all', 1), null);
 console.log('ok keys');
+
+// a main chat that cd'd into an issue worktree is still the main chat (its tmux started in the main checkout: home);
+// a chat Homebase started in the worktree ("Start issue") is the issue's chat
+{
+    const wt = '/w/pracsys/.claude/worktrees/2263-dimension-links-only';
+    assert.equal(isMaster({ cwd: wt, home: '/w/pracsys' }), true);
+    assert.equal(isMaster({ cwd: wt, home: wt }), false);
+    assert.equal(isMaster({ cwd: wt }), false);
+    console.log('ok main chat by home');
+}

@@ -25,7 +25,7 @@ Ctrl+C stops it and removes the temp folder.
 
 ## What you get
 
-* **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested", "Doing", "In review" and "Ready to merge", and the Issues tab shows the milestone's issues. A milestone picked in the header limits the board to its issues; a chat waiting on you is shown whatever the milestone. Merge requests and pull requests come from `glab` and `gh`. A row with no MR or PR to act on (a helper that stopped or finished) has a Dismiss button, which puts it away on every device until that helper works again.
+* **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested", "Doing", "In review" and "Ready to merge", and the Issues tab shows the milestone's issues. A milestone picked in the header limits the board to its issues; a chat waiting on you, and a main chat's own row, is shown whatever the milestone. Merge requests and pull requests come from `glab` and `gh`. A row with no MR or PR to act on (a helper that stopped or finished) has a Dismiss button, which puts it away on every device until that helper works again.
 * **Helpers as rows.** A chat starts helpers with `homebase helper start`; each is its own Claude in its own tmux and worktree, and shows as a row under the chat that started it. Open chat steps into it and what you type goes straight to it; Stop closes it. See "Helper in its own chat" below.
 * **A chat view.** The transcript of one session, with each reply collapsed to its `TLDR:` line; "Show more" opens the full reply.
 
@@ -37,7 +37,7 @@ Ctrl+C stops it and removes the temp folder.
 * **A diff viewer.** "Changes" lists the uncommitted and committed files of a chat's folder, or of a subagent's worktree, and shows each file's diff. It is read-only.
 
   ![The Changes view: file list on the left, one file's diff on the right](docs/screenshots/diff.png)
-* **A composer with a menu.** Type a message, paste or drop images, or run a slash command. The + menu adds files, hides earlier messages, starts a fresh conversation, compacts, restarts the chat and switches notifications on.
+* **A composer with a menu.** Type a message, paste or drop images, or run a slash command. The + menu adds files, hides earlier messages, starts a fresh conversation (in the chat's own folder, even after it cd'd into a worktree), compacts, restarts the chat and switches notifications on.
 
   ![The + menu above the message box](docs/screenshots/composer.png)
 * **Auto-compact.** A chat that has been idle for 2 minutes with more than 100k tokens of context, and no subagent running, gets `/compact` typed for it, at most once an hour. From 70k the chat offers "Compact?". It is on by default, the + menu switches it off, and it only happens while a Homebase page is open.
@@ -354,7 +354,7 @@ How it stays safe:
 
 Until Claude writes its first transcript (on the first prompt) the chat sends to `cc-new-<name>` by tmux name (`/api/send?tmux=`, only that name pattern and only while the session runs), and `/api/starting` lets a reloaded page find it again.
 When Homebase's own code changes on disk the header says "Homebase was updated — Reload server": `POST /api/server/reload` (local requests only, never the remote port) starts a fresh detached `node server.mjs` with the same arguments and environment, logging to `server.log` in the Homebase dir, closes its listeners and exits once the new one answers; the page then reloads itself. If only `public/*.js` or `.css` changed it offers "Page updated — Refresh" instead.
-The chat menu's "Restart chat" (`POST /api/restart?id=`) kills the chat's Homebase tmux session and resumes it so Claude reloads (e.g. an edited `homebase-rules.md`); refused while Claude is working or asking, or when the chat doesn't run in Homebase's tmux.
+The chat menu's "Restart chat" (`POST /api/restart?id=`) kills the chat's Homebase tmux session and resumes it in the folder the chat was started in (not where a `cd` in the chat left it) so Claude reloads (e.g. an edited `homebase-rules.md`); refused while Claude is working or asking, or when the chat doesn't run in Homebase's tmux.
 Once the transcript exists, Homebase maps it to that tmux session on every poll (same start folder, no tmux of its own), so no second Claude is started.
 
 ## On the phone: Home Screen, notifications, a lost phone

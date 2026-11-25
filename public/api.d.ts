@@ -11,6 +11,8 @@ interface Session {
     id: string;
     forge?: ForgeStatus | null;
     cwd: string;
+    /** the folder its Claude was started in (its tmux start dir), null without a tmux; cwd follows a cd in the chat */
+    home?: string | null;
     dir: string;
     project: string;
     branch: string;

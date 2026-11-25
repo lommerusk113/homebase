@@ -172,9 +172,19 @@ import { liveSessions, closedSession, transcript } from '../../server/transcript
     assert.equal(await restartChat(sid, ok.opts), 'cc-cccccccc');
     assert.deepEqual(ok.calls.map(c => c[0]), ['has-session', 'kill-session', 'new-session', 'capture-pane'], 'kill, then new, then wait for the prompt');
     assert.ok(ok.calls[2].join(' ').includes(`--resume ${sid}`));
+    const home = fake();
+    await restartChat(sid, { ...home.opts, session: { ...session, cwd: '/w/.claude/worktrees/2263-x', home: '/w' } });
+    assert.equal(home.calls[2][home.calls[2].indexOf('-c') + 1], '/w', "restarts in the chat's home, not where a cd left it");
     const stuck = fake(true, 'loading');
     assert.equal((await restartChat(sid, { ...stuck.opts, waitMs: 1000 }).catch(e => e)).status, 504);
     assert.deepEqual([promptUp('❯ '), promptUp('loading'), promptUp('Do you trust?\n\n❯ 1. Yes\n  2. No\nEnter to confirm')], [true, false, false]);
+    // fresh conversation after a cd: a new Claude (no --resume) in the chat's home, same tmux name, instead of /clear
+    const { clearChat } = await import('../../server/control.mjs');
+    const moved = fake();
+    await clearChat(sid, { ...moved.opts, session: { ...session, cwd: '/w/.claude/worktrees/2263-x', home: '/w' }, reg: async () => new Map() });
+    const made = moved.calls.find(c => c[0] === 'new-session');
+    assert.deepEqual(moved.calls.map(c => c[0]), ['kill-session', 'new-session']);
+    assert.deepEqual([made[made.indexOf('-s') + 1], made[made.indexOf('-c') + 1], made.join(' ').includes('--resume')], ['cc-cccccccc', '/w', false]);
     console.log('ok restart chat');
 }
 

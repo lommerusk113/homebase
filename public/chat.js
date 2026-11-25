@@ -5,7 +5,9 @@ import { syncDiff } from './diff.js';
 
 // Subagent and worktree sessions never become the chat's master on their own.
 /** @param {Session} s */
-export const isMaster = s => !s.sidechain && !s.parentId && !/\/\.(claude\/)?worktrees\//.test(s.cwd || ''); // a work helper's chat (parentId) is not a main chat
+// a work helper's chat (parentId) is not a main chat; nor one Homebase started in a worktree (Start issue). By home, the folder
+// its Claude was started in, so a main chat that cd'd into an issue worktree stays the main chat
+export const isMaster = s => !s.sidechain && !s.parentId && !/\/\.(claude\/)?worktrees\//.test(s.home || s.cwd || '');
 // The chat sticks to the bound session (chat:<project>, else the legacy global pick) and only moves on its own to a
 // Homebase /clear successor (clearedFrom). Nothing bound yet: the master with the latest real activity (lastActivity,
 // from the server), never file mtime, which an idle claude process still bumps with bookkeeping lines.

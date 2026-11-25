@@ -742,6 +742,7 @@ async function attachTmux(out, now, live) {
 
     for (const s of out) {
         s.tmux = tmuxFor(s.id, aliases, live); // the registry knows a /clear successor's tmux after a restart emptied the aliases
+        s.home = tmuxList.find(t => t.name === s.tmux)?.path ?? null; // the folder its Claude was started in; s.cwd follows a `cd` in the chat
     }
     linkClears(out, live);
 

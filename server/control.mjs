@@ -5,7 +5,7 @@ import { liveSessions } from './entries.mjs';
 import { closedNote } from './helpers.mjs';
 import { versionWarning, settingsPath, backupSettings } from './setup.mjs';
 import { refuseIfTrustDialog, cancelQuestion, parseDialog, parseQuestion, questionOpen, capture, inputLine, promptBack, freeTextOption, typeAnswer } from './startup.mjs';
-import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, ELSEWHERE, sleep, NEW_TMUX, OUR_TMUX, withLock, helpers } from './tmux.mjs';
+import { tmux, tmuxName, tmuxFor, aliases, clears, tmuxSession, sendSteps, refuseIfLiveElsewhere, ELSEWHERE, sleep, NEW_TMUX, OUR_TMUX, withLock, helpers, freshSession } from './tmux.mjs';
 
 // Only known sessions, only their recorded cwd.
 async function resumable(id) {
@@ -264,10 +264,22 @@ export async function compactChat(id) {
 }
 
 // Types /clear (same checks as send) and remembers it, so the next session list maps the new transcript to this tmux session.
-export async function clearChat(id) {
+// A chat whose Claude a `cd` moved (cwd is not home) gets a new Claude in its home instead, in the same tmux: /clear would start there.
+export async function clearChat(id, { tm = tmux, session = null, reg = liveSessions } = {}) {
 
-    const s = await resumable(id);
-    const c = { from: id, tmux: targetOf(id, await liveSessions()), cwd: s.cwd, clearedAt: Date.now() };
+    const s = session ?? await resumable(id);
+    const c = { from: id, tmux: targetOf(id, await reg()), cwd: s.cwd, clearedAt: Date.now() };
+    if (s.home && s.cwd !== s.home && !helpers.has(id)) {
+        refuseIfBusy(s);
+        Object.assign(c, { cwd: s.home });
+        await withLock(c.tmux, async () => {
+            await tm(['kill-session', '-t', `=${c.tmux}`]).catch(() => { throw conflict("Not running in Homebase's tmux"); });
+            clears.push(c);
+            await tm(['new-session', '-d', ...freshSession(c.tmux, s.home)]);
+        });
+
+        return;
+    }
     clears.push(c);
     try {
         c.tmux = await send(id, '/clear', s, { typed: true }); // send may have replaced a dead aliased tmux session
@@ -390,7 +402,7 @@ export async function restartChat(id, { tm = tmux, nap = sleep, waitMs = 20_000,
         await tm(['kill-session', '-t', `=${old}`]);
         aliases.delete(id);
         const name = tmuxName(id);
-        await tm(['new-session', '-d', ...tmuxSession(id, s.cwd)]);
+        await tm(['new-session', '-d', ...tmuxSession(id, s.home ?? s.cwd)]); // where the chat was started, not where a cd left it
         await waitForPrompt(name, { tm, nap, waitMs });
 
         return name;

@@ -138,6 +138,8 @@ export function linkClears(sessions, live, map = aliases) {
     }
 }
 export const tmuxSession = (id, cwd) => ['-s', tmuxName(id), '-c', cwd, ...claudeCmd(id)];
+// A new conversation (no --resume) in tmux session `name`
+export const freshSession = (name, cwd) => ['-s', name, '-c', cwd, loginShell(), '-lic', claudeLine()];
 
 export const MAX_SEND = 20 * 1024;
 export const sleep = ms => new Promise(r => setTimeout(r, ms));

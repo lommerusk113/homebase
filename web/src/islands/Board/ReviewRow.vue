@@ -6,7 +6,7 @@ import { ReviewsKey, useInjected } from '@/keys';
 import CiPill from '@/components/CiPill.vue';
 
 const props = defineProps<{ url: string }>();
-const { byUrl, open, review, starting } = useInjected(ReviewsKey);
+const { byUrl, open, review, reviewing, starting } = useInjected(ReviewsKey);
 const r = toRef(() => byUrl.value.get(props.url)!);
 </script>
 
@@ -17,7 +17,8 @@ const r = toRef(() => byUrl.value.get(props.url)!);
             <small class="next"><span class="chip mono">!{{ r.iid }}</span>{{ ` ${r.project} · ${r.author}${r.draft ? ' · draft' : ''} · ${ago(r.updatedAt)}` }}<template v-if="r.pipeline?.status">{{ ' ' }}<CiPill :pipeline="r.pipeline" /></template></small>
         </td>
         <td class="act">
-            <wa-button class="review-btn" size="s" appearance="outlined" :disabled="starting.has(url) || undefined" title="Start a chat that reviews this MR, read-only" @click.stop="review(r)">{{ starting.has(url) ? 'Starting…' : 'Review' }}</wa-button>
+            <button v-if="reviewing(r)" type="button" class="sent-pill review-busy" title="Open the review chat" @click.stop="review(r)"><span class="pulse" />Reviewing…</button>
+            <wa-button v-else class="review-btn" size="s" appearance="outlined" :disabled="starting.has(url) || undefined" title="Start a chat that reviews this MR, read-only" @click.stop="review(r)">{{ starting.has(url) ? 'Starting…' : 'Review' }}</wa-button>
         </td>
     </tr>
 </template>

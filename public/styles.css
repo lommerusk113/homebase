@@ -207,6 +207,8 @@ a.chip:hover { text-decoration:underline; }
 .pulse { width:7px; height:7px; border-radius:50%; background:var(--c-doing); animation:pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity:.25; } }
 
+.review-busy { border:0; font:inherit; font-size:var(--fs-s); cursor:pointer; }
+
 .main { flex:1; display:flex; min-height:0; }
 .left { position:relative; flex:1; min-width:0; display:flex; flex-direction:column; container-type:inline-size; }
 /* the board and the chat each sit in one card, side by side with the same gutters: the board's Work | Issues title is its header, the body scrolls under it */

@@ -108,5 +108,13 @@ import { join } from 'node:path';
     await resume(left('❯ Review MR !9 of acme/alpha\n'));
     assert.equal(typed.length, 0, 'a leftover that has the prompt is left alone');
     assert.ok(!typed.some(a => a[0] === 'kill-session'));
+    // tmux reports the pane's folder with symlinks resolved: a project folder reached through a symlink is still the same folder
+    const target = realpathSync(mkdtempSync(join(tmpdir(), 'hb-link-')));
+    const link = join(realpathSync(mkdtempSync(join(tmpdir(), 'hb-link-'))), 'l');
+    execFileSync('ln', ['-s', target, link]);
+    typed.length = 0;
+    const viaLink = await startReview({ url: rr.url }, { ...rbase, dirOf: async () => link, tmux: async a => (a[0] === 'display-message' ? { stdout: `${target}\n` } : left('❯ Review MR !9 of acme/alpha\n')(a)), nap: async () => {}, waitMs: 1000, known: async () => [{ id: 'old1', tmux: 'cc-new-alpha-review-9' }], transcripts: async () => [] });
+    assert.deepEqual([viaLink.sessionId, viaLink.reused], ['old1', true], 'symlinked folder');
+    assert.ok(!typed.some(a => a[0] === 'kill-session'));
     assert.match(reviewPrompt(rr), /!9 of acme\/alpha .*do not push, comment/);
 }

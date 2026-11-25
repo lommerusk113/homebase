@@ -1,7 +1,7 @@
 // "New project": create a GitHub repo for the personal account, clone it, and start a Claude chat in it (POST /api/projects/new);
 // or start one in a folder that is already there (POST /api/projects/open).
 // The token comes from the macOS keychain into memory only: it reaches the gh child process through its env and nowhere else.
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { readdir, realpath, stat } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -61,6 +61,10 @@ async function cloneAndStart(c, i, made) {
     return { ...await startChat(c, i + 1, made ? `${made} and cloned to ${dir}, but starting Claude failed:` : `Cloned to ${dir}, but starting Claude failed:`), repo };
 }
 
+// tmux reports a pane's folder with symlinks resolved (/tmp -> /private/tmp), so compare resolved paths
+const resolved = p => { try { return realpathSync(p); } catch { return p; } };
+const same = (a, b) => !!a && resolved(a) === resolved(b);
+
 // The start-chat step: Claude in tmux cc-new-<name> in dir, then wait for its session id; step `i`, `what` heads its error.
 export async function startChat(c, i, what) {
 
@@ -72,7 +76,7 @@ export async function startChat(c, i, what) {
         await tm(['new-session', '-d', '-s', tmuxName, '-x', '200', '-y', '50', '-c', dir, 'zsh', '-lic', claudeLine('', undefined, { manual })]);
     } catch (e) {
         // a session left by an earlier start (one that timed out, or a click made twice) in this same folder is the chat: use it, never kill it
-        const there = /duplicate session/.test(`${e?.message} ${e?.stderr}`) && await tm(['display-message', '-p', '-t', `=${tmuxName}:`, '#{pane_current_path}']).then(r => r?.stdout?.trim() === dir, () => false);
+        const there = /duplicate session/.test(`${e?.message} ${e?.stderr}`) && await tm(['display-message', '-p', '-t', `=${tmuxName}:`, '#{pane_current_path}']).then(r => same(r?.stdout?.trim(), dir), () => false);
         if (!there) {
             throw fail(i, e, what);
         }

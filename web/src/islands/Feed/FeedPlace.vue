@@ -15,6 +15,7 @@ const NEAR_BOTTOM_PX = 40; // this close to the bottom counts as reading the new
 const nearBottom = () => feed.scrollHeight - feed.scrollTop - feed.clientHeight < NEAR_BOTTOM_PX;
 const keyed = () => [...feed.querySelectorAll<HTMLElement>('[data-key]')];
 let place: { end: boolean; top: number; key?: string; y: number } = { end: true, top: 0, y: 0 };
+let height = feed.clientHeight; // the feed's own height last seen: the browser moves scrollTop when it changes
 let clicked = false; // a click in the feed is being handled: a size change now is the reader's own (Show more)
 
 function notePlace() {
@@ -48,7 +49,11 @@ const sizes = new ResizeObserver(() => {
     if (clicked) {
         return notePlace();
     }
-    syncPlace();
+    // the feed itself resized (keyboard, composer): the browser's scrollTop shift is not the reader moving
+    if (feed.clientHeight === height) {
+        syncPlace();
+    }
+    height = feed.clientHeight;
     restorePlace();
 });
 function watchSizes() {

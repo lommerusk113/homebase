@@ -43,14 +43,14 @@ function picked() {
         </button>
         <wa-dropdown-item value="files">Add files…</wa-dropdown-item>
         <hr class="c-sep">
-        <wa-dropdown-item value="view">Hide earlier messages<span slot="details">only here; Claude still remembers them</span></wa-dropdown-item>
-        <wa-dropdown-item value="compact" id="compact-item" .disabled="!canCompact">Compact conversation<span slot="details">Claude keeps a summary; frees context</span></wa-dropdown-item>
-        <wa-dropdown-item value="restart" id="restart-item">Restart chat<span slot="details">same conversation; reloads Claude and its rules</span></wa-dropdown-item>
-        <wa-dropdown-item value="new">Start a fresh conversation<span slot="details">Claude forgets this chat</span></wa-dropdown-item>
+        <wa-dropdown-item value="view">Hide earlier messages<small class="c-hint">only here; Claude still remembers them</small></wa-dropdown-item>
+        <wa-dropdown-item value="compact" id="compact-item" .disabled="!canCompact">Compact conversation<small class="c-hint">Claude keeps a summary; frees context</small></wa-dropdown-item>
+        <wa-dropdown-item value="restart" id="restart-item">Restart chat<small class="c-hint">same conversation; reloads Claude and its rules</small></wa-dropdown-item>
+        <wa-dropdown-item value="new">Start a fresh conversation<small class="c-hint">Claude forgets this chat</small></wa-dropdown-item>
         <hr class="c-sep">
-        <wa-dropdown-item value="auto-compact" type="checkbox" id="auto-compact" .checked="autoCompact">Auto-compact idle chats over 100k context</wa-dropdown-item>
-        <wa-dropdown-item value="needs-only" type="checkbox" id="needs-only" .checked="needsOnly">Show only messages that need me</wa-dropdown-item>
-        <wa-dropdown-item value="push" id="push-item"><span id="push-label">{{ pushLabel }}</span><span slot="details" id="push-state">{{ pushState }}</span></wa-dropdown-item>
+        <wa-dropdown-item value="auto-compact" type="checkbox" id="auto-compact" .checked="autoCompact">Auto-compact idle chats<small class="c-hint">when over 100k context</small><span slot="details" :class="{ on: autoCompact }" class="c-state">{{ autoCompact ? 'On' : 'Off' }}</span></wa-dropdown-item>
+        <wa-dropdown-item value="needs-only" type="checkbox" id="needs-only" .checked="needsOnly">Show only messages that need me<span slot="details" :class="{ on: needsOnly }" class="c-state">{{ needsOnly ? 'On' : 'Off' }}</span></wa-dropdown-item>
+        <wa-dropdown-item value="push" id="push-item"><span id="push-label">{{ pushLabel }}</span><span slot="details" class="c-state" id="push-state">{{ pushState }}</span></wa-dropdown-item>
     </wa-dropdown>
     <input ref="picker" type="file" id="attach-input" accept="image/*" multiple hidden @change="picked">
 </template>

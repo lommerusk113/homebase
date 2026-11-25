@@ -3,6 +3,7 @@ import { api, state } from 'old/core.js';
 import { bindChat } from 'old/chat.js';
 import { oldState } from '@/old';
 import { useNotice } from '@/composables/useNotice';
+import { reviewChat } from '@/lib/board';
 
 const starting = reactive(new Set<string>()); // urls whose review chat is being started
 
@@ -15,18 +16,8 @@ export function useReviews() {
 
         return reviews.filter(r => project === 'all' || r.project.split('/').pop() === project);
     });
-    /** The review chat the Review button started (tmux cc-new-<project>-review-<iid>), if it is open. */
-    const chatOf = (r: ReviewRequest) => {
-        const name = `cc-new-${r.project.split('/').pop()}-review-${r.iid}`.replace(/[^A-Za-z0-9._-]/g, '-');
-
-        return oldState.value.sessions.find(s => s.tmux === name);
-    };
-    /** That chat is busy: the row says Reviewing… and opens it. */
-    const reviewing = (r: ReviewRequest) => {
-        const s = chatOf(r);
-
-        return !!s && s.status === 'working';
-    };
+    /** Its review chat, or a helper that chat started, is busy: the row says Reviewing… and opens the chat. */
+    const reviewing = (r: ReviewRequest) => !!reviewChat(oldState.value.sessions, r);
     const byUrl = computed(() => new Map(reviews.value.map(r => [r.url, r])));
 
     /** Review: the server starts a chat in the MR's project that reviews it read-only; this opens that chat. */
@@ -35,8 +26,8 @@ export function useReviews() {
         if (starting.has(r.url)) {
             return;
         }
-        const open = chatOf(r);
-        if (open && open.status === 'working') {
+        const open = reviewChat(oldState.value.sessions, r);
+        if (open) {
             bindChat(open.id);
 
             return;

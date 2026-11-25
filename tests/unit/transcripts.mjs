@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { summarize, chatItems, turnState, readTail, fetchComments, latestTopic, queuedPrompts, parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from '../../server.mjs';
-import { sessionTopic, startingIssues, workingLine, workingTitle } from '../../web/src/lib/board.ts';
+import { sessionTopic, startingIssues, workingLine, workingTitle, reviewChat } from '../../web/src/lib/board.ts';
 import { say } from './helpers.mjs';
 
 // tracker e9c15e3f: a ~900 KB tool_result line filled the 512 KB tail, so the chat showed one bubble and the 403 vanished
@@ -319,4 +319,17 @@ import { say } from './helpers.mjs';
     assert.deepEqual(JSON.parse(out), [['from the old session'], 404]);
     rmSync(home, { recursive: true, force: true });
     console.log('ok agent feed after the chat was cleared');
+}
+
+// A Review requested row is busy while its review chat (tmux cc-new-<project>-review-<iid>) or a helper it started works
+{
+    const r = { project: 'group/pracsys', iid: 1889 };
+    const main = { id: 'm', tmux: 'cc-new-pracsys-review-1889', status: 'waiting' };
+    const helper = { id: 'h', tmux: 'cc-h', parentId: 'm', status: 'working' };
+    const other = { id: 'o', tmux: 'cc-o', status: 'working' };
+    assert.equal(reviewChat([main, other], r), undefined, 'idle review chat, unrelated chat working');
+    assert.equal(reviewChat([{ ...main, status: 'working' }], r)?.id, 'm', 'the review chat itself works');
+    assert.equal(reviewChat([main, helper, other], r)?.id, 'm', 'its helper works: opens the review chat');
+    assert.equal(reviewChat([helper, other], r), undefined, 'no review chat');
+    console.log('ok review row busy with its review chat or helper');
 }

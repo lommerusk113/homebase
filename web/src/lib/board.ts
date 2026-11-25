@@ -111,3 +111,14 @@ export function askingEvents(prev: Session[] | undefined, next: Session[]): Atte
 
     return next.filter(s => waitsOnYou(s) && !was.has(s.id)).map(session => ({ kind: 'asking', session }) as AttentionEvent);
 }
+
+/** The review chat the Review button started for an MR (tmux cc-new-<project>-review-<iid>) while it, or a helper it started, works. */
+export function reviewChat(sessions: Pick<Session, 'id' | 'tmux' | 'status' | 'parentId'>[], r: Pick<ReviewRequest, 'project' | 'iid'>) {
+
+    const name = `cc-new-${r.project.split('/').pop()}-review-${r.iid}`.replace(/[^A-Za-z0-9._-]/g, '-');
+    const chat = sessions.find(s => s.tmux === name);
+    // ponytail: one level of helpers, as helpers start no helpers of their own
+    const busy = chat && sessions.some(s => (s.id === chat.id || s.parentId === chat.id) && s.status === 'working');
+
+    return busy ? chat : undefined;
+}

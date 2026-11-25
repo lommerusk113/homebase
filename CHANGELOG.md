@@ -4,6 +4,8 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A helper saved without a branch keeps its worktree path, so the milestone filter places its row by its issue instead of showing it under every milestone after a restart.
+
 * A chat asking about an MR ("MR !1856 … force-push?") puts that MR's row in Needs you, also from a main chat checked out on another issue; a chat waiting on you is never hidden by the milestone filter
 * The Token saver now turns itself on at 90% of the five-hour (session) limit, ignoring the weekly one, and the switch shows ON with a note like "auto, 91% used"; switching it off holds until session usage drops back under 90%.
 * Switching to a project with a stored milestone now holds the board back until its issues load, like a page load does, instead of flashing rows outside the milestone and then dropping them

@@ -9,6 +9,7 @@ import { callerTmux, parseArgs, readOut, wait } from '../../bin/homebase.mjs';
 import { now } from './helpers.mjs';
 import { workItems } from '../../server/items.mjs';
 import { send } from '../../server/control.mjs';
+import { inMilestone } from '../../web/src/lib/milestone.ts';
 
 const uuid = n => `${String(n).padStart(8, '0')}-2222-4333-8444-555555555555`;
 const P = uuid(90), Q = uuid(91);
@@ -209,6 +210,20 @@ console.log('ok helper view');
 console.log('ok helper wait');
 
 // board nesting: the helper's chat names its parent; the parent gets it as an agent, so its row nests there with helperSession
+// a helper saved without a branch keeps its worktree path, so the milestone filter can place its row
+{
+    helpers.clear();
+    const h = { id: uuid(1), parent: P, title: 'Add dimension renaming', at: now, closedAt: now + 1, branch: null, cwd: '/w/.claude/worktrees/2263-dimension-links-only' };
+    const plain = { id: uuid(2), parent: P, title: 'Look around', at: now, closedAt: now + 1, branch: null, cwd: '/w' };
+    helpers.set(h.id, h);
+    helpers.set(plain.id, plain);
+    const list = [{ id: P, project: 'alpha', tmux: 'cc-00000090', agents: [] }, { id: uuid(1), project: 'alpha', prs: [] }, { id: uuid(2), project: 'alpha', prs: [] }];
+    nestHelpers(list, new Set(), now + 10);
+    const [a, b] = list[0].agents;
+    assert.ok(a.worktreePath.endsWith('2263-dimension-links-only'));
+    assert.equal(b.worktreePath, null, 'a helper in the main checkout has none');
+    assert.equal(inMilestone({ ...a, pr: null, prState: null }, { id: 1, issues: new Set([2273]) }), false);
+}
 {
     helpers.clear();
     const open = { id: uuid(1), parent: P, title: 'Fix it', at: now, closedAt: null, branch: 'helper/fix-it', cwd: '/x/alpha/.claude/worktrees/fix-it' };

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { workItems, tmuxArgs, repoName, gateRuns, gateFor, toGate, sameRepo } from '../../server.mjs';
 import { rowOf } from '../../server/items.mjs';
 import { loadStore, record, seeds, flush } from '../../server/store.mjs';
+import { HOLD_MS, saveSent, loadSent } from '../../server/once.mjs';
 import { open, mr, agent, nextOf, actOf } from './helpers.mjs';
 
 assert.equal(nextOf({ state: 'merged' }, { status: 'running', stage: 1 }), 'Merged');
@@ -123,6 +124,17 @@ assert.deepEqual(forged.map(i => [i.key, i.sessionId, i.column]), [[mr(1), 'old'
     assert.deepEqual([clicked.column, clicked.action, /^Sent to Claude/.test(clicked.next)], ['doing', null, true]);
     const moved = workItems([main], () => open({ branch: '2284-x', reviewers: ['Ann'] }), 10, new Map(), [], new Map(), () => null, sent)[0];
     assert.equal(moved.column, 'review', 'the conflict is gone: the click no longer holds it');
+    const late = workItems([main], conflict, 7 + HOLD_MS, new Map(), [], new Map(), () => null, sent)[0];
+    assert.deepEqual([late.column, late.action?.label], ['needs-you', 'Rebase'], 'after HOLD_MS the button is back');
+
+    // a restart keeps the hold: saved, then loaded into a fresh map
+    const dir = mkdtempSync(join(tmpdir(), 'hb-sent-'));
+    await saveSent(dir, sent, 10);
+    const loaded = new Map();
+    loadSent(dir, loaded, 10);
+    assert.deepEqual(loaded.get(mr(58)), { at: 7, kind: 'conflict' });
+    loadSent(dir, (loaded.clear(), loaded), 7 + HOLD_MS);
+    assert.equal(loaded.size, 0, 'an expired hold is not loaded');
 }
 
 console.log('ok items');

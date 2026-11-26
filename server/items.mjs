@@ -4,7 +4,7 @@ import { USAGE_KEYS, IDLE_CUTOFF_MS, formatDuration, formatTokens } from './usag
 import { mentionsMr, namesMr, mrRef, mrNumber, forgeWords } from './forge.mjs';
 import { waitsOnYou } from '../web/src/lib/waiting.ts';
 import { canned } from '../web/src/lib/canned.ts';
-import { sentRows } from './once.mjs';
+import { sentRows, HOLD_MS } from './once.mjs';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
@@ -479,8 +479,8 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const row = rowOf(ps, agent, { pr: it.pr, title, mr: w.mr, aMr: w.aMr, requested: !!requested, now, error: it.pr ? errorOf(it.pr, it.project) : null, chat });
 
         // the user's click on its button holds it in Doing until its state kind changes (the forge saw the work), not until
-        // the chat's turn ends. ponytail: a chat that ignores the click leaves it there until then
-        const click = !chat && isOpen ? sent.get(it.key) : null;
+        // the chat's turn ends, for HOLD_MS at most: then the button is back, as the chat did nothing the forge saw
+        const click = !chat && isOpen && now - (sent.get(it.key)?.at ?? -Infinity) < HOLD_MS ? sent.get(it.key) : null;
         if (click?.kind === row.state.kind && row.column !== 'doing') {
             Object.assign(row, { column: 'doing', next: `Sent to Claude (${clock(click.at)})`, action: null });
         }

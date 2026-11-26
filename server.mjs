@@ -36,7 +36,7 @@ import { loadHelpers, startHelper, closeHelper, chatIn, parentOf, parentTmux, fi
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 import { diff } from './server/diff.mjs';
-import { claim, release, sentRows } from './server/once.mjs';
+import { claim, release, sentRows, loadSent, saveSent } from './server/once.mjs';
 import { pushSession } from './server/gitpush.mjs';
 import { doctor, setup, unsetup, missingTools, readClaudeVersion, versionWarning } from './server/setup.mjs';
 
@@ -125,6 +125,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     loadHandled(DATA_DIR);
     loadDismissed(DATA_DIR);
     loadReports(DATA_DIR);
+    loadSent(DATA_DIR);
     loadReviewers(DATA_DIR);
     loadHelpers(DATA_DIR);
     writeToken(DATA_DIR, TOKEN); // for bin/homebase.mjs, owner-only
@@ -358,11 +359,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                         res.setHeader('x-homebase-once', '1');
                         return deny(409, 'Already sent');
                     }
+                    saveSent(DATA_DIR).catch(() => {});
                     try {
                         await startReviewer(DATA_DIR, { key, cwd, gitlab: !!repo && isGitLab(repo), sha: row.prState?.sha });
                     } catch (e) {
                         if (once) {
                             release(sentRows, once);
+                            saveSent(DATA_DIR).catch(() => {});
                         }
                         throw e;
                     }
@@ -417,6 +420,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     res.setHeader('x-homebase-once', '1'); // the client's quiet "Already sent", not an error
                     return deny(409, 'Already sent');
                 }
+                if (once) {
+                    saveSent(DATA_DIR).catch(() => {});
+                }
                 try {
                 if (url.searchParams.has('tmux')) {
                     await sendToNew(url.searchParams.get('tmux'), body); // a new project's chat that has no transcript yet
@@ -448,6 +454,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 } catch (e) {
                     if (once) {
                         release(sentRows, once); // a failed send is retried with the same key
+                        saveSent(DATA_DIR).catch(() => {});
                     }
                     throw e;
                 }

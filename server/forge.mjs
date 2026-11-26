@@ -105,7 +105,7 @@ async function fetchPr(url) {
             target: mr.target_branch,
             issue,
             sha: mr.sha ?? mr.diff_refs?.head_sha ?? null,
-            mergeStatus: status ?? null // why GitLab won't merge it yet, for an approved row that isn't mergeable
+            mergeStatus: prev ? prev.mergeStatus ?? null : status ?? null // why GitLab won't merge it yet; kept like ready while GitLab is still checking
         };
     }
 

@@ -111,7 +111,7 @@ const th = (...authors) => ({ resolved: false, notes: authors.map(author => ({ a
 const turn = (...threads) => humanComments([], 'me', 10, threads);
 const mine = turn(th(B, ME), th(B, ME, BOT)); // last note by me (my Claude posts as me), a bot after me doesn't count
 assert.deepEqual([mine.unresolved, mine.replied, mine.repliedTo], [0, 2, ['Børre']]);
-const wr = withThreads({ ...waiting, changes: true }, mine); // GitLab's discussions_not_resolved set changes
+const wr = withThreads({ ...waiting, changes: true, mergeStatus: 'discussions_not_resolved' }, mine); // the project requires resolved threads
 assert.equal(colOf(wr, null, true), 'review');
 assert.equal(nextOf(wr, null), 'Replied to 2 threads — waiting for Børre to resolve');
 assert.equal(actOf(mr(4), wr, null, 'T'), null);
@@ -139,7 +139,7 @@ assert.equal(actOf(mr(4), mix, null, 'T').label, 'Fix & reply');
 const hand = (author, body) => ({ author, body });
 const handed = turn({ resolved: false, notes: [hand(B, 'is 2400 right?'), hand(ME, 'No code change'), hand(B, '@PetterGT should take a look')] });
 assert.deepEqual([handed.unresolved, handed.replied, handed.repliedTo], [0, 1, ['PetterGT']]);
-assert.equal(nextOf(withThreads({ ...waiting, changes: true }, handed), null), 'Replied to 1 thread — waiting for PetterGT to resolve');
+assert.equal(nextOf(withThreads({ ...waiting, changes: true, mergeStatus: 'discussions_not_resolved' }, handed), null), 'Replied to 1 thread — waiting for PetterGT to resolve');
 assert.equal(turn({ resolved: false, notes: [hand(B, '@me what about this'), ] }).unresolved, 1); // mentioning me is still on me
 assert.equal(turn({ resolved: false, notes: [hand(B, 'ping @borre')] }).unresolved, 1); // own name is no hand-off
 const done = turn({ ...th(B), resolved: true }, th(ME), th(BOT)); // resolved, my own, bot-only threads don't count

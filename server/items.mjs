@@ -98,8 +98,8 @@ function mrNext(prState, mr) {
 }
 
 // Replied threads are what stops the merge only when the forge says so: GitLab's discussions_not_resolved (the project
-// requires them resolved); GitHub has no such status, so there they count whenever it can't merge.
-const waitsOnThreads = ps => !!ps.replied && !ps.ready && (ps.mergeStatus == null || ps.mergeStatus === 'discussions_not_resolved');
+// requires them resolved). On GitHub a PR that can't merge always has another reason (review, draft, CI, conflict).
+const waitsOnThreads = ps => !!ps.replied && !ps.ready && ps.mergeStatus === 'discussions_not_resolved';
 
 // The step review comments ask for, or null when there are none.
 function reviewComments(prState) {

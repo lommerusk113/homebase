@@ -48,6 +48,12 @@ import { mr, fakeBin, withFakeGlab, glabMr, nextOf, colOf, actOf } from './helpe
     const kept = await withFakeGlab(`case "$*" in *approvals*) echo 'boom' >&2; exit 1;; *) echo '${body}';; esac`, () => prState(u117));
     assert.deepEqual([kept.ready, kept.approvedBy], [true, ['Ann']]);
     assert.ok(prs.get(u117).error, 'and the row is flagged stale');
+    // GitLab recomputing (unchecked) keeps the last merge status, so a row waiting on threads doesn't flap for a minute
+    const u118 = 'https://gitlab.example.com/g/p/-/merge_requests/118';
+    assert.equal((await glabMr({ detailed_merge_status: 'discussions_not_resolved' }, 118)).mergeStatus, 'discussions_not_resolved');
+    prs.get(u118).at = 0;
+    const rechecking = JSON.stringify({ state: 'opened', title: 't', source_branch: 'b', detailed_merge_status: 'unchecked' });
+    assert.equal((await withFakeGlab(`echo '${rechecking}'`, () => prState(u118))).mergeStatus, 'discussions_not_resolved');
     prs.get(url).at = 0;
     const checking = await glabMr({ detailed_merge_status: 'checking' }, 114);
     await prs.get(url).pending;

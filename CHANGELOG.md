@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A row waiting on threads the project requires resolved no longer flips to "Needs a reviewer" for a minute while GitLab rechecks the MR, and on GitHub replied threads never stand in for a running pipeline or a missing review.
 * A Review click on a requested MR no longer answers "not a merge request that asks you for a review" when the server's list was cold (after a restart) or its last refresh failed: it fetches the list first. The review chat now runs review-gate and then polish-loop, still read-only, and ends with a TLDR.
 * Threads you replied to no longer stand in for what really stops an MR (no reviewer yet, a running pipeline); they count as the blocker only when the project requires them resolved, and are otherwise noted in the text ("· 1 open thread").
 * An approved MR GitLab can merge shows Merge even with open threads ("Approved by Børre — merge it · 2 open threads"); only a project that requires resolved threads keeps it waiting on them.

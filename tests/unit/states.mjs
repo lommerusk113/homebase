@@ -27,7 +27,7 @@ const kinds = [
     ['draft', open({ draft: true }), 'needs-you', 'Mark ready'],
     ['pipeline', open({ draft: true, ci: 'running' }), 'review', 'Review'],
     ['ready', open({ ready: true, approved: true, replied: 2, sha: 'abc1234' }), 'ready', 'Merge'], // open threads GitLab lets merge: information, not a blocker
-    ['replied', open({ replied: 1, reviewers: ['Ann'] }), 'review', 'Review'],
+    ['replied', open({ replied: 1, reviewers: ['Ann'], mergeStatus: 'discussions_not_resolved' }), 'review', 'Review'],
     ['pipeline', open({ ci: 'running', reviewers: ['Ann'] }), 'review', 'Review'],
     ['ready', open({ ready: true, sha: 'abc1234' }), 'ready', 'Merge'],
     ['in-review', open({ reviewers: ['Ann'] }), 'review', 'Review'],
@@ -53,6 +53,9 @@ for (const [kind, ps, column, label] of kinds) {
     assert.deepEqual([row(unreviewed).next, ...shown(row(unreviewed))], ['Needs a reviewer · 1 open thread', 'review', 'Request review']);
     const running = withThreads(open({ approved: true, ci: 'running', mergeStatus: 'ci_still_running', sha: 'abc1234' }), { replied: 1, repliedTo: ['Bo'] });
     assert.deepEqual([row(running).next, row(running).state.kind], ['Pipeline running · 1 open thread', 'pipeline']);
+    // GitHub (no merge status): a PR that can't merge always has another reason, so threads never stand in for it
+    const gh = withThreads(open({ approved: true, ci: 'running', sha: 'abc1234' }), { replied: 1, repliedTo: ['Bo'] });
+    assert.deepEqual([row(gh).next, row(gh).state.kind], ['Pipeline running · 1 open thread', 'pipeline']);
     const unapproved = withThreads(open({ reviewers: ['Ann'] }), { unanswered: 1, unansweredBy: ['Bo'] });
     assert.deepEqual(shown(row(unapproved)), ['needs-you', 'Fix & reply']);
 }

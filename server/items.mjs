@@ -341,7 +341,7 @@ export function reportOn(s, url) {
         return null;
     }
 
-    return r.mr === url || r.mr.replace(/^!/, '') === mrNumber(url) ? r : null;
+    return r.mr === url || r.mr.replace(/^[!#]/, '') === mrNumber(url) ? r : null;
 }
 
 // The work items' raw groups: one per PR/MR (deduped across sessions and agents), plus running or stopped agents with

@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A conflicted GitHub PR no longer flips to Ready to merge while GitHub recomputes it; answering a chat's question ends its needs-you report like a prompt does; `homebase status --mr '#12'` works, a malformed MR is refused, and a hand-edited reports.json can't take the board down.
 * `homebase status needs-you --mr !N` without a question no longer breaks the whole board; the row reads "Asks: see its chat".
 * Merge asks GitLab again before it merges, so a comment or a withdrawn approval from the last minute is seen first; an MR approved while GitLab rechecks reads "not mergeable yet (GitLab: still checking)".
 * A row waiting on threads the project requires resolved no longer flips to "Needs a reviewer" for a minute while GitLab rechecks the MR, and on GitHub replied threads never stand in for a running pipeline or a missing review.

@@ -460,6 +460,17 @@ export function lastActivity(entries) {
     return Number.isNaN(at) ? null : at;
 }
 
+// When the user last answered the chat: its newest human prompt or answered AskUserQuestion; without either in the tail,
+// the tail's first entry, so a report older than everything read counts as answered.
+export function lastAnswerAt(entries) {
+
+    const asked = new Set(entries.flatMap(e => (e.type === 'assistant' && Array.isArray(e.message?.content) ? e.message.content : []))
+        .filter(b => b.type === 'tool_use' && b.name === 'AskUserQuestion').map(b => b.id));
+    const answer = entries.findLast(e => isHumanPrompt(e) || (e.type === 'user' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result' && asked.has(b.tool_use_id))));
+
+    return Date.parse((answer ?? entries.find(e => e.timestamp))?.timestamp) || null;
+}
+
 // The newest open background call as a step: a test run reads "running tests", anything else as stepOf says it.
 const TEST_RUN = /\btests?\b|\bcheck|gradlew?\b.*\b(test|check|build)\b|\b(vitest|jest|cucumber|spock|pytest)\b/i;
 function backgroundStep(entries, open) {
@@ -526,7 +537,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         stepAt: step?.at ?? null, // when that call started, for "for 2m" on the Now line
         queued: queuedPrompts(entries).map(q => q.text),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
-        lastPromptAt: Date.parse(entries.findLast(isHumanPrompt)?.timestamp) || null, // a report (homebase status) older than it is over
+        lastPromptAt: lastAnswerAt(entries), // a report (homebase status) older than it is over
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
         lastReplyAt: Date.parse(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)?.timestamp) || null, // for `homebase helper wait`: a reply newer than the wait
         sidechain: !!entries.find(e => e.type === 'user' || e.type === 'assistant')?.isSidechain, // a transcript a subagent wrote

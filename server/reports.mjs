@@ -9,12 +9,19 @@ export const reports = new Map();
 export const PHASES = ['doing', 'needs-you', 'done'];
 const MAX = 200;
 
+// An MR is its URL, !N or #N: anything else would be stored and never match a row.
+const MR = /^(?:https:\/\/\S+|[!#]?\d+)$/;
+const valid = r => !!r && PHASES.includes(r.phase) && (r.mr == null || (typeof r.mr === 'string' && r.mr.length <= 300 && MR.test(r.mr.trim())))
+    && (r.text == null || typeof r.text === 'string');
+
 export function loadReports(dir) {
 
     reports.clear();
     try {
         for (const [id, r] of Object.entries(JSON.parse(readFileSync(join(dir, 'reports.json'), 'utf8')))) {
-            reports.set(id, r);
+            if (valid(r) && Number.isFinite(r.at)) { // as report() checks it: a hand-edited entry never takes the board down
+                reports.set(id, r);
+            }
         }
     } catch {} // missing or broken: no reports, chats report again
 }
@@ -22,8 +29,8 @@ export function loadReports(dir) {
 // phase done forgets the chat's report. Throws 400 for an unknown phase or an over-long field.
 export async function report(dir, sessionId, { phase, mr = null, text = null } = {}, now = Date.now()) {
 
-    if (!PHASES.includes(phase) || (mr != null && (typeof mr !== 'string' || mr.length > 300)) || (text != null && typeof text !== 'string')) {
-        throw Object.assign(new Error(`expected a phase (${PHASES.join(', ')}), an optional MR (URL or !N) and text`), { status: 400 });
+    if (!valid({ phase, mr, text })) {
+        throw Object.assign(new Error(`expected a phase (${PHASES.join(', ')}), an optional MR (URL, !N or #N) and text`), { status: 400 });
     }
     if (phase === 'done') {
         reports.delete(sessionId);

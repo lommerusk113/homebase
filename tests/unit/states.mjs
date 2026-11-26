@@ -3,6 +3,12 @@
 // own rows and Dismiss are the page's: tests/browser/work.test.mjs and edges.test.mjs check them.
 import assert from 'node:assert/strict';
 import { workItems } from '../../server/items.mjs';
+import { loadReports, reports } from '../../server/reports.mjs';
+import { lastAnswerAt } from '../../server/sessions.mjs';
+import { ghPr, prs } from '../../server/forge.mjs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { withThreads } from '../../server/forge.mjs';
 import { HOLD_MS, mergeRefusal } from '../../server/once.mjs';
 import { byStart } from '../../web/src/lib/board.ts';
@@ -76,6 +82,7 @@ const rules = [
     ['3 a chat waiting on you beats a running helper', conflict, [main({ agents: [helper()] }), asks], 'needs-you', null],
     ['3 a reported needs-you without a question', conflict, [main(), chat({ status: 'waiting', report: { phase: 'needs-you', mr: '!1', text: null, at: 5 } })], 'needs-you', 'Rebase'],
     ['8 a stopped helper superseded by a later finished one', open({ reviewers: ['Ann'] }), [main({ agents: [helper({ id: 's', description: 'Fix A', status: 'stopped', stopReason: 'api-error', updated: NOW - 9000 }), helper({ id: 'd', description: 'Fix B', status: 'done', updated: NOW - 1000 })] })], 'review', 'Review'],
+    ['5 a report naming the MR as #1 (GitHub style)', conflict, [main(), chat({ status: 'working', report: { phase: 'doing', mr: '#1', text: 'Rebasing', at: 5 } })], 'doing', null],
     ['3 a reported needs-you', conflict, [main(), chat({ status: 'waiting', report: { phase: 'needs-you', mr: '!1', text: 'Which?', at: 5 } })], 'needs-you', 'Rebase'],
     ['4 a running helper', conflict, [main({ agents: [helper()] })], 'doing', null],
     ['5 a chat working on its branch', conflict, [main(), chat({ status: 'working', head: '1-x' })], 'doing', null],
@@ -250,3 +257,27 @@ console.log('ok order by first appearance');
     assert.match(mergeRefusal(row(open({ reviewers: ['Ann'] })), 'abc1234'), /no Merge button/);
 }
 console.log('ok merge only at the confirmed head');
+
+// inputs that must never take the board down or leave a row stuck
+{
+    // a hand-edited reports.json: bad entries are dropped at load
+    const dir = mkdtempSync(join(tmpdir(), 'hb-reports-'));
+    writeFileSync(join(dir, 'reports.json'), JSON.stringify({ a: { phase: 'needs-you', mr: 12, text: 5, at: 1 }, b: { phase: 'doing', mr: '!1', text: 'x', at: 2 }, c: null }));
+    loadReports(dir);
+    assert.deepEqual([...reports.keys()], ['b']);
+    reports.clear();
+    // an answered question ends a needs-you report like a new prompt does; with neither in the tail, the tail's start does
+    const t = s => new Date(s * 1000).toISOString();
+    const asked = [{ type: 'user', timestamp: t(1), message: { content: 'go' } }, { type: 'assistant', timestamp: t(2), message: { content: [{ type: 'tool_use', id: 'q1', name: 'AskUserQuestion' }] } },
+        { type: 'user', timestamp: t(3), message: { content: [{ type: 'tool_result', tool_use_id: 'q1', content: 'Yes' }] } }];
+    assert.equal(lastAnswerAt(asked), 3000);
+    assert.equal(lastAnswerAt([{ type: 'assistant', timestamp: t(7), message: { content: [{ type: 'text', text: 'hi' }] } }]), 7000);
+    // GitHub still computing mergeability keeps the conflict it saw, never flips to ready
+    const pr = 'https://github.com/o/p/pull/9', base = { state: 'OPEN', title: 't', headRefName: 'b', baseRefName: 'main', isDraft: false, reviewDecision: '' };
+    prs.set(pr, { at: 1, value: ghPr({ ...base, mergeable: 'CONFLICTING' }, pr) });
+    const rechecking = ghPr({ ...base, mergeable: 'UNKNOWN' }, pr);
+    assert.deepEqual([rechecking.ready, rechecking.blocked], [false, 'conflict']);
+    prs.delete(pr);
+    assert.equal(ghPr({ ...base, mergeable: 'UNKNOWN' }, pr).ready, false, 'no earlier answer: not ready');
+}
+console.log('ok odd inputs');

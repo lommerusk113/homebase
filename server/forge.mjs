@@ -124,6 +124,8 @@ export function ghPr(pr, url) {
     const pipeline = pipelineOf(null, pr.statusCheckRollup, url);
     const reviews = pr.latestReviews ?? [];
     const conflict = pr.mergeable === 'CONFLICTING';
+    // GitHub still computing mergeability (after a push to the base): keep what it said last, so a conflict doesn't flip to ready
+    const unknown = pr.mergeable === 'UNKNOWN', prev = unknown ? prs.get(url)?.value : null;
 
     return {
         state: pr.state.toLowerCase(),
@@ -133,9 +135,9 @@ export function ghPr(pr, url) {
         createdAt: Date.parse(pr.createdAt) || null,
         reviewers: [...new Set([...(pr.reviewRequests ?? []).map(r => r.login ?? r.name), ...reviews.map(r => r.author?.login)].filter(Boolean))],
         // an empty reviewDecision means the repo requires no review (hobby repos without branch protection)
-        ready: (pr.reviewDecision === 'APPROVED' || !pr.reviewDecision) && !pr.isDraft && !ciOf(pipeline) && !conflict,
+        ready: (pr.reviewDecision === 'APPROVED' || !pr.reviewDecision) && !pr.isDraft && !ciOf(pipeline) && !conflict && (!unknown || !!prev?.ready),
         approved: pr.reviewDecision === 'APPROVED',
-        blocked: conflict ? 'conflict' : null,
+        blocked: conflict ? 'conflict' : prev?.blocked ?? null,
         changes: pr.reviewDecision === 'CHANGES_REQUESTED',
         changesBy: reviews.filter(r => r.state === 'CHANGES_REQUESTED').map(r => r.author?.login).filter(Boolean),
         draft: pr.isDraft,

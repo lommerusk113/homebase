@@ -15,9 +15,7 @@ for (const [kind, k] of Object.entries(KINDS)) {
 console.log('ok every kind has a column and only ready merges');
 
 const opts = { pr: url, title: 'T' };
-const threads = 'Approved — waiting for the reviewer to resolve 2 threads';
-assert.equal(rowOf({ state: 'open', ready: false, approved: true, notReady: threads, reviewers: [] }, null, opts).stage, 3, 'approved with open threads stays Approved');
-assert.equal(rowOf({ state: 'open', blocked: 'blocked', approved: true, notReady: threads, reviewers: [] }, null, opts).next, `Blocked by another MR · ${threads}`);
+assert.equal(rowOf({ state: 'open', ready: true, approved: true, replied: 2, reviewers: [] }, null, opts).stage, 3, 'approved with open threads is Approved');
 assert.equal(rowOf({ state: 'open', blocked: 'blocked', approved: true, reviewers: [] }, null, opts).next, 'Blocked by another MR');
 console.log('ok approved with threads');
 
@@ -31,7 +29,7 @@ console.log('ok comments get the fix button');
 
 const everything = { state: 'open', changes: true, changesBy: ['Ann'], ci: 'failing', blocked: 'conflict', reviewers: ['Ann'] };
 assert.equal(rowOf(everything, null, opts).next, 'Address review comments from Ann · Pipeline failing · Merge conflicts — rebase it', 'every blocker is named');
-assert.equal(rowOf({ ...everything, changes: false, blocked: 'checks', notReady: threads }, null, opts).next, `Pipeline failing · Waiting for external status checks · ${threads}`);
+assert.equal(rowOf({ ...everything, changes: false, blocked: 'checks' }, null, opts).next, 'Pipeline failing · Waiting for external status checks');
 assert.equal(rowOf({ state: 'open', ci: 'failing' }, null, opts).next, 'Pipeline failing');
 console.log('ok next lists every blocker');
 

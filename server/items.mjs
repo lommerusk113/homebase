@@ -67,7 +67,7 @@ function mrNext(prState, mr) {
         return `Open the ${mr} to check its state`;
     }
     // everything in the way is said, the first thing to do first
-    const blockers = [reviewComments(prState), prState.ci === 'failing' && 'Pipeline failing', prState.blocked && BLOCKED_STEP[prState.blocked], prState.notReady].filter(Boolean);
+    const blockers = [reviewComments(prState), prState.ci === 'failing' && 'Pipeline failing', prState.blocked && BLOCKED_STEP[prState.blocked]].filter(Boolean);
     if (blockers.length) {
         return blockers.join(' · ');
     }
@@ -85,7 +85,8 @@ function mrNext(prState, mr) {
         const n = prState.replied;
         // GitHub with no review required is ready unapproved: it says Ready, not Approved
         const ok = prState.approvedBy?.length ? `Approved by ${prState.approvedBy.join(', ')}` : prState.approved === false ? 'Ready' : 'Approved';
-        return `${ok} — merge it${n ? ` · ${n} replied thread${n === 1 ? '' : 's'} still open` : ''}`;
+        // open threads are information: GitLab says mergeable only when the project lets them stay open
+        return `${ok} — merge it${n ? ` · ${n} open thread${n === 1 ? '' : 's'}` : ''}`;
     }
 
     if (prState.approved) { // approved, but the forge doesn't call it mergeable yet (no pipeline yet, still checking)
@@ -94,20 +95,6 @@ function mrNext(prState, mr) {
     }
 
     return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
-}
-
-// A mergeable MR is only ready once no thread is open; otherwise it stays approved in review with the threads named.
-// The gate doesn't hold it back: its verdict is the row's badge, the merge is the reviewer's approval.
-function demote(prState) {
-
-    if (!prState?.ready) {
-        return prState;
-    }
-    const n = prState.replied;
-    const ok = prState.approved === false ? 'Ready' : 'Approved'; // a GitHub PR that needs no review was approved by nobody
-    const notReady = n ? `${ok} — waiting for ${prState.repliedTo?.join(', ') || 'the reviewer'} to resolve ${n} thread${n === 1 ? '' : 's'}` : null;
-
-    return notReady ? { ...prState, ready: false, approved: prState.approved ?? true, notReady } : prState;
 }
 
 // The step review comments ask for, or null when there are none.
@@ -139,7 +126,7 @@ function reviewComments(prState) {
     return null;
 }
 
-// One kind per row, from the same inputs the old chains read; KINDS says what each kind shows. ps: the MR state after demote().
+// One kind per row, from the same inputs the old chains read; KINDS says what each kind shows. ps: the MR state.
 // Order matters: an MR's first blocker wins, as in rowAction.
 export function deriveKind(ps, agent, hasPr, requested = false, chat = null) {
 
@@ -176,7 +163,6 @@ export function deriveKind(ps, agent, hasPr, requested = false, chat = null) {
         : ps.blocked === 'conflict' || ps.blocked === 'rebase' ? 'conflict'
         : ps.blocked ? 'blocked'
         : ps.draft && ps.ci !== 'running' ? 'draft' // nothing blocks it but the draft flag: the user takes it out of draft
-        : ps.notReady ? 'threads'
         : ps.replied && !ps.ready ? 'replied'
         : ps.ci === 'running' ? 'pipeline'
         : ps.ready ? 'ready'
@@ -231,7 +217,6 @@ export const KINDS = {
     failing: mrKind('needs-you', c => canned('pipeline', mrRefOf(c))),
     conflict: mrKind('needs-you', c => canned('rebase', mrRefOf(c))),
     blocked: mrKind('review'),
-    threads: mrKind('review'),
     replied: mrKind('review'),
     pipeline: mrKind('review'),
     draft: { ...mrKind('needs-you', c => canned('ready', mrRefOf(c))), next: () => 'Ready except draft: mark ready' },
@@ -478,7 +463,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const gates = it.pr ? sessions.filter(s => s.project === it.project).flatMap(s => [...s.gates ?? [], ...(s.agents ?? []).flatMap(a => a.gates ?? [])]) : [];
         const run = it.pr ? gateFor(gates, it.pr, prState?.branch) : null;
         const gate = it.pr ? toGate(run, prState?.sha, heads, STARTED) : null;
-        const ps = demote(prState);
+        const ps = prState;
         // asked in the master's open turn but no agent runs for it yet: show it as in progress, without the button
         const requested = it.pr && agent?.status !== 'running' && prState?.state !== 'merged' && prState?.state !== 'closed'
             ? requestFor(sessions, it.project, it.pr, prState) : null;
@@ -520,7 +505,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             Object.assign(row, { column: 'needs-you', next: `Asks: ${asker.asks.split('\n')[0]} · ${row.next}` });
         }
         // an approved MR needs no reviewer: its row says what still stops the merge instead
-        const rev = !row.action && row.column === 'review' && !prState?.approved && row.state.kind !== 'threads' ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now, prState?.sha) : null;
+        const rev = !row.action && row.column === 'review' && !prState?.approved ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now, prState?.sha) : null;
 
         return {
             key: it.key,

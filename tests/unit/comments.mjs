@@ -121,9 +121,9 @@ assert.equal(nextOf({ ...wr, ci: 'running' }, null), 'Replied to 2 threads — w
 // mergeable wins over replied threads; unanswered comments and a failing pipeline still win over mergeable
 const wrReady = { ...wr, ready: true };
 assert.equal(colOf(wrReady, null, true), 'ready');
-assert.equal(nextOf(wrReady, null), 'Approved — merge it · 2 replied threads still open');
+assert.equal(nextOf(wrReady, null), 'Approved — merge it · 2 open threads');
 assert.equal(actOf(mr(4), wrReady, null, 'T').label, 'Merge');
-assert.equal(nextOf({ ...wrReady, replied: 1 }, null), 'Approved — merge it · 1 replied thread still open');
+assert.equal(nextOf({ ...wrReady, replied: 1 }, null), 'Approved — merge it · 1 open thread');
 assert.equal(actOf(mr(4), { ...wrReady, ci: 'failing' }, null, 'T').label, 'Fix pipeline');
 const theirsReady = withThreads({ ...waiting, ready: true }, turn(th(B), th(ME, B)));
 assert.equal(nextOf(theirsReady, null), 'Approved — 2 unanswered comments from Børre');

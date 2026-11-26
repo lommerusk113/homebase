@@ -26,7 +26,7 @@ const kinds = [
     ['blocked', open({ blocked: 'checks', draft: true }), 'review', 'Review'],
     ['draft', open({ draft: true }), 'needs-you', 'Mark ready'],
     ['pipeline', open({ draft: true, ci: 'running' }), 'review', 'Review'],
-    ['threads', open({ ready: true, approved: true, replied: 2 }), 'review', null],
+    ['ready', open({ ready: true, approved: true, replied: 2, sha: 'abc1234' }), 'ready', 'Merge'], // open threads GitLab lets merge: information, not a blocker
     ['replied', open({ replied: 1, reviewers: ['Ann'] }), 'review', 'Review'],
     ['pipeline', open({ ci: 'running', reviewers: ['Ann'] }), 'review', 'Review'],
     ['ready', open({ ready: true, sha: 'abc1234' }), 'ready', 'Merge'],
@@ -42,8 +42,12 @@ for (const [kind, ps, column, label] of kinds) {
     const approved = withThreads(open({ ready: true, approved: true, approvedBy: ['Ann'], sha: 'abc1234' }), { unanswered: 1, unansweredBy: ['Bo'] });
     assert.deepEqual([row(approved).state.kind, ...shown(row(approved))], ['changes', 'needs-you', 'Fix & reply']);
     assert.match(row(approved).next, /^Approved — 1 unanswered comment from Bo/);
-    const replied = withThreads(open({ ready: true, approved: true, sha: 'abc1234' }), { replied: 2, repliedTo: ['Bo'] });
-    assert.deepEqual(shown(row(replied)), ['review', null], 'replied threads still open: approved, waiting on them');
+    // pracsys !1849: approved by Børre, GitLab says mergeable, the project lets threads stay open: Merge, threads as information
+    const replied = withThreads(open({ ready: true, approved: true, approvedBy: ['Børre'], sha: 'abc1234' }), { replied: 2, repliedTo: ['Børre'] });
+    assert.deepEqual([row(replied).next, ...shown(row(replied))], ['Approved by Børre — merge it · 2 open threads', 'ready', 'Merge']);
+    // the same MR in a project that requires resolved threads: GitLab won't merge it, so it waits on them, no Merge
+    const required = withThreads(open({ ready: false, approved: true, approvedBy: ['Børre'], changes: true, mergeStatus: 'discussions_not_resolved', sha: 'abc1234' }), { replied: 2, repliedTo: ['Børre'] });
+    assert.deepEqual([row(required).next, ...shown(row(required))], ['Replied to 2 threads — waiting for Børre to resolve', 'review', null]);
     const unapproved = withThreads(open({ reviewers: ['Ann'] }), { unanswered: 1, unansweredBy: ['Bo'] });
     assert.deepEqual(shown(row(unapproved)), ['needs-you', 'Fix & reply']);
 }
@@ -153,14 +157,14 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
     assert.deepEqual(shown(row(null, [main()], sent(NOW - 1000))), ['doing', null]);
 }
 {
-    // a GitHub PR that needs no review, with replied threads: Ready, not Approved, and no button
-    const x = row(open({ ready: true, approved: false, replied: 1, repliedTo: ['Bo'] }));
-    assert.deepEqual([x.next, ...shown(x)], ['Ready — waiting for Bo to resolve 1 thread', 'review', null]);
+    // a PR that needs no review, with replied threads: Ready, not Approved, and mergeable
+    const x = row(open({ ready: true, approved: false, replied: 1, repliedTo: ['Bo'], sha: 'abc1234' }));
+    assert.deepEqual([x.next, ...shown(x)], ['Ready — merge it · 1 open thread', 'ready', 'Merge']);
 }
 {
     // texts that say what the button does, and who acts
     assert.equal(row(open({ reviewers: ['Ann'] }), [main({ agents: [helper({ status: 'stopped' })] })]).next, 'Helper stopped — Continue resumes it');
-    assert.equal(row(open({ ready: true, approved: true, replied: 2, repliedTo: ['Ann'] })).next, 'Approved — waiting for Ann to resolve 2 threads');
+    assert.equal(row(open({ ready: true, approved: true, replied: 2, repliedTo: ['Ann'] })).next, 'Approved — merge it · 2 open threads');
     assert.equal(row(open({ ready: true, approved: false })).next, 'Ready — merge it', 'GitHub without a required review: not Approved');
     assert.equal(row(open({ ready: true, approved: false, unanswered: 1, unansweredBy: ['Bo'] })).next, "Reply to Bo's comment", 'unreviewed GitHub PR: no Approved');
     assert.match(row(open({ approved: true, ci: 'running', unanswered: 1, unansweredBy: ['Bo'] })).next, /^Approved — 1 unanswered comment from Bo/);

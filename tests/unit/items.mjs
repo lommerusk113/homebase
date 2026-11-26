@@ -295,13 +295,12 @@ assert.equal(gated[0].gate.verdict, 'fix first');
 // the gate's fix first doesn't hold back a mergeable MR: Merge, the verdict stays the badge
 const warned = workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: runs, agents: [] }], () => open({ ready: true, ci: 'success', sha: 'abc' }), 0, new Map())[0];
 assert.deepEqual([warned.column, warned.gate.verdict, warned.action.label], ['ready', 'fix first', 'Merge']);
-// open threads are the blocker, the reviewer's to resolve; with none open it is ready
+// open threads don't hold back an MR GitLab calls mergeable: Merge, with the threads counted in the text
 const passed = [{ ...runs[1], verdict: 'ready', commit: 'abc1234' }];
 const withGate = pr => workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: passed, agents: [] }], () => open({ ready: true, sha: 'abc1234ff', branch: 'kjn-gate', ...pr }), 0, new Map())[0];
-assert.deepEqual([withGate({ replied: 3 }).next, withGate({ replied: 3 }).action?.label, withGate({ replied: 3 }).column], ['Approved — waiting for the reviewer to resolve 3 threads', undefined, 'review']); // the reviewer acts: no button
+assert.deepEqual([withGate({ replied: 3 }).next, withGate({ replied: 3 }).action?.label, withGate({ replied: 3 }).column], ['Approved — merge it · 3 open threads', 'Merge', 'ready']);
 assert.deepEqual([withGate({}).column, withGate({}).action.label], ['ready', 'Merge']);
-// approved by a reviewer with threads open: they are the blocker, and no Review button
-assert.deepEqual([withGate({ replied: 3, approved: true }).next, withGate({ replied: 3, approved: true }).action], ['Approved — waiting for the reviewer to resolve 3 threads', null]);
+assert.deepEqual([withGate({ replied: 3, approved: true, approvedBy: ['Børre'] }).next, withGate({ replied: 3, approved: true }).action.label], ['Approved by Børre — merge it · 3 open threads', 'Merge']);
 console.log('ok review gate');
 assert.equal(items[1].action.label, 'Review'); // waiting on review: the reviewer chat's button (review-chat.mjs)
 console.log('ok actions');

@@ -5,6 +5,7 @@ Notable changes to Homebase, newest first.
 ## Unreleased
 
 * A Review click on a requested MR no longer answers "not a merge request that asks you for a review" when the server's list was cold (after a restart) or its last refresh failed: it fetches the list first. The review chat now runs review-gate and then polish-loop, still read-only, and ends with a TLDR.
+* An approved MR GitLab can merge shows Merge even with open threads ("Approved by Børre — merge it · 2 open threads"); only a project that requires resolved threads keeps it waiting on them.
 * Merge merges only the commit the row showed when you clicked it: a push while the confirm was open is refused with "The MR changed since you clicked Merge".
 * A clicked Continue on an MR row stays held while its own prompt runs, until the helper runs again.
 * An approved MR GitLab won't merge yet says why ("needs a passing pipeline", "still checking"); Send findings no longer shows its row in Doing on the clicking device; the Issues tab no longer claims Homebase never writes to GitLab.

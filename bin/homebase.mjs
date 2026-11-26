@@ -15,7 +15,7 @@ const USAGE = `usage: homebase helper <command>
   stop <id> [--keep-worktree]
   send <id>... | --all          (message on stdin)
   wait <id>...                  (returns when one ends a turn or closes, with its read output)
-homebase status doing|needs-you|done [--mr <url or !N>] ["<what, e.g. Running tests>"]`;
+homebase status doing|needs-you|done [--mr <url, !N or GitHub #N>] ["<what, e.g. Running tests>"]`;
 
 const fail = (msg, code = 1) => {
     process.stderr.write(`${msg}\n`);

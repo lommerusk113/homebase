@@ -83,7 +83,7 @@ const rules = [
     ['3 a chat waiting on you beats a running helper', conflict, [main({ agents: [helper()] }), asks], 'needs-you', null],
     ['3 a reported needs-you without a question', conflict, [main(), chat({ status: 'waiting', report: { phase: 'needs-you', mr: '!1', text: null, at: 5 } })], 'needs-you', 'Rebase'],
     ['8 a stopped helper superseded by a later finished one', open({ reviewers: ['Ann'] }), [main({ agents: [helper({ id: 's', description: 'Fix A', status: 'stopped', stopReason: 'api-error', updated: NOW - 9000 }), helper({ id: 'd', description: 'Fix B', status: 'done', updated: NOW - 1000 })] })], 'review', 'Review'],
-    ['5 a report naming the MR as #1 (GitHub style)', conflict, [main(), chat({ status: 'working', report: { phase: 'doing', mr: '#1', text: 'Rebasing', at: 5 } })], 'doing', null],
+    ['5 a GitLab #1 is an issue, not this MR', conflict, [main(), chat({ status: 'working', report: { phase: 'doing', mr: '#1', text: 'Rebasing', at: 5 } })], 'needs-you', 'Rebase'],
     ['3 a reported needs-you', conflict, [main(), chat({ status: 'waiting', report: { phase: 'needs-you', mr: '!1', text: 'Which?', at: 5 } })], 'needs-you', 'Rebase'],
     ['4 a running helper', conflict, [main({ agents: [helper()] })], 'doing', null],
     ['5 a chat working on its branch', conflict, [main(), chat({ status: 'working', head: '1-x' })], 'doing', null],
@@ -199,6 +199,12 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
     // stage follows approval as the texts do
     assert.equal(row(open({ ready: true, approved: false })).stageLabel, 'Review');
     assert.equal(row(open({ ready: true, approved: true })).stageLabel, 'Approved');
+}
+{
+    // a GitHub PR's #N report matches it
+    const pr = 'https://github.com/o/p/pull/1';
+    const x = workItems([{ ...main(), prs: [{ url: pr, at: 1 }] }, chat({ status: 'working', report: { phase: 'doing', mr: '#1', text: 'Rebasing', at: 5 } })], () => open({ blocked: 'conflict' }), NOW).find(r => r.pr === pr);
+    assert.deepEqual([x.column, x.next], ['doing', 'Rebasing']);
 }
 console.log('ok precedence');
 

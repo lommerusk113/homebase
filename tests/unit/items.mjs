@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { workItems, tmuxArgs, repoName, gateRuns, gateFor, toGate, sameRepo } from '../../server.mjs';
 import { rowOf } from '../../server/items.mjs';
-import { loadStore, record, seeds, flush } from '../../server/store.mjs';
+import { loadStore, record, seeds, flush, seedForge } from '../../server/store.mjs';
 import { HOLD_MS, saveSent, loadSent } from '../../server/once.mjs';
 import { open, mr, agent, nextOf, actOf } from './helpers.mjs';
 
@@ -160,8 +160,15 @@ console.log('ok items');
     assert.equal(statSync(file).mode & 0o777, 0o600);
     assert.deepEqual(readdirSync(dir), ['items.json']);
     const back = loadStore(file);
-    assert.deepEqual(back.data.p[mr(1)], { title: 'One', issue: '9', branch: 'b', sessionId: 's1', firstSeen: 1000, lastSeen: 1000, state: 'open', mergedAt: null, agents: [{ id: 'a1', description: 'Impl !1', finished: 5 }], gateHeads: null });
+    assert.deepEqual(back.data.p[mr(1)], { title: 'One', issue: '9', branch: 'b', sessionId: 's1', firstSeen: 1000, lastSeen: 1000, state: 'open', mergedAt: null, agents: [{ id: 'a1', description: 'Impl !1', finished: 5 }], gateHeads: null, forge: null, forgeAt: null, comments: null, commentsAt: null });
     assert.equal(back.data.p[mr(2)].mergedAt, 1000);
+    // the forge's last answers are kept and seed the caches after a restart, as answered at their time
+    record(back, [item(mr(1), { state: 'open', title: 'One', issue: '9' }, { forgeAnswers: { forge: { state: 'open', ready: true, sha: 'abc' }, forgeAt: 1500, comments: { count: 1 }, commentsAt: 1600 } })], 1500);
+    const prsMap = new Map(), swrMap = new Map();
+    seedForge(back, prsMap, swrMap);
+    assert.deepEqual([prsMap.get(mr(1)), swrMap.get(`comments:${mr(1)}`)], [{ at: 1500, okAt: 1500, value: { state: 'open', ready: true, sha: 'abc' } }, { at: 1600, okAt: 1600, value: { count: 1 } }]);
+    record(back, [item(mr(1), { state: 'open', title: 'One', issue: '9' })], 1800);
+    back.dirty = false;
     record(back, [item(mr(1), { state: 'open', title: 'One', issue: '9' })], 2000);
     assert.equal(back.dirty, false);
     record(back, [item(mr(1), { state: 'merged' })], 3000);

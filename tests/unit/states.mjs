@@ -6,7 +6,7 @@ import { workItems } from '../../server/items.mjs';
 import { canned } from '../../web/src/lib/canned.ts';
 import { loadReports, reports, report, forgetReport } from '../../server/reports.mjs';
 import { lastAnswerAt, attachReports, summarize } from '../../server/sessions.mjs';
-import { ghPr, prs } from '../../server/forge.mjs';
+import { ghPr, prs, settle } from '../../server/forge.mjs';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -171,15 +171,6 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
     // a helper that finished since the click says how it went in the held text
     const fin = main({ agents: [helper({ status: 'done', outcome: 'Pipeline fails on a missing CI secret.', updated: NOW - 500 })] });
     assert.match(row(conflict, [fin], sent(NOW - 1000)).next, /^Sent to Claude \(.+\) · Helper finished: Pipeline fails on a missing CI secret · button back at /);
-    // a forge still checking (a first lookup's guess) keeps the click: the guess is no new state
-    const guess = new Map([[url, { at: NOW - 1000, kind: 'conflict' }]]);
-    assert.deepEqual(shown(row(open({ reviewers: ['Ann'], checking: true }), [main()], guess)), ['doing', null]);
-    assert.equal(guess.size, 1, 'not forgotten');
-    // two still-checking answers in a row: the kept guess is still a guess
-    const ghUrl = 'https://github.com/o/p/pull/3', gb = { state: 'OPEN', title: 't', headRefName: 'b', baseRefName: 'main', isDraft: false, reviewDecision: '', mergeable: 'UNKNOWN' };
-    prs.set(ghUrl, { at: 1, value: ghPr(gb, ghUrl) });
-    assert.equal(ghPr(gb, ghUrl).checking, true);
-    prs.delete(ghUrl);
     // an MR button's click without a forge answer holds too
     assert.deepEqual(shown(row(null, [main()], sent(NOW - 1000))), ['doing', null]);
 }
@@ -339,12 +330,10 @@ console.log('ok merge only at the confirmed head');
     assert.equal(reports.get('w').mr, 'https://gitlab.com/g/p/-/merge_requests/12', 'a URL is cut to the MR');
     await assert.rejects(report(dir2, 'x', { phase: 'doing', mr: 'https://gitlab.com/g/p/-/issues/12' }), e => e.status === 400);
     reports.clear();
-    // GitHub still computing mergeability keeps the conflict it saw, never flips to ready
-    const pr = 'https://github.com/o/p/pull/9', base = { state: 'OPEN', title: 't', headRefName: 'b', baseRefName: 'main', isDraft: false, reviewDecision: '' };
-    prs.set(pr, { at: 1, value: ghPr({ ...base, mergeable: 'CONFLICTING' }, pr) });
-    const rechecking = ghPr({ ...base, mergeable: 'UNKNOWN' }, pr);
+    // GitHub still computing mergeability keeps the conflict it saw for the same head, never flips to ready
+    const base = { state: 'OPEN', title: 't', headRefName: 'b', baseRefName: 'main', isDraft: false, reviewDecision: '', headRefOid: 'abc1234' }, pr = 'https://github.com/o/p/pull/9';
+    const rechecking = settle(ghPr({ ...base, mergeable: 'UNKNOWN' }, pr), ghPr({ ...base, mergeable: 'CONFLICTING' }, pr));
     assert.deepEqual([rechecking.ready, rechecking.blocked], [false, 'conflict']);
-    prs.delete(pr);
     assert.equal(ghPr({ ...base, mergeable: 'UNKNOWN' }, pr).ready, false, 'no earlier answer: not ready');
 }
 console.log('ok odd inputs');

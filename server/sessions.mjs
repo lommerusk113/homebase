@@ -11,8 +11,8 @@ import { splitTldr, gateRuns, latestTopic, queuedPrompts } from './summaries.mjs
 import { readUsage, usageCache } from './usage.mjs';
 import { chatItems, RULES_LABEL, handled } from './feed.mjs';
 import { waitingQuestion } from './asks.mjs';
-import { loadStore, record, seeds, flush, gateHeadsOf, STORE_FILE } from './store.mjs';
-import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
+import { loadStore, record, seeds, flush, gateHeadsOf, seedForge, STORE_FILE } from './store.mjs';
+import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr, prs } from './forge.mjs';
 import { isManual } from './manual.mjs';
 import { reports, forgetReport, endsAt } from './reports.mjs';
 import { sentRows, saveSent } from './once.mjs';
@@ -41,6 +41,7 @@ const AGENT_IDLE_MS = 2 * 60_000; // ended its turn with text but never handed b
 
 const store = loadStore();
 const gateHeads = gateHeadsOf(store);
+seedForge(store, prs, swr); // the last forge answers: a restart serves them at once and asks again in the background
 const projects = new Map(); // cwd -> repo name
 export { repoPaths }; // repo name -> { host, path }, from the origin URL
 
@@ -766,6 +767,9 @@ async function itemsOf(out) {
         it.comments = comments.get(it.pr) ?? null;
         // a failed lookup: without any state the row says why; with an older one it is flagged stale
         it.forgeError = it.pr ? errorOf(it.pr, it.project) : null;
+        // the raw answers, for the store (seedForge); dropped before the response
+        it.forgeAnswers = it.pr ? { forge: prs.get(it.pr)?.okAt ? prs.get(it.pr).value : null, forgeAt: prs.get(it.pr)?.okAt ?? null,
+            comments: swr.get(`comments:${it.pr}`)?.okAt ? swr.get(`comments:${it.pr}`).value : null, commentsAt: swr.get(`comments:${it.pr}`)?.okAt ?? null } : null;
     }
     // each project's forge state, on its sessions: the page says once when the forge can't be reached, and how old its data is
     for (const project of new Set(out.map(s => s.project))) {
@@ -775,7 +779,7 @@ async function itemsOf(out) {
     record(store, items);
     flush(store);
     items.filter(i => i.pr && i.since == null).forEach(i => { i.since = store.data[i.project]?.[i.pr]?.firstSeen ?? null; });
-    items.forEach(i => { delete i.agentLinks; delete i.gateHead; });
+    items.forEach(i => { delete i.agentLinks; delete i.gateHead; delete i.forgeAnswers; });
 
     return items;
 }

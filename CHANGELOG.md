@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* GitLab's and GitHub's last answers are kept with each MR in items.json, so a restart shows the board as it was at once and asks again in the background; while a forge is still checking, mergeability comes only from its last settled answer for the same commit (a new commit is unknown, never Merge), and the extra re-asks are gone.
 * A forge that is still checking on a second lookup keeps a clicked row's hold too, and `homebase status --mr` with an MR URL plus `/diffs`, `#note_…` or `?tab=` matches its row (a URL naming no MR is refused).
 * A GitLab MR's first lookup after a start asks again while GitLab is still checking, and a guess from a forge still checking never ends a clicked row's hold.
 * An answer typed while a chat is still working now ends its `homebase status needs-you` report (a doing report stays while the chat works); a GitLab `--mr '#12'` (an issue) is refused with what to write instead, and an empty `--mr` says the `#` was read as a shell comment.

@@ -72,7 +72,12 @@ export function record(store, items, now = Date.now()) {
             state,
             mergedAt: state === 'merged' ? old?.mergedAt ?? now : old?.mergedAt ?? null,
             agents: [...agents.values()],
-            gateHeads: it.gateHead ? { [it.gateHead[0]]: it.gateHead[1] } : old?.gateHeads ?? null // the MR head seen with its latest gate run
+            gateHeads: it.gateHead ? { [it.gateHead[0]]: it.gateHead[1] } : old?.gateHeads ?? null, // the MR head seen with its latest gate run
+            // the forge's last answers (MR state and comments) with when they came, served after a restart (seedForge)
+            forge: it.forgeAnswers?.forge ?? old?.forge ?? null,
+            forgeAt: it.forgeAnswers?.forgeAt ?? old?.forgeAt ?? null,
+            comments: it.forgeAnswers?.comments ?? old?.comments ?? null,
+            commentsAt: it.forgeAnswers?.commentsAt ?? old?.commentsAt ?? null
         };
         projectData[it.pr] = next;
         store.dirty ||= !old || !sameEntry(old, next);
@@ -128,5 +133,21 @@ export function flush(store, now = Date.now()) {
         store.dirty = false;
     } catch (e) {
         console.error(`could not write ${store.file}: ${e.message}`); // retried after the gap
+    }
+}
+
+// Fills the forge caches (prs, and swr's comments) from the stored answers, as answered at their time: the first poll after
+// a start places rows as before it, and the TTL asks the forge again in the background.
+export function seedForge(store, prs, swr) {
+
+    for (const urls of Object.values(store.data)) {
+        for (const [url, e] of Object.entries(urls)) {
+            if (e.forge && e.forgeAt && !prs.has(url)) {
+                prs.set(url, { at: e.forgeAt, okAt: e.forgeAt, value: e.forge });
+            }
+            if (e.comments && e.commentsAt && !swr.has(`comments:${url}`)) {
+                swr.set(`comments:${url}`, { at: e.commentsAt, okAt: e.commentsAt, value: e.comments });
+            }
+        }
     }
 }

@@ -233,7 +233,7 @@ Edit the rules file to change how all Homebase chats behave; chats already runni
 
 What Homebase stores, all in the Homebase dir:
 
-* `items.json`: the MRs/PRs it has seen, so the Work view doesn't lose one when its link scrolls out of a transcript; deleting the file is safe.
+* `items.json`: the MRs/PRs it has seen, with the forge's last answer for each (state and comments), so the Work view doesn't lose one when its link scrolls out of a transcript and a restart shows the same board at once; deleting the file is safe.
 * `uploads/`: images attached in the chat (paste, drop or the + menu). They are sent as `[Image: <path>]` lines, which Claude opens with its Read tool; the folder is never cleaned up, so delete old files when you like.
 * `asking/<session>.json`: the hook's markers. The answer, the next tool (for a permission prompt), a new prompt or the end of the turn removes the marker; Homebase also ignores one the transcript has moved past, a permission prompt that was answered (Claude's input box is back on the chat's screen while the approved tool still runs), or one older than a day.
 * `tracked.json`: the projects on your board.

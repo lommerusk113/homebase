@@ -7,8 +7,6 @@ import { ghRun, accountOf, repoPaths } from './account.mjs';
 const run = promisify(execFile);
 
 export const PR_TTL_MS = 60_000;
-const GH_RECHECK_MS = Number(process.env.HOMEBASE_GH_RECHECK_MS ?? 2000); // a forge still computing mergeability is asked again after this
-const CHECKING = ['unchecked', 'checking', 'approvals_syncing', 'preparing'];
 export const prs = new Map(); // url -> { at, value, pending }
 
 // CI pipeline as { status, url, at } or null. GitLab passes the MR's head_pipeline (or legacy pipeline) as-is;
@@ -55,25 +53,21 @@ export function repoOfUrl(url) {
 // GitLab merge statuses that stop a merge for a reason other than review or CI.
 const BLOCKED = { conflict: 'conflict', need_rebase: 'rebase', blocked_status: 'blocked', external_status_checks: 'checks' };
 
-// Read-only PR/MR lookup via gh/glab. Returns { state: open|merged|closed, title, branch, reviewers, ready, blocked, changes, changesBy, draft, ci, pipeline } or null.
+// GitLab still computing mergeability: its answer says nothing about whether the MR can merge (settle keeps the last one).
+const CHECKING = ['unchecked', 'checking', 'approvals_syncing', 'preparing'];
+
+// Read-only PR/MR lookup via gh/glab, settled against the last answer (see settle). Returns { state: open|merged|closed,
+// title, branch, reviewers, mergeable, ready, blocked, changes, changesBy, draft, ci, pipeline, ... } or null.
 async function fetchPr(url) {
 
     const gl = url.match(/^https:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)/);
     if (gl) {
-        const ask = async () => JSON.parse((await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}`], { timeout: apiTimeout() })).stdout);
-        let mr = await ask();
-        // GitLab still computing the status with no earlier answer to keep (a first lookup): ask once more instead of guessing
-        if (mr.state === 'opened' && CHECKING.includes(mr.detailed_merge_status) && !prs.get(url)?.value) {
-            await new Promise(r => setTimeout(r, GH_RECHECK_MS));
-            mr = await ask();
-        }
+        const mr = JSON.parse((await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}`], { timeout: apiTimeout() })).stdout);
         const state = { opened: 'open', merged: 'merged' }[mr.state] ?? 'closed';
         const status = mr.detailed_merge_status;
         const pipeline = pipelineOf(mr.head_pipeline ?? mr.pipeline);
         // ci_must_pass without a pipeline is a missing one, not a failing one
         const ci = status === 'ci_must_pass' && !pipeline ? null : { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? ciOf(pipeline);
-        // GitLab is still computing the status: keep what it said last, so ready doesn't flap
-        const prev = CHECKING.includes(status) ? prs.get(url)?.value : null;
         // no milestone of its own: its issue's, which beats guessing from the target branch (v1 and v2 share one branch)
         const issue = issueOf(mr.title, mr.description);
         const issueMs = !mr.milestone && issue
@@ -81,29 +75,28 @@ async function fetchPr(url) {
             : null;
         const ms = mr.milestone ?? issueMs;
         // mergeable is not approved: a project without required approvals lets an unreviewed MR merge. Asked for every open
-        // MR GitLab doesn't already call unapproved, so one approved while its pipeline runs or fails stays Approved
+        // MR GitLab doesn't already call unapproved; a failure fails the lookup, so the last answer stays
         const approvedBy = state === 'open' && !mr.draft && !['not_approved', 'draft_status', 'not_open'].includes(status)
             ? await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}/approvals`], { timeout: apiTimeout() })
-                .then(r => (JSON.parse(r.stdout).approved_by ?? []).map(a => a.user?.name).filter(Boolean)) // a failure fails the lookup: the last state stays
-            : null;
-        const approved = approvedBy ? approvedBy.length > 0 : status === 'not_approved' ? false : !!prev?.approved;
+                .then(r => (JSON.parse(r.stdout).approved_by ?? []).map(a => a.user?.name).filter(Boolean))
+            : [];
 
-        return {
+        return settle({
             state,
             title: mr.title,
             branch: mr.source_branch,
             updatedAt: Date.parse(mr.updated_at) || 0,
             createdAt: Date.parse(mr.created_at) || null,
             reviewers: (mr.reviewers ?? []).map(r => r.name),
-            // ready means merge now, by someone's approval: a failing or running pipeline (GitLab allows it when CI isn't
-            // required) is not ready, nor is an MR nobody approved
-            ready: (prev ? prev.mergeStatus ?? status : status) === 'mergeable' && !ci && approved, // the kept status while GitLab rechecks
-            // approved although its pipeline may still run or fail: the stage says Approved, the column waits for CI
-            approved,
-            approvedBy: approvedBy ?? prev?.approvedBy ?? [],
-            blocked: BLOCKED[status] ?? prev?.blocked ?? null,
-            // ponytail: the MR payload doesn't say which reviewer blocked; the /reviewers endpoint would
-            changes: status === 'requested_changes' || status === 'discussions_not_resolved' || mr.blocking_discussions_resolved === false,
+            approved: approvedBy.length > 0,
+            approvedBy,
+            reviewRequired: true,
+            // mergeability: true, false, or null while GitLab still checks
+            mergeable: CHECKING.includes(status) ? null : status === 'mergeable',
+            mergeStatus: status ?? null, // why GitLab won't merge it yet
+            blocked: BLOCKED[status] ?? null,
+            // ponytail: the MR payload doesn't say which reviewer asked; threads come from withThreads only
+            changes: status === 'requested_changes',
             changesBy: [],
             draft: !!mr.draft,
             ci,
@@ -111,47 +104,38 @@ async function fetchPr(url) {
             milestone: ms ? { id: ms.id, title: ms.title, due_date: ms.due_date } : null,
             target: mr.target_branch,
             issue,
-            sha: mr.sha ?? mr.diff_refs?.head_sha ?? null,
-            checking: state === 'open' && CHECKING.includes(status) && (!prev || !!prev.checking), // still a guess (also a kept guess): a click's hold is kept (items.mjs)
-            mergeStatus: prev ? prev.mergeStatus ?? null : status ?? null // why GitLab won't merge it yet; kept like ready while GitLab is still checking
-        };
+            sha: mr.sha ?? mr.diff_refs?.head_sha ?? null
+        }, prs.get(url)?.value);
     }
 
     const repo = repoOfUrl(url);
     const view = fields => ghRun(repo, ['pr', 'view', url, '--json', fields], { timeout: apiTimeout() });
     const fields = 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid,updatedAt,createdAt,mergeable';
     // a token without read:org (the personal one) can't read reviewRequests; the reviewers then come from the reviews alone
-    const ask = () => view(fields).catch(e => (/required scopes/.test(e.message) ? view(fields.replace('reviewRequests,', '')) : Promise.reject(e)));
-    let pr = JSON.parse((await ask()).stdout);
-    // GitHub computes mergeability on the first ask: with no earlier answer to keep, ask once more instead of showing a guess
-    if (pr.state === 'OPEN' && pr.mergeable === 'UNKNOWN' && !prs.get(url)?.value) {
-        await new Promise(r => setTimeout(r, GH_RECHECK_MS));
-        pr = JSON.parse((await ask()).stdout);
-    }
+    const { stdout } = await view(fields).catch(e => (/required scopes/.test(e.message) ? view(fields.replace('reviewRequests,', '')) : Promise.reject(e)));
 
-    return ghPr(pr, url);
+    return settle(ghPr(JSON.parse(stdout), url), prs.get(url)?.value);
 }
 
-// A `gh pr view --json` answer as the PR state the board reads.
+// A `gh pr view --json` answer as the PR state the board reads (settled on its own; fetchPr settles it on the last answer).
 export function ghPr(pr, url) {
 
     const pipeline = pipelineOf(null, pr.statusCheckRollup, url);
     const reviews = pr.latestReviews ?? [];
-    const conflict = pr.mergeable === 'CONFLICTING';
-    // GitHub still computing mergeability (after a push to the base): keep what it said last, so a conflict doesn't flip to ready
-    const unknown = pr.mergeable === 'UNKNOWN', prev = unknown ? prs.get(url)?.value : null;
 
-    return {
+    return settle({
         state: pr.state.toLowerCase(),
         title: pr.title,
         branch: pr.headRefName,
         updatedAt: Date.parse(pr.updatedAt) || 0,
         createdAt: Date.parse(pr.createdAt) || null,
         reviewers: [...new Set([...(pr.reviewRequests ?? []).map(r => r.login ?? r.name), ...reviews.map(r => r.author?.login)].filter(Boolean))],
-        // an empty reviewDecision means the repo requires no review (hobby repos without branch protection)
-        ready: (pr.reviewDecision === 'APPROVED' || !pr.reviewDecision) && !pr.isDraft && !ciOf(pipeline) && !conflict && (!unknown || !!prev?.ready),
         approved: pr.reviewDecision === 'APPROVED',
-        blocked: conflict ? 'conflict' : prev?.blocked ?? null,
+        approvedBy: reviews.filter(r => r.state === 'APPROVED').map(r => r.author?.login).filter(Boolean),
+        reviewRequired: !!pr.reviewDecision, // an empty reviewDecision: the repo requires no review (hobby repos without branch protection)
+        mergeable: pr.mergeable === 'UNKNOWN' ? null : pr.mergeable === 'MERGEABLE', // UNKNOWN: GitHub still computing
+        mergeStatus: null,
+        blocked: pr.mergeable === 'CONFLICTING' ? 'conflict' : null,
         changes: pr.reviewDecision === 'CHANGES_REQUESTED',
         changesBy: reviews.filter(r => r.state === 'CHANGES_REQUESTED').map(r => r.author?.login).filter(Boolean),
         draft: pr.isDraft,
@@ -160,9 +144,18 @@ export function ghPr(pr, url) {
         milestone: pr.milestone ? { id: pr.milestone.number, title: pr.milestone.title, due_date: pr.milestone.dueOn?.slice(0, 10) ?? null } : null,
         target: pr.baseRefName,
         issue: issueOf(pr.title, pr.body),
-        sha: pr.headRefOid ?? null,
-        checking: unknown && pr.state === 'OPEN' && (!prev || !!prev.checking) // still a guess (also a kept guess): a click's hold is kept (items.mjs)
-    };
+        sha: pr.headRefOid ?? null
+    }, null);
+}
+
+// Mergeability (mergeable, blocked, mergeStatus) comes only from a settled answer for the current head: a forge still
+// checking keeps the last settled one for the same sha, and on a new sha it is unknown (null). Ready only on a settled yes.
+export function settle(answer, prev) {
+
+    const kept = answer.state === 'open' && answer.mergeable == null && prev?.sha && prev.sha === answer.sha && prev.mergeable != null;
+    const ps = kept ? { ...answer, mergeable: prev.mergeable, blocked: prev.blocked, mergeStatus: prev.mergeStatus } : answer;
+
+    return { ...ps, ready: ps.state === 'open' && ps.mergeable === true && !ps.blocked && !ps.draft && !ps.ci && (ps.approved || !ps.reviewRequired) };
 }
 
 // The one write: merges a GitLab MR now, only while its head is still `sha` (what the board showed approved). No auto-merge;

@@ -32,10 +32,10 @@ import { mr, fakeBin, withFakeGlab, glabMr, nextOf, colOf, actOf } from './helpe
     assert.equal(nextOf(await glabMr({ detailed_merge_status: 'blocked_status' }, 112), null), 'Blocked by another MR');
     // a must-pass project without a pipeline isn't "Pipeline failing"
     assert.equal((await glabMr({ detailed_merge_status: 'ci_must_pass' }, 113)).ci, null);
-    // unchecked/checking keep the last answer, so a ready MR doesn't flap and notify again
+    // unchecked/checking keep the last settled answer for the same head, so a ready MR doesn't flap and notify again
     const url = 'https://gitlab.example.com/g/p/-/merge_requests/114';
     prs.delete(url);
-    assert.equal((await glabMr({}, 114)).ready, true);
+    assert.equal((await glabMr({ sha: 'ccc1234' }, 114)).ready, true);
     // mergeable but nobody approved (no approvals required): not ready, so no Merge button
     const unapproved = await glabMr({ approved_by: [], head_pipeline: { status: 'success' } }, 115);
     assert.deepEqual([unapproved.ready, unapproved.approved], [false, false]);
@@ -44,21 +44,25 @@ import { mr, fakeBin, withFakeGlab, glabMr, nextOf, colOf, actOf } from './helpe
     const u117 = 'https://gitlab.example.com/g/p/-/merge_requests/117';
     assert.equal((await glabMr({ head_pipeline: { status: 'success' } }, 117)).ready, true);
     const body = JSON.stringify({ state: 'opened', title: 't', source_branch: 'b', detailed_merge_status: 'mergeable', head_pipeline: { status: 'success' } });
+    const okAt = prs.get(u117).okAt;
     prs.get(u117).at = 0;
     const kept = await withFakeGlab(`case "$*" in *approvals*) echo 'boom' >&2; exit 1;; *) echo '${body}';; esac`, () => prState(u117));
     assert.deepEqual([kept.ready, kept.approvedBy], [true, ['Ann']]);
-    assert.ok(prs.get(u117).error, 'and the row is flagged stale');
-    // a first lookup while GitLab still checks asks once more, and says it is still a guess if it is
+    assert.deepEqual([!!prs.get(u117).error, prs.get(u117).okAt], [true, okAt], 'and the row is flagged stale, as of its last answer');
+    // a first lookup while GitLab still checks: mergeability unknown, so never ready
     const first = await glabMr({ detailed_merge_status: 'checking' }, 119);
-    assert.deepEqual([first.checking, first.mergeStatus], [true, 'checking']);
-    // GitLab recomputing (unchecked) keeps the last merge status, so a row waiting on threads doesn't flap for a minute
+    assert.deepEqual([first.mergeable, first.ready, first.mergeStatus], [null, false, 'checking']);
+    // GitLab recomputing (unchecked) keeps the last settled status for the same head; a new head is unknown
     const u118 = 'https://gitlab.example.com/g/p/-/merge_requests/118';
-    assert.equal((await glabMr({ detailed_merge_status: 'discussions_not_resolved' }, 118)).mergeStatus, 'discussions_not_resolved');
+    assert.equal((await glabMr({ detailed_merge_status: 'discussions_not_resolved', sha: 'aaa1111' }, 118)).mergeStatus, 'discussions_not_resolved');
     prs.get(u118).at = 0;
-    const rechecking = JSON.stringify({ state: 'opened', title: 't', source_branch: 'b', detailed_merge_status: 'unchecked' });
-    assert.equal((await withFakeGlab(`echo '${rechecking}'`, () => prState(u118))).mergeStatus, 'discussions_not_resolved');
+    const rechecking = sha => JSON.stringify({ state: 'opened', title: 't', source_branch: 'b', detailed_merge_status: 'unchecked', sha });
+    assert.equal((await withFakeGlab(`echo '${rechecking('aaa1111')}'`, () => prState(u118))).mergeStatus, 'discussions_not_resolved');
+    prs.get(u118).at = 0;
+    const pushed = await withFakeGlab(`echo '${rechecking('bbb2222')}'`, () => prState(u118));
+    assert.deepEqual([pushed.mergeable, pushed.mergeStatus], [null, 'unchecked'], 'a push: unknown until GitLab settles');
     prs.get(url).at = 0;
-    const checking = await glabMr({ detailed_merge_status: 'checking' }, 114);
+    const checking = await glabMr({ detailed_merge_status: 'checking', sha: 'ccc1234' }, 114);
     await prs.get(url).pending;
     assert.equal(prs.get(url).value.ready, true, `checking kept ready (first answer ${checking.ready})`);
     console.log('ok gitlab merge statuses');

@@ -1,7 +1,5 @@
 // Unit tests: one file per area under tests/unit/, run one after another in this order.
 // Each prints `ok <name>` per passing group; a failing assert rejects the import and fails the run.
-process.env.HOMEBASE_GH_RECHECK_MS ??= '10'; // a forge's "still checking" re-ask, not worth 2 s per test
-
 const UNITS = [
     'agents', 'answered-once', 'chat', 'items', 'kinds', 'comments', 'asks', 'usage', 'milestones', 'turns', 'board', 'security', 'http',
     'client', 'links', 'transcripts', 'projects', 'accounts', 'forge', 'sessions', 'send', 'questions', 'push',

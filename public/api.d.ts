@@ -61,6 +61,8 @@ interface Session {
     subagents: { running: number; finished: number };
     files: string[];
     updated: number;
+    /** the died turn's last entry id, marked handled when its row is opened */
+    diedId?: string | null;
     created: number;
     /** last human prompt or Claude text/tool call, not file mtime; null when the transcript has none */
     lastActivity: number | null;

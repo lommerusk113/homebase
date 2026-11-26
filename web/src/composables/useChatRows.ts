@@ -1,5 +1,5 @@
 import { computed, reactive } from 'vue';
-import { inView, markHandled, state, store } from 'old/core.js';
+import { inView, markHandled, state } from 'old/core.js';
 import { ago } from '@/lib/time';
 import { askedIds, waitsOnYou } from '@/lib/waiting';
 import { isMaster, bindChat, focusChat } from 'old/chat.js';
@@ -11,8 +11,9 @@ import type { useWorkItems } from '@/composables/useWorkItems';
 const handled = reactive(new Set<string>()); // replies marked as handled here, until the next poll has the server's word
 
 // A main chat whose turn never ended and went silent for 30 minutes (the laptop slept, Claude hangs): without a row it
-// would only vanish from Doing. It stays under Needs you until the user opens it, per turn (lastActivity).
-const diedMark = (s: Session) => String(s.lastActivity ?? s.updated);
+// would only vanish from Doing. It stays under Needs you until the user opens it, per turn: opening marks the turn's last
+// entry (diedId) handled on the server, so every device drops it; `seen` hides it here until the next poll says so.
+const seen = reactive(new Set<string>());
 
 /** The board's rows for the chats themselves: waiting on you, stopped mid-turn, working, or starting on an issue. */
 export function useChatRows(work: ReturnType<typeof useWorkItems>) {
@@ -27,7 +28,7 @@ export function useChatRows(work: ReturnType<typeof useWorkItems>) {
     // a chat whose question names an MR shown in Needs you is that row (askedBy), else it gets its own row
     const asked = computed(() => askedIds(work.items.value));
     const asking = computed(() => visible.value.filter(s => waitsOnYou(s) && !asked.value.has(s.id) && !(s.needsId && !s.asking && handled.has(s.needsId))));
-    const died = computed(() => visible.value.filter(s => !!s.died && isMaster(s) && s.status !== 'working' && !waitsOnYou(s) && store.get(`died-seen:${s.id}`) !== diedMark(s)));
+    const died = computed(() => visible.value.filter(s => !!s.died && isMaster(s) && s.status !== 'working' && !waitsOnYou(s) && !seen.has(s.diedId ?? s.id)));
     // "#N · starting…": the main chat took the issue on, but no subagent or MR shows it yet
     const starting = computed(() => visible.value.filter(isMaster).flatMap(s => {
         const items = visible.value.filter(o => o.project === s.project).flatMap(o => o.items || []);
@@ -46,7 +47,10 @@ export function useChatRows(work: ReturnType<typeof useWorkItems>) {
         }
     };
     const openDied = (s: Session) => {
-        store.set(`died-seen:${s.id}`, diedMark(s));
+        seen.add(s.diedId ?? s.id);
+        if (s.diedId) {
+            markHandled(s.id, s.diedId).catch(() => seen.delete(s.diedId!)); // not saved: the row comes back to open again
+        }
         focusChat(s.id);
     };
 

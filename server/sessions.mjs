@@ -9,7 +9,7 @@ import { ROOT, projectDirs, cache, liveSessions, readTail, tailOf, textOf, isHum
 import { WORKING_MS, closedSession, turnState, hasTurnMarkers, turnPrompts, helperAsk, askingHelper, openToolUse, pendingQuestion, askMarker, spawnPrompts } from './turns.mjs';
 import { splitTldr, gateRuns, latestTopic, queuedPrompts } from './summaries.mjs';
 import { readUsage, usageCache } from './usage.mjs';
-import { chatItems, RULES_LABEL } from './feed.mjs';
+import { chatItems, RULES_LABEL, handled } from './feed.mjs';
 import { waitingQuestion } from './asks.mjs';
 import { loadStore, record, seeds, flush, gateHeadsOf, STORE_FILE } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
@@ -678,6 +678,9 @@ async function readSession({ dir, file, path, st }, now, live) {
 
     diedFrom ??= diedSince();
     s.died &&= (s.lastActivity ?? st.mtimeMs) > diedFrom; // only turns that died since the feature first ran here
+    // the died turn's last entry: opening its row marks it handled (POST /api/handled), so every device drops the row
+    s.diedId = s.died ? entries.findLast(e => e.uuid)?.uuid ?? null : null;
+    s.died &&= !handled.has(s.diedId);
 
     return { ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, context: ctx?.percent ?? null, contextSize: ctx?.size ?? null, contextAt: ctx?.at ?? null, checks: checksStatus(id), agents: subagents };
 }

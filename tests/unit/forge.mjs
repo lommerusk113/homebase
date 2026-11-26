@@ -40,6 +40,14 @@ import { mr, fakeBin, withFakeGlab, glabMr, nextOf, colOf, actOf } from './helpe
     const unapproved = await glabMr({ approved_by: [], head_pipeline: { status: 'success' } }, 115);
     assert.deepEqual([unapproved.ready, unapproved.approved], [false, false]);
     assert.deepEqual((await glabMr({ head_pipeline: { status: 'success' } }, 116)).approvedBy, ['Ann']);
+    // one failed approvals lookup keeps the MR's last state (Ready, by Ann) instead of dropping it out of Ready
+    const u117 = 'https://gitlab.example.com/g/p/-/merge_requests/117';
+    assert.equal((await glabMr({ head_pipeline: { status: 'success' } }, 117)).ready, true);
+    const body = JSON.stringify({ state: 'opened', title: 't', source_branch: 'b', detailed_merge_status: 'mergeable', head_pipeline: { status: 'success' } });
+    prs.get(u117).at = 0;
+    const kept = await withFakeGlab(`case "$*" in *approvals*) echo 'boom' >&2; exit 1;; *) echo '${body}';; esac`, () => prState(u117));
+    assert.deepEqual([kept.ready, kept.approvedBy], [true, ['Ann']]);
+    assert.ok(prs.get(u117).error, 'and the row is flagged stale');
     prs.get(url).at = 0;
     const checking = await glabMr({ detailed_merge_status: 'checking' }, 114);
     await prs.get(url).pending;

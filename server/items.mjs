@@ -96,9 +96,10 @@ function demote(prState) {
         return prState;
     }
     const n = prState.replied;
-    const notReady = n ? `Approved — waiting for ${prState.repliedTo?.join(', ') || 'the reviewer'} to resolve ${n} thread${n === 1 ? '' : 's'}` : null;
+    const ok = prState.approved === false ? 'Ready' : 'Approved'; // a GitHub PR that needs no review was approved by nobody
+    const notReady = n ? `${ok} — waiting for ${prState.repliedTo?.join(', ') || 'the reviewer'} to resolve ${n} thread${n === 1 ? '' : 's'}` : null;
 
-    return notReady ? { ...prState, ready: false, approved: true, notReady } : prState;
+    return notReady ? { ...prState, ready: false, approved: prState.approved ?? true, notReady } : prState;
 }
 
 // The step review comments ask for, or null when there are none.
@@ -463,7 +464,8 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
     return itemGroups(live, prOf, now, seeds).map(it => {
 
         const agents = it.agents.toSorted((a, b) => b.updated - a.updated || a.id.localeCompare(b.id)); // the id settles a tie (stored agents share 0)
-        const agent = agents.find(a => a.status === 'running') ?? agents[0] ?? null; // a running helper leads, however quiet it is
+        // a running helper leads, however quiet it is; of several, the first started, so the lead never swaps between polls
+        const agent = agents.filter(a => a.status === 'running').toSorted((a, b) => (a.started ?? 0) - (b.started ?? 0) || a.id.localeCompare(b.id))[0] ?? agents[0] ?? null;
         const prState = it.pr ? prOf(it.pr) : null;
         const gates = it.pr ? sessions.filter(s => s.project === it.project).flatMap(s => [...s.gates ?? [], ...(s.agents ?? []).flatMap(a => a.gates ?? [])]) : [];
         const run = it.pr ? gateFor(gates, it.pr, prState?.branch) : null;
@@ -499,7 +501,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             const nowKind = isContinue ? row.state.kind : ps ? deriveKind(ps, null, true).kind : click.kind; // no forge answer: unknown, kept
             if (nowKind !== click.kind || now - click.at >= HOLD_MS) {
                 sent.delete(it.key);
-            } else if (!chat && !asker && row.column !== 'doing') {
+            } else if (!chat && !asker && row.column !== 'doing' && !(agent?.status === 'stopped' && agent.updated > click.at)) { // a helper that stopped since shows its Continue
                 Object.assign(row, { column: 'doing', next: `Sent to Claude (${clock(click.at)}) · button back at ${clock(click.at + HOLD_MS)}`, action: null });
             }
         }
@@ -507,7 +509,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             Object.assign(row, { column: 'needs-you', next: `Asks: ${asker.asks.split('\n')[0]} · ${row.next}` });
         }
         // an approved MR needs no reviewer: its row says what still stops the merge instead
-        const rev = !row.action && row.column === 'review' && !prState?.approved ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now, prState?.sha) : null;
+        const rev = !row.action && row.column === 'review' && !prState?.approved && row.state.kind !== 'threads' ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now, prState?.sha) : null;
 
         return {
             key: it.key,
@@ -537,7 +539,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             files: agent?.files ?? [],
             gateHead: run && heads.get(gateKey(run)) ? [gateKey(run), heads.get(gateKey(run))] : null, // for the store; dropped before the response
             agentLinks: agents.filter(a => a.status === 'done').map(a => ({ id: a.id, description: a.description, finished: a.updated })), // for the store; dropped before the response
-            activity: agents.slice(1).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
+            activity: agents.filter(a => a !== agent).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
             next: row.next,
             action: row.action ?? (rev?.label ? rev : null),

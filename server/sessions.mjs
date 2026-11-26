@@ -678,11 +678,18 @@ async function readSession({ dir, file, path, st }, now, live) {
 
     diedFrom ??= diedSince();
     s.died &&= (s.lastActivity ?? st.mtimeMs) > diedFrom; // only turns that died since the feature first ran here
-    // the died turn's last entry: opening its row marks it handled (POST /api/handled), so every device drops the row
-    s.diedId = s.died ? entries.findLast(e => e.uuid)?.uuid ?? null : null;
-    s.died &&= !handled.has(s.diedId);
+    Object.assign(s, diedTurn(s.died, entries));
 
     return { ...s, id, dir, updated: st.mtimeMs, created: st.birthtimeMs, context: ctx?.percent ?? null, contextSize: ctx?.size ?? null, contextAt: ctx?.at ?? null, checks: checksStatus(id), agents: subagents };
+}
+
+// A died turn as the board shows it: its last entry's id (diedId), which opening its row marks handled (POST /api/handled),
+// and died no more once it is, so every device drops the row.
+export function diedTurn(died, entries, done = handled) {
+
+    const diedId = died ? entries.findLast(e => e.uuid)?.uuid ?? null : null;
+
+    return { died: !!died && !done.has(diedId), diedId };
 }
 
 // The work items of all sessions (their PRs/MRs and agents), with PR/MR state, human comments and milestone.

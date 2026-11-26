@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { summarize, turnState, parseDialog, selectSteps, trustFolder, trustNewProject, answerStartup } from '../../server.mjs';
 import { liveSessions, closedSession, transcript } from '../../server/transcripts.mjs';
+import { diedTurn } from '../../server/sessions.mjs';
 
 {
     // the process registry: live pids' session ids; a dead pid's or a half-written entry doesn't count; no registry is null
@@ -219,4 +220,13 @@ import { liveSessions, closedSession, transcript } from '../../server/transcript
     assert.equal(summarize([...asked, you(reloadMessage())], 60_000).needsYou, true, 'a rules note');
     assert.equal(summarize([...asked, you('later')], 60_000).needsYou, false, 'a real message ends it');
     console.log('ok rules note keeps needs you');
+}
+
+// a died turn's row: its last entry's id, and gone on every device once that is marked handled
+{
+    const entries = [{ uuid: 'a' }, { type: 'x' }, { uuid: 'b' }];
+    assert.deepEqual(diedTurn(true, entries, new Set()), { died: true, diedId: 'b' });
+    assert.deepEqual(diedTurn(true, entries, new Set(['b'])), { died: false, diedId: 'b' });
+    assert.deepEqual(diedTurn(false, entries, new Set()), { died: false, diedId: null });
+    console.log('ok died turn marked handled');
 }

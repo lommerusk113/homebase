@@ -131,6 +131,25 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
     assert.match(row(null, [main()], new Map(), () => 'not logged in').next, /not logged in/, '9 says why the lookup failed');
 }
 {
+    // two running helpers: the first started leads, whoever wrote last; activity lists the others, never the lead
+    const r1 = helper({ id: 'r1', started: 1, updated: NOW - 5 }), r2 = helper({ id: 'r2', started: 2, updated: NOW - 1 });
+    const lead = x => [x.agentId, x.activity.map(a => a.id)];
+    assert.deepEqual(lead(row(open(), [main({ agents: [r1, r2] })])), ['r1', ['r2']]);
+    assert.deepEqual(lead(row(open(), [main({ agents: [{ ...r1, updated: NOW }, r2] })])), ['r1', ['r2']]);
+    const s1 = helper({ id: 's1', status: 'stopped', stopReason: 'api-error', updated: NOW });
+    assert.deepEqual(lead(row(open(), [main({ agents: [s1, helper({ id: 'q', updated: NOW - 300_000 })] })])), ['q', ['s1']]);
+    // a helper that stopped after the click shows its Continue, not the hold
+    const later = main({ agents: [helper({ status: 'stopped', stopReason: 'api-error', updated: NOW - 500 })] });
+    assert.deepEqual(shown(row(conflict, [later], sent(NOW - 1000))), ['needs-you', 'Continue']);
+    // an MR button's click without a forge answer holds too
+    assert.deepEqual(shown(row(null, [main()], sent(NOW - 1000))), ['doing', null]);
+}
+{
+    // a GitHub PR that needs no review, with replied threads: Ready, not Approved, and no button
+    const x = row(open({ ready: true, approved: false, replied: 1, repliedTo: ['Bo'] }));
+    assert.deepEqual([x.next, ...shown(x)], ['Ready — waiting for Bo to resolve 1 thread', 'review', null]);
+}
+{
     // texts that say what the button does, and who acts
     assert.equal(row(open({ reviewers: ['Ann'] }), [main({ agents: [helper({ status: 'stopped' })] })]).next, 'Helper stopped — Continue resumes it');
     assert.equal(row(open({ ready: true, approved: true, replied: 2, repliedTo: ['Ann'] })).next, 'Approved — waiting for Ann to resolve 2 threads');

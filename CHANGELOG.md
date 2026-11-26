@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* `homebase status needs-you --mr !N` without a question no longer breaks the whole board; the row reads "Asks: see its chat".
 * Merge asks GitLab again before it merges, so a comment or a withdrawn approval from the last minute is seen first; an MR approved while GitLab rechecks reads "not mergeable yet (GitLab: still checking)".
 * A row waiting on threads the project requires resolved no longer flips to "Needs a reviewer" for a minute while GitLab rechecks the MR, and on GitHub replied threads never stand in for a running pipeline or a missing review.
 * A Review click on a requested MR no longer answers "not a merge request that asks you for a review" when the server's list was cold (after a restart) or its last refresh failed: it fetches the list first. The review chat now runs review-gate and then polish-loop, still read-only, and ends with a TLDR.

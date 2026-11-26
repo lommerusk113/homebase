@@ -28,12 +28,12 @@ Free text (how a reply is worded) may fill a row's text, never its group, except
 |---|---|---|---|---|
 | 1 | merged | Merged | Merged | none |
 | 2 | closed | Closed without merging | Closed without merging | none |
-| 3 | its chat waits on you about it | Needs you | `Asks: <question> · <what rules 4–6 and 8–10 say>` (a question beats the hold) | theirs (none while a helper runs) |
+| 3 | its chat waits on you about it | Needs you | `Asks: <question, or "see its chat"> · <what rules 4–6 and 8–10 say>` (a question beats the hold) | theirs (none while a helper runs) |
 | 4 | a helper on it runs (it leads the row however quiet, over newer finished or stopped ones; of several, the first started) | Doing | the helper's current step | none |
 | 5 | a chat on its branch works, or reported `doing` | Doing | the report, else the chat's current step | none |
 | 6 | an open prompt names it and nothing runs yet (*text*) | Doing | Sent to Claude… | none |
 | 7 | its button was clicked, the MR's own kind is still the one clicked (also checked while rules 4–6 show), under 30 min ago, and no helper on it stopped since (then rule 8) | Doing | Sent to Claude (time) [· Helper finished: (outcome), when one did since] · button back at (time) | none |
-| 8 | a helper on it stopped | Needs you | why it stopped | Continue |
+| 8 | the helper that last wrote on it stopped (a later finished helper supersedes it) | Needs you | why it stopped | Continue |
 | 9 | the forge never answered, or its comments could never be read (rules 3–8 still apply; 5 by a report only while the forge never answered) | Not checked | why the lookup failed | none |
 | 10 | the MR state, first blocker wins (below) | | | |
 

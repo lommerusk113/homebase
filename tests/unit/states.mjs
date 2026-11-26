@@ -74,6 +74,8 @@ const rules = [
     ['1 merged beats a running helper', { state: 'merged' }, [main({ agents: [helper()] })], 'done', null],
     ['2 closed beats a waiting chat', { state: 'closed' }, [main(), asks], 'closed', null],
     ['3 a chat waiting on you beats a running helper', conflict, [main({ agents: [helper()] }), asks], 'needs-you', null],
+    ['3 a reported needs-you without a question', conflict, [main(), chat({ status: 'waiting', report: { phase: 'needs-you', mr: '!1', text: null, at: 5 } })], 'needs-you', 'Rebase'],
+    ['8 a stopped helper superseded by a later finished one', open({ reviewers: ['Ann'] }), [main({ agents: [helper({ id: 's', description: 'Fix A', status: 'stopped', stopReason: 'api-error', updated: NOW - 9000 }), helper({ id: 'd', description: 'Fix B', status: 'done', updated: NOW - 1000 })] })], 'review', 'Review'],
     ['3 a reported needs-you', conflict, [main(), chat({ status: 'waiting', report: { phase: 'needs-you', mr: '!1', text: 'Which?', at: 5 } })], 'needs-you', 'Rebase'],
     ['4 a running helper', conflict, [main({ agents: [helper()] })], 'doing', null],
     ['5 a chat working on its branch', conflict, [main(), chat({ status: 'working', head: '1-x' })], 'doing', null],

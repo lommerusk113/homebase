@@ -487,7 +487,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         // a chat waiting on you about the open MR puts its row in Needs you, its question before the row's own reason: what
         // it reported first, else the lead MR of its question
         const reported = isOpen ? live.filter(s => s.project === it.project && s.status !== 'working' && reportOn(s, it.pr)?.phase === 'needs-you').toSorted((a, b) => a.id.localeCompare(b.id))[0] : null;
-        const asker = reported ? { id: reported.id, asks: reported.report.text } : isOpen ? askerFor(live, it.project, it.pr) : null;
+        const asker = reported ? { id: reported.id, asks: reported.report.text || 'see its chat' } : isOpen ? askerFor(live, it.project, it.pr) : null;
 
         // the user's click on its button holds it in Doing while what it clicked on is unchanged, for HOLD_MS at most: then the
         // button is back, as the chat did nothing the forge saw. An MR button is compared with the MR's own kind, also while a

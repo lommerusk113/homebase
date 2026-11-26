@@ -36,7 +36,7 @@ import { loadHelpers, startHelper, closeHelper, chatIn, parentOf, parentTmux, fi
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 import { diff } from './server/diff.mjs';
-import { claim, release } from './server/once.mjs';
+import { claim, release, sentRows } from './server/once.mjs';
 import { pushSession } from './server/gitpush.mjs';
 import { doctor, setup, unsetup, missingTools, readClaudeVersion, versionWarning } from './server/setup.mjs';
 
@@ -129,7 +129,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     loadHelpers(DATA_DIR);
     writeToken(DATA_DIR, TOKEN); // for bin/homebase.mjs, owner-only
     warmMilestones();
-    const sentRows = new Map(); // rowKey -> { at, kind }: the row buttons' double-send guard (server/once.mjs)
     const kindOf = async key => (await polledSessions()).flatMap(s => s.items ?? []).find(i => i.key === key)?.state?.kind;
     const handler = async (req, res) => {
         const url = new URL(req.url, 'http://x');

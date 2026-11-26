@@ -4,6 +4,7 @@ import { USAGE_KEYS, IDLE_CUTOFF_MS, formatDuration, formatTokens } from './usag
 import { mentionsMr, namesMr, mrRef, mrNumber, forgeWords } from './forge.mjs';
 import { waitsOnYou } from '../web/src/lib/waiting.ts';
 import { canned } from '../web/src/lib/canned.ts';
+import { sentRows } from './once.mjs';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
@@ -448,7 +449,7 @@ function isDismissed(x) {
 
 // One row per work item, newest agent first, with its column, stage, next step, action, gate badge and usage.
 // Without the rows the user dismissed.
-export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads, seeds = [], reviews = reviewers, errorOf = () => null) {
+export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads, seeds = [], reviews = reviewers, errorOf = () => null, sent = sentRows) {
 
     // a reviewer chat is not work on the MR it reviews: it never becomes a row or its working chat
     const reviewerIds = new Set([...reviews.values()].map(r => r.id));
@@ -477,6 +478,12 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             .find(s => s.report || (!!prState.branch && (s.head ?? s.branch) === prState.branch)) ?? null : null;
         const row = rowOf(ps, agent, { pr: it.pr, title, mr: w.mr, aMr: w.aMr, requested: !!requested, now, error: it.pr ? errorOf(it.pr, it.project) : null, chat });
 
+        // the user's click on its button holds it in Doing until its state kind changes (the forge saw the work), not until
+        // the chat's turn ends. ponytail: a chat that ignores the click leaves it there until then
+        const click = !chat && isOpen ? sent.get(it.key) : null;
+        if (click?.kind === row.state.kind && row.column !== 'doing') {
+            Object.assign(row, { column: 'doing', next: `Sent to Claude (${clock(click.at)})`, action: null });
+        }
         // a chat waiting on you about the open MR puts its row in Needs you, its question before the row's own reason: what
         // it reported first, else the lead MR of its question
         const reported = isOpen ? live.find(s => s.project === it.project && s.status !== 'working' && reportOn(s, it.pr)?.phase === 'needs-you') : null;

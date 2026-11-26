@@ -102,7 +102,7 @@ assert.deepEqual(forged.map(i => [i.key, i.sessionId, i.column]), [[mr(1), 'old'
 {
     const conflict = () => open({ blocked: 'conflict', branch: '2284-x', issue: '2284' });
     const main = { id: 'm', project: 'p', prs: [{ url: mr(58), at: 1 }], agents: [] };
-    const row = chat => workItems([main, { id: 'h', project: 'p', prs: [], agents: [], branch: 'supplier-automation', status: 'idle', ...chat }], conflict, 10, new Map(), [], new Map(), () => null)
+    const row = (chat, sent) => workItems([main, { id: 'h', project: 'p', prs: [], agents: [], branch: 'supplier-automation', status: 'idle', ...chat }], conflict, 10, new Map(), [], new Map(), () => null, sent)
         .find(i => i.pr === mr(58));
     const busy = row({ status: 'working', head: '2284-x', step: 'running tests' });
     assert.deepEqual([busy.column, busy.next, busy.action], ['doing', 'Running tests', null]);
@@ -117,6 +117,12 @@ assert.deepEqual(forged.map(i => [i.key, i.sessionId, i.column]), [[mr(1), 'old'
     const asks = row({ status: 'waiting', report: { phase: 'needs-you', mr: mr(58), text: 'Keep both migrations?', at: 5 } });
     assert.deepEqual([asks.column, asks.askedBy, asks.next.startsWith('Asks: Keep both migrations?')], ['needs-you', 'h', true]);
 
+    // the user's click on the row's button moves it to Doing until its state kind changes, not until the chat's turn ends
+    const sent = new Map([[mr(58), { at: 7, kind: 'conflict' }]]);
+    const clicked = row({}, sent);
+    assert.deepEqual([clicked.column, clicked.action, /^Sent to Claude/.test(clicked.next)], ['doing', null, true]);
+    const moved = workItems([main], () => open({ branch: '2284-x', reviewers: ['Ann'] }), 10, new Map(), [], new Map(), () => null, sent)[0];
+    assert.equal(moved.column, 'review', 'the conflict is gone: the click no longer holds it');
 }
 
 console.log('ok items');

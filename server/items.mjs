@@ -326,7 +326,7 @@ const isMr = (ref, url) => (ref.startsWith('https://') ? ref === url : ref.match
 // question names, never by where the chat is checked out or which helper it started: a main chat asks about many MRs.
 // ponytail: an issue-only question ("#2283?") links nothing and keeps its own chat row; match the MR's issue when that misses
 export function askerFor(sessions, project, url) {
-    return sessions.find(s => s.project === project && waitsOnYou(s) && (r => !!r && isMr(r, url))(s.asks?.match(LEAD_MR)?.[0])) ?? null;
+    return sessions.filter(s => s.project === project && waitsOnYou(s) && (r => !!r && isMr(r, url))(s.asks?.match(LEAD_MR)?.[0])).toSorted((a, b) => a.id.localeCompare(b.id))[0] ?? null;
 }
 
 // What a chat reported about this MR with `homebase status` ({ phase, mr, text, at }), until its next prompt; else null.
@@ -475,7 +475,8 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const isOpen = prState?.state === 'open';
         const chat = isOpen ? live.filter(s => s.project === it.project && s.status === 'working')
             .map(s => ({ ...s, report: reportOn(s, it.pr)?.phase === 'doing' ? s.report : null }))
-            .find(s => s.report || (!!prState.branch && (s.head ?? s.branch) === prState.branch)) ?? null : null;
+            .filter(s => s.report || (!!prState.branch && (s.head ?? s.branch) === prState.branch))
+            .toSorted((a, b) => !!b.report - !!a.report || a.id.localeCompare(b.id))[0] ?? null : null; // a report says more than a branch; the id keeps it the same every poll
         const row = rowOf(ps, agent, { pr: it.pr, title, mr: w.mr, aMr: w.aMr, requested: !!requested, now, error: it.pr ? errorOf(it.pr, it.project) : null, chat });
 
         // the user's click on its button holds it in Doing until its state kind changes (the forge saw the work), not until
@@ -486,7 +487,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         }
         // a chat waiting on you about the open MR puts its row in Needs you, its question before the row's own reason: what
         // it reported first, else the lead MR of its question
-        const reported = isOpen ? live.find(s => s.project === it.project && s.status !== 'working' && reportOn(s, it.pr)?.phase === 'needs-you') : null;
+        const reported = isOpen ? live.filter(s => s.project === it.project && s.status !== 'working' && reportOn(s, it.pr)?.phase === 'needs-you').toSorted((a, b) => a.id.localeCompare(b.id))[0] : null;
         const asker = reported ? { id: reported.id, asks: reported.report.text } : isOpen ? askerFor(live, it.project, it.pr) : null;
         if (asker) {
             Object.assign(row, { column: 'needs-you', next: `Asks: ${asker.asks.split('\n')[0]} · ${row.next}` });
@@ -513,6 +514,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             helperSession: agent?.helperSession ?? null, // a helper in its own chat (server/helpers.mjs): Step in opens that chat
             helperClosed: !!agent?.helperClosed,
             updated: itemUpdated(agent, it.linkedAt, prState),
+            since: it.pr ? null : Math.min(...agents.map(a => a.started ?? a.updated)), // when the row first appeared, its order in its group (an MR's: sessions.mjs, from the store)
             branch: [prState?.branch, agent?.branch].find(b => b && b !== 'HEAD') ?? null, // transcript gitBranch is unreliable inside worktrees; HEAD is a detached checkout
             stepAt: agent?.status === 'running' ? agent.stepAt ?? null : null,
             worktreePath: agent?.worktreePath ?? null,

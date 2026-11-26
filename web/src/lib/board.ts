@@ -48,6 +48,9 @@ export function issueWork(n: string, sessions: Session[]): { sessionId: string |
     return s ? { sessionId: s.id, key: null } : null;
 }
 
+/** Rows' order in a group: newest work first, by when the row first appeared, never by its last activity, so a row never moves inside its group. */
+export const byStart = (a: Pick<WorkItem, 'since' | 'updated' | 'key'>, b: Pick<WorkItem, 'since' | 'updated' | 'key'>): number => (b.since ?? b.updated) - (a.since ?? a.updated) || a.key.localeCompare(b.key);
+
 const SHORT_WORDS = 3;
 
 /** "project · Now: <step> · for 2m" for a working main chat; the time is since its newest tool call, else its turn start. */

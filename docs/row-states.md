@@ -42,14 +42,17 @@ MR state, first match wins:
 | changes | review comments to fix or answer (not approved) | Needs you | Fix & reply |
 | failing | pipeline failed | Needs you | Fix pipeline |
 | conflict | conflicts, or needs a rebase | Needs you | Rebase |
-| blocked | blocked by another MR or external checks | In review | none |
+| blocked | blocked by another MR or external checks | In review | Review |
 | draft | nothing blocks it but the draft flag | Needs you | Mark ready |
-| threads | approved, replied threads still open | In review | none |
-| replied | replied to threads, waiting on the reviewer | In review | none |
-| pipeline | pipeline running | In review | none |
-| ready | approved and mergeable | Ready to merge | Merge |
-| in-review | has reviewers | In review | Review (a reviewer chat) |
-| needs-reviewer | no reviewer | In review | Ask for review |
+| threads | approved, replied threads still open | In review | none (approved needs no reviewer) |
+| replied | replied to threads, waiting on the reviewer | In review | Review |
+| pipeline | pipeline running | In review | Review |
+| ready | approved and mergeable | Ready to merge | Merge (GitLab: Homebase merges after a confirm; GitHub: asks the chat) |
+| in-review | has reviewers | In review | Review |
+| needs-reviewer | no reviewer | In review | Request review |
+
+Review starts a read-only reviewer chat; it shows on every In review row that is not approved and has no button of its own.
+Two chats on one MR: the one that reported wins, then the lower session id, so the text is the same every poll.
 
 ## A helper without an MR
 

@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* Rows keep their place inside a group (newest work first, by when they first appeared) instead of reshuffling whenever a helper writes something, and two chats on one MR no longer swap the row's text from poll to poll.
 * An MR row sits in Doing, with what runs ("Running tests") and no Rebase or other MR button, while a chat or helper works on it, also when only its background tests run: found by the branch its folder has checked out (no longer the folder it started in), or by what it reported.
 * Chats report their MR work with `homebase status doing|needs-you|done --mr !N "<what>"`, and the board places rows from that instead of from how a reply is worded; the rules file tells chats to use it.
 * Clicking a row's button (Rebase, Fix…) keeps it in Doing until the MR's state changes, instead of jumping back to Needs you as soon as the chat's turn ends; the hold survives a Homebase restart and ends after 30 minutes, when the button comes back.

@@ -177,6 +177,8 @@ interface WorkItem {
     /** when a running agent started its current step (`next` names it); null otherwise */
     stepAt: number | null;
     updated: number;
+    /** When the row first appeared (an MR: first seen, a helper: started): its fixed order in its group. */
+    since: number | null;
     branch: string;
     worktreePath: string | null;
     tldr: string | null;

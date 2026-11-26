@@ -715,6 +715,7 @@ async function itemsOf(out) {
     }
     record(store, items);
     flush(store);
+    items.filter(i => i.pr).forEach(i => { i.since = store.data[i.project]?.[i.pr]?.firstSeen ?? null; });
     items.forEach(i => { delete i.agentLinks; delete i.gateHead; });
 
     return items;

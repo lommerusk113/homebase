@@ -25,7 +25,7 @@ Ctrl+C stops it and removes the temp folder.
 
 ## What you get
 
-* **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested" (each row has a Review button that starts a chat reviewing the MR read-only), "Doing", "In review" and "Ready to merge" (an approved GitLab MR has a Merge button that asks first, then merges it at the commit shown, with no auto-merge; while something still stops the merge the row says what, with no Run gate or Review button), and the Issues tab shows the milestone's issues. A milestone picked in the header limits the board to its issues; a chat waiting on you, and a main chat's own row, is shown whatever the milestone. Merge requests and pull requests come from `glab` and `gh`. A row with no MR or PR to act on (a helper that stopped or finished) has a Dismiss button, which puts it away on every device until that helper works again.
+* **A board per project.** Pick the projects you follow; the Work tab sorts their items into "Needs you", "Review requested" (each row has a Review button that starts a chat reviewing the MR read-only), "Doing", "In review" and "Ready to merge" (an approved GitLab MR has a Merge button that asks first, then merges it at the commit shown, with no auto-merge; while something still stops the merge the row says what, with no Run gate or Review button), and the Issues tab shows the milestone's issues. A milestone picked in the header limits the board to its issues; a chat waiting on you, and a main chat's own row, is shown whatever the milestone. Merge requests and pull requests come from `glab` and `gh`. Inside a group rows keep their place, newest work first by when the row first appeared, and only move when their group changes; `docs/row-states.md` says which group each state goes in. A row with no MR or PR to act on (a helper that stopped or finished) has a Dismiss button, which puts it away on every device until that helper works again.
 * **Helpers as rows.** A chat starts helpers with `homebase helper start`; each is its own Claude in its own tmux and worktree, and shows as a row under the chat that started it. Open chat steps into it and what you type goes straight to it; Stop closes it. See "Helper in its own chat" below.
 * **A chat view.** The transcript of one session, with each reply collapsed to its `TLDR:` line; "Show more" opens the full reply.
 
@@ -239,6 +239,7 @@ What Homebase stores, all in the Homebase dir:
 * `tracked.json`: the projects on your board.
 * `handled.json`: the replies you marked as handled (the newest 500), as `<session>/<reply>` ids.
 * `dismissed.json`: the work rows you dismissed (the newest 500), as helper id and time; a row comes back when its helper works again.
+* `sent.json`: the row buttons you clicked in the last 30 minutes, so a clicked row stays in Doing across a restart.
 * `vapid.json` and `subscriptions.json`: the Web Push keys and subscriptions; this computer's browser and paired devices may subscribe.
 * `devices.json`: the paired devices (see [Use from your phone](#use-from-your-phone-tailscale)).
 

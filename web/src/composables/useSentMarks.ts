@@ -94,8 +94,10 @@ async function send(x: WorkItem) {
     if (sent.has(x.key) || !x.action) {
         return;
     }
-    sent.set(x.key, Date.now());
-    save();
+    if (x.action.kind !== 'findings') { // findings are no hold here either: the row stays where the server puts it
+        sent.set(x.key, Date.now());
+        save();
+    }
     unanswered.delete(x.key);
 
     if (x.sessionId !== chatSession()?.id) {

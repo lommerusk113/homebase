@@ -114,6 +114,8 @@ interface PrState {
     approvedBy?: string[];
     /** its comments could never be read, so the row is Not checked */
     unread?: boolean;
+    /** GitLab's detailed_merge_status */
+    mergeStatus?: string | null;
     blocked?: 'conflict' | 'rebase' | 'blocked' | 'checks' | null;
     changes: boolean;
     changesBy: string[];

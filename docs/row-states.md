@@ -28,7 +28,7 @@ Free text (how a reply is worded) may fill a row's text, never its group, except
 |---|---|---|---|---|
 | 1 | merged | Merged | Merged | none |
 | 2 | closed | Closed without merging | Closed without merging | none |
-| 3 | its chat waits on you about it | Needs you | `Asks: <question> · <what rules 4–10 say>` | theirs (none while a helper runs) |
+| 3 | its chat waits on you about it | Needs you | `Asks: <question> · <what rules 4–6 and 8–10 say>` (a question beats the hold) | theirs (none while a helper runs) |
 | 4 | a helper on it runs (it leads the row however quiet, over newer finished or stopped ones; of several, the first started) | Doing | the helper's current step | none |
 | 5 | a chat on its branch works, or reported `doing` | Doing | the report, else the chat's current step | none |
 | 6 | an open prompt names it and nothing runs yet (*text*) | Doing | Sent to Claude… | none |
@@ -50,7 +50,7 @@ MR state, first match wins:
 | replied | replied to threads, waiting on the reviewer | In review | Review |
 | pipeline | pipeline running | In review | Review |
 | ready | mergeable and approved by someone (GitLab asks its approvals; GitHub: approved, or no review required), nothing unanswered | Ready to merge | GitLab: Merge (Homebase merges after a confirm); GitHub: Merge + close issue (asks the chat to run the gate, then merge) |
-| in-review | has reviewers, or approved but not mergeable yet ("Approved by Ann — not mergeable yet") | In review | Review (none once approved) |
+| in-review | has reviewers, or approved but not mergeable yet ("Approved by Ann — not mergeable yet (GitLab: needs a passing pipeline)") | In review | Review (none once approved) |
 | needs-reviewer | no reviewer | In review | Request review |
 
 Review starts a read-only reviewer chat; it shows on every In review row that is not approved and has no button of its own.

@@ -104,7 +104,8 @@ async function fetchPr(url) {
             milestone: ms ? { id: ms.id, title: ms.title, due_date: ms.due_date } : null,
             target: mr.target_branch,
             issue,
-            sha: mr.sha ?? mr.diff_refs?.head_sha ?? null
+            sha: mr.sha ?? mr.diff_refs?.head_sha ?? null,
+            mergeStatus: status ?? null // why GitLab won't merge it yet, for an approved row that isn't mergeable
         };
     }
 

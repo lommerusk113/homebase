@@ -55,6 +55,9 @@ export const itemUpdated = (agent, linkedAt, prState) => Math.max(agent?.updated
 
 const BLOCKED_STEP = { conflict: 'Merge conflicts — rebase it', rebase: 'Needs a rebase onto its target', blocked: 'Blocked by another MR', checks: 'Waiting for external status checks' }; // blocked and checks are GitLab's
 
+// GitLab's detailed_merge_status in words, for an approved MR it won't merge yet; others are shown as GitLab spells them
+const MERGE_WHY = { ci_must_pass: 'needs a passing pipeline', unchecked: 'still checking', checking: 'still checking', preparing: 'still checking', approvals_syncing: 'still checking', jira_association_missing: 'needs a Jira issue', locked_paths: 'locked paths', locked_lfs_files: 'locked files', need_rebase: 'needs a rebase' };
+
 const clock = ms => (ms ? new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '');
 
 // The MR's own next step (no agent): review comments, a failing pipeline and conflicts first, then what blocks the merge.
@@ -86,7 +89,8 @@ function mrNext(prState, mr) {
     }
 
     if (prState.approved) { // approved, but the forge doesn't call it mergeable yet (no pipeline yet, still checking)
-        return `Approved${prState.approvedBy?.length ? ` by ${prState.approvedBy.join(', ')}` : ''} — not mergeable yet`;
+        const why = MERGE_WHY[prState.mergeStatus] ?? prState.mergeStatus?.replace(/_/g, ' ');
+        return `Approved${prState.approvedBy?.length ? ` by ${prState.approvedBy.join(', ')}` : ''} — not mergeable yet${why ? ` (GitLab: ${why})` : ''}`;
     }
 
     return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';

@@ -41,7 +41,7 @@ onMounted(() => hooks.rendered?.(false));
             <IssuesHead :hint="data?.updating ? 'Updating…' : undefined" />
             <IssueLane v-for="(lane, n) in lanes" :key="lane.who?.username ?? ''" :lane :n />
             <ClosedLine />
-            <div class="is-note">Read-only: Homebase never writes to {{ words.forge }}. "Send to chat" only types into the chat on the right.</div>
+            <div class="is-note">Homebase never writes issues to {{ words.forge }}{{ words.forge === 'GitLab' ? '; it only merges an MR when you click Merge on the Work tab' : '' }}. "Send to chat" only types into the chat on the right.</div>
         </template>
     </div>
 </template>

@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* An approved MR GitLab won't merge yet says why ("needs a passing pipeline", "still checking"); Send findings no longer shows its row in Doing on the clicking device; the Issues tab no longer claims Homebase never writes to GitLab.
 * A held row ("Sent to Claude") shows how a helper that finished since went, instead of hiding it until the button comes back.
 * Send findings no longer parks its row in Doing for 30 minutes; a Not checked row says why the lookup failed before what its helper did; an unreviewed GitHub PR's stage reads Review, matching its Ready text.
 * An MR approved by someone but not mergeable yet reads "Approved by Ann — not mergeable yet" instead of asking for a reviewer; "Approved —" on review comments only shows when someone approved it; an MR whose comments could not be read keeps its title and helpers while Not checked.

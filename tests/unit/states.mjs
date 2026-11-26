@@ -162,6 +162,11 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
     const unread = row({ ...open({ title: 'Fix login', branch: '1-x', ready: true, approved: true }), unread: true }, [main({ agents: [helper()] })]);
     assert.deepEqual([unread.title, unread.agentId, unread.column], ['Fix login', 'a', 'doing']);
     assert.equal(row({ ...open({ title: 'Fix login', ready: true, approved: true }), unread: true }).column, 'unknown');
+    const failed = row({ ...open({ title: 'Fix login' }), unread: true }, [main({ agents: [helper({ status: 'done', outcome: 'Pushed the fix' })] })], new Map(), () => 'comments: timed out');
+    assert.match(failed.next, /^Couldn't check the MR: comments: timed out · Helper finished: Pushed the fix/, '9 why the lookup failed stays first');
+    // stage follows approval as the texts do
+    assert.equal(row(open({ ready: true, approved: false })).stageLabel, 'Review');
+    assert.equal(row(open({ ready: true, approved: true })).stageLabel, 'Approved');
 }
 console.log('ok precedence');
 

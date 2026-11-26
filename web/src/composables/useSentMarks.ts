@@ -106,7 +106,8 @@ async function send(x: WorkItem) {
     setTimeout(renderBoard, SENT_MS + 500);
 
     // a failed send drops the sent mark; sendText shows the error
-    if (!await sendText(x.sessionId, x.action.message, undefined, undefined, true, x.key)) {
+    // findings are no hold: their own key keeps the double-send guard without parking the row in Doing (docs/row-states.md)
+    if (!await sendText(x.sessionId, x.action.message, undefined, undefined, true, x.action.kind === 'findings' ? `findings:${x.key}` : x.key)) {
         sent.delete(x.key);
         save();
         renderBoard();

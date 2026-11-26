@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* Send findings no longer parks its row in Doing for 30 minutes; a Not checked row says why the lookup failed before what its helper did; an unreviewed GitHub PR's stage reads Review, matching its Ready text.
 * An MR approved by someone but not mergeable yet reads "Approved by Ann — not mergeable yet" instead of asking for a reviewer; "Approved —" on review comments only shows when someone approved it; an MR whose comments could not be read keeps its title and helpers while Not checked.
 * Of several running helpers on one MR the first started leads its row, so text and Step in no longer swap; a helper that stopped after you clicked shows Continue instead of the hold; a GitHub PR that needs no review with replied threads reads Ready, without a Review button.
 * A failed comments lookup no longer places a row as if nobody had commented: it keeps the last answer, and an MR whose comments could never be read is Not checked (with why), never Ready to merge over unanswered threads.

@@ -83,4 +83,4 @@ A row never moves inside its group; it only moves when its group changes.
 
 A click on a row's button is the only manual move: the row goes to Doing at once (rule 7) and stays there while its kind is the one clicked, across restarts, for at most 30 minutes.
 When the kind changes the click is over, so the same failure coming back later shows its button again; after 30 minutes the button is back too, because the chat did nothing the forge can see.
-Review and Merge are not holds: Review shows Reviewing… on its row, Merge turns the row Merged.
+Review, Send findings and Merge are not holds: Review shows Reviewing… on its row, Send findings hands the reviewer's findings to the chat, Merge turns the row Merged.

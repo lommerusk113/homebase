@@ -43,7 +43,7 @@ function stageOf(pr, prState, agent) {
     if (prState?.state === 'merged' || prState?.state === 'closed') {
         return 4;
     }
-    if (prState?.ready || prState?.approved) {
+    if (prState?.approved ?? prState?.ready) { // as the texts: a GitHub PR that needs no review is Ready, not Approved
         return 3;
     }
 
@@ -250,7 +250,7 @@ export function rowOf(ps, agent, { pr = null, title = null, mr = 'MR', aMr = 'a 
         const at = clock(agent.updated);
         // the reason leads, so a truncated line still says why the row needs you
         const outcome = `Helper finished: ${agent.outcome.replace(/[.!]$/, '')}${at ? ` (${at})` : ''}`;
-        next = kind === 'unknown' ? outcome : `${next} · ${outcome}`;
+        next = kind === 'unknown' && !error ? outcome : `${next} · ${outcome}`; // why the lookup failed stays first
     }
 
     return { state: { kind, reason }, column: columnOf(kind), next, action: k.action(c), stage: k.stage(c) };

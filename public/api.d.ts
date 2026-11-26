@@ -121,6 +121,8 @@ interface PrState {
     issue: string;
     sha: string;
     updatedAt: number;
+    /** when the MR was opened on the forge, for the row's fixed order */
+    createdAt?: number | null;
     replied: number;
     repliedTo: string[];
 }
@@ -180,7 +182,7 @@ interface WorkItem {
     /** when a running agent started its current step (`next` names it); null otherwise */
     stepAt: number | null;
     updated: number;
-    /** When the row first appeared (an MR: first seen, a helper: started): its fixed order in its group. */
+    /** Its fixed order in its group: an MR's creation on the forge (else when Homebase first saw it), a helper's start. */
     since: number | null;
     branch: string;
     worktreePath: string | null;

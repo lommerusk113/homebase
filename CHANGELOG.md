@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* MR rows are ordered by when the MR was opened (the same on every install, not by when Homebase first saw it), and the chats' own rows by when the chat started, so they no longer swap as chats take turns writing.
 * A clicked button's hold in Doing ends for good once the row's state changes, so a pipeline that fails again later shows Fix pipeline at once; Review no longer sends its row to Doing; a question about the MR beats the hold; a clicked Continue holds a helper row on every device; a working chat's own step shows instead of "Sent to Claude…".
 * A GitLab MR is Ready to merge, with its Merge button, only once someone approved it ("Approved by Ann — merge it"); a mergeable MR nobody approved stays In review.
 * Rows keep their place inside a group (newest work first, by when they first appeared) instead of reshuffling whenever a helper writes something, and two chats on one MR no longer swap the row's text from poll to poll.

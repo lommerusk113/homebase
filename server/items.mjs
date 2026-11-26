@@ -521,7 +521,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             helperSession: agent?.helperSession ?? null, // a helper in its own chat (server/helpers.mjs): Step in opens that chat
             helperClosed: !!agent?.helperClosed,
             updated: itemUpdated(agent, it.linkedAt, prState),
-            since: it.pr ? null : Math.min(...agents.map(a => a.started ?? a.updated)), // when the row first appeared, its order in its group (an MR's: sessions.mjs, from the store)
+            since: it.pr ? prState?.createdAt ?? null : Math.min(...agents.map(a => a.started ?? a.updated)), // its fixed order in its group: an MR's creation on the forge (else sessions.mjs's first seen), a helper's start
             branch: [prState?.branch, agent?.branch].find(b => b && b !== 'HEAD') ?? null, // transcript gitBranch is unreliable inside worktrees; HEAD is a detached checkout
             stepAt: agent?.status === 'running' ? agent.stepAt ?? null : null,
             worktreePath: agent?.worktreePath ?? null,

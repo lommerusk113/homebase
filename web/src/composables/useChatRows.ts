@@ -17,7 +17,8 @@ const diedMark = (s: Session) => String(s.lastActivity ?? s.updated);
 /** The board's rows for the chats themselves: waiting on you, stopped mid-turn, working, or starting on an issue. */
 export function useChatRows(work: ReturnType<typeof useWorkItems>) {
 
-    const visible = computed(() => oldState.value.sessions.filter(inView));
+    // newest chat first, by when it started, so a chat's row never moves inside its group as chats take turns writing
+    const visible = computed(() => oldState.value.sessions.filter(inView).toSorted((a, b) => (b.created ?? 0) - (a.created ?? 0) || a.id.localeCompare(b.id)));
     const byId = computed(() => new Map(visible.value.map(s => [s.id, s])));
 
     // these rows are main chats only, never hidden by the milestone filter: a main chat works on many issues, so where it is

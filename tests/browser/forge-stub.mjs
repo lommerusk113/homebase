@@ -12,7 +12,7 @@ const fail = msg => { log(`FAIL ${cli} ${args.join(' ')}`); process.stderr.write
 const GL = 'https://gitlab.com/acme/alpha';
 const me = { username: 'tester', name: 'Test User' }, ann = { username: 'ann', name: 'Ann Reviewer' };
 const sprint = { id: 11, title: 'Sprint 12', due_date: '2026-12-01' };
-const mr = (iid, o) => ({ iid, state: 'opened', title: `MR ${iid}`, source_branch: `b-${iid}`, target_branch: 'main', description: '', reviewers: [], draft: false, milestone: sprint, web_url: `${GL}/-/merge_requests/${iid}`, author: me, ...o });
+const mr = (iid, o) => ({ iid, state: 'opened', title: `MR ${iid}`, source_branch: `b-${iid}`, target_branch: 'main', description: '', reviewers: [], draft: false, milestone: sprint, web_url: `${GL}/-/merge_requests/${iid}`, author: me, created_at: new Date(Date.UTC(2026, 0, 1) + iid * 3600_000).toISOString(), ...o });
 const MRS = {
     100: mr(100, { state: 'merged', title: '#8 - Cleanup', source_branch: '8-cleanup', detailed_merge_status: 'not_open', sha: 'aaa0000' }),
     101: mr(101, { title: '#5 - Fix login redirect', source_branch: '5-fix-login', detailed_merge_status: 'not_approved', head_pipeline: { status: 'failed', web_url: `${GL}/-/pipelines/1`, finished_at: ago(900) }, sha: 'aaa1111' }),

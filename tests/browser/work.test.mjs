@@ -72,10 +72,10 @@ export default {
         await open();
         await page.waitFor(`${row(MR(102))} && ${row(MR(106))}`, { what: 'the !102 row and the forge-seeded !106' });
         assert.deepEqual(await page.ev(groups), {
-            'needs-you': [MR(104), 'agent-stopped', `asking:${IDS.master}`], // newest work first (docs/row-states.md); the master's last reply asks for a decision
+            'needs-you': ['agent-stopped', MR(104), `asking:${IDS.master}`], // newest work first (MRs by creation, helpers by start; docs/row-states.md), then the chats; the master's last reply asks for a decision
             reviews: [MR(201), MR(202)].map(u => `review:${u}`), // newest first; my own !102 is dropped
-            doing: [MR(101), MR(105), `starting:${IDS.worker}:7`], // placeholders after the item rows
-            review: [MR(106), MR(103), MR(107)],
+            doing: [MR(105), MR(101), `starting:${IDS.worker}:7`], // placeholders after the item rows
+            review: [MR(107), MR(106), MR(103)],
             ready: [MR(102)],
             finished: ['agent-notes'],
             done: [MR(100)]

@@ -20,6 +20,7 @@
 | `limits.mjs` | Rate limits from the status-line dumps |
 | `reviewer.mjs` | Review chats: POST `/api/reviewer?key=` starts a read-only reviewer Claude (own `cc-<id8>` tmux, fixed prompt) in an in-review row's checkout; `/api/reviewer/sent` marks its findings sent; `reviewers.json` in the Homebase dir maps row key to chat (the button states: `reviewAction` in `items.mjs`) |
 | `helpers.mjs` | Work helpers as their own chats, driven by `bin/homebase.mjs helper start/read/list/stop/send/wait` from inside a chat's tmux: `/api/helpers` (POST `start` with the brief as body, GET list and `/<id>`, POST `stop`, POST `send` through `control.mjs` `send()`; `wait` polls GET `/<id>` every 5 s and returns once a helper seen at a turn, or with a reply newer than the wait, ends it, or closes), `startHelper` (worktree `helper/<slug>` from the parent's HEAD, own `cc-<id8>` tmux, `HELPER_RULE`, 4 per parent and 8 in all; the parent is its chat's tmux, so it stays the parent across `/clear`), `closeHelper` (kills only its tmux, `git worktree remove` without `--force`, `git branch -d`), `nestHelpers` (the helper's chat gets `parentId`, its parent an agent with `helperSession`, so the board nests its row; a closed one is read-only, `send()` refuses it), `reapHelpers` (at start and every 60 s through `closeHelper`, registered helpers only: pure `reapDecisions` closes one whose claude exited, whose parent is gone 10 min while it doesn't work, idle 30 min, or waiting on you 24 h), `helpers.json` and the owner-only `token` file in the Homebase dir |
+| `reports.mjs` | What chats report with `homebase status doing\|needs-you\|done --mr !N "<text>"` (POST `/api/status?parent=<tmux>`): session id -> `{ phase, mr, text, at }` in `reports.json` in the Homebase dir; `items.mjs` `reportOn` places the MR's row from it (doing while the chat works, needs-you while it doesn't, ended by a newer prompt) |
 | `saver.mjs` | Token saver: GET/POST `/api/saver`, `token-saver.md` in the Homebase dir (the setting, and the rule a stale chat re-reads); `claudeLine` adds its rule so helpers run on Sonnet |
 | `checks.mjs` | Checks before done: GET/POST `/api/checks?project=` (`{commands: [...]}` in `checks.json` in the Homebase dir; set with `curl -X POST -H 'x-codetool: 1' -H 'x-homebase-token: <token>' -d '{"commands":["npm test"]}' 'localhost:<port>/api/checks?project=<repo>'`), the Stop hook logic behind `hooks/checks.mjs` (runs only when the git state changed since the last pass, blocks up to 3 identical failures), `--settings` file for `claudeLine`, per-session `checks/<id>.json` for the row's chip |
 | `tmux.mjs` | tmux plumbing: socket override, session names, `/clear` aliases, keystroke steps |
@@ -38,7 +39,7 @@
 | `static.mjs` | App file map, build hash, CSP, `public/vendor` serving, revalidation, the Vue islands (`/web/main.js` and `/web/main.css` from `web/dist`, their tags in `index.html` only once built; see `web/README.md`) |
 
 Imports only go one way, with no cycles:
-`saver`, `checks`, `security`, `pairing`, `static`, `uploads`, `tracked`, `push`, `reload`, `limits` and `usage` import no other module; `forge` neither.
+`saver`, `reports`, `once`, `checks`, `security`, `pairing`, `static`, `uploads`, `tracked`, `push`, `reload`, `limits` and `usage` import no other module; `forge` neither.
 `tmux` → saver, checks.
 `entries` → tmux.
 `summaries` → entries.
@@ -46,8 +47,8 @@ Imports only go one way, with no cycles:
 `feed` → entries, summaries, asks.
 `turns` → entries, tmux, startup.
 `transcripts` → entries, feed, turns (and re-exports all six).
-`items` → entries, usage, forge.
-`sessions` → checks, entries, summaries, feed, turns, usage, forge, items, tmux.
+`items` → entries, usage, forge, once.
+`sessions` → checks, reports, entries, summaries, feed, turns, usage, forge, items, tmux.
 `milestones` → forge, items, sessions.
 `reviews` → forge, account.
 `log` → entries, summaries, usage, forge, sessions.

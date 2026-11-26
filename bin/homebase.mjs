@@ -14,7 +14,8 @@ const USAGE = `usage: homebase helper <command>
   list [--all]
   stop <id> [--keep-worktree]
   send <id>... | --all          (message on stdin)
-  wait <id>...                  (returns when one ends a turn or closes, with its read output)`;
+  wait <id>...                  (returns when one ends a turn or closes, with its read output)
+homebase status doing|needs-you|done [--mr <url or !N>] ["<what, e.g. Running tests>"]`;
 
 const fail = (msg, code = 1) => {
     process.stderr.write(`${msg}\n`);
@@ -42,7 +43,7 @@ export function parseArgs(argv) {
         const a = argv[i];
         if (!a.startsWith('--')) {
             words.push(a);
-        } else if (['--title', '--model', '--base', '--branch'].includes(a)) {
+        } else if (['--title', '--model', '--base', '--branch', '--mr'].includes(a)) {
             flags[a.slice(2)] = argv[++i];
         } else {
             flags[a.slice(2)] = true;
@@ -140,13 +141,20 @@ export async function wait(ids, env = process.env, { every = 5000, patience = 12
 export async function main(argv = process.argv.slice(2), env = process.env) {
 
     const [group, cmd, ...rest] = argv;
-    if (group !== 'helper' || !cmd) {
+    if (!(group === 'helper' || group === 'status') || !cmd) {
         fail(USAGE, 2);
     }
     const { flags, words } = parseArgs(rest);
     const parent = callerTmux(env);
     const needParent = () => parent ?? fail('run this inside a Homebase chat: no tmux pane ($TMUX_PANE) found');
     const q = o => new URLSearchParams(Object.entries(o).filter(([, v]) => v != null && v !== false).map(([k, v]) => [k, v === true ? '1' : v])).toString();
+
+    // the chat's own row: which MR it works on and what it does, so the board never guesses that from its replies
+    if (group === 'status') {
+        await api(`/api/status?${q({ parent: needParent() })}`, { method: 'POST', body: JSON.stringify({ phase: cmd, mr: flags.mr ?? null, text: words.join(' ') || null }), env });
+        console.log(`status: ${cmd}${flags.mr ? ` on ${flags.mr}` : ''}${words.length ? `: ${words.join(' ')}` : ''}`);
+        return;
+    }
 
     if (cmd === 'start') {
         if (!flags.title) {

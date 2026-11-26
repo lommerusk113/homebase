@@ -72,6 +72,12 @@ import { liveSessions, closedSession, transcript } from '../../server/transcript
     assert.equal(summarize([...launched, notice, launched[3], launched[4]], 5 * 60_000, null, new Set(['s'])).status, 'waiting', 'its notice ends it');
     assert.equal(summarize(launched, 5 * 60_000, null, new Set()).status, 'waiting', 'a closed chat runs nothing');
     assert.equal(summarize(launched, 31 * 60_000, null, new Set(['s'])).status, 'idle', 'silent past the limit: a lost notice');
+    // its step names the pending background run: a test run as "running tests", else its description
+    const bgCall = (description, command) => [...turn.slice(0, 1),
+        { ...turn[1], message: { content: [{ type: 'tool_use', id: 't', name: 'Bash', input: { command, description, run_in_background: true } }], stop_reason: 'tool_use' } }, ...launched.slice(2)];
+    assert.equal(summarize(bgCall('Run browser suite', 'node tests/browser/run.mjs'), 5 * 60_000, null, new Set(['s'])).step, 'running tests');
+    assert.equal(summarize(bgCall('Ship to main', 'npm run ship'), 5 * 60_000, null, new Set(['s'])).step, 'ship to main');
+    assert.equal(summarize(launched, 5 * 60_000).lastPromptAt, Date.parse(at('55:20')), 'when the last human prompt came, which ends a report');
     console.log('ok background command keeps a chat working');
 }
 

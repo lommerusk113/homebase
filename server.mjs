@@ -29,8 +29,9 @@ import { saveSaver, syncSaver } from './server/saver.mjs';
 import { readChecks, saveChecks } from './server/checks.mjs';
 import { loadHandled, markHandled } from './server/handled.mjs';
 import { loadDismissed, dismiss } from './server/dismissed.mjs';
+import { loadReports, report } from './server/reports.mjs';
 import { loadReviewers, startReviewer, markFindingsSent } from './server/reviewer.mjs';
-import { loadHelpers, startHelper, closeHelper, parentOf, parentTmux, findHelper, helperView, ahead, writeToken, reapHelpers } from './server/helpers.mjs';
+import { loadHelpers, startHelper, closeHelper, chatIn, parentOf, parentTmux, findHelper, helperView, ahead, writeToken, reapHelpers } from './server/helpers.mjs';
 
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
@@ -123,6 +124,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ownerOnly(DATA_DIR);
     loadHandled(DATA_DIR);
     loadDismissed(DATA_DIR);
+    loadReports(DATA_DIR);
     loadReviewers(DATA_DIR);
     loadHelpers(DATA_DIR);
     writeToken(DATA_DIR, TOKEN); // for bin/homebase.mjs, owner-only
@@ -276,6 +278,26 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 if (one && req.method === 'GET') {
                     return json(helperView(findHelper(one[1]), list, live));
                 }
+            }
+            // `homebase status` from inside a chat: what it works on, for its row (server/reports.mjs); the chat is the caller's tmux
+            if (isPost('/api/status')) {
+                if (remote) {
+                    return deny(403, 'chats report from the Mac');
+                }
+                const s = url.searchParams.get('parent') ? chatIn(await polledSessions(), url.searchParams.get('parent')) : null; // helpers too
+                if (!s) {
+                    return deny(403, 'run this from a chat Homebase started (its tmux is not one of them)');
+                }
+                const body = await readBody(req, 4096);
+                let input;
+                try {
+                    input = JSON.parse(body);
+                } catch {
+                    return deny(400, 'expected JSON');
+                }
+                await report(DATA_DIR, s.id, input);
+                polledSessions.stale();
+                return res.end('ok');
             }
             // The board's projects, shared by the Mac and its paired devices
             if (url.pathname === '/api/tracked' && req.method === 'GET') {

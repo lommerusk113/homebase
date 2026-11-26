@@ -1,6 +1,6 @@
 // Work helpers in their own tmux (server/helpers.mjs) and the CLI that drives them (bin/homebase.mjs), with fake tmux and git.
 import assert from 'node:assert/strict';
-import { mkdtempSync, statSync, readFileSync } from 'node:fs';
+import { mkdtempSync, statSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadHelpers, startHelper, closeHelper, parentOf, parentTmux, findHelper, helperView, writeToken, nestHelpers, reapDecisions, reapHelpers, PER_PARENT, TOTAL, START_MS } from '../../server/helpers.mjs';
@@ -133,6 +133,20 @@ console.log('ok helper limits');
     assert.equal(callerTmux({}, () => assert.fail('no tmux call')), null);
     assert.equal(callerTmux({ TMUX_PANE: '%3' }, () => { throw new Error('no server'); }), null);
     assert.deepEqual(parseArgs(['--title', 'A b', '--wait', 'x', '--model', 'opus']), { flags: { title: 'A b', wait: true, model: 'opus' }, words: ['x'] });
+    assert.deepEqual(parseArgs(['--mr', '!58', 'Running', 'tests']), { flags: { mr: '!58' }, words: ['Running', 'tests'] });
+    {
+        // homebase status: kept in reports.json, read back at start; done forgets it; an unknown phase is a 400
+        const { reports, report, loadReports } = await import('../../server/reports.mjs');
+        const dir = mkdtempSync(join(tmpdir(), 'hb-rep-'));
+        await report(dir, 's1', { phase: 'doing', mr: '!58', text: ' Running tests ' }, 5);
+        loadReports(dir);
+        assert.deepEqual(reports.get('s1'), { phase: 'doing', mr: '!58', text: 'Running tests', at: 5 });
+        await assert.rejects(report(dir, 's1', { phase: 'working' }), { status: 400 });
+        await report(dir, 's1', { phase: 'done' });
+        loadReports(dir);
+        assert.equal(reports.has('s1'), false);
+        rmSync(dir, { recursive: true });
+    }
 }
 console.log('ok helper parent');
 
@@ -257,7 +271,7 @@ console.log('ok helper wait');
     [open, shut, gone].forEach(h => helpers.set(h.id, h));
     const list = [
         { id: P, project: 'alpha', tmux: 'cc-00000090', agents: [] },
-        { id: uuid(1), project: 'alpha', status: 'working', step: 'running npm test', lastActivity: now + 5, prs: [], files: [] },
+        { id: uuid(1), project: 'alpha', status: 'working', step: 'running npm test', lastActivity: now + 5, prs: [], files: [], head: '2284-x' },
         { id: uuid(2), project: 'alpha', status: 'idle', lastReply: 'Looked.\nTLDR: nothing wrong', prs: [] }
     ];
     nestHelpers(list, new Set(['cc-00000001']), now + 10);
@@ -265,6 +279,7 @@ console.log('ok helper wait');
     assert.equal(list[2].helper.closed, 'Closed — ask the main chat to start a new helper');
     assert.deepEqual(list[0].agents.map(a => [a.id, a.status, a.helperClosed]), [[uuid(1), 'running', false], [uuid(2), 'done', true]], 'an aged-out closed helper has no row');
     assert.equal(list[0].agents[0].step, 'running npm test');
+    assert.deepEqual(list[0].agents[0].branches, ['helper/fix-it', '2284-x'], 'and the branch its folder has now, after a cd into an MR worktree');
     assert.equal(list[0].agents[1].tldr, 'nothing wrong');
     const items = workItems(list.map(s => ({ ...s, lastActivity: now })), () => null, now + 10);
     const row = items.find(i => i.key === uuid(1));

@@ -275,7 +275,7 @@ export function nestHelpers(list, live, now = Date.now(), registry = helpers) {
             status: running ? 'running' : 'done', stopReason: null,
             outcome: running ? null : (tldr || body).split('\n').find(l => l.trim())?.slice(0, 120) ?? null,
             stage: running ? 1 : 4, step: waits ? `Needs you: ${s?.question ?? s?.needsText ?? 'see its chat'}` : s?.step ?? null, stepAt: s?.stepAt ?? null,
-            tldr: tldr || null, body, branch: h.branch ?? null, branches: [h.branch].filter(Boolean), prs: (s?.prs ?? []).map(p => p.url),
+            tldr: tldr || null, body, branch: h.branch ?? s?.head ?? null, branches: [...new Set([h.branch, s?.head].filter(Boolean))], prs: (s?.prs ?? []).map(p => p.url),
             worktreePath: h.branch || h.cwd?.includes('/.claude/worktrees/') ? h.cwd : null, files: s?.files ?? [], updated: s?.lastActivity ?? s?.updated ?? h.at, started: h.at
         });
     }

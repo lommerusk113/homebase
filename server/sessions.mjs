@@ -14,6 +14,7 @@ import { waitingQuestion } from './asks.mjs';
 import { loadStore, record, seeds, flush, gateHeadsOf, STORE_FILE } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { isManual } from './manual.mjs';
+import { reports } from './reports.mjs';
 import { canned } from '../web/src/lib/canned.ts';
 import { repoPaths, accountOf } from './account.mjs';
 import { pushBlocked } from './gitpush.mjs';
@@ -158,17 +159,18 @@ export function agentStage(uses, report, done) {
 const LAUNCHED = /^(?:Command[^\n]*?(?:in background with ID: |moved to the background \(ID: )|Monitor started \(task |Workflow launched in background\. Task ID: )(\w+)|^Async agent launched successfully[\s\S]*?agentId: (\w+)/m;
 const NOTIFIED = /<task-notification>\s*<task-id>(\w+)<\/task-id>/;
 
-// Background commands and subagents the agent launched that haven't sent their task notification yet.
+// Background commands and subagents the agent launched that haven't sent their task notification yet, as task id -> the
+// id of the tool call that launched it.
 // ponytail: only the parsed tail; a launch older than it is missed
 export function backgroundTasks(entries) {
 
-    const open = new Set();
+    const open = new Map();
     for (const e of entries) {
         const blocks = e.type === 'user' && Array.isArray(e.message?.content) ? e.message.content : [];
         for (const b of blocks.filter(b => b.type === 'tool_result')) {
             const m = (typeof b.content === 'string' ? b.content : textOf({ message: { content: b.content } })).match(LAUNCHED);
             if (m) {
-                open.add(m[1] ?? m[2]);
+                open.set(m[1] ?? m[2], b.tool_use_id);
             }
         }
         const told = e.type === 'attachment' && e.attachment?.type === 'queued_command' ? textOf({ message: { content: e.attachment.prompt } }) : e.type === 'user' ? textOf(e) : '';
@@ -313,11 +315,12 @@ export function summarizeAgent(meta, entries, ageMs, id) {
     };
 }
 
-// The branch checked out in a git worktree, from its `.git` file and HEAD; null when gone or detached.
+// The branch checked out in a git checkout or linked worktree, from its `.git` file or folder and HEAD; null when gone or detached.
 async function worktreeHead(path) {
 
     try {
-        const gitdir = (await readFile(join(path, '.git'), 'utf8')).trim().replace(/^gitdir: /, '');
+        const dotGit = join(path, '.git');
+        const gitdir = (await stat(dotGit)).isDirectory() ? dotGit : (await readFile(dotGit, 'utf8')).trim().replace(/^gitdir: /, '');
         return (await readFile(join(gitdir, 'HEAD'), 'utf8')).match(/^ref: refs\/heads\/(.+)/)?.[1] ?? null;
     } catch {
         return null;
@@ -456,6 +459,19 @@ export function lastActivity(entries) {
     return Number.isNaN(at) ? null : at;
 }
 
+// The newest open background call as a step: a test run reads "running tests", anything else as stepOf says it.
+const TEST_RUN = /\btests?\b|\bcheck|gradlew?\b.*\b(test|check|build)\b|\b(vitest|jest|cucumber|spock|pytest)\b/i;
+function backgroundStep(entries, open) {
+
+    const ids = new Set(open.values());
+    const use = entries.flatMap(e => (e.type === 'assistant' && Array.isArray(e.message?.content) ? e.message.content : [])).findLast(b => b.type === 'tool_use' && ids.has(b.id));
+    if (!use) {
+        return null;
+    }
+
+    return TEST_RUN.test(`${use.input?.description ?? ''} ${use.input?.command ?? ''}`) ? 'running tests' : stepOf(use);
+}
+
 // What the running turn does now: its newest tool call in words ("running npm test"), or null before its first one.
 function turnStep(turns, since) {
 
@@ -478,6 +494,8 @@ export function summarize(entries, ageMs, marker = null, live = null) {
     const lastItem = chatItems(entries, 1).findLast(i => !i.notice && i.label !== RULES_LABEL); // the chat's newest bubble past agent notices and the rules note, so the Work tab and the chat agree on "needs you"
 
     const step = turn.state === 'working' ? turnStep(turns, turn.since) : null;
+    // ponytail: silent past AGENT_TOOL_MS counts as a lost notice (a restart killed it), like agentStatus does
+    const background = ageMs < AGENT_TOOL_MS && !closedSession(entries, ageMs, live) ? backgroundTasks(entries) : new Map();
     const needsYou = turn.state === 'idle' && lastItem?.role === 'assistant' && !!lastItem.needsYou && !lastItem.answer && !lastItem.error;
     const question = turn.state === 'asking' ? pendingQuestion(entries, marker) : null;
 
@@ -489,8 +507,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         pr: last('pr-link')?.prUrl ?? null,
         prs: prLinks(entries),
         model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? null,
-        // ponytail: silent past AGENT_TOOL_MS counts as a lost notice (a restart killed it), like agentStatus does
-        status: status(lastTurn, ageMs, turn, ageMs < AGENT_TOOL_MS && !closedSession(entries, ageMs, live) && backgroundTasks(entries).size > 0),
+        status: status(lastTurn, ageMs, turn, background.size > 0),
         known: hasTurnMarkers(entries), // false: no turn markers in a recent transcript, so the status is only a guess
         asking: turn.state === 'asking',
         died: !!turn.died, // its turn never ended and nothing works on it: the board keeps a row until the user has looked
@@ -503,10 +520,11 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         topic: latestTopic(entries),
         openPrompts,
         now: openPrompts.at(-1)?.text ?? null, // the human prompt the running turn works on (newest absorbed one wins)
-        step: step?.step ?? null,
+        step: step?.step ?? (turn.state === 'asking' ? null : backgroundStep(entries, background)),
         stepAt: step?.at ?? null, // when that call started, for "for 2m" on the Now line
         queued: queuedPrompts(entries).map(q => q.text),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
+        lastPromptAt: Date.parse(entries.findLast(isHumanPrompt)?.timestamp) || null, // a report (homebase status) older than it is over
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
         lastReplyAt: Date.parse(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)?.timestamp) || null, // for `homebase helper wait`: a reply newer than the wait
         sidechain: !!entries.find(e => e.type === 'user' || e.type === 'assistant')?.isSidechain, // a transcript a subagent wrote
@@ -806,6 +824,8 @@ export async function sessions() {
         const repo = repoPaths.get(s.project);
         s.hobby = !!repo && accountOf(repo) === 'personal';
         s.unpushed = await unpushedOf(s.cwd);
+        s.head = s.cwd ? await worktreeHead(s.cwd) : null; // the branch its folder has now; the transcript's is where the chat started
+        s.report = reports.get(s.id) ?? null;
         s.pushBlocked = s.unpushed > 0 && await pushBlocked(s);
     }));
 

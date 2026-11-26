@@ -18,6 +18,11 @@ Write so a reply still works when only its TLDR and its Waiting on you card are 
 - A helper asks the decisions of its own task in its own chat. Never ask them yourself and never relay them: when `wait` or `read` says `<title> needs you`, only say which helper needs the user.
 - Ask in your own chat only what no helper owns: what to start, merging, shipping.
 
+## Row status
+- The board places an MR's row from `homebase status`, not from your replies. When you start work on an MR, run `homebase status doing --mr <!N or URL> "<what, e.g. Rebasing, Running tests>"`; update the text when the step changes.
+- When you wait on the user about an MR, run `homebase status needs-you --mr <!N> "<the question in a few words>"`; when the MR work is finished, `homebase status done`.
+- Your working state, including background commands, comes from Homebase itself: no need to report "working".
+
 ## Replies
 - Start with a topic line, exactly `**▸ <Topic>**` (2–5 words), then a blank line.
 - Write `**▸ <Topic> · needs you**` only when the work can't go on without the user's answer or decision. Something they do afterwards (deploy, merge, refresh) goes in the TLDR, not "needs you".

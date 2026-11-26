@@ -97,6 +97,28 @@ assert.deepEqual(forged.map(i => [i.key, i.sessionId, i.column]), [[mr(1), 'old'
     assert.equal(row.next, 'Waiting for review by Ann');
 }
 
+// pracsys !1858: a helper the main chat started in its main checkout cd'd into the MR's worktree, rebased it and runs the tests
+// in the background; GitLab still says conflict until the push, and the transcript's branch is the checkout it started in
+{
+    const conflict = () => open({ blocked: 'conflict', branch: '2284-x', issue: '2284' });
+    const main = { id: 'm', project: 'p', prs: [{ url: mr(58), at: 1 }], agents: [] };
+    const row = chat => workItems([main, { id: 'h', project: 'p', prs: [], agents: [], branch: 'supplier-automation', status: 'idle', ...chat }], conflict, 10, new Map(), [], new Map(), () => null)
+        .find(i => i.pr === mr(58));
+    const busy = row({ status: 'working', head: '2284-x', step: 'running tests' });
+    assert.deepEqual([busy.column, busy.next, busy.action], ['doing', 'Running tests', null]);
+    assert.equal(row({ status: 'working', head: 'main' }).column, 'needs-you', 'a chat on another branch works on something else');
+    assert.equal(row({ status: 'waiting', head: '2284-x' }).column, 'needs-you', 'done working: the MR state counts again');
+
+    // what the chat reported (homebase status) links it to the MR from any folder and says what it does
+    const doing = { phase: 'doing', mr: '!58', text: 'Rebasing onto main', at: 5 };
+    assert.deepEqual((r => [r.column, r.next, r.action])(row({ status: 'working', head: 'main', report: doing })), ['doing', 'Rebasing onto main', null]);
+    assert.equal(row({ status: 'working', head: 'main', report: doing, lastPromptAt: 6 }).column, 'needs-you', 'a newer prompt ends the report');
+    assert.equal(row({ status: 'working', head: 'main', report: { ...doing, mr: '!59' } }).column, 'needs-you', 'about another MR');
+    const asks = row({ status: 'waiting', report: { phase: 'needs-you', mr: mr(58), text: 'Keep both migrations?', at: 5 } });
+    assert.deepEqual([asks.column, asks.askedBy, asks.next.startsWith('Asks: Keep both migrations?')], ['needs-you', 'h', true]);
+
+}
+
 console.log('ok items');
 
 {

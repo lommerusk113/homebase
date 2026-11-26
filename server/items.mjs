@@ -130,7 +130,7 @@ function reviewComments(prState) {
 
 // One kind per row, from the same inputs the old chains read; KINDS says what each kind shows. ps: the MR state after demote().
 // Order matters: an MR's first blocker wins, as in rowAction.
-export function deriveKind(ps, agent, hasPr, requested = false) {
+export function deriveKind(ps, agent, hasPr, requested = false, chat = null) {
 
     if (ps?.state === 'merged') {
         return { kind: 'merged', reason: 'the forge says merged' };
@@ -143,6 +143,10 @@ export function deriveKind(ps, agent, hasPr, requested = false) {
     }
     if (agent?.status === 'running') {
         return { kind: 'running', reason: 'the helper is working' };
+    }
+    // its chat works on the MR's branch (a local rebase and test run the forge can't see yet): no forge step while it does
+    if (chat) {
+        return { kind: 'chat-working', reason: 'its chat is working' };
     }
     if (agent?.status === 'stopped') {
         return { kind: STOPPED.has(agent.stopReason) ? agent.stopReason : 'stopped', reason: agent.stopReason ?? 'no reason given' };
@@ -189,12 +193,16 @@ const mrKind = (column, action = noButton) => ({ column, action: c => (c.pr ? ac
 const agentKind = (column, next, action = noButton) => ({ column, next, action, stage: baseStage });
 
 // What each kind of row shows: column (its group; see columnOf), next (its text), action (the canned send of its button, or null)
-// and stage (its lifecycle index). c: { ps, agent, pr, title, mr, aMr, now, error }, error being why the forge couldn't be asked.
+// and stage (its lifecycle index). c: { ps, agent, pr, title, mr, aMr, now, error, chat }, error being why the forge couldn't be asked, chat the session working on its branch.
 export const KINDS = {
     merged: { column: 'done', next: () => 'Merged', action: noButton, stage: () => 4 },
     abandoned: { column: 'closed', next: () => 'Closed without merging', action: noButton, stage: () => 4 },
     requested: agentKind('doing', () => 'Sent to Claude…'),
     running: agentKind('doing', c => c.agent.step ?? `${c.agent.description} is ${VERB[c.agent.stage] ?? 'working'}…`),
+    'chat-working': agentKind('doing', c => {
+        const say = c.chat.report?.text ?? c.chat.step;
+        return say ? say.replace(/^./, x => x.toUpperCase()) : 'Its chat is working…';
+    }),
     stopped: agentKind('needs-you', () => 'Agent stopped — check the chat', continueIt),
     'api-error': agentKind('needs-you', stoppedText('API error'), continueIt),
     'rate-limit': agentKind('needs-you', stoppedText('rate limit hit'), continueIt),
@@ -222,11 +230,11 @@ export const KINDS = {
 export const columnOf = kind => KINDS[kind].column;
 
 // A row's column, next text, action and stage from its kind. A finished helper's outcome follows the reason in the text of an MR row.
-export function rowOf(ps, agent, { pr = null, title = null, mr = 'MR', aMr = 'a MR', requested = false, now = Date.now(), error = null } = {}) {
+export function rowOf(ps, agent, { pr = null, title = null, mr = 'MR', aMr = 'a MR', requested = false, now = Date.now(), error = null, chat = null } = {}) {
 
-    const { kind, reason } = deriveKind(ps, agent, !!pr, requested);
+    const { kind, reason } = deriveKind(ps, agent, !!pr, requested, chat);
     const k = KINDS[kind];
-    const c = { ps, agent, pr, title, mr, aMr, now, error };
+    const c = { ps, agent, pr, title, mr, aMr, now, error, chat };
     let next = k.next(c);
     if (agent?.status === 'done' && agent.outcome && agent.stopReason !== 'killed' && k.column !== 'finished' && !['merged', 'abandoned', 'requested'].includes(kind)) {
         const at = clock(agent.updated);
@@ -318,6 +326,18 @@ const isMr = (ref, url) => (ref.startsWith('https://') ? ref === url : ref.match
 // ponytail: an issue-only question ("#2283?") links nothing and keeps its own chat row; match the MR's issue when that misses
 export function askerFor(sessions, project, url) {
     return sessions.find(s => s.project === project && waitsOnYou(s) && (r => !!r && isMr(r, url))(s.asks?.match(LEAD_MR)?.[0])) ?? null;
+}
+
+// What a chat reported about this MR with `homebase status` ({ phase, mr, text, at }), until its next prompt; else null.
+// mr: the MR's URL, !N or N.
+export function reportOn(s, url) {
+
+    const r = s.report;
+    if (!r?.mr || r.at <= (s.lastPromptAt ?? 0)) {
+        return null;
+    }
+
+    return r.mr === url || r.mr.replace(/^!/, '') === mrNumber(url) ? r : null;
 }
 
 // The work items' raw groups: one per PR/MR (deduped across sessions and agents), plus running or stopped agents with
@@ -449,10 +469,18 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             ? requestFor(sessions, it.project, it.pr, prState) : null;
         const title = prState?.title ?? agent?.description ?? it.pr;
         const w = forgeWords(it.project, it.pr);
-        const row = rowOf(ps, agent, { pr: it.pr, title, mr: w.mr, aMr: w.aMr, requested: !!requested, now, error: it.pr ? errorOf(it.pr, it.project) : null });
+        // a chat or helper working on the MR (its status counts its background commands, e.g. a local test run): by what it
+        // reported (homebase status), else by the branch its folder has checked out
+        const isOpen = prState?.state === 'open';
+        const chat = isOpen ? live.filter(s => s.project === it.project && s.status === 'working')
+            .map(s => ({ ...s, report: reportOn(s, it.pr)?.phase === 'doing' ? s.report : null }))
+            .find(s => s.report || (!!prState.branch && (s.head ?? s.branch) === prState.branch)) ?? null : null;
+        const row = rowOf(ps, agent, { pr: it.pr, title, mr: w.mr, aMr: w.aMr, requested: !!requested, now, error: it.pr ? errorOf(it.pr, it.project) : null, chat });
 
-        // a chat waiting on you about the open MR puts its row in Needs you, its question before the row's own reason
-        const asker = prState?.state === 'open' ? askerFor(live, it.project, it.pr) : null;
+        // a chat waiting on you about the open MR puts its row in Needs you, its question before the row's own reason: what
+        // it reported first, else the lead MR of its question
+        const reported = isOpen ? live.find(s => s.project === it.project && s.status !== 'working' && reportOn(s, it.pr)?.phase === 'needs-you') : null;
+        const asker = reported ? { id: reported.id, asks: reported.report.text } : isOpen ? askerFor(live, it.project, it.pr) : null;
         if (asker) {
             Object.assign(row, { column: 'needs-you', next: `Asks: ${asker.asks.split('\n')[0]} · ${row.next}` });
         }

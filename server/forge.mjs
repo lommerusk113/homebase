@@ -76,7 +76,7 @@ async function fetchPr(url) {
         // mergeable is not approved: a project without required approvals lets an unreviewed MR merge. Asked only then.
         const approvedBy = status === 'mergeable'
             ? await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}/approvals`], { timeout: apiTimeout() })
-                .then(r => (JSON.parse(r.stdout).approved_by ?? []).map(a => a.user?.name).filter(Boolean), () => null)
+                .then(r => (JSON.parse(r.stdout).approved_by ?? []).map(a => a.user?.name).filter(Boolean)) // a failure fails the lookup: the last state stays
             : null;
         const approved = approvedBy ? approvedBy.length > 0 : !!prev?.approved;
 
@@ -92,7 +92,7 @@ async function fetchPr(url) {
             ready: (status === 'mergeable' || !!prev?.ready) && !ci && approved,
             // approved although its pipeline may still run or fail: the stage says Approved, the column waits for CI
             approved,
-            approvedBy: approvedBy ?? [],
+            approvedBy: approvedBy ?? prev?.approvedBy ?? [],
             blocked: BLOCKED[status] ?? prev?.blocked ?? null,
             // ponytail: the MR payload doesn't say which reviewer blocked; the /reviewers endpoint would
             changes: status === 'requested_changes' || status === 'discussions_not_resolved' || mr.blocking_discussions_resolved === false,

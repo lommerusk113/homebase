@@ -695,9 +695,15 @@ async function itemsOf(out) {
     const seeded = [...forge, ...seeds(store, Date.now(), MAX_AGE_MS)];
     const urls = new Set([...out.flatMap(s => [...s.prs.filter(p => sameRepo(p.url, s.project, p.repo)).map(p => p.url), ...s.agents.flatMap(a => a.prs)]), ...seeded.map(f => f.url)]);
     const states = new Map(await Promise.all([...urls].map(async u => [u, await prState(u)])));
-    // human comments on open MRs only; never waits, so the first poll after start has none yet
-    const comments = new Map([...urls].filter(u => states.get(u)?.state === 'open')
-        .map(u => [u, swrEntry(`comments:${u}`, PR_TTL_MS, () => fetchComments(u)).value ?? null]));
+    // human comments on open MRs only
+    // the first load is awaited, as the MR state is, so the first poll after a start places rows as every later one does
+    const comments = new Map(await Promise.all([...urls].filter(u => states.get(u)?.state === 'open').map(async u => {
+        const hit = swrEntry(`comments:${u}`, PR_TTL_MS, () => fetchComments(u));
+        if (!hit.at) {
+            await hit.pending?.catch(() => null);
+        }
+        return [u, hit.value ?? null];
+    })));
 
     // a failed lookup: the MR state's error, else the comments' (the `unknown` row kind says it in its text)
     const errorOf = (url, project) => {

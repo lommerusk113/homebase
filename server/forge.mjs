@@ -56,13 +56,24 @@ const BLOCKED = { conflict: 'conflict', need_rebase: 'rebase', blocked_status: '
 // GitLab still computing mergeability: its answer says nothing about whether the MR can merge (settle keeps the last one).
 const CHECKING = ['unchecked', 'checking', 'approvals_syncing', 'preparing'];
 
+// A GitLab project's merge_method (merge, rebase_merge, ff), cached: it rarely changes.
+const mergeMethods = new Map();
+async function mergeMethodOf(path) {
+
+    if (!mergeMethods.has(path)) {
+        mergeMethods.set(path, JSON.parse((await run('glab', ['api', `projects/${encodeURIComponent(path)}`], { timeout: apiTimeout() })).stdout).merge_method);
+    }
+
+    return mergeMethods.get(path);
+}
+
 // Read-only PR/MR lookup via gh/glab, settled against the last answer (see settle). Returns { state: open|merged|closed,
 // title, branch, reviewers, mergeable, ready, blocked, changes, changesBy, draft, ci, pipeline, ... } or null.
 async function fetchPr(url) {
 
     const gl = url.match(/^https:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)/);
     if (gl) {
-        const mr = JSON.parse((await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}`], { timeout: apiTimeout() })).stdout);
+        const mr = JSON.parse((await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}?include_diverged_commits_count=true`], { timeout: apiTimeout() })).stdout);
         const state = { opened: 'open', merged: 'merged' }[mr.state] ?? 'closed';
         const status = mr.detailed_merge_status;
         const pipeline = pipelineOf(mr.head_pipeline ?? mr.pipeline);
@@ -74,6 +85,9 @@ async function fetchPr(url) {
             ? await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/issues/${issue}`], { timeout: apiTimeout() }).then(r => JSON.parse(r.stdout).milestone, () => null)
             : null;
         const ms = mr.milestone ?? issueMs;
+        // a fast-forward project merges only an MR that is not behind its target, whatever detailed_merge_status says
+        const behind = state === 'open' && status === 'mergeable' && mr.diverged_commits_count > 0
+            && ['ff', 'rebase_merge'].includes(await mergeMethodOf(gl[1]));
         // mergeable is not approved: a project without required approvals lets an unreviewed MR merge. Asked for every open
         // MR GitLab doesn't already call unapproved; a failure fails the lookup, so the last answer stays
         const approvedBy = state === 'open' && !mr.draft && !['not_approved', 'draft_status', 'not_open'].includes(status)
@@ -94,7 +108,7 @@ async function fetchPr(url) {
             // mergeability: true, false, or null while GitLab still checks
             mergeable: CHECKING.includes(status) ? null : status === 'mergeable',
             mergeStatus: status ?? null, // why GitLab won't merge it yet
-            blocked: BLOCKED[status] ?? null,
+            blocked: behind ? 'rebase' : BLOCKED[status] ?? null,
             // ponytail: the MR payload doesn't say which reviewer asked; threads come from withThreads only
             changes: status === 'requested_changes',
             changesBy: [],
@@ -169,7 +183,9 @@ export async function mergeMr(url, sha, exec = run) {
     try {
         await exec('glab', ['api', '-X', 'PUT', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}/merge`, '-f', `sha=${sha}`], { timeout: apiTimeout() });
     } catch (e) {
-        throw Object.assign(new Error(`Couldn't merge: ${String(e.stderr || e.message).trim().split('\n')[0]}`), { status: 409 });
+        const why = String(e.stderr || e.message).trim().split('\n')[0];
+        // 405 on a fast-forward project: the MR is behind its target
+        throw Object.assign(new Error(`Couldn't merge: ${/\b405\b/.test(why) ? 'needs a rebase onto its target branch' : why}`), { status: 409 });
     } finally {
         prs.delete(url);
     }

@@ -30,6 +30,12 @@ import { mr, fakeBin, withFakeGlab, glabMr, nextOf, colOf, actOf } from './helpe
     const conflict = await glabMr({ detailed_merge_status: 'conflict', reviewers: [{ name: 'Ann' }] }, 111);
     assert.deepEqual([conflict.ready, conflict.blocked, nextOf(conflict, null), actOf(mr(4), conflict, null, 'T').label], [false, 'conflict', 'Merge conflicts — rebase it', 'Rebase']);
     assert.equal(nextOf(await glabMr({ detailed_merge_status: 'blocked_status' }, 112), null), 'Blocked by another MR');
+    // a fast-forward project can't merge an MR that is behind its target: no Merge button although GitLab says mergeable
+    const behindMr = (fields, n) => withFakeGlab(`case "$2" in\n*merge_requests*) echo '${JSON.stringify({ state: 'opened', title: 't', source_branch: 'b', detailed_merge_status: 'mergeable', approved_by: [{ user: { name: 'Ann' } }], ...fields })}';;\n*) echo '{"merge_method":"ff"}';;\nesac`,
+        () => prState(`https://gitlab.example.com/ff/proj/-/merge_requests/${n}`));
+    const behind = await behindMr({ diverged_commits_count: 1 }, 120);
+    assert.deepEqual([behind.ready, behind.blocked, nextOf(behind, null)], [false, 'rebase', 'Needs a rebase onto its target']);
+    assert.equal((await behindMr({ diverged_commits_count: 0 }, 121)).blocked, null);
     // a must-pass project without a pipeline isn't "Pipeline failing"
     assert.equal((await glabMr({ detailed_merge_status: 'ci_must_pass' }, 113)).ci, null);
     // unchecked/checking keep the last settled answer for the same head, so a ready MR doesn't flap and notify again

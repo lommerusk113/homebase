@@ -73,12 +73,13 @@ async function fetchPr(url) {
             ? await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/issues/${issue}`], { timeout: apiTimeout() }).then(r => JSON.parse(r.stdout).milestone, () => null)
             : null;
         const ms = mr.milestone ?? issueMs;
-        // mergeable is not approved: a project without required approvals lets an unreviewed MR merge. Asked only then.
-        const approvedBy = status === 'mergeable'
+        // mergeable is not approved: a project without required approvals lets an unreviewed MR merge. Asked for every open
+        // MR GitLab doesn't already call unapproved, so one approved while its pipeline runs or fails stays Approved
+        const approvedBy = state === 'open' && !mr.draft && !['not_approved', 'draft_status', 'not_open'].includes(status)
             ? await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}/approvals`], { timeout: apiTimeout() })
                 .then(r => (JSON.parse(r.stdout).approved_by ?? []).map(a => a.user?.name).filter(Boolean)) // a failure fails the lookup: the last state stays
             : null;
-        const approved = approvedBy ? approvedBy.length > 0 : !!prev?.approved;
+        const approved = approvedBy ? approvedBy.length > 0 : status === 'not_approved' ? false : !!prev?.approved;
 
         return {
             state,

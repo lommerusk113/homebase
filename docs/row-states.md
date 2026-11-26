@@ -3,7 +3,7 @@
 How a Work-tab row gets its group, its text and its button.
 One model, read top to bottom: the first rule that matches wins.
 Same inputs give the same group and the same order, on every start and every device.
-`tests/unit/states.mjs` checks every line of the tables below.
+`tests/unit/states.mjs` checks every line of the MR and helper tables and the order; the Work browser tests check the chats' own rows and Dismiss.
 
 ## Inputs
 
@@ -29,12 +29,12 @@ Free text (how a reply is worded) may fill a row's text, never its group, except
 | 1 | merged | Merged | Merged | none |
 | 2 | closed | Closed without merging | Closed without merging | none |
 | 3 | its chat waits on you about it | Needs you | `Asks: <question> · <what rules 4–10 say>` | theirs (none while a helper runs) |
-| 4 | a helper on it runs | Doing | the helper's current step | none |
+| 4 | a helper on it runs (it leads the row however quiet, over newer finished or stopped ones) | Doing | the helper's current step | none |
 | 5 | a chat on its branch works, or reported `doing` | Doing | the report, else the chat's current step | none |
 | 6 | an open prompt names it and nothing runs yet (*text*) | Doing | Sent to Claude… | none |
-| 7 | its button was clicked, its kind is still the one clicked (rules 4 and 6 are the click at work and don't end it), under 30 min ago | Doing | Sent to Claude (time) | none |
+| 7 | its button was clicked, the MR's own kind is still the one clicked (also checked while rules 4–6 show), under 30 min ago | Doing | Sent to Claude (time) · button back at (time) | none |
 | 8 | a helper on it stopped | Needs you | why it stopped | Continue |
-| 9 | the forge never answered | Not checked | why the lookup failed | none |
+| 9 | the forge never answered (rules 3, 5 by a report, and 8 still apply) | Not checked | why the lookup failed | none |
 | 10 | the MR state, first blocker wins (below) | | | |
 
 MR state, first match wins:
@@ -46,7 +46,7 @@ MR state, first match wins:
 | conflict | conflicts, or needs a rebase | Needs you | Rebase |
 | blocked | blocked by another MR or external checks | In review | Review |
 | draft | nothing blocks it but the draft flag | Needs you | Mark ready |
-| threads | approved, replied threads still open | In review | none (approved needs no reviewer) |
+| threads | approved, replied threads still open | In review: Approved — waiting for (reviewer) to resolve N threads | none (approved needs no reviewer) |
 | replied | replied to threads, waiting on the reviewer | In review | Review |
 | pipeline | pipeline running | In review | Review |
 | ready | mergeable and approved by someone (GitLab asks its approvals; GitHub: approved, or no review required), nothing unanswered | Ready to merge | GitLab: Merge (Homebase merges after a confirm); GitHub: Merge + close issue (asks the chat to run the gate, then merge) |

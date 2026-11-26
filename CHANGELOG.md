@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A running helper keeps its MR row in Doing however quiet it is; a failure that comes back while a chat worked on it shows its button again once the chat is idle; a held row says when its button comes back; a chat's report and a Continue count before the forge has answered; an MR approved while its pipeline runs stays Approved.
 * Row texts say what the button does and who acts: "Helper stopped — Continue resumes it", "Approved — waiting for Ann to resolve 2 threads", and a GitHub PR that needs no review reads "Ready — merge it" instead of claiming it was approved.
 * A clicked button's hold now outlives the chat's turn that handles it and the helper it starts; unanswered comments on an approved MR keep it in Needs you with Fix & reply (as before), and the row model doc says so.
 * The first board after a Homebase start already counts review comments, so rows no longer start in one group and move a poll later; one failed approvals lookup keeps an MR's last state instead of dropping it out of Ready to merge.

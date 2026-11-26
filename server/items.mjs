@@ -463,7 +463,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
     return itemGroups(live, prOf, now, seeds).map(it => {
 
         const agents = it.agents.toSorted((a, b) => b.updated - a.updated || a.id.localeCompare(b.id)); // the id settles a tie (stored agents share 0)
-        const agent = agents[0] ?? null;
+        const agent = agents.find(a => a.status === 'running') ?? agents[0] ?? null; // a running helper leads, however quiet it is
         const prState = it.pr ? prOf(it.pr) : null;
         const gates = it.pr ? sessions.filter(s => s.project === it.project).flatMap(s => [...s.gates ?? [], ...(s.agents ?? []).flatMap(a => a.gates ?? [])]) : [];
         const run = it.pr ? gateFor(gates, it.pr, prState?.branch) : null;
@@ -476,10 +476,11 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const w = forgeWords(it.project, it.pr);
         // a chat or helper working on the MR (its status counts its background commands, e.g. a local test run): by what it
         // reported (homebase status), else by the branch its folder has checked out
-        const isOpen = prState?.state === 'open';
+        // open, or not known yet (no forge answer): a chat's own report counts either way, a branch only once the forge names it
+        const isOpen = !!it.pr && (!prState || prState.state === 'open');
         const chat = isOpen ? live.filter(s => s.project === it.project && s.status === 'working')
             .map(s => ({ ...s, report: reportOn(s, it.pr)?.phase === 'doing' ? s.report : null }))
-            .filter(s => s.report || (!!prState.branch && (s.head ?? s.branch) === prState.branch))
+            .filter(s => s.report || (!!prState?.branch && (s.head ?? s.branch) === prState.branch))
             .toSorted((a, b) => !!b.report - !!a.report || a.id.localeCompare(b.id))[0] ?? null : null; // a report says more than a branch; the id keeps it the same every poll
         const row = rowOf(ps, agent, { pr: it.pr, title, mr: w.mr, aMr: w.aMr, requested: !!requested, now, error: it.pr ? errorOf(it.pr, it.project) : null, chat });
 
@@ -488,18 +489,18 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const reported = isOpen ? live.filter(s => s.project === it.project && s.status !== 'working' && reportOn(s, it.pr)?.phase === 'needs-you').toSorted((a, b) => a.id.localeCompare(b.id))[0] : null;
         const asker = reported ? { id: reported.id, asks: reported.report.text } : isOpen ? askerFor(live, it.project, it.pr) : null;
 
-        // the user's click on its button holds it in Doing while its state kind is the one clicked, not until the chat's turn
-        // ends, for HOLD_MS at most: then the button is back, as the chat did nothing the forge saw. A changed kind ends the
-        // click for good, so the same failure coming back later shows its button. Not while a chat works on it or asks about it.
+        // the user's click on its button holds it in Doing while what it clicked on is unchanged, for HOLD_MS at most: then the
+        // button is back, as the chat did nothing the forge saw. An MR button is compared with the MR's own kind, also while a
+        // chat, prompt or helper works on it, so the same failure coming back later shows its button; a Continue with the row's
+        // kind, which a running helper ends. A chat at work or a question shows instead of the hold.
         const click = sent.get(it.key);
-        // the click's own prompt (requested) or a helper it set going (running) is the click at work, not a new state; a
-        // running helper does end a Continue, which asked for exactly that
-        const atWork = row.state.kind === 'requested' || (row.state.kind === 'running' && !STOPPED.has(click?.kind) && click?.kind !== 'stopped');
-        if (click && !chat && !asker && !atWork && (it.pr ? isOpen : true)) {
-            if (click.kind !== row.state.kind || now - click.at >= HOLD_MS) {
+        if (click && prState?.state !== 'merged' && prState?.state !== 'closed') {
+            const isContinue = click.kind === 'stopped' || STOPPED.has(click.kind);
+            const nowKind = isContinue ? row.state.kind : ps ? deriveKind(ps, null, true).kind : click.kind; // no forge answer: unknown, kept
+            if (nowKind !== click.kind || now - click.at >= HOLD_MS) {
                 sent.delete(it.key);
-            } else if (row.column !== 'doing') {
-                Object.assign(row, { column: 'doing', next: `Sent to Claude (${clock(click.at)})`, action: null });
+            } else if (!chat && !asker && row.column !== 'doing') {
+                Object.assign(row, { column: 'doing', next: `Sent to Claude (${clock(click.at)}) · button back at ${clock(click.at + HOLD_MS)}`, action: null });
             }
         }
         if (asker) {

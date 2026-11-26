@@ -1,5 +1,6 @@
-// docs/row-states.md, line by line: every precedence rule and MR kind, with its group and button, and the same answer
-// for the same inputs whatever order the sessions come in.
+// docs/row-states.md, line by line for the server's tables (MR rows, helpers without an MR, order): every precedence rule
+// and MR kind with its group and button, and the same answer for the same inputs whatever order they come in. The chats'
+// own rows and Dismiss are the page's: tests/browser/work.test.mjs and edges.test.mjs check them.
 import assert from 'node:assert/strict';
 import { workItems } from '../../server/items.mjs';
 import { withThreads } from '../../server/forge.mjs';
@@ -104,6 +105,37 @@ assert.deepEqual(shown(row(conflict, [main(), asks], sent(NOW - 1000))), ['needs
     assert.deepEqual(shown(row(open({ ready: true, sha: 'abc1234' }), [main()], new Map([[`merge:${url}`, { at: NOW - 1000, kind: 'abc1234' }]]))), ['ready', 'Merge']);
 }
 assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migrations\? · /, '3 the question leads the text');
+{
+    // a running helper leads, however quiet, over a newer finished or stopped one
+    const failing = open({ ci: 'failing' });
+    const quiet = helper({ id: 'r', updated: NOW - 300_000 });
+    assert.deepEqual(shown(row(failing, [main({ agents: [quiet, helper({ id: 'd', status: 'done', updated: NOW - 1000 })] })])), ['doing', null]);
+    assert.deepEqual(shown(row(failing, [main({ agents: [quiet, helper({ id: 's', status: 'stopped', stopReason: 'api-error', updated: NOW - 1000 })] })])), ['doing', null]);
+    // the same failure coming back while a chat worked on it ends the click: the button is back once the chat is idle
+    const clicks = new Map([[url, { at: NOW - 600_000, kind: 'failing' }]]);
+    const onBranch = st => chat({ status: st, head: '1-x' });
+    row(open({ ci: 'running', branch: '1-x' }), [main(), onBranch('working')], clicks);
+    row(open({ ci: 'failing', branch: '1-x' }), [main(), onBranch('working')], clicks);
+    assert.deepEqual(shown(row(open({ ci: 'failing', branch: '1-x' }), [main(), onBranch('idle')], clicks)), ['needs-you', 'Fix pipeline']);
+    // the held text says when the button is back
+    assert.match(row(conflict, [main()], sent(NOW - 1000)).next, /^Sent to Claude \(.+\) · button back at /);
+}
+{
+    // no forge answer yet: a chat's own report and a Continue still count
+    const doing = chat({ status: 'working', report: { phase: 'doing', mr: '!1', text: 'Rebasing', at: 5 } });
+    assert.deepEqual([...shown(row(null, [main(), doing])), row(null, [main(), doing]).next], ['doing', null, 'Rebasing']);
+    const waits = chat({ status: 'waiting', report: { phase: 'needs-you', mr: '!1', text: 'Which?', at: 5 } });
+    assert.equal(row(null, [main(), waits]).column, 'needs-you');
+    const stopped = main({ agents: [helper({ status: 'stopped', stopReason: 'api-error' })] });
+    assert.deepEqual(shown(row(null, [stopped], new Map([[url, { at: NOW - 1000, kind: 'api-error' }]]))), ['doing', null], 'Continue holds without a forge answer');
+    assert.match(row(null, [main()], new Map(), () => 'not logged in').next, /not logged in/, '9 says why the lookup failed');
+}
+{
+    // texts that say what the button does, and who acts
+    assert.equal(row(open({ reviewers: ['Ann'] }), [main({ agents: [helper({ status: 'stopped' })] })]).next, 'Helper stopped — Continue resumes it');
+    assert.equal(row(open({ ready: true, approved: true, replied: 2, repliedTo: ['Ann'] })).next, 'Approved — waiting for Ann to resolve 2 threads');
+    assert.equal(row(open({ ready: true, approved: false })).next, 'Ready — merge it', 'GitHub without a required review: not Approved');
+}
 console.log('ok precedence');
 
 // a helper without an MR (table "A helper without an MR")

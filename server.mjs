@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { transcript, agentFeed } from './server/transcripts.mjs';
 import { polledSessions, startingChats } from './server/sessions.mjs';
-import { refreshAll, refreshInfo, isGitLab, mergeMr, prs, swr } from './server/forge.mjs';
+import { refreshAll, refreshInfo, isGitLab, mergeMr, prs, swr, forgeWords } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
 import { reviewRequests } from './server/reviews.mjs';
 import { limits } from './server/limits.mjs';
@@ -294,6 +294,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     input = JSON.parse(body);
                 } catch {
                     return deny(400, 'expected JSON');
+                }
+                // on GitLab #12 is an issue: a report naming it would be stored and match no row
+                if (/^\s*#\d+\s*$/.test(input?.mr ?? '') && forgeWords(s.project).forge === 'GitLab') {
+                    return deny(400, `on GitLab ${input.mr.trim()} is an issue: use !<MR number> or the MR's URL`);
                 }
                 await report(DATA_DIR, s.id, input);
                 polledSessions.stale();

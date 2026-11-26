@@ -475,8 +475,12 @@ export function attachReports(list, live, all = reports) {
     }
 }
 
-// A human prompt that answers the chat: not the "Load new rules" note Homebase types (as feed.mjs counts replies).
-const isAnswer = e => isHumanPrompt(e) && cannedLabel(textOf(e)) !== RULES_LABEL;
+// A human prompt that answers the chat, also one typed while it worked: not the "Load new rules" note Homebase types (as
+// feed.mjs counts replies).
+// A prompt typed while the chat works is queued: Claude Code keeps it as a human queued_command attachment.
+const isAnswer = e => (isHumanPrompt(e) && cannedLabel(textOf(e)) !== RULES_LABEL)
+    || (e.type === 'attachment' && e.attachment?.type === 'queued_command' && e.attachment.origin?.kind === 'human'
+        && cannedLabel(textOf({ message: { content: e.attachment.prompt } })) !== RULES_LABEL);
 
 // When the user last answered the chat: its newest human prompt or answered AskUserQuestion, else null (attachReports
 // forgets an answered report, so one whose answer scrolled out of the tail stays over).

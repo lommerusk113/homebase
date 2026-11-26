@@ -152,7 +152,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     // the chat's own row: which MR it works on and what it does, so the board never guesses that from its replies
     if (group === 'status') {
         if ('mr' in flags && !flags.mr) {
-            fail(USAGE, 2); // --mr with no value: an unquoted #12 the shell read as a comment
+            fail("--mr needs a value: write !12, the MR's URL, or quote '#12' (an unquoted # starts a shell comment)", 2);
         }
         await api(`/api/status?${q({ parent: needParent() })}`, { method: 'POST', body: JSON.stringify({ phase: cmd, mr: flags.mr ?? null, text: words.join(' ') || null }), env });
         console.log(`status: ${cmd}${flags.mr ? ` on ${flags.mr}` : ''}${words.length ? `: ${words.join(' ')}` : ''}`);

@@ -40,7 +40,7 @@ import { now, withFakeGlab } from './helpers.mjs';
     // Review on a row the board still shows after a restart: a cold cache waits for the list instead of 404ing
     const { repoPaths } = await import('../../server/account.mjs');
     const { reviewRequest } = await import('../../server/reviews.mjs');
-    const { swr } = await import('../../server/forge.mjs');
+    const { swr, me } = await import('../../server/forge.mjs');
     repoPaths.set('rv', { host: 'gitlab.rv2.test', path: 'g/rv' });
     const u = 'https://gitlab.rv2.test/g/rv/-/merge_requests/1';
     const body = JSON.stringify([{ web_url: u, iid: 1, title: 'Late', state: 'opened', author: { username: 'ann', name: 'Ann' }, updated_at: '2026-01-01T00:00:00Z', references: { full: 'g/rv!1' } }]);
@@ -52,6 +52,7 @@ import { now, withFakeGlab } from './helpers.mjs';
     } finally {
         repoPaths.delete('rv');
         swr.delete('reviews:gitlab.rv2.test');
+        me.clear(); // whoAmI cached the fake user: the accounts test counts on an empty cache
     }
 }
 assert.deepEqual(repoPath('git@gitlab.com:tritt/accounting/pracsys.git\n'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });

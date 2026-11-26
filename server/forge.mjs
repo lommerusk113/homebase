@@ -112,7 +112,7 @@ async function fetchPr(url) {
             target: mr.target_branch,
             issue,
             sha: mr.sha ?? mr.diff_refs?.head_sha ?? null,
-            checking: state === 'open' && CHECKING.includes(status) && !prev, // still a guess: a click's hold is kept (items.mjs)
+            checking: state === 'open' && CHECKING.includes(status) && (!prev || !!prev.checking), // still a guess (also a kept guess): a click's hold is kept (items.mjs)
             mergeStatus: prev ? prev.mergeStatus ?? null : status ?? null // why GitLab won't merge it yet; kept like ready while GitLab is still checking
         };
     }
@@ -161,7 +161,7 @@ export function ghPr(pr, url) {
         target: pr.baseRefName,
         issue: issueOf(pr.title, pr.body),
         sha: pr.headRefOid ?? null,
-        checking: unknown && !prev && pr.state === 'OPEN' // still a guess: a click's hold is kept (items.mjs)
+        checking: unknown && pr.state === 'OPEN' && (!prev || !!prev.checking) // still a guess (also a kept guess): a click's hold is kept (items.mjs)
     };
 }
 

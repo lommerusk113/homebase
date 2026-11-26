@@ -35,8 +35,13 @@ export async function report(dir, sessionId, { phase, mr = null, text = null } =
     if (!valid({ phase, mr, text })) {
         throw Object.assign(new Error(`expected a phase (${PHASES.join(', ')}), an optional MR (URL, !N or #N) and text`), { status: 400 });
     }
+    // a URL is cut to the MR itself (/diffs, #note_1, ?tab= follow it); one that names no MR would place no row
+    const url = mr?.trim().startsWith('https://') ? mr.trim().match(/^https:\/\/[^\s?#]+?\/(?:-\/merge_requests|pull)\/\d+/)?.[0] : null;
+    if (mr?.trim().startsWith('https://') && !url) {
+        throw Object.assign(new Error('that URL names no MR: use the MR\'s URL or !N'), { status: 400 });
+    }
     // an update without --mr keeps the MR the chat named before; a report that never named one would place no row
-    const named = mr?.trim() || reports.get(sessionId)?.mr || null;
+    const named = url || mr?.trim() || reports.get(sessionId)?.mr || null;
     if (phase !== 'done' && !named) {
         throw Object.assign(new Error('name the MR: --mr <url or !N>'), { status: 400 });
     }

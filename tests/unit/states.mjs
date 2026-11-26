@@ -175,6 +175,11 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
     const guess = new Map([[url, { at: NOW - 1000, kind: 'conflict' }]]);
     assert.deepEqual(shown(row(open({ reviewers: ['Ann'], checking: true }), [main()], guess)), ['doing', null]);
     assert.equal(guess.size, 1, 'not forgotten');
+    // two still-checking answers in a row: the kept guess is still a guess
+    const ghUrl = 'https://github.com/o/p/pull/3', gb = { state: 'OPEN', title: 't', headRefName: 'b', baseRefName: 'main', isDraft: false, reviewDecision: '', mergeable: 'UNKNOWN' };
+    prs.set(ghUrl, { at: 1, value: ghPr(gb, ghUrl) });
+    assert.equal(ghPr(gb, ghUrl).checking, true);
+    prs.delete(ghUrl);
     // an MR button's click without a forge answer holds too
     assert.deepEqual(shown(row(null, [main()], sent(NOW - 1000))), ['doing', null]);
 }
@@ -322,6 +327,9 @@ console.log('ok merge only at the confirmed head');
     await report(dir2, 'u', { phase: 'doing', text: 'Running tests' }, 6);
     assert.deepEqual(reports.get('u'), { phase: 'doing', mr: '!7', text: 'Running tests', at: 6 });
     await assert.rejects(report(dir2, 'v', { phase: 'needs-you', text: 'Which?' }), e => e.status === 400);
+    await report(dir2, 'w', { phase: 'doing', mr: 'https://gitlab.com/g/p/-/merge_requests/12/diffs?tab=x#note_1' }, 7);
+    assert.equal(reports.get('w').mr, 'https://gitlab.com/g/p/-/merge_requests/12', 'a URL is cut to the MR');
+    await assert.rejects(report(dir2, 'x', { phase: 'doing', mr: 'https://gitlab.com/g/p/-/issues/12' }), e => e.status === 400);
     reports.clear();
     // GitHub still computing mergeability keeps the conflict it saw, never flips to ready
     const pr = 'https://github.com/o/p/pull/9', base = { state: 'OPEN', title: 't', headRefName: 'b', baseRefName: 'main', isDraft: false, reviewDecision: '' };

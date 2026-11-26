@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A forge that is still checking on a second lookup keeps a clicked row's hold too, and `homebase status --mr` with an MR URL plus `/diffs`, `#note_…` or `?tab=` matches its row (a URL naming no MR is refused).
 * A GitLab MR's first lookup after a start asks again while GitLab is still checking, and a guess from a forge still checking never ends a clicked row's hold.
 * An answer typed while a chat is still working now ends its `homebase status` report like any prompt; a GitLab `--mr '#12'` (an issue) is refused with what to write instead, and an empty `--mr` says the `#` was read as a shell comment.
 * `homebase status --mr !N` places GitHub rows too; an update without `--mr` keeps the MR the chat named before, a first report without one is refused, and `--mr` with no value (an unquoted `#12`) fails instead of reporting nothing.

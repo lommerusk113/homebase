@@ -475,10 +475,11 @@ export function attachReports(list, live, all = reports) {
     }
 }
 
-// A human prompt that answers the chat, also one typed while it worked: not the "Load new rules" note Homebase types (as
-// feed.mjs counts replies).
-// A prompt typed while the chat works is queued: Claude Code keeps it as a human queued_command attachment.
-const isAnswer = e => (isHumanPrompt(e) && cannedLabel(textOf(e)) !== RULES_LABEL)
+// A human prompt that starts a turn: not the "Load new rules" note Homebase types (as feed.mjs counts replies). It ends a
+// doing report; a note typed while the chat works (queued) starts no turn, so it doesn't.
+const isPrompt = e => isHumanPrompt(e) && cannedLabel(textOf(e)) !== RULES_LABEL;
+// An answer to the chat: a prompt, or one typed while it worked (a human queued_command attachment). It ends a needs-you report.
+const isAnswer = e => isPrompt(e)
     || (e.type === 'attachment' && e.attachment?.type === 'queued_command' && e.attachment.origin?.kind === 'human'
         && cannedLabel(textOf({ message: { content: e.attachment.prompt } })) !== RULES_LABEL);
 
@@ -559,7 +560,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         stepAt: step?.at ?? null, // when that call started, for "for 2m" on the Now line
         queued: queuedPrompts(entries).map(q => q.text),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
-        lastPromptAt: Date.parse(entries.findLast(isAnswer)?.timestamp) || null, // a report (homebase status) older than it is over
+        lastPromptAt: Date.parse(entries.findLast(isPrompt)?.timestamp) || null, // a report (homebase status) older than it is over
         lastAnswerAt: lastAnswerAt(entries), // a needs-you report older than this is answered (reports.mjs endsAt)
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
         lastReplyAt: Date.parse(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)?.timestamp) || null, // for `homebase helper wait`: a reply newer than the wait

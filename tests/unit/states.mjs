@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { workItems } from '../../server/items.mjs';
 import { canned } from '../../web/src/lib/canned.ts';
 import { loadReports, reports, report, forgetReport } from '../../server/reports.mjs';
-import { lastAnswerAt, attachReports } from '../../server/sessions.mjs';
+import { lastAnswerAt, attachReports, summarize } from '../../server/sessions.mjs';
 import { ghPr, prs } from '../../server/forge.mjs';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -292,6 +292,14 @@ console.log('ok merge only at the confirmed head');
     assert.equal(lastAnswerAt([...asked, { type: 'user', timestamp: t(9), message: { content: canned('rules', 'rules.md').message } }]), 3000, 'Load new rules is no answer');
     const queued = { type: 'attachment', timestamp: t(11), attachment: { type: 'queued_command', prompt: 'main, please', origin: { kind: 'human' } } };
     assert.equal(lastAnswerAt([...asked, queued]), 11000, 'an answer typed while the chat works counts');
+    // ... but a note typed while the chat works starts no turn: a doing report stays
+    const working = summarize([{ type: 'user', timestamp: t(1), uuid: 'p', message: { role: 'user', content: 'Rebase !2' } }, queued], 1000);
+    assert.equal(working.lastPromptAt, 1000);
+    const keep = [{ id: 'k', lastPromptAt: working.lastPromptAt, lastAnswerAt: working.lastAnswerAt }];
+    reports.set('k', { phase: 'doing', mr: '!2', text: 'Rebasing', at: 2500 });
+    attachReports(keep, null, reports);
+    assert.equal(!!keep[0].report, true);
+    reports.clear();
     assert.equal(lastAnswerAt([{ type: 'assistant', timestamp: t(7), message: { content: [{ type: 'text', text: 'hi' }] } }]), null, 'no answer in the tail: the report stands');
     // reports: only a live, not-cleared chat's count; an answered one is forgotten for good
     const all = new Map([['old', { phase: 'needs-you', mr: '!1', text: 'Which?', at: 5 }], ['gone', { phase: 'doing', mr: '!1', text: 'x', at: 5 }], ['ok', { phase: 'doing', mr: '!1', text: 'x', at: 5 }], ['answered', { phase: 'needs-you', mr: '!1', text: 'Q', at: 5 }]]);

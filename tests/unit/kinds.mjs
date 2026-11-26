@@ -15,7 +15,7 @@ for (const [kind, k] of Object.entries(KINDS)) {
 console.log('ok every kind has a column and only ready merges');
 
 const opts = { pr: url, title: 'T' };
-const threads = '2 threads still open — resolve them';
+const threads = 'Approved — waiting for the reviewer to resolve 2 threads';
 assert.equal(rowOf({ state: 'open', ready: false, approved: true, notReady: threads, reviewers: [] }, null, opts).stage, 3, 'approved with open threads stays Approved');
 assert.equal(rowOf({ state: 'open', blocked: 'blocked', approved: true, notReady: threads, reviewers: [] }, null, opts).next, `Blocked by another MR · ${threads}`);
 assert.equal(rowOf({ state: 'open', blocked: 'blocked', approved: true, reviewers: [] }, null, opts).next, 'Blocked by another MR');

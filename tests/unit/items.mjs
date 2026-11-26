@@ -28,7 +28,7 @@ assert.equal(nextOf(open(), { status: 'running', stage: 2, description: 'Rebase 
     assert.equal(stepOf({ name: 'Edit', input: { file_path: '/x/src/login.js' } }), 'editing login.js');
     assert.equal(stepOf({ name: 'mcp__x__y', input: {} }), 'using mcp__x__y');
 }
-assert.equal(nextOf(null, { status: 'stopped' }), 'Agent stopped — check the chat');
+assert.equal(nextOf(null, { status: 'stopped' }), 'Helper stopped — Continue resumes it');
 const at = new Date(Date.UTC(2026, 0, 1, 12, 0)).getTime();
 const hm = new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 assert.equal(nextOf(null, { status: 'stopped', stopReason: 'api-error', updated: at }), `Helper stopped: API error at ${hm} — Continue resumes it`);
@@ -226,7 +226,7 @@ assert.equal(act(open({ ready: true }), null, 'https://github.com/o/r/pull/9').m
 assert.deepEqual(act(open({ changes: true, reviewers: ['Ann'] }), null), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
 // one precedence with nextStep: a stopped agent wins over the MR's own ask, but not over a merged MR; a running pipeline asks nothing
 assert.deepEqual([open({ changes: true }), open({ ready: true })].map(p => act(p, { status: 'stopped' }).label), ['Continue', 'Continue']);
-assert.equal(nextOf(open({ ready: true }), { status: 'stopped' }), 'Agent stopped — check the chat');
+assert.equal(nextOf(open({ ready: true }), { status: 'stopped' }), 'Helper stopped — Continue resumes it');
 assert.equal(act({ state: 'merged' }, { status: 'stopped' }), null);
 assert.equal(act(open({ ci: 'running' }), null), null);
 assert.deepEqual(act(open({ ci: 'failing', reviewers: ['Ann'] }), null), { label: 'Fix pipeline', message: `The pipeline on !4 (${mr(4)}) is failing — find out why and fix it.` });
@@ -298,10 +298,10 @@ assert.deepEqual([warned.column, warned.gate.verdict, warned.action.label], ['re
 // open threads are the blocker, with the reviewer's button; with none open it is ready
 const passed = [{ ...runs[1], verdict: 'ready', commit: 'abc1234' }];
 const withGate = pr => workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: passed, agents: [] }], () => open({ ready: true, sha: 'abc1234ff', branch: 'kjn-gate', ...pr }), 0, new Map())[0];
-assert.deepEqual([withGate({ replied: 3 }).next, withGate({ replied: 3 }).action?.label, withGate({ replied: 3 }).column], ['3 threads still open — resolve them', 'Review', 'review']);
+assert.deepEqual([withGate({ replied: 3 }).next, withGate({ replied: 3 }).action?.label, withGate({ replied: 3 }).column], ['Approved — waiting for the reviewer to resolve 3 threads', 'Review', 'review']);
 assert.deepEqual([withGate({}).column, withGate({}).action.label], ['ready', 'Merge']);
 // approved by a reviewer with threads open: they are the blocker, and no Review button
-assert.deepEqual([withGate({ replied: 3, approved: true }).next, withGate({ replied: 3, approved: true }).action], ['3 threads still open — resolve them', null]);
+assert.deepEqual([withGate({ replied: 3, approved: true }).next, withGate({ replied: 3, approved: true }).action], ['Approved — waiting for the reviewer to resolve 3 threads', null]);
 console.log('ok review gate');
 assert.equal(items[1].action.label, 'Review'); // waiting on review: the reviewer chat's button (review-chat.mjs)
 console.log('ok actions');

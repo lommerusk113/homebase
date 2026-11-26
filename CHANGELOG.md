@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A held row ("Sent to Claude") shows how a helper that finished since went, instead of hiding it until the button comes back.
 * Send findings no longer parks its row in Doing for 30 minutes; a Not checked row says why the lookup failed before what its helper did; an unreviewed GitHub PR's stage reads Review, matching its Ready text.
 * An MR approved by someone but not mergeable yet reads "Approved by Ann — not mergeable yet" instead of asking for a reviewer; "Approved —" on review comments only shows when someone approved it; an MR whose comments could not be read keeps its title and helpers while Not checked.
 * Of several running helpers on one MR the first started leads its row, so text and Step in no longer swap; a helper that stopped after you clicked shows Continue instead of the hold; a GitHub PR that needs no review with replied threads reads Ready, without a Review button.
@@ -16,7 +17,7 @@ Notable changes to Homebase, newest first.
 * MR rows are ordered by when the MR was opened (the same on every install, not by when Homebase first saw it), and the chats' own rows by when the chat started, so they no longer swap as chats take turns writing.
 * A clicked button's hold in Doing ends for good once the row's state changes, so a pipeline that fails again later shows Fix pipeline at once; Review no longer sends its row to Doing; a question about the MR beats the hold; a clicked Continue holds a helper row on every device; a working chat's own step shows instead of "Sent to Claude…".
 * A GitLab MR is Ready to merge, with its Merge button, only once someone approved it ("Approved by Ann — merge it"); a mergeable MR nobody approved stays In review.
-* Rows keep their place inside a group (newest work first, by when they first appeared) instead of reshuffling whenever a helper writes something, and two chats on one MR no longer swap the row's text from poll to poll.
+* Rows keep their place inside a group (newest work first) instead of reshuffling whenever a helper writes something, and two chats on one MR no longer swap the row's text from poll to poll.
 * An MR row sits in Doing, with what runs ("Running tests") and no Rebase or other MR button, while a chat or helper works on it, also when only its background tests run: found by the branch its folder has checked out (no longer the folder it started in), or by what it reported.
 * Chats report their MR work with `homebase status doing|needs-you|done --mr !N "<what>"`, and the board places rows from that instead of from how a reply is worded; the rules file tells chats to use it.
 * Clicking a row's button (Rebase, Fix…) keeps it in Doing until the MR's state changes, instead of jumping back to Needs you as soon as the chat's turn ends; the hold survives a Homebase restart and ends after 30 minutes, when the button comes back.

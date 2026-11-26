@@ -506,7 +506,9 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             if (nowKind !== click.kind || now - click.at >= HOLD_MS) {
                 sent.delete(it.key);
             } else if (!chat && !asker && row.column !== 'doing' && !(agent?.status === 'stopped' && agent.updated > click.at)) { // a helper that stopped since shows its Continue
-                Object.assign(row, { column: 'doing', next: `Sent to Claude (${clock(click.at)}) · button back at ${clock(click.at + HOLD_MS)}`, action: null });
+                // a helper that finished since says how it went, so the held row never hides that
+                const told = agent?.status === 'done' && agent.outcome && agent.updated > click.at ? ` · Helper finished: ${agent.outcome.replace(/[.!]$/, '')}` : '';
+                Object.assign(row, { column: 'doing', next: `Sent to Claude (${clock(click.at)})${told} · button back at ${clock(click.at + HOLD_MS)}`, action: null });
             }
         }
         if (asker) {

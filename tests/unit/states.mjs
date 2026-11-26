@@ -141,6 +141,9 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
     // a helper that stopped after the click shows its Continue, not the hold
     const later = main({ agents: [helper({ status: 'stopped', stopReason: 'api-error', updated: NOW - 500 })] });
     assert.deepEqual(shown(row(conflict, [later], sent(NOW - 1000))), ['needs-you', 'Continue']);
+    // a helper that finished since the click says how it went in the held text
+    const fin = main({ agents: [helper({ status: 'done', outcome: 'Pipeline fails on a missing CI secret.', updated: NOW - 500 })] });
+    assert.match(row(conflict, [fin], sent(NOW - 1000)).next, /^Sent to Claude \(.+\) · Helper finished: Pipeline fails on a missing CI secret · button back at /);
     // an MR button's click without a forge answer holds too
     assert.deepEqual(shown(row(null, [main()], sent(NOW - 1000))), ['doing', null]);
 }

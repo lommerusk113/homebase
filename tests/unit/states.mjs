@@ -48,6 +48,11 @@ for (const [kind, ps, column, label] of kinds) {
     // the same MR in a project that requires resolved threads: GitLab won't merge it, so it waits on them, no Merge
     const required = withThreads(open({ ready: false, approved: true, approvedBy: ['Børre'], changes: true, mergeStatus: 'discussions_not_resolved', sha: 'abc1234' }), { replied: 2, repliedTo: ['Børre'] });
     assert.deepEqual([row(required).next, ...shown(row(required))], ['Replied to 2 threads — waiting for Børre to resolve', 'review', null]);
+    // threads that don't block it never hide what does: nobody approved, or the pipeline still runs
+    const unreviewed = withThreads(open({ mergeStatus: 'not_approved', sha: 'abc1234' }), { replied: 1, repliedTo: ['Bo'] });
+    assert.deepEqual([row(unreviewed).next, ...shown(row(unreviewed))], ['Needs a reviewer · 1 open thread', 'review', 'Request review']);
+    const running = withThreads(open({ approved: true, ci: 'running', mergeStatus: 'ci_still_running', sha: 'abc1234' }), { replied: 1, repliedTo: ['Bo'] });
+    assert.deepEqual([row(running).next, row(running).state.kind], ['Pipeline running · 1 open thread', 'pipeline']);
     const unapproved = withThreads(open({ reviewers: ['Ann'] }), { unanswered: 1, unansweredBy: ['Bo'] });
     assert.deepEqual(shown(row(unapproved)), ['needs-you', 'Fix & reply']);
 }

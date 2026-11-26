@@ -71,31 +71,35 @@ function mrNext(prState, mr) {
     if (blockers.length) {
         return blockers.join(' · ');
     }
-    if (prState.replied && !prState.ready) {
-        const n = prState.replied;
+    const n = prState.replied;
+    if (waitsOnThreads(prState)) {
         return `Replied to ${n} thread${n === 1 ? '' : 's'} — waiting for ${prState.repliedTo?.join(', ') || 'the reviewer'} to resolve`;
     }
+    // threads that don't block the merge are information after what does
+    const open = n ? ` · ${n} open thread${n === 1 ? '' : 's'}` : '';
     if (prState.ci === 'running') {
-        return 'Pipeline running';
+        return `Pipeline running${open}`;
     }
     if (prState.draft) {
-        return 'Draft — mark it ready for review';
+        return `Draft — mark it ready for review${open}`;
     }
     if (prState.ready) {
-        const n = prState.replied;
         // GitHub with no review required is ready unapproved: it says Ready, not Approved
         const ok = prState.approvedBy?.length ? `Approved by ${prState.approvedBy.join(', ')}` : prState.approved === false ? 'Ready' : 'Approved';
-        // open threads are information: GitLab says mergeable only when the project lets them stay open
-        return `${ok} — merge it${n ? ` · ${n} open thread${n === 1 ? '' : 's'}` : ''}`;
+        return `${ok} — merge it${open}`;
     }
 
     if (prState.approved) { // approved, but the forge doesn't call it mergeable yet (no pipeline yet, still checking)
         const why = MERGE_WHY[prState.mergeStatus] ?? prState.mergeStatus?.replace(/_/g, ' ');
-        return `Approved${prState.approvedBy?.length ? ` by ${prState.approvedBy.join(', ')}` : ''} — not mergeable yet${why ? ` (GitLab: ${why})` : ''}`;
+        return `Approved${prState.approvedBy?.length ? ` by ${prState.approvedBy.join(', ')}` : ''} — not mergeable yet${why ? ` (GitLab: ${why})` : ''}${open}`;
     }
 
-    return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
+    return `${prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer'}${open}`;
 }
+
+// Replied threads are what stops the merge only when the forge says so: GitLab's discussions_not_resolved (the project
+// requires them resolved); GitHub has no such status, so there they count whenever it can't merge.
+const waitsOnThreads = ps => !!ps.replied && !ps.ready && (ps.mergeStatus == null || ps.mergeStatus === 'discussions_not_resolved');
 
 // The step review comments ask for, or null when there are none.
 function reviewComments(prState) {
@@ -163,7 +167,7 @@ export function deriveKind(ps, agent, hasPr, requested = false, chat = null) {
         : ps.blocked === 'conflict' || ps.blocked === 'rebase' ? 'conflict'
         : ps.blocked ? 'blocked'
         : ps.draft && ps.ci !== 'running' ? 'draft' // nothing blocks it but the draft flag: the user takes it out of draft
-        : ps.replied && !ps.ready ? 'replied'
+        : waitsOnThreads(ps) ? 'replied'
         : ps.ci === 'running' ? 'pipeline'
         : ps.ready ? 'ready'
         : ps.reviewers?.length || ps.approved ? 'in-review' : 'needs-reviewer';

@@ -5,6 +5,7 @@ Notable changes to Homebase, newest first.
 ## Unreleased
 
 * A Review click on a requested MR no longer answers "not a merge request that asks you for a review" when the server's list was cold (after a restart) or its last refresh failed: it fetches the list first. The review chat now runs review-gate and then polish-loop, still read-only, and ends with a TLDR.
+* Threads you replied to no longer stand in for what really stops an MR (no reviewer yet, a running pipeline); they count as the blocker only when the project requires them resolved, and are otherwise noted in the text ("· 1 open thread").
 * An approved MR GitLab can merge shows Merge even with open threads ("Approved by Børre — merge it · 2 open threads"); only a project that requires resolved threads keeps it waiting on them.
 * Merge merges only the commit the row showed when you clicked it: a push while the confirm was open is refused with "The MR changed since you clicked Merge".
 * A clicked Continue on an MR row stays held while its own prompt runs, until the helper runs again.
@@ -12,10 +13,10 @@ Notable changes to Homebase, newest first.
 * A held row ("Sent to Claude") shows how a helper that finished since went, instead of hiding it until the button comes back.
 * Send findings no longer parks its row in Doing for 30 minutes; a Not checked row says why the lookup failed before what its helper did; an unreviewed GitHub PR's stage reads Review, matching its Ready text.
 * An MR approved by someone but not mergeable yet reads "Approved by Ann — not mergeable yet" instead of asking for a reviewer; "Approved —" on review comments only shows when someone approved it; an MR whose comments could not be read keeps its title and helpers while Not checked.
-* Of several running helpers on one MR the first started leads its row, so text and Step in no longer swap; a helper that stopped after you clicked shows Continue instead of the hold; a GitHub PR that needs no review with replied threads reads Ready, without a Review button.
+* Of several running helpers on one MR the first started leads its row, so text and Step in no longer swap; a helper that stopped after you clicked shows Continue instead of the hold.
 * A failed comments lookup no longer places a row as if nobody had commented: it keeps the last answer, and an MR whose comments could never be read is Not checked (with why), never Ready to merge over unanswered threads.
 * A running helper keeps its MR row in Doing however quiet it is; a failure that comes back while a chat worked on it shows its button again once the chat is idle; a held row says when its button comes back; a chat's report and a Continue count before the forge has answered; an MR approved while its pipeline runs stays Approved.
-* Row texts say what the button does and who acts: "Helper stopped — Continue resumes it", "Approved — waiting for Ann to resolve 2 threads", and a GitHub PR that needs no review reads "Ready — merge it" instead of claiming it was approved.
+* Row texts say what the button does and who acts: "Helper stopped — Continue resumes it", and a GitHub PR that needs no review reads "Ready — merge it" instead of claiming it was approved.
 * A clicked button's hold now outlives the chat's turn that handles it and the helper it starts; unanswered comments on an approved MR keep it in Needs you with Fix & reply (as before), and the row model doc says so.
 * The first board after a Homebase start already counts review comments, so rows no longer start in one group and move a poll later; one failed approvals lookup keeps an MR's last state instead of dropping it out of Ready to merge.
 * Opening a chat whose turn died clears its Needs you row on every device, not only in the browser that opened it.

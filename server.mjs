@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { transcript, agentFeed } from './server/transcripts.mjs';
 import { polledSessions, startingChats } from './server/sessions.mjs';
-import { refreshAll, refreshInfo, isGitLab, mergeMr, prs, swr, forgeWords } from './server/forge.mjs';
+import { refreshAll, refreshInfo, isGitLab, mergeMr, prs, swr } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
 import { reviewRequests } from './server/reviews.mjs';
 import { limits } from './server/limits.mjs';
@@ -30,6 +30,7 @@ import { readChecks, saveChecks } from './server/checks.mjs';
 import { loadHandled, markHandled } from './server/handled.mjs';
 import { loadDismissed, dismiss } from './server/dismissed.mjs';
 import { loadReports, report } from './server/reports.mjs';
+import { loadSends, logHousekeeping } from './server/sendlog.mjs';
 import { loadReviewers, startReviewer, markFindingsSent } from './server/reviewer.mjs';
 import { loadHelpers, startHelper, closeHelper, chatIn, parentOf, parentTmux, findHelper, helperView, ahead, writeToken, reapHelpers } from './server/helpers.mjs';
 
@@ -125,6 +126,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     loadHandled(DATA_DIR);
     loadDismissed(DATA_DIR);
     loadReports(DATA_DIR);
+    loadSends(DATA_DIR);
     loadSent(DATA_DIR);
     loadReviewers(DATA_DIR);
     loadHelpers(DATA_DIR);
@@ -295,11 +297,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 } catch {
                     return deny(400, 'expected JSON');
                 }
-                // on GitLab #12 is an issue: a report naming it would be stored and match no row
-                if (/^\s*#\d+\s*$/.test(input?.mr ?? '') && forgeWords(s.project).forge === 'GitLab') {
-                    return deny(400, `on GitLab ${input.mr.trim()} is an issue: use !<MR number> or the MR's URL`);
-                }
-                await report(DATA_DIR, s.id, input);
+                // --mr resolves to a URL by the chat's own repo: !N on GitLab, #N on GitHub
+                const repo = repoPaths.get(s.project);
+                const forge = repo && { gitlab: isGitLab(repo), web: `https://${isGitLab(repo) || repo.host.includes('.') ? repo.host : 'github.com'}/${repo.path}` };
+                await report(DATA_DIR, s.id, input, Date.now(), forge);
                 polledSessions.stale();
                 return res.end('ok');
             }
@@ -455,6 +456,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 }
                 if (once) {
                     saveSent(DATA_DIR).catch(() => {});
+                }
+                if (url.searchParams.has('housekeeping') && url.searchParams.get('id')) {
+                    logHousekeeping(url.searchParams.get('id'), body); // Homebase's note ("Load new rules"): no answer from the user
                 }
                 try {
                 if (url.searchParams.has('tmux')) {

@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 import { workItems } from '../../server/items.mjs';
 import { canned } from '../../web/src/lib/canned.ts';
 import { loadReports, reports, report, forgetReport } from '../../server/reports.mjs';
-import { lastAnswerAt, attachReports, summarize } from '../../server/sessions.mjs';
 import { ghPr, prs, settle } from '../../server/forge.mjs';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -81,14 +80,13 @@ const rules = [
     ['1 merged beats a running helper', { state: 'merged' }, [main({ agents: [helper()] })], 'done', null],
     ['2 closed beats a waiting chat', { state: 'closed' }, [main(), asks], 'closed', null],
     ['3 a chat waiting on you beats a running helper', conflict, [main({ agents: [helper()] }), asks], 'needs-you', null],
-    ['3 a reported needs-you without a question', conflict, [main(), chat({ status: 'waiting', report: { phase: 'needs-you', mr: '!1', text: null, at: 5 } })], 'needs-you', 'Rebase'],
+    ['3 a reported needs-you without a question', conflict, [main(), chat({ status: 'waiting', report: { phase: 'needs-you', mr: url, text: null, at: 5 } })], 'needs-you', 'Rebase'],
     ['8 a stopped helper superseded by a later finished one', open({ reviewers: ['Ann'] }), [main({ agents: [helper({ id: 's', description: 'Fix A', status: 'stopped', stopReason: 'api-error', updated: NOW - 9000 }), helper({ id: 'd', description: 'Fix B', status: 'done', updated: NOW - 1000 })] })], 'review', 'Review'],
-    ['5 a GitLab #1 is an issue, not this MR', conflict, [main(), chat({ status: 'working', report: { phase: 'doing', mr: '#1', text: 'Rebasing', at: 5 } })], 'needs-you', 'Rebase'],
-    ['3 a reported needs-you', conflict, [main(), chat({ status: 'waiting', report: { phase: 'needs-you', mr: '!1', text: 'Which?', at: 5 } })], 'needs-you', 'Rebase'],
+    ['3 a reported needs-you', conflict, [main(), chat({ status: 'waiting', report: { phase: 'needs-you', mr: url, text: 'Which?', at: 5 } })], 'needs-you', 'Rebase'],
     ['4 a running helper', conflict, [main({ agents: [helper()] })], 'doing', null],
     ['5 a chat working on its branch', conflict, [main(), chat({ status: 'working', head: '1-x' })], 'doing', null],
     ['5 a chat on another branch is not it', conflict, [main(), chat({ status: 'working', head: 'main' })], 'needs-you', 'Rebase'],
-    ['5 a reported doing', conflict, [main(), chat({ status: 'working', report: { phase: 'doing', mr: '!1', text: 'Rebasing', at: 5 } })], 'doing', null],
+    ['5 a reported doing', conflict, [main(), chat({ status: 'working', report: { phase: 'doing', mr: url, text: 'Rebasing', at: 5 } })], 'doing', null],
     ['5 a working chat beats its own open prompt', conflict, [main(), chat({ status: 'working', head: '1-x', openPrompts: [{ at: new Date(NOW).toISOString(), text: 'rebase !1' }] })], 'doing', null],
     ['6 an open prompt names it', conflict, [main({ openPrompts: [{ at: new Date(NOW).toISOString(), text: 'rebase !1' }] })], 'doing', null],
     ['8 a stopped helper', open({ reviewers: ['Ann'] }), [main({ agents: [helper({ status: 'stopped', stopReason: 'api-error' })] })], 'needs-you', 'Continue'],
@@ -149,9 +147,9 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
 }
 {
     // no forge answer yet: a chat's own report and a Continue still count
-    const doing = chat({ status: 'working', report: { phase: 'doing', mr: '!1', text: 'Rebasing', at: 5 } });
+    const doing = chat({ status: 'working', report: { phase: 'doing', mr: url, text: 'Rebasing', at: 5 } });
     assert.deepEqual([...shown(row(null, [main(), doing])), row(null, [main(), doing]).next], ['doing', null, 'Rebasing']);
-    const waits = chat({ status: 'waiting', report: { phase: 'needs-you', mr: '!1', text: 'Which?', at: 5 } });
+    const waits = chat({ status: 'waiting', report: { phase: 'needs-you', mr: url, text: 'Which?', at: 5 } });
     assert.equal(row(null, [main(), waits]).column, 'needs-you');
     const stopped = main({ agents: [helper({ status: 'stopped', stopReason: 'api-error' })] });
     assert.deepEqual(shown(row(null, [stopped], new Map([[url, { at: NOW - 1000, kind: 'api-error' }]]))), ['doing', null], 'Continue holds without a forge answer');
@@ -200,14 +198,6 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
     assert.equal(row(open({ ready: true, approved: false })).stageLabel, 'Review');
     assert.equal(row(open({ ready: true, approved: true })).stageLabel, 'Approved');
 }
-{
-    // a GitHub PR's #N report matches it
-    const pr = 'https://github.com/o/p/pull/1';
-    const x = workItems([{ ...main(), prs: [{ url: pr, at: 1 }] }, chat({ status: 'working', report: { phase: 'doing', mr: '#1', text: 'Rebasing', at: 5 } })], () => open({ blocked: 'conflict' }), NOW).find(r => r.pr === pr);
-    assert.deepEqual([x.column, x.next], ['doing', 'Rebasing']);
-    const bang = workItems([{ ...main(), prs: [{ url: pr, at: 1 }] }, chat({ status: 'working', report: { phase: 'doing', mr: '!1', text: 'Rebasing', at: 5 } })], () => open({ blocked: 'conflict' }), NOW).find(r => r.pr === pr);
-    assert.equal(bang.column, 'doing', '!N, as the rules teach, works on GitHub too');
-}
 console.log('ok precedence');
 
 // a helper without an MR (table "A helper without an MR")
@@ -228,7 +218,7 @@ console.log('ok helpers without an MR');
 
 // same inputs, same rows: the order sessions come in changes nothing
 {
-    const sessions = [main({ agents: [helper({ status: 'done' })] }), chat({ status: 'working', head: '1-x' }), chat({ id: 'd', status: 'working', report: { phase: 'doing', mr: '!1', text: 'Testing', at: 5 } }), asks];
+    const sessions = [main({ agents: [helper({ status: 'done' })] }), chat({ status: 'working', head: '1-x' }), chat({ id: 'd', status: 'working', report: { phase: 'doing', mr: url, text: 'Testing', at: 5 } }), asks];
     const key = list => JSON.stringify(workItems(list, () => conflict, NOW).map(x => [x.key, x.column, x.next, x.action?.label]));
     const want = key(sessions);
     for (const order of [[3, 2, 1, 0], [1, 3, 0, 2], [2, 0, 3, 1]]) {
@@ -269,67 +259,6 @@ console.log('ok merge only at the confirmed head');
 
 // inputs that must never take the board down or leave a row stuck
 {
-    // a hand-edited reports.json: bad entries are dropped at load
-    const dir = mkdtempSync(join(tmpdir(), 'hb-reports-'));
-    writeFileSync(join(dir, 'reports.json'), JSON.stringify({ a: { phase: 'needs-you', mr: 12, text: 5, at: 1 }, b: { phase: 'doing', mr: '!1', text: 'x', at: 2 }, c: null }));
-    loadReports(dir);
-    assert.deepEqual([...reports.keys()], ['b']);
-    reports.clear();
-    // an answered question ends a needs-you report like a new prompt does; with neither in the tail, the tail's start does
-    const t = s => new Date(s * 1000).toISOString();
-    const asked = [{ type: 'user', timestamp: t(1), message: { content: 'go' } }, { type: 'assistant', timestamp: t(2), message: { content: [{ type: 'tool_use', id: 'q1', name: 'AskUserQuestion' }] } },
-        { type: 'user', timestamp: t(3), message: { content: [{ type: 'tool_result', tool_use_id: 'q1', content: 'Yes' }] } }];
-    assert.equal(lastAnswerAt(asked), 3000);
-    assert.equal(lastAnswerAt([...asked, { type: 'user', timestamp: t(9), message: { content: canned('rules', 'rules.md').message } }]), 3000, 'Load new rules is no answer');
-    const queued = { type: 'attachment', timestamp: t(11), attachment: { type: 'queued_command', prompt: 'main, please', origin: { kind: 'human' } } };
-    assert.equal(lastAnswerAt([...asked, queued]), 11000, 'an answer typed while the chat works counts');
-    // ... but a note typed while the chat works starts no turn: a doing report stays
-    const working = summarize([{ type: 'user', timestamp: t(1), uuid: 'p', message: { role: 'user', content: 'Rebase !2' } }, queued], 1000);
-    assert.equal(working.lastPromptAt, 1000);
-    const keep = [{ id: 'k', lastPromptAt: working.lastPromptAt, lastAnswerAt: working.lastAnswerAt }];
-    reports.set('k', { phase: 'doing', mr: '!2', text: 'Rebasing', at: 2500 });
-    attachReports(keep, null, reports);
-    assert.equal(!!keep[0].report, true);
-    reports.clear();
-    assert.equal(lastAnswerAt([{ type: 'assistant', timestamp: t(7), message: { content: [{ type: 'text', text: 'hi' }] } }]), null, 'no answer in the tail: the report stands');
-    // reports: only a live, not-cleared chat's count; an answered one is forgotten for good
-    const all = new Map([['old', { phase: 'needs-you', mr: '!1', text: 'Which?', at: 5 }], ['gone', { phase: 'doing', mr: '!1', text: 'x', at: 5 }], ['ok', { phase: 'doing', mr: '!1', text: 'x', at: 5 }], ['answered', { phase: 'needs-you', mr: '!1', text: 'Q', at: 5 }]]);
-    const list = [{ id: 'old' }, { id: 'new', clearedFrom: 'old' }, { id: 'gone' }, { id: 'ok' }, { id: 'answered', lastPromptAt: 9 }];
-    for (const [k, v] of all) {
-        reports.set(k, v);
-    }
-    attachReports(list, new Map([['old', 't'], ['new', 't'], ['ok', 't'], ['answered', 't']]), reports);
-    assert.deepEqual(list.map(s => !!s.report), [false, false, false, true, false]);
-    assert.equal(reports.has('answered'), false, 'answered: forgotten');
-    reports.clear();
-    // an answered question ends a needs-you report, not the doing report of a chat that keeps working
-    const mid = [{ id: 'd', lastPromptAt: 1, lastAnswerAt: 9 }, { id: 'n', lastPromptAt: 1, lastAnswerAt: 9 }];
-    reports.set('d', { phase: 'doing', mr: '!1', text: 'Rebasing', at: 5 });
-    reports.set('n', { phase: 'needs-you', mr: '!1', text: 'Which?', at: 5 });
-    attachReports(mid, null, reports);
-    assert.deepEqual(mid.map(x => !!x.report), [true, false]);
-    reports.clear();
-    // many reports forgotten in one poll: one write at a time, so reports.json stays whole
-    const dir2 = mkdtempSync(join(tmpdir(), 'hb-reports-'));
-    loadReports(dir2);
-    for (let i = 0; i < 30; i++) {
-        await report(dir2, `s${i}`, { phase: 'doing', mr: '!1', text: 'x' }, 5);
-    }
-    for (let i = 0; i < 30; i += 2) {
-        forgetReport(`s${i}`);
-    }
-    await report(dir2, 'last', { phase: 'doing', mr: '!1' }, 6);
-    assert.equal(Object.keys(JSON.parse(readFileSync(join(dir2, 'reports.json'), 'utf8'))).length, 16);
-    reports.clear();
-    // an update without --mr keeps the MR named before; a first report without one is refused
-    await report(dir2, 'u', { phase: 'doing', mr: '!7', text: 'Rebasing' }, 5);
-    await report(dir2, 'u', { phase: 'doing', text: 'Running tests' }, 6);
-    assert.deepEqual(reports.get('u'), { phase: 'doing', mr: '!7', text: 'Running tests', at: 6 });
-    await assert.rejects(report(dir2, 'v', { phase: 'needs-you', text: 'Which?' }), e => e.status === 400);
-    await report(dir2, 'w', { phase: 'doing', mr: 'https://gitlab.com/g/p/-/merge_requests/12/diffs?tab=x#note_1' }, 7);
-    assert.equal(reports.get('w').mr, 'https://gitlab.com/g/p/-/merge_requests/12', 'a URL is cut to the MR');
-    await assert.rejects(report(dir2, 'x', { phase: 'doing', mr: 'https://gitlab.com/g/p/-/issues/12' }), e => e.status === 400);
-    reports.clear();
     // GitHub still computing mergeability keeps the conflict it saw for the same head, never flips to ready
     const base = { state: 'OPEN', title: 't', headRefName: 'b', baseRefName: 'main', isDraft: false, reviewDecision: '', headRefOid: 'abc1234' }, pr = 'https://github.com/o/p/pull/9';
     const rechecking = settle(ghPr({ ...base, mergeable: 'UNKNOWN' }, pr), ghPr({ ...base, mergeable: 'CONFLICTING' }, pr));

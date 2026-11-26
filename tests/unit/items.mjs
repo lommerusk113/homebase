@@ -117,10 +117,9 @@ assert.deepEqual(forged.map(i => [i.key, i.sessionId, i.column]), [[mr(1), 'old'
     assert.equal(row({ status: 'waiting', head: '2284-x' }).column, 'needs-you', 'done working: the MR state counts again');
 
     // what the chat reported (homebase status) links it to the MR from any folder and says what it does
-    const doing = { phase: 'doing', mr: '!58', text: 'Rebasing onto main', at: 5 };
+    const doing = { phase: 'doing', mr: mr(58), text: 'Rebasing onto main', at: 5 };
     assert.deepEqual((r => [r.column, r.next, r.action])(row({ status: 'working', head: 'main', report: doing })), ['doing', 'Rebasing onto main', null]);
-    assert.equal(row({ status: 'working', head: 'main', report: doing, lastPromptAt: 6 }).column, 'needs-you', 'a newer prompt ends the report');
-    assert.equal(row({ status: 'working', head: 'main', report: { ...doing, mr: '!59' } }).column, 'needs-you', 'about another MR');
+    assert.equal(row({ status: 'working', head: 'main', report: { ...doing, mr: mr(59) } }).column, 'needs-you', 'about another MR');
     const asks = row({ status: 'waiting', report: { phase: 'needs-you', mr: mr(58), text: 'Keep both migrations?', at: 5 } });
     assert.deepEqual([asks.column, asks.askedBy, asks.next.startsWith('Asks: Keep both migrations?')], ['needs-you', 'h', true]);
 

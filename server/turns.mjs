@@ -58,6 +58,19 @@ export async function askMarker(id, { live = null, tm = tmux } = {}) {
     return fresh && promptBack(await capture(tmuxFor(id, aliases, live), tm)) ? null : marker;
 }
 
+// When the user last answered a permission prompt in the chat (hooks/asking.mjs writes <session>.answered), else null.
+export async function permissionAnsweredAt(id) {
+
+    if (!SESSION_ID.test(id ?? '')) {
+        return null;
+    }
+    try {
+        return Date.parse(JSON.parse(await readFile(join(process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase'), 'asking', `${id}.answered`), 'utf8')).at) || null;
+    } catch {
+        return null;
+    }
+}
+
 async function readMarker(id) {
 
     if (!SESSION_ID.test(id ?? '')) {

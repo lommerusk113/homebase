@@ -6,17 +6,18 @@ import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ROOT, projectDirs, cache, liveSessions, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, INTERRUPTED } from './entries.mjs';
-import { WORKING_MS, closedSession, turnState, hasTurnMarkers, turnPrompts, helperAsk, askingHelper, openToolUse, pendingQuestion, askMarker, spawnPrompts } from './turns.mjs';
+import { WORKING_MS, closedSession, turnState, hasTurnMarkers, turnPrompts, helperAsk, askingHelper, openToolUse, pendingQuestion, askMarker, permissionAnsweredAt, spawnPrompts } from './turns.mjs';
 import { splitTldr, gateRuns, latestTopic, queuedPrompts } from './summaries.mjs';
 import { readUsage, usageCache } from './usage.mjs';
-import { chatItems, RULES_LABEL, handled } from './feed.mjs';
+import { chatItems, handled } from './feed.mjs';
+import { isHousekeeping } from './sendlog.mjs';
 import { waitingQuestion } from './asks.mjs';
 import { loadStore, record, seeds, flush, gateHeadsOf, seedForge, STORE_FILE } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr, prs } from './forge.mjs';
 import { isManual } from './manual.mjs';
-import { reports, forgetReport, endsAt } from './reports.mjs';
+import { reports, forgetReport } from './reports.mjs';
 import { sentRows, saveSent } from './once.mjs';
-import { canned, cannedLabel } from '../web/src/lib/canned.ts';
+import { canned } from '../web/src/lib/canned.ts';
 import { repoPaths, accountOf } from './account.mjs';
 import { pushBlocked } from './gitpush.mjs';
 import { contextOf } from './limits.mjs';
@@ -461,38 +462,41 @@ export function lastActivity(entries) {
     return Number.isNaN(at) ? null : at;
 }
 
-// What each chat reported (homebase status): only a live chat's that no /clear succeeded (a closed or cleared chat's report
-// would hold its row forever), and a report the user has answered since is forgotten for good, so a tail that no longer
-// holds the answer can't bring it back. live: liveSessions(), null when the registry can't be read (then every chat counts).
+// What each chat reported (homebase status), and when a report ends for good (deleted, so a restart or a tail that no longer
+// holds the end can't bring it back): a doing report at the next turn a human prompt starts; a needs-you report at any human
+// input (a prompt, a note typed while it works, an answered question or permission prompt); any report when its chat closes
+// or a /clear replaces it. s.report is set while it counts: doing while the chat works, needs-you while it doesn't.
+// live: liveSessions(), null when the registry can't be read (then no chat counts as closed).
 export function attachReports(list, live, all = reports) {
 
     const cleared = new Set(list.map(s => s.clearedFrom).filter(Boolean));
     for (const s of list) {
         const r = all.get(s.id);
-        if (r && r.at <= endsAt(s, r)) {
+        const ended = r && ((r.phase === 'doing' ? s.lastPromptAt ?? 0 : Math.max(s.lastInputAt ?? 0, s.permissionAnsweredAt ?? 0)) > r.at
+            || (live && !live.has(s.id)) || cleared.has(s.id));
+        if (ended) {
             forgetReport(s.id);
         }
-        s.report = r && r.at > endsAt(s, r) && (!live || live.has(s.id)) && !cleared.has(s.id) ? r : null;
+        s.report = r && !ended && (r.phase === 'doing') === (s.status === 'working') ? r : null;
     }
 }
 
-// A human prompt that starts a turn: not the "Load new rules" note Homebase types (as feed.mjs counts replies). It ends a
-// doing report; a note typed while the chat works (queued) starts no turn, so it doesn't.
-const isPrompt = e => isHumanPrompt(e) && cannedLabel(textOf(e)) !== RULES_LABEL;
-// An answer to the chat: a prompt, or one typed while it worked (a human queued_command attachment). It ends a needs-you report.
-const isAnswer = e => isPrompt(e)
-    || (e.type === 'attachment' && e.attachment?.type === 'queued_command' && e.attachment.origin?.kind === 'human'
-        && cannedLabel(textOf({ message: { content: e.attachment.prompt } })) !== RULES_LABEL);
+// A human prompt that starts a turn: not a note Homebase typed itself, as its send log flags it.
+const isPrompt = e => isHumanPrompt(e) && !isHousekeeping(e.sessionId, textOf(e));
+// A note the user typed while the chat worked: Claude Code keeps it as a human queued_command attachment.
+const isQueued = e => e.type === 'attachment' && e.attachment?.type === 'queued_command' && e.attachment.origin?.kind === 'human'
+    && !isHousekeeping(e.sessionId, textOf({ message: { content: e.attachment.prompt } }));
 
-// When the user last answered the chat: its newest human prompt or answered AskUserQuestion, else null (attachReports
-// forgets an answered report, so one whose answer scrolled out of the tail stays over).
-export function lastAnswerAt(entries) {
+// When the user last gave the chat any input in the tail: a prompt, a queued note or an answered AskUserQuestion (a permission
+// answer comes from the hook: turns.mjs permissionAnsweredAt); null without one.
+export function lastInputAt(entries) {
 
     const asked = new Set(entries.flatMap(e => (e.type === 'assistant' && Array.isArray(e.message?.content) ? e.message.content : []))
         .filter(b => b.type === 'tool_use' && b.name === 'AskUserQuestion').map(b => b.id));
-    const answer = entries.findLast(e => isAnswer(e) || (e.type === 'user' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result' && asked.has(b.tool_use_id))));
+    const input = entries.findLast(e => isPrompt(e) || isQueued(e)
+        || (e.type === 'user' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result' && asked.has(b.tool_use_id))));
 
-    return Date.parse(answer?.timestamp) || null;
+    return Date.parse(input?.timestamp) || null;
 }
 
 // The newest open background call as a step: a test run reads "running tests", anything else as stepOf says it.
@@ -527,7 +531,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
     const lastTurn = turns.at(-1);
     const turn = turnState(entries, ageMs, marker, live);
     const openPrompts = turnPrompts(entries, ageMs, marker, live);
-    const lastItem = chatItems(entries, 1).findLast(i => !i.notice && i.label !== RULES_LABEL); // the chat's newest bubble past agent notices and the rules note, so the Work tab and the chat agree on "needs you"
+    const lastItem = chatItems(entries, 1).findLast(i => !i.notice && !i.housekeeping); // the chat's newest bubble past agent notices and Homebase's own notes, so the Work tab and the chat agree on "needs you"
 
     const step = turn.state === 'working' ? turnStep(turns, turn.since) : null;
     // ponytail: silent past AGENT_TOOL_MS counts as a lost notice (a restart killed it), like agentStatus does
@@ -561,8 +565,8 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         stepAt: step?.at ?? null, // when that call started, for "for 2m" on the Now line
         queued: queuedPrompts(entries).map(q => q.text),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
-        lastPromptAt: Date.parse(entries.findLast(isPrompt)?.timestamp) || null, // a report (homebase status) older than it is over
-        lastAnswerAt: lastAnswerAt(entries), // a needs-you report older than this is answered (reports.mjs endsAt)
+        lastPromptAt: Date.parse(entries.findLast(isPrompt)?.timestamp) || null, // ends a doing report (attachReports)
+        lastInputAt: lastInputAt(entries), // ends a needs-you report
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
         lastReplyAt: Date.parse(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)?.timestamp) || null, // for `homebase helper wait`: a reply newer than the wait
         sidechain: !!entries.find(e => e.type === 'user' || e.type === 'assistant')?.isSidechain, // a transcript a subagent wrote
@@ -691,6 +695,7 @@ async function readSession({ dir, file, path, st }, now, live) {
     const marker = await askMarker(file.replace('.jsonl', ''), { live });
     const s = summarize(entries, now - st.mtimeMs, marker, live);
     const id = s.id ?? file.replace('.jsonl', '');
+    s.permissionAnsweredAt = await permissionAnsweredAt(id); // ends a needs-you report (attachReports)
 
     // subagents run inside their session's process, so they end with it
     const closed = closedSession(entries, now - st.mtimeMs, live);

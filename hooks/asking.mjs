@@ -39,6 +39,10 @@ try {
             // a tool that ran in the same message as the question (a background Agent) doesn't answer it;
             // ponytail: subagent tools never clear, so a subagent's permission marker waits for the main chat's next tool or Stop
             if (h.tool_name === 'AskUserQuestion' || marker()?.permission) {
+                if (marker()?.permission) {
+                    // the user answered a permission prompt: <session>.answered says when (it ends a needs-you report)
+                    writeFileSync(join(dir, `${h.session_id}.answered`), JSON.stringify({ at: new Date().toISOString() }));
+                }
                 rmSync(file, { force: true });
             }
         }

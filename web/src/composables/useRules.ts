@@ -32,7 +32,7 @@ export function useRules() {
         async load() {
 
             const s = session.value;
-            if (s && await send(s.id, s.rulesReload!, undefined, undefined, true)) {
+            if (s && await send(s.id, s.rulesReload!, undefined, undefined, true, undefined, true)) { // housekeeping: no answer to anything
                 dismiss();
             }
         },

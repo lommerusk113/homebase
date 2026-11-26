@@ -19,8 +19,8 @@ Write so a reply still works when only its TLDR and its Waiting on you card are 
 - Ask in your own chat only what no helper owns: what to start, merging, shipping.
 
 ## Row status
-- The board places an MR's row from `homebase status`, not from your replies. When you start work on an MR, run `homebase status doing --mr <!N or URL> "<what, e.g. Rebasing, Running tests>"`; update the text when the step changes.
-- When you wait on the user about an MR, run `homebase status needs-you --mr <!N> "<the question in a few words>"`; when the MR work is finished, `homebase status done`.
+- The board places an MR's row from `homebase status`, not from your replies. When you start work on an MR, run `homebase status doing --mr <MR> "<what, e.g. Rebasing, Running tests>"`, where `<MR>` is its URL, `!N` on GitLab or `'#N'` (quoted) on GitHub; update the text with `homebase status doing "<step>"` when the step changes.
+- When you wait on the user about an MR, run `homebase status needs-you --mr <MR> "<the question in a few words>"`; when the MR work is finished, `homebase status done`.
 - Your working state, including background commands, comes from Homebase itself: no need to report "working".
 
 ## Replies

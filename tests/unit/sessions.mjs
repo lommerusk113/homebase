@@ -214,6 +214,8 @@ import { diedTurn } from '../../server/sessions.mjs';
 {
     // Homebase's own "Load new rules" message typed after a reply that waits on you is not an answer: it still needs the user
     const { reloadMessage } = await import('../../server/rules.mjs');
+    const { logHousekeeping } = await import('../../server/sendlog.mjs');
+    logHousekeeping('s', reloadMessage()); // the send log flags Homebase's own notes; their text is never classified
     const reply = text => ({ type: 'assistant', uuid: 'r1', sessionId: 's', cwd: '/r', message: { content: [{ type: 'text', text }] } });
     const you = text => ({ type: 'user', message: { content: text } });
     const asked = [you('go'), reply('**▸ Deploy**\n\nWaiting on you: ship it? — 1. Yes — 2. No\n\nTLDR: ship it?')];

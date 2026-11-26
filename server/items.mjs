@@ -5,7 +5,6 @@ import { mentionsMr, namesMr, mrRef, mrNumber, forgeWords } from './forge.mjs';
 import { waitsOnYou } from '../web/src/lib/waiting.ts';
 import { canned } from '../web/src/lib/canned.ts';
 import { sentRows, HOLD_MS } from './once.mjs';
-import { endsAt } from './reports.mjs';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
@@ -333,19 +332,9 @@ export function askerFor(sessions, project, url) {
     return sessions.filter(s => s.project === project && waitsOnYou(s) && (r => !!r && isMr(r, url))(s.asks?.match(LEAD_MR)?.[0])).toSorted((a, b) => a.id.localeCompare(b.id))[0] ?? null;
 }
 
-// What a chat reported about this MR with `homebase status` ({ phase, mr, text, at }), until its next prompt; else null.
-// mr: the MR's URL, N or !N, and #N on GitHub (a GitLab #N is an issue, never this MR).
-export function reportOn(s, url) {
-
-    const r = s.report;
-    if (!r?.mr || r.at <= endsAt(s, r)) {
-        return null;
-    }
-
-    const n = mrNumber(url);
-
-    return [url, n, `!${n}`, url.includes('/pull/') && `#${n}`].includes(r.mr) ? r : null;
-}
+// What a chat reported about this MR with `homebase status` while it counts (sessions.mjs attachReports), else null: its
+// stored URL is this MR's.
+export const reportOn = (s, url) => (s.report?.mr === url ? s.report : null);
 
 // The work items' raw groups: one per PR/MR (deduped across sessions and agents), plus running or stopped agents with
 // no MR yet. Agents whose description names a known MR (!123) count as work on it; finished agents without an MR stay

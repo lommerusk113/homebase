@@ -1,9 +1,10 @@
 // The chat feed: transcript entries turned into bubbles (prompts, replies, tool lines, commands, agent results), answers
 // paired with their questions, and feedTail for "Show earlier".
 import { cache, tailOf, readTailInfo, TAIL_MAX_BYTES, textOf, isSystemText, unwrapPasted, INTERRUPTED } from './entries.mjs';
+import { isHousekeeping } from './sendlog.mjs';
 import { RISKY, TOOL_KIND, toolSummary, queuedPrompts } from './summaries.mjs';
 import { topicAndTldr, replyChips } from './asks.mjs';
-import { canned, cannedLabel } from '../web/src/lib/canned.ts';
+import { cannedLabel } from '../web/src/lib/canned.ts';
 
 export const FEED_ITEMS = 60; // chat items per load; the page's "Show earlier" asks for more
 
@@ -36,7 +37,6 @@ export async function feedTail(path, st, max = FEED_ITEMS, cap = TAIL_MAX_BYTES)
 }
 
 const DUP_MS = 60_000;
-export const RULES_LABEL = canned('rules').label;
 
 // Ids of the replies the user marked as handled: they no longer need you (server/handled.mjs keeps them on disk).
 export const handled = new Set();
@@ -47,13 +47,16 @@ export const chatItems = (entries, max = 60) => chatFeed(entries, max).items;
 // The newest `max` items, plus any older question still waiting on you; earlier: how many older items were left out.
 export function chatFeed(entries, max = 60) {
 
-    const items = dedupePrompts([...mergeChunks(rawItems(entries)), ...pendingPrompts(entries)]);
+    // Homebase's own notes ("Load new rules"), as its send log flags them: no answer to anything
+    const sid = entries.find(e => e.sessionId)?.sessionId;
+    const items = dedupePrompts([...mergeChunks(rawItems(entries)), ...pendingPrompts(entries)])
+        .map(i => (i.role === 'user' && isHousekeeping(sid, i.text) ? { ...i, housekeeping: true } : i));
     const all = pairAnswers(items.map(i => (i.role === 'assistant' ? topicAndTldr(i) : i)));
 
     // a question the user has answered or replied after no longer needs them
     let replied = false;
     for (const i of all.toReversed()) {
-        replied ||= i.role === 'user' && i.label !== RULES_LABEL; // "Load new rules" is Homebase's note, not an answer
+        replied ||= i.role === 'user' && !i.housekeeping;
         if (i.needsYou && (replied || i.answer)) {
             i.needsYou = false;
         }

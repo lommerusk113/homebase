@@ -45,7 +45,7 @@ export function useSend() {
      * canned: a button's message, not typed by the user: the server refuses it while Claude asks, instead of declining the question.
      * once: a row button's row key; the server refuses a repeat (409, "Sent to Claude") until the row's state changes.
      */
-    async function send(sid: string, text: string, answerTo?: string, note?: string, canned?: boolean, once?: string): Promise<boolean> {
+    async function send(sid: string, text: string, answerTo?: string, note?: string, canned?: boolean, once?: string, housekeeping?: boolean): Promise<boolean> {
 
         error.value = '';
         const out: OutboxItem = { role: 'user', text, sid, at: new Date().toISOString(), sending: true, answerTo, note, canned, ...(canned && { label: cannedLabel(text) ?? undefined }) };
@@ -54,7 +54,7 @@ export function useSend() {
         refresh();
 
         try {
-            const r = await api(`/api/send?${sid.startsWith('cc-new-') ? 'tmux' : 'id'}=${encodeURIComponent(sid)}${canned ? '&canned=1' : ''}${once ? `&once=${encodeURIComponent(once)}` : ''}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: note ? `${text}\n\n${note}` : text, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
+            const r = await api(`/api/send?${sid.startsWith('cc-new-') ? 'tmux' : 'id'}=${encodeURIComponent(sid)}${canned ? '&canned=1' : ''}${once ? `&once=${encodeURIComponent(once)}` : ''}${housekeeping ? '&housekeeping=1' : ''}`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: note ? `${text}\n\n${note}` : text, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
             if (once && refusedAsSent(r, once)) {
                 state.outbox = state.outbox.filter(o => o !== out);
                 refresh();

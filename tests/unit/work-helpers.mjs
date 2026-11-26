@@ -138,9 +138,9 @@ console.log('ok helper limits');
         // homebase status: kept in reports.json, read back at start; done forgets it; an unknown phase is a 400
         const { reports, report, loadReports } = await import('../../server/reports.mjs');
         const dir = mkdtempSync(join(tmpdir(), 'hb-rep-'));
-        await report(dir, 's1', { phase: 'doing', mr: '!58', text: ' Running tests ' }, 5);
+        await report(dir, 's1', { phase: 'doing', mr: '!58', text: ' Running tests ' }, 5, { gitlab: true, web: 'https://gitlab.com/g/p' });
         loadReports(dir);
-        assert.deepEqual(reports.get('s1'), { phase: 'doing', mr: '!58', text: 'Running tests', at: 5 });
+        assert.deepEqual(reports.get('s1'), { phase: 'doing', mr: 'https://gitlab.com/g/p/-/merge_requests/58', text: 'Running tests', at: 5 });
         await assert.rejects(report(dir, 's1', { phase: 'working' }), { status: 400 });
         await report(dir, 's1', { phase: 'done' });
         loadReports(dir);

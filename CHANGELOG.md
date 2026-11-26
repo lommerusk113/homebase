@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A clicked button's hold now outlives the chat's turn that handles it and the helper it starts; unanswered comments on an approved MR keep it in Needs you with Fix & reply (as before), and the row model doc says so.
 * The first board after a Homebase start already counts review comments, so rows no longer start in one group and move a poll later; one failed approvals lookup keeps an MR's last state instead of dropping it out of Ready to merge.
 * Opening a chat whose turn died clears its Needs you row on every device, not only in the browser that opened it.
 * MR rows are ordered by when the MR was opened (the same on every install, not by when Homebase first saw it), and the chats' own rows by when the chat started, so they no longer swap as chats take turns writing.

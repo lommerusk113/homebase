@@ -158,8 +158,8 @@ export function deriveKind(ps, agent, hasPr, requested = false, chat = null) {
         return hasPr ? { kind: 'unknown', reason: 'no answer from the forge' } : { kind: 'idle', reason: 'nothing to do' };
     }
 
-    // review comments ask for a fix with or without the forge's changes flag; on an approved MR they are a note on Approved
-    const kind = ps.changes || (!ps.ready && (ps.unresolved || ps.unanswered)) ? 'changes'
+    // review comments ask for a fix with or without the forge's changes flag, also on an approved MR (withThreads says so too)
+    const kind = ps.changes || ps.unresolved || ps.unanswered ? 'changes'
         : ps.ci === 'failing' ? 'failing'
         : ps.blocked === 'conflict' || ps.blocked === 'rebase' ? 'conflict'
         : ps.blocked ? 'blocked'
@@ -316,7 +316,7 @@ export function requestFor(sessions, project, url, prState) {
 
     const hits = sessions.filter(s => s.project === project).flatMap(s => s.openPrompts ?? []).filter(p => mentionsMr(p.text, url, prState?.issue));
 
-    return hits.sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
+    return hits.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || a.text.localeCompare(b.text))[0] ?? null;
 }
 
 // The MR a question is about: its first MR URL, `!N` or "MR N" / "PR #N", whichever comes first; a later one is context.
@@ -376,7 +376,7 @@ function itemGroups(sessions, prOf, now, seeds) {
     for (const { url, project, sessionId, agents = [] } of seeds) {
         const it = add(url, project);
         const inProject = sessions.filter(s => s.project === project);
-        const latest = inProject.toSorted((a, b) => (b.lastActivity ?? b.updated ?? 0) - (a.lastActivity ?? a.updated ?? 0))[0];
+        const latest = inProject.toSorted((a, b) => (b.lastActivity ?? b.updated ?? 0) - (a.lastActivity ?? a.updated ?? 0) || a.id.localeCompare(b.id))[0];
         it.linkSession ??= inProject.find(s => s.id === sessionId)?.id ?? latest?.id ?? null;
         stored.set(it, [...stored.get(it) ?? [], ...agents]);
     }
@@ -459,7 +459,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
 
     return itemGroups(live, prOf, now, seeds).map(it => {
 
-        const agents = it.agents.toSorted((a, b) => b.updated - a.updated);
+        const agents = it.agents.toSorted((a, b) => b.updated - a.updated || a.id.localeCompare(b.id)); // the id settles a tie (stored agents share 0)
         const agent = agents[0] ?? null;
         const prState = it.pr ? prOf(it.pr) : null;
         const gates = it.pr ? sessions.filter(s => s.project === it.project).flatMap(s => [...s.gates ?? [], ...(s.agents ?? []).flatMap(a => a.gates ?? [])]) : [];
@@ -489,7 +489,10 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         // ends, for HOLD_MS at most: then the button is back, as the chat did nothing the forge saw. A changed kind ends the
         // click for good, so the same failure coming back later shows its button. Not while a chat works on it or asks about it.
         const click = sent.get(it.key);
-        if (click && !chat && !asker && (it.pr ? isOpen : true)) {
+        // the click's own prompt (requested) or a helper it set going (running) is the click at work, not a new state; a
+        // running helper does end a Continue, which asked for exactly that
+        const atWork = row.state.kind === 'requested' || (row.state.kind === 'running' && !STOPPED.has(click?.kind) && click?.kind !== 'stopped');
+        if (click && !chat && !asker && !atWork && (it.pr ? isOpen : true)) {
             if (click.kind !== row.state.kind || now - click.at >= HOLD_MS) {
                 sent.delete(it.key);
             } else if (row.column !== 'doing') {

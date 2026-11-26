@@ -447,6 +447,7 @@ export function withThreads(prState, comments) {
 
     const { unresolved, unresolvedBy, unanswered, unansweredBy } = comments;
 
+    // also on an approved MR: comments nobody answered need an answer before it merges
     return { ...prState, changes: true, unresolved, unresolvedBy, unanswered, unansweredBy };
 }
 

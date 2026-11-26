@@ -26,7 +26,7 @@ assert.equal(rowOf(commentsOnly, null, opts).state.kind, 'changes');
 assert.deepEqual([rowOf(commentsOnly, null, opts).column, rowOf(commentsOnly, null, opts).action.label], ['needs-you', 'Fix & reply']);
 assert.equal(rowOf({ ...commentsOnly, unresolved: 0, unanswered: 1, unansweredBy: ['Ann'] }, null, opts).action.label, 'Fix & reply');
 assert.equal(rowOf({ ...commentsOnly, unresolved: 0 }, null, opts).state.kind, 'pipeline', 'no comments, no fix');
-assert.equal(rowOf({ ...commentsOnly, ready: true, ci: null }, null, opts).action.label, 'Merge', 'an approved MR with open comments still merges');
+assert.equal(rowOf({ ...commentsOnly, ready: true, ci: null }, null, opts).action.label, 'Fix & reply', 'an approved MR with open comments answers them before it merges');
 console.log('ok comments get the fix button');
 
 const everything = { state: 'open', changes: true, changesBy: ['Ann'], ci: 'failing', blocked: 'conflict', reviewers: ['Ann'] };

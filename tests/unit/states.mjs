@@ -2,6 +2,7 @@
 // for the same inputs whatever order the sessions come in.
 import assert from 'node:assert/strict';
 import { workItems } from '../../server/items.mjs';
+import { withThreads } from '../../server/forge.mjs';
 import { HOLD_MS } from '../../server/once.mjs';
 import { byStart } from '../../web/src/lib/board.ts';
 import { open, mr } from './helpers.mjs';
@@ -34,6 +35,22 @@ const kinds = [
 for (const [kind, ps, column, label] of kinds) {
     const x = row(ps);
     assert.deepEqual([x.state.kind, ...shown(x)], [kind, column, label], `${kind}: ${JSON.stringify(ps)}`);
+}
+// through withThreads, as the server does: comments nobody answered need you, also on an approved MR; replied ones don't
+{
+    const approved = withThreads(open({ ready: true, approved: true, approvedBy: ['Ann'], sha: 'abc1234' }), { unanswered: 1, unansweredBy: ['Bo'] });
+    assert.deepEqual([row(approved).state.kind, ...shown(row(approved))], ['changes', 'needs-you', 'Fix & reply']);
+    assert.match(row(approved).next, /^Approved — 1 unanswered comment from Bo/);
+    const replied = withThreads(open({ ready: true, approved: true, sha: 'abc1234' }), { replied: 2, repliedTo: ['Bo'] });
+    assert.deepEqual(shown(row(replied)), ['review', null], 'replied threads still open: approved, waiting on them');
+    const unapproved = withThreads(open({ reviewers: ['Ann'] }), { unanswered: 1, unansweredBy: ['Bo'] });
+    assert.deepEqual(shown(row(unapproved)), ['needs-you', 'Fix & reply']);
+}
+// GitHub: no Homebase merge; its chat runs the gate, then merges
+{
+    const pr = 'https://github.com/o/p/pull/1';
+    const x = workItems([{ ...main(), prs: [{ url: pr, at: 1 }] }], () => open({ ready: true }), NOW).find(r => r.pr === pr);
+    assert.deepEqual([x.column, x.action?.label], ['ready', 'Merge + close issue']);
 }
 console.log('ok every MR kind has its group and button');
 
@@ -70,6 +87,23 @@ assert.equal(row(conflict, [main(), chat({ status: 'working', head: '1-x', step:
     assert.deepEqual(shown(row(conflict, [main()], clicks)), ['needs-you', 'Rebase'], '7 the conflict is back after the MR moved on');
 }
 assert.deepEqual(shown(row(conflict, [main(), asks], sent(NOW - 1000))), ['needs-you', 'Rebase'], '3 a question beats a held click, with the MR step button');
+{
+    // the click's own prompt and the helper it set going are the click at work: the hold outlives them
+    const clicks = sent(NOW - 1000);
+    const prompt = main({ openPrompts: [{ at: new Date(NOW).toISOString(), text: 'Rebase !1 onto its target' }] });
+    assert.deepEqual(shown(row(conflict, [prompt], clicks)), ['doing', null]);
+    assert.deepEqual(shown(row(conflict, [main({ agents: [helper()] })], clicks)), ['doing', null]);
+    const after = row(conflict, [main()], clicks);
+    assert.deepEqual([...shown(after), /^Sent to Claude \(/.test(after.next)], ['doing', null, true], '7 still held once the turn ended');
+    // a Continue ends once the helper runs again
+    const cont = new Map([[url, { at: NOW - 1000, kind: 'api-error' }]]);
+    row(open({ reviewers: ['Ann'] }), [main({ agents: [helper()] })], cont);
+    assert.equal(cont.size, 0, 'a running helper ends a Continue');
+    // Review and Merge claims sit under their own keys: no hold
+    assert.deepEqual(shown(row(open({ reviewers: ['Ann'] }), [main()], new Map([[`review:${url}`, { at: NOW - 1000, kind: 'in-review' }]]))), ['review', 'Review']);
+    assert.deepEqual(shown(row(open({ ready: true, sha: 'abc1234' }), [main()], new Map([[`merge:${url}`, { at: NOW - 1000, kind: 'abc1234' }]]))), ['ready', 'Merge']);
+}
+assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migrations\? · /, '3 the question leads the text');
 console.log('ok precedence');
 
 // a helper without an MR (table "A helper without an MR")
@@ -97,7 +131,20 @@ console.log('ok helpers without an MR');
         assert.equal(key(order.map(i => sessions[i])), want, `order ${order}`);
     }
 }
+// tied agents on one MR: the same agent leads whatever order they come in
+{
+    const a = helper({ id: 'a1', status: 'stopped', stopReason: 'api-error', updated: 5 }), b = helper({ id: 'b1', status: 'done', updated: 5 });
+    const key = agents => JSON.stringify(shown(row(open({ reviewers: ['Ann'] }), [main({ agents })])));
+    assert.equal(key([a, b]), key([b, a]));
+}
 console.log('ok same inputs, same rows');
+// since: an MR's creation on the forge, a helper's start
+{
+    assert.equal(row(open({ createdAt: 42 })).since, 42);
+    assert.equal(row(open()).since, null, 'no creation date: sessions.mjs fills in when it was first seen');
+    const x = workItems([{ ...main(), prs: [], agents: [helper({ prs: [], description: 'Tidy', started: 7 })] }], () => null, NOW).find(r => !r.pr);
+    assert.equal(x.since, 7);
+}
 
 // order inside a group: when the row first appeared, never its last activity
 {

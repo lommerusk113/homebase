@@ -12,7 +12,7 @@ Free text (how a reply is worded) may fill a row's text, never its group, except
 
 | Input | From | Kept across a restart |
 |---|---|---|
-| MR state (open, merged, closed, draft, pipeline, conflicts, approvals, threads) | the forge (`glab`, `gh`) | yes: the last answer is stored in `items.json` and served until the first new one |
+| MR state (open, merged, closed, draft, pipeline, conflicts, approvals, threads) | the forge (`glab`, `gh`), comments included | asked again at start: the first poll waits for the answer; a failed lookup keeps the last answer (marked stale) while the server runs, and without one the row is Not checked |
 | Helper status (running, stopped + why, done) | its transcript and tmux | yes (transcript) |
 | Chat status (working, asking, idle) | turn markers in its transcript, the asking hook's marker | yes (transcript) |
 | Chat works on the MR | the chat's folder has the MR's branch checked out, or `homebase status doing --mr` | yes (git, `reports.json`) |
@@ -20,7 +20,7 @@ Free text (how a reply is worded) may fill a row's text, never its group, except
 | Button clicked | the server's record of the send | yes (`sent.json`), for 30 minutes |
 | Dismissed | `dismissed.json` | yes |
 | A died chat opened | `handled.json` (its last entry) | yes, on every device |
-| Approved by | GitLab's approvals, asked once the MR is mergeable | yes (the stored forge answer) |
+| Approved by | GitLab's approvals, asked once the MR is mergeable | as the MR state |
 
 ## Precedence for an MR row
 
@@ -32,7 +32,7 @@ Free text (how a reply is worded) may fill a row's text, never its group, except
 | 4 | a helper on it runs | Doing | the helper's current step | none |
 | 5 | a chat on its branch works, or reported `doing` | Doing | the report, else the chat's current step | none |
 | 6 | an open prompt names it and nothing runs yet (*text*) | Doing | Sent to Claude… | none |
-| 7 | its button was clicked, its kind is still the one clicked, under 30 min ago | Doing | Sent to Claude (time) | none |
+| 7 | its button was clicked, its kind is still the one clicked (rules 4 and 6 are the click at work and don't end it), under 30 min ago | Doing | Sent to Claude (time) | none |
 | 8 | a helper on it stopped | Needs you | why it stopped | Continue |
 | 9 | the forge never answered | Not checked | why the lookup failed | none |
 | 10 | the MR state, first blocker wins (below) | | | |
@@ -41,7 +41,7 @@ MR state, first match wins:
 
 | Kind | When | Group | Button |
 |---|---|---|---|
-| changes | review comments to fix or answer, or changes requested (on an approved MR they are a note on ready) | Needs you | Fix & reply |
+| changes | review comments to fix or answer, or changes requested, also on an approved MR (its text then starts Approved) | Needs you | Fix & reply |
 | failing | pipeline failed | Needs you | Fix pipeline |
 | conflict | conflicts, or needs a rebase | Needs you | Rebase |
 | blocked | blocked by another MR or external checks | In review | Review |
@@ -49,7 +49,7 @@ MR state, first match wins:
 | threads | approved, replied threads still open | In review | none (approved needs no reviewer) |
 | replied | replied to threads, waiting on the reviewer | In review | Review |
 | pipeline | pipeline running | In review | Review |
-| ready | mergeable and approved by someone (GitLab asks its approvals; GitHub: approved, or no review required); open comments are a note, not a blocker | Ready to merge | Merge (GitLab: Homebase merges after a confirm; GitHub: asks the chat) |
+| ready | mergeable and approved by someone (GitLab asks its approvals; GitHub: approved, or no review required), nothing unanswered | Ready to merge | GitLab: Merge (Homebase merges after a confirm); GitHub: Merge + close issue (asks the chat to run the gate, then merge) |
 | in-review | has reviewers | In review | Review |
 | needs-reviewer | no reviewer | In review | Request review |
 

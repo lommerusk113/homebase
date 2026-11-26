@@ -237,7 +237,7 @@ What Homebase stores, all in the Homebase dir:
 * `uploads/`: images attached in the chat (paste, drop or the + menu). They are sent as `[Image: <path>]` lines, which Claude opens with its Read tool; the folder is never cleaned up, so delete old files when you like.
 * `asking/<session>.json`: the hook's markers. The answer, the next tool (for a permission prompt), a new prompt or the end of the turn removes the marker; Homebase also ignores one the transcript has moved past, a permission prompt that was answered (Claude's input box is back on the chat's screen while the approved tool still runs), or one older than a day.
 * `tracked.json`: the projects on your board.
-* `handled.json`: the replies you marked as handled (the newest 500), as `<session>/<reply>` ids.
+* `handled.json`: the replies you marked as handled and the died chats you opened (the newest 500), as `<session>/<entry>` ids.
 * `dismissed.json`: the work rows you dismissed (the newest 500), as helper id and time; a row comes back when its helper works again.
 * `sent.json`: the row buttons you clicked in the last 30 minutes, so a clicked row stays in Doing across a restart.
 * `vapid.json` and `subscriptions.json`: the Web Push keys and subscriptions; this computer's browser and paired devices may subscribe.

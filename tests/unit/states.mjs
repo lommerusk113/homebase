@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { workItems } from '../../server/items.mjs';
 import { withThreads } from '../../server/forge.mjs';
-import { HOLD_MS } from '../../server/once.mjs';
+import { HOLD_MS, mergeRefusal } from '../../server/once.mjs';
 import { byStart } from '../../web/src/lib/board.ts';
 import { open, mr } from './helpers.mjs';
 
@@ -225,3 +225,13 @@ console.log('ok same inputs, same rows');
     assert.deepEqual(rows.toSorted(byStart).map(r => r.key), ['b', 'd', 'c', 'a']);
 }
 console.log('ok order by first appearance');
+
+// Merge only at the head the user confirmed
+{
+    const ready = row(open({ ready: true, sha: 'abc1234' }));
+    assert.equal(mergeRefusal(ready, 'abc1234'), null);
+    assert.match(mergeRefusal(ready, 'def5678'), /changed since you clicked/, 'a push after the dialog opened');
+    assert.match(mergeRefusal(ready, null), /changed since you clicked/, 'no head sent');
+    assert.match(mergeRefusal(row(open({ reviewers: ['Ann'] })), 'abc1234'), /no Merge button/);
+}
+console.log('ok merge only at the confirmed head');

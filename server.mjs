@@ -36,7 +36,7 @@ import { loadHelpers, startHelper, closeHelper, chatIn, parentOf, parentTmux, fi
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
 import { vapidKeys, validSub, addSub, removeSub, removeDeviceSubs, readSubs, watchSessions, watchedAt, pageFocused } from './server/push.mjs';
 import { diff } from './server/diff.mjs';
-import { claim, release, sentRows, loadSent, saveSent } from './server/once.mjs';
+import { claim, release, sentRows, loadSent, saveSent, mergeRefusal } from './server/once.mjs';
 import { pushSession } from './server/gitpush.mjs';
 import { doctor, setup, unsetup, missingTools, readClaudeVersion, versionWarning } from './server/setup.mjs';
 
@@ -376,8 +376,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             if (isPost('/api/merge')) {
                 const key = url.searchParams.get('key');
                 const row = (await polledSessions()).flatMap(s => s.items ?? []).find(i => i.key === key);
-                if (row?.action?.kind !== 'merge') {
-                    return deny(409, 'This row has no Merge button any more: reload the board');
+                const refused = mergeRefusal(row, url.searchParams.get('sha'));
+                if (refused) {
+                    return deny(409, refused);
                 }
                 if (!claim(sentRows, `merge:${key}`, row.prState?.sha)) {
                     return deny(409, 'Already merging');

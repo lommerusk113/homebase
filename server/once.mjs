@@ -49,3 +49,14 @@ export async function saveSent(dir = savedIn, map = sentRows, now = Date.now()) 
     await writeFile(tmp, JSON.stringify(keep), { mode: 0o600 });
     await rename(tmp, file);
 }
+
+// Why a Merge click is refused, or null: only a row the board shows with its Merge button, at the head the user confirmed
+// (sha, sent by the page), so a push after the dialog opened is never merged.
+export function mergeRefusal(row, sha) {
+
+    if (row?.action?.kind !== 'merge') {
+        return 'This row has no Merge button any more: reload the board';
+    }
+
+    return sha && sha === row.prState?.sha ? null : 'The MR changed since you clicked Merge: check it, then merge again';
+}

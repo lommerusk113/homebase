@@ -72,7 +72,8 @@ async function merge(x: WorkItem) {
     }
     merging.add(x.key);
     try {
-        const r = await api(`/api/merge?key=${encodeURIComponent(x.key)}`, { method: 'POST' }).catch(() => null);
+        // the head the row showed when Merge was clicked: the server refuses if the MR moved since
+        const r = await api(`/api/merge?key=${encodeURIComponent(x.key)}&sha=${encodeURIComponent(x.prState?.sha ?? '')}`, { method: 'POST' }).catch(() => null);
         if (!r?.ok) {
             useNotice().showError(r ? await r.text() : 'Couldn’t reach Homebase to merge');
         }

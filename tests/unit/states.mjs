@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { workItems } from '../../server/items.mjs';
 import { loadReports, reports } from '../../server/reports.mjs';
-import { lastAnswerAt } from '../../server/sessions.mjs';
+import { lastAnswerAt, attachReports } from '../../server/sessions.mjs';
 import { ghPr, prs } from '../../server/forge.mjs';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -271,7 +271,17 @@ console.log('ok merge only at the confirmed head');
     const asked = [{ type: 'user', timestamp: t(1), message: { content: 'go' } }, { type: 'assistant', timestamp: t(2), message: { content: [{ type: 'tool_use', id: 'q1', name: 'AskUserQuestion' }] } },
         { type: 'user', timestamp: t(3), message: { content: [{ type: 'tool_result', tool_use_id: 'q1', content: 'Yes' }] } }];
     assert.equal(lastAnswerAt(asked), 3000);
-    assert.equal(lastAnswerAt([{ type: 'assistant', timestamp: t(7), message: { content: [{ type: 'text', text: 'hi' }] } }]), 7000);
+    assert.equal(lastAnswerAt([{ type: 'assistant', timestamp: t(7), message: { content: [{ type: 'text', text: 'hi' }] } }]), null, 'no answer in the tail: the report stands');
+    // reports: only a live, not-cleared chat's count; an answered one is forgotten for good
+    const all = new Map([['old', { phase: 'needs-you', mr: '!1', text: 'Which?', at: 5 }], ['gone', { phase: 'doing', mr: '!1', text: 'x', at: 5 }], ['ok', { phase: 'doing', mr: '!1', text: 'x', at: 5 }], ['answered', { phase: 'needs-you', mr: '!1', text: 'Q', at: 5 }]]);
+    const list = [{ id: 'old' }, { id: 'new', clearedFrom: 'old' }, { id: 'gone' }, { id: 'ok' }, { id: 'answered', lastPromptAt: 9 }];
+    for (const [k, v] of all) {
+        reports.set(k, v);
+    }
+    attachReports(list, new Map([['old', 't'], ['new', 't'], ['ok', 't'], ['answered', 't']]), reports);
+    assert.deepEqual(list.map(s => !!s.report), [false, false, false, true, false]);
+    assert.equal(reports.has('answered'), false, 'answered: forgotten');
+    reports.clear();
     // GitHub still computing mergeability keeps the conflict it saw, never flips to ready
     const pr = 'https://github.com/o/p/pull/9', base = { state: 'OPEN', title: 't', headRefName: 'b', baseRefName: 'main', isDraft: false, reviewDecision: '' };
     prs.set(pr, { at: 1, value: ghPr({ ...base, mergeable: 'CONFLICTING' }, pr) });

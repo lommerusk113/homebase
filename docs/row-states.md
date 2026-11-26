@@ -16,7 +16,7 @@ Free text (how a reply is worded) may fill a row's text, never its group, except
 | Helper status (running, stopped + why, done) | its transcript and tmux | yes (transcript) |
 | Chat status (working, asking, idle) | turn markers in its transcript, the asking hook's marker | yes (transcript) |
 | Chat works on the MR | the chat's folder has the MR's branch checked out, or `homebase status doing --mr` | yes (git, `reports.json`) |
-| Chat waits on you about the MR | `homebase status needs-you --mr`, else its open question names the MR first (*text*) | yes |
+| Chat waits on you about the MR | `homebase status needs-you --mr`, else its open question names the MR first (*text*); a report counts only from a live chat no `/clear` replaced, until you answer it (a prompt or an answered question) | yes |
 | Button clicked | the server's record of the send | yes (`sent.json`), for 30 minutes |
 | Dismissed | `dismissed.json` | yes |
 | A died chat opened | `handled.json` (its last entry) | yes, on every device |

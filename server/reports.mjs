@@ -14,8 +14,11 @@ const MR = /^(?:https:\/\/\S+|[!#]?\d+)$/;
 const valid = r => !!r && PHASES.includes(r.phase) && (r.mr == null || (typeof r.mr === 'string' && r.mr.length <= 300 && MR.test(r.mr.trim())))
     && (r.text == null || typeof r.text === 'string');
 
+let savedIn = null; // the Homebase dir loadReports read, where forgetReport writes
+
 export function loadReports(dir) {
 
+    savedIn = dir;
     reports.clear();
     try {
         for (const [id, r] of Object.entries(JSON.parse(readFileSync(join(dir, 'reports.json'), 'utf8')))) {
@@ -44,4 +47,12 @@ export async function report(dir, sessionId, { phase, mr = null, text = null } =
     await mkdir(dir, { recursive: true });
     await writeFile(tmp, JSON.stringify(Object.fromEntries(keep)), { mode: 0o600 });
     await rename(tmp, file);
+}
+
+// Forgets a chat's report (answered since, see sessions.mjs attachReports) and saves that, so a restart doesn't bring it back.
+export function forgetReport(sessionId) {
+
+    if (reports.delete(sessionId) && savedIn) {
+        report(savedIn, sessionId, { phase: 'done' }).catch(() => {});
+    }
 }

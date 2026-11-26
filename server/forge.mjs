@@ -7,6 +7,7 @@ import { ghRun, accountOf, repoPaths } from './account.mjs';
 const run = promisify(execFile);
 
 export const PR_TTL_MS = 60_000;
+const GH_RECHECK_MS = Number(process.env.HOMEBASE_GH_RECHECK_MS ?? 2000);
 export const prs = new Map(); // url -> { at, value, pending }
 
 // CI pipeline as { status, url, at } or null. GitLab passes the MR's head_pipeline (or legacy pipeline) as-is;
@@ -113,9 +114,15 @@ async function fetchPr(url) {
     const view = fields => ghRun(repo, ['pr', 'view', url, '--json', fields], { timeout: apiTimeout() });
     const fields = 'state,title,body,reviewDecision,isDraft,headRefName,baseRefName,milestone,reviewRequests,latestReviews,statusCheckRollup,headRefOid,updatedAt,createdAt,mergeable';
     // a token without read:org (the personal one) can't read reviewRequests; the reviewers then come from the reviews alone
-    const { stdout } = await view(fields).catch(e => (/required scopes/.test(e.message) ? view(fields.replace('reviewRequests,', '')) : Promise.reject(e)));
+    const ask = () => view(fields).catch(e => (/required scopes/.test(e.message) ? view(fields.replace('reviewRequests,', '')) : Promise.reject(e)));
+    let pr = JSON.parse((await ask()).stdout);
+    // GitHub computes mergeability on the first ask: with no earlier answer to keep, ask once more instead of showing a guess
+    if (pr.mergeable === 'UNKNOWN' && !prs.get(url)?.value) {
+        await new Promise(r => setTimeout(r, GH_RECHECK_MS));
+        pr = JSON.parse((await ask()).stdout);
+    }
 
-    return ghPr(JSON.parse(stdout), url);
+    return ghPr(pr, url);
 }
 
 // A `gh pr view --json` answer as the PR state the board reads.

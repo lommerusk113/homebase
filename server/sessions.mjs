@@ -14,7 +14,7 @@ import { waitingQuestion } from './asks.mjs';
 import { loadStore, record, seeds, flush, gateHeadsOf, STORE_FILE } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { isManual } from './manual.mjs';
-import { reports } from './reports.mjs';
+import { reports, forgetReport } from './reports.mjs';
 import { sentRows, saveSent } from './once.mjs';
 import { canned } from '../web/src/lib/canned.ts';
 import { repoPaths, accountOf } from './account.mjs';
@@ -460,15 +460,30 @@ export function lastActivity(entries) {
     return Number.isNaN(at) ? null : at;
 }
 
-// When the user last answered the chat: its newest human prompt or answered AskUserQuestion; without either in the tail,
-// the tail's first entry, so a report older than everything read counts as answered.
+// What each chat reported (homebase status): only a live chat's that no /clear succeeded (a closed or cleared chat's report
+// would hold its row forever), and a report the user has answered since is forgotten for good, so a tail that no longer
+// holds the answer can't bring it back. live: liveSessions(), null when the registry can't be read (then every chat counts).
+export function attachReports(list, live, all = reports) {
+
+    const cleared = new Set(list.map(s => s.clearedFrom).filter(Boolean));
+    for (const s of list) {
+        const r = all.get(s.id);
+        if (r && r.at <= (s.lastPromptAt ?? 0)) {
+            forgetReport(s.id);
+        }
+        s.report = r && r.at > (s.lastPromptAt ?? 0) && (!live || live.has(s.id)) && !cleared.has(s.id) ? r : null;
+    }
+}
+
+// When the user last answered the chat: its newest human prompt or answered AskUserQuestion, else null (attachReports
+// forgets an answered report, so one whose answer scrolled out of the tail stays over).
 export function lastAnswerAt(entries) {
 
     const asked = new Set(entries.flatMap(e => (e.type === 'assistant' && Array.isArray(e.message?.content) ? e.message.content : []))
         .filter(b => b.type === 'tool_use' && b.name === 'AskUserQuestion').map(b => b.id));
     const answer = entries.findLast(e => isHumanPrompt(e) || (e.type === 'user' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result' && asked.has(b.tool_use_id))));
 
-    return Date.parse((answer ?? entries.find(e => e.timestamp))?.timestamp) || null;
+    return Date.parse(answer?.timestamp) || null;
 }
 
 // The newest open background call as a step: a test run reads "running tests", anything else as stepOf says it.
@@ -862,11 +877,11 @@ export async function sessions() {
         s.hobby = !!repo && accountOf(repo) === 'personal';
         s.unpushed = await unpushedOf(s.cwd);
         s.head = s.cwd ? await worktreeHead(s.cwd) : null; // the branch its folder has now; the transcript's is where the chat started
-        s.report = reports.get(s.id) ?? null;
         s.pushBlocked = s.unpushed > 0 && await pushBlocked(s);
     }));
 
     await attachTmux(out, now, live); // first: it sets clearedFrom, which attachItems follows
+    attachReports(out, live);
     nestHelpers(out, new Set((await liveTmux()).map(t => t.name)), now); // before the items: a helper's row is an agent of its parent
     attachItems(out, await itemsOf(out), now);
     for (const s of out) {

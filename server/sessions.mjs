@@ -16,7 +16,7 @@ import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forge
 import { isManual } from './manual.mjs';
 import { reports, forgetReport, endsAt } from './reports.mjs';
 import { sentRows, saveSent } from './once.mjs';
-import { canned } from '../web/src/lib/canned.ts';
+import { canned, cannedLabel } from '../web/src/lib/canned.ts';
 import { repoPaths, accountOf } from './account.mjs';
 import { pushBlocked } from './gitpush.mjs';
 import { contextOf } from './limits.mjs';
@@ -475,13 +475,16 @@ export function attachReports(list, live, all = reports) {
     }
 }
 
+// A human prompt that answers the chat: not the "Load new rules" note Homebase types (as feed.mjs counts replies).
+const isAnswer = e => isHumanPrompt(e) && cannedLabel(textOf(e)) !== RULES_LABEL;
+
 // When the user last answered the chat: its newest human prompt or answered AskUserQuestion, else null (attachReports
 // forgets an answered report, so one whose answer scrolled out of the tail stays over).
 export function lastAnswerAt(entries) {
 
     const asked = new Set(entries.flatMap(e => (e.type === 'assistant' && Array.isArray(e.message?.content) ? e.message.content : []))
         .filter(b => b.type === 'tool_use' && b.name === 'AskUserQuestion').map(b => b.id));
-    const answer = entries.findLast(e => isHumanPrompt(e) || (e.type === 'user' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result' && asked.has(b.tool_use_id))));
+    const answer = entries.findLast(e => isAnswer(e) || (e.type === 'user' && Array.isArray(e.message?.content) && e.message.content.some(b => b.type === 'tool_result' && asked.has(b.tool_use_id))));
 
     return Date.parse(answer?.timestamp) || null;
 }
@@ -552,7 +555,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         stepAt: step?.at ?? null, // when that call started, for "for 2m" on the Now line
         queued: queuedPrompts(entries).map(q => q.text),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
-        lastPromptAt: Date.parse(entries.findLast(isHumanPrompt)?.timestamp) || null, // a report (homebase status) older than it is over
+        lastPromptAt: Date.parse(entries.findLast(isAnswer)?.timestamp) || null, // a report (homebase status) older than it is over
         lastAnswerAt: lastAnswerAt(entries), // a needs-you report older than this is answered (reports.mjs endsAt)
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
         lastReplyAt: Date.parse(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)?.timestamp) || null, // for `homebase helper wait`: a reply newer than the wait

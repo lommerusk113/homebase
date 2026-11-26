@@ -3,6 +3,7 @@
 // own rows and Dismiss are the page's: tests/browser/work.test.mjs and edges.test.mjs check them.
 import assert from 'node:assert/strict';
 import { workItems } from '../../server/items.mjs';
+import { canned } from '../../web/src/lib/canned.ts';
 import { loadReports, reports, report, forgetReport } from '../../server/reports.mjs';
 import { lastAnswerAt, attachReports } from '../../server/sessions.mjs';
 import { ghPr, prs } from '../../server/forge.mjs';
@@ -271,6 +272,7 @@ console.log('ok merge only at the confirmed head');
     const asked = [{ type: 'user', timestamp: t(1), message: { content: 'go' } }, { type: 'assistant', timestamp: t(2), message: { content: [{ type: 'tool_use', id: 'q1', name: 'AskUserQuestion' }] } },
         { type: 'user', timestamp: t(3), message: { content: [{ type: 'tool_result', tool_use_id: 'q1', content: 'Yes' }] } }];
     assert.equal(lastAnswerAt(asked), 3000);
+    assert.equal(lastAnswerAt([...asked, { type: 'user', timestamp: t(9), message: { content: canned('rules', 'rules.md').message } }]), 3000, 'Load new rules is no answer');
     assert.equal(lastAnswerAt([{ type: 'assistant', timestamp: t(7), message: { content: [{ type: 'text', text: 'hi' }] } }]), null, 'no answer in the tail: the report stands');
     // reports: only a live, not-cleared chat's count; an answered one is forgotten for good
     const all = new Map([['old', { phase: 'needs-you', mr: '!1', text: 'Which?', at: 5 }], ['gone', { phase: 'doing', mr: '!1', text: 'x', at: 5 }], ['ok', { phase: 'doing', mr: '!1', text: 'x', at: 5 }], ['answered', { phase: 'needs-you', mr: '!1', text: 'Q', at: 5 }]]);

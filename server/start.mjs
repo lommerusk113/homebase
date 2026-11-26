@@ -11,7 +11,7 @@ import { tmux, sleep, sendSteps } from './tmux.mjs';
 import { capture } from './startup.mjs';
 import { promptUp } from './control.mjs';
 import { startChat, failer, listTranscripts } from './newproject.mjs';
-import { reviewRequests } from './reviews.mjs';
+import { reviewRequest } from './reviews.mjs';
 
 const run = promisify(execFile);
 const bad = (msg, status = 400) => Object.assign(new Error(msg), { status });
@@ -169,14 +169,14 @@ export async function startIssue(body, deps = {}) {
 }
 
 /** The prompt of a review chat: read-only, so nothing leaves the machine. */
-export const reviewPrompt = r => `Review MR !${r.iid} of ${r.project} (${r.url}) using the review-gate or code-review skill. Read it with glab (mr view, mr diff), do not check it out. Read-only: do not push, comment, approve or edit anything. End with the findings.`;
+export const reviewPrompt = r => `Review MR !${r.iid} of ${r.project} (${r.url}) using the review-gate skill, then the polish-loop skill on the diff, reporting what it would change instead of applying it. Read it with glab (mr view, mr diff), do not check it out. Read-only: do not push, comment, approve or edit anything on GitLab or in the checkout. End with the findings and a TLDR.`;
 
 /** POST /api/reviews/start { url }: a new chat in the MR's project, in its main checkout, with the review prompt sent. -> { ok, dir, tmux, sessionId, reused? }. */
 export async function startReview(body, deps = {}) {
 
-    const { requests = reviewRequests, repos = repoPaths, dirOf = repoDirOf, tmux: tm = tmux, nap = sleep, transcripts = listTranscripts, waitMs = 20_000, trustMs = 60_000, known = sessions } = deps;
+    const { request = reviewRequest, repos = repoPaths, dirOf = repoDirOf, tmux: tm = tmux, nap = sleep, transcripts = listTranscripts, waitMs = 20_000, trustMs = 60_000, known = sessions } = deps;
     // only an MR on the review list: the url is never used for anything else
-    const r = typeof body?.url === 'string' ? requests().find(x => x.url === body.url) : null;
+    const r = typeof body?.url === 'string' ? await request(body.url) : null;
     if (!r) {
         throw bad('not a merge request that asks you for a review', 404);
     }

@@ -3,7 +3,7 @@ import { repoPath, groupIssues, milestoneOf, activeMilestones, keepMilestone, wo
 import { inMilestone, toData, isLoading, emptyPill, pillLabel } from '../../web/src/lib/milestone.ts';
 import { issueCards, buildLanes, closedBy, chatMessage, shortTitle, owners, emptyText } from '../../web/src/lib/issues.ts';
 import { chatStatus } from '../../web/src/lib/chat.ts';
-import { now } from './helpers.mjs';
+import { now, withFakeGlab } from './helpers.mjs';
 
 {
     const mr = (iid, o) => ({ iid, state: 'opened', title: `T${iid}`, web_url: `https://gitlab.com/g/p/-/merge_requests/${iid}`, references: { full: `g/p!${iid}` }, author: { username: 'ann', name: 'Ann' }, draft: false, updated_at: `2026-01-0${iid}T00:00:00Z`, ...o });
@@ -35,6 +35,24 @@ import { now } from './helpers.mjs';
         swr.delete('reviews:gitlab.rv.test');
     }
     assert.deepEqual(logged, ['reviews: gitlab.rv.test: timed out', 'reviews: gitlab.rv.test: 502']);
+}
+{
+    // Review on a row the board still shows after a restart: a cold cache waits for the list instead of 404ing
+    const { repoPaths } = await import('../../server/account.mjs');
+    const { reviewRequest } = await import('../../server/reviews.mjs');
+    const { swr } = await import('../../server/forge.mjs');
+    repoPaths.set('rv', { host: 'gitlab.rv2.test', path: 'g/rv' });
+    const u = 'https://gitlab.rv2.test/g/rv/-/merge_requests/1';
+    const body = JSON.stringify([{ web_url: u, iid: 1, title: 'Late', state: 'opened', author: { username: 'ann', name: 'Ann' }, updated_at: '2026-01-01T00:00:00Z', references: { full: 'g/rv!1' } }]);
+    try {
+        await withFakeGlab(`case "$*" in *reviewer_username*) echo '${body}';; *merge_requests*) exit 1;; *) echo '{"username":"me","name":"Me"}';; esac`, async () => {
+            assert.equal((await reviewRequest(u))?.title, 'Late');
+            assert.equal(await reviewRequest('other'), undefined, 'an unlisted url still finds nothing');
+        });
+    } finally {
+        repoPaths.delete('rv');
+        swr.delete('reviews:gitlab.rv2.test');
+    }
 }
 assert.deepEqual(repoPath('git@gitlab.com:tritt/accounting/pracsys.git\n'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });
 assert.deepEqual(repoPath('https://gitlab.com/tritt/accounting/pracsys.git'), { host: 'gitlab.com', path: 'tritt/accounting/pracsys' });

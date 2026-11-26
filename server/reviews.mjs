@@ -1,5 +1,5 @@
 // Open GitLab MRs by others that ask the signed-in user for a review: read-only GETs, one list call per GitLab host Homebase knows.
-import { api, isGitLab, whoAmI, swrEntry, prState, pipelineOf } from './forge.mjs';
+import { api, isGitLab, whoAmI, swrEntry, refetch, prState, pipelineOf } from './forge.mjs';
 import { repoPaths } from './account.mjs';
 
 export const REVIEWS_TTL_MS = 120_000;
@@ -33,14 +33,26 @@ async function fetchReviews(repo) {
 
 const warned = new Set();
 
+const entries = () => {
+    const hosts = new Map([...repoPaths.values()].filter(isGitLab).map(r => [r.host, r]));
+
+    return [...hosts].map(([host, repo]) => [host, swrEntry(`reviews:${host}`, REVIEWS_TTL_MS, () => fetchReviews(repo))]);
+};
+
+// The listed MR by url. A miss waits for a fresh list first: the board keeps showing the last list it got, so after a
+// restart or a failed refresh the server's cache can be colder than the row the user clicked.
+export async function reviewRequest(url) {
+
+    const find = () => reviewRequests().find(x => x.url === url);
+
+    return find() ?? (await Promise.all(entries().map(([, hit]) => hit.pending ?? refetch(hit, hit.fn))), find());
+}
+
 // The cached rows; never waits, so the first call after start is empty. A failed refresh keeps serving the last good
 // rows and logs once per outage per host; the board's forge state (forge.mjs forgeStatus) reads the entry's error.
 export function reviewRequests() {
 
-    const hosts = new Map([...repoPaths.values()].filter(isGitLab).map(r => [r.host, r]));
-
-    return [...hosts].flatMap(([host, repo]) => {
-        const hit = swrEntry(`reviews:${host}`, REVIEWS_TTL_MS, () => fetchReviews(repo));
+    return entries().flatMap(([host, hit]) => {
         if (!hit.error) {
             warned.delete(host);
         } else if (!warned.has(host)) {

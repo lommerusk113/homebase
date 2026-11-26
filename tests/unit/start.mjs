@@ -87,7 +87,7 @@ import { join } from 'node:path';
     // review button: only an MR on the review list starts, in the project's checkout
     const { startReview, reviewPrompt } = await import('../../server.mjs');
     const rr = { url: 'https://gitlab.com/acme/alpha/-/merge_requests/9', iid: 9, project: 'acme/alpha' };
-    const rbase = { requests: () => [rr], repos: new Map([['alpha', {}]]), dirOf: async () => '/tmp', tmux: async () => { throw new Error('no tmux'); } };
+    const rbase = { request: async u => (u === rr.url ? rr : undefined), repos: new Map([['alpha', {}]]), dirOf: async () => '/tmp', tmux: async () => { throw new Error('no tmux'); } };
     const none = await startReview({ url: 'https://evil.example/x' }, rbase).catch(x => x);
     assert.equal(none.status, 404);
     const noTmux = await startReview({ url: rr.url }, rbase).catch(x => x);
@@ -116,5 +116,5 @@ import { join } from 'node:path';
     const viaLink = await startReview({ url: rr.url }, { ...rbase, dirOf: async () => link, tmux: async a => (a[0] === 'display-message' ? { stdout: `${target}\n` } : left('❯ Review MR !9 of acme/alpha\n')(a)), nap: async () => {}, waitMs: 1000, known: async () => [{ id: 'old1', tmux: 'cc-new-alpha-review-9' }], transcripts: async () => [] });
     assert.deepEqual([viaLink.sessionId, viaLink.reused], ['old1', true], 'symlinked folder');
     assert.ok(!typed.some(a => a[0] === 'kill-session'));
-    assert.match(reviewPrompt(rr), /!9 of acme\/alpha .*do not push, comment/);
+    assert.match(reviewPrompt(rr), /!9 of acme\/alpha .*review-gate skill, then the polish-loop skill.*do not push, comment.*TLDR/);
 }

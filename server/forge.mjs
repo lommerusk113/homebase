@@ -90,7 +90,7 @@ async function fetchPr(url) {
             reviewers: (mr.reviewers ?? []).map(r => r.name),
             // ready means merge now, by someone's approval: a failing or running pipeline (GitLab allows it when CI isn't
             // required) is not ready, nor is an MR nobody approved
-            ready: (status === 'mergeable' || !!prev?.ready) && !ci && approved,
+            ready: (prev ? prev.mergeStatus ?? status : status) === 'mergeable' && !ci && approved, // the kept status while GitLab rechecks
             // approved although its pipeline may still run or fail: the stage says Approved, the column waits for CI
             approved,
             approvedBy: approvedBy ?? prev?.approvedBy ?? [],

@@ -55,8 +55,9 @@ export const itemUpdated = (agent, linkedAt, prState) => Math.max(agent?.updated
 
 const BLOCKED_STEP = { conflict: 'Merge conflicts — rebase it', rebase: 'Needs a rebase onto its target', blocked: 'Blocked by another MR', checks: 'Waiting for external status checks' }; // blocked and checks are GitLab's
 
-// GitLab's detailed_merge_status in words, for an approved MR it won't merge yet; others are shown as GitLab spells them
-const MERGE_WHY = { ci_must_pass: 'needs a passing pipeline', unchecked: 'still checking', checking: 'still checking', preparing: 'still checking', approvals_syncing: 'still checking', jira_association_missing: 'needs a Jira issue', locked_paths: 'locked paths', locked_lfs_files: 'locked files', need_rebase: 'needs a rebase' };
+// GitLab's detailed_merge_status in words, for an approved MR it won't merge yet (mergeable and not_approved there: an answer from
+// before the approval, kept while GitLab rechecks); others are shown as GitLab spells them
+const MERGE_WHY = { mergeable: 'still checking', not_approved: 'still checking', ci_must_pass: 'needs a passing pipeline', unchecked: 'still checking', checking: 'still checking', preparing: 'still checking', approvals_syncing: 'still checking', jira_association_missing: 'needs a Jira issue', locked_paths: 'locked paths', locked_lfs_files: 'locked files', need_rebase: 'needs a rebase' };
 
 const clock = ms => (ms ? new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '');
 

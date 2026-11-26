@@ -48,7 +48,7 @@ MR state, first match wins:
 | draft | nothing blocks it but the draft flag | Needs you | Mark ready |
 | replied | not mergeable, and the threads open are ones you replied to (the project requires them resolved): waiting on the reviewer | In review | Review (none once approved) |
 | pipeline | pipeline running | In review | Review |
-| ready | mergeable and approved by someone (GitLab asks its approvals; GitHub: approved, or no review required), nothing unanswered; open threads the project lets stay open are counted in the text ("Approved by Børre — merge it · 2 open threads"), never a blocker | Ready to merge | GitLab: Merge (Homebase merges after a confirm); GitHub: Merge + close issue (asks the chat to run the gate, then merge) |
+| ready | mergeable and approved by someone (GitLab asks its approvals; GitHub: approved, or no review required), nothing unanswered; open threads the project lets stay open are counted in the text ("Approved by Børre — merge it · 2 open threads"), never a blocker | Ready to merge | GitLab: Merge (after a confirm Homebase asks GitLab again and merges only if the row still offers Merge at the head you confirmed); GitHub: Merge + close issue (asks the chat to run the gate, then merge) |
 | in-review | has reviewers, or approved but not mergeable yet ("Approved by Ann — not mergeable yet (GitLab: needs a passing pipeline)") | In review | Review (none once approved) |
 | needs-reviewer | no reviewer | In review | Request review |
 

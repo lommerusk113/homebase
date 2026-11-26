@@ -179,6 +179,7 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
     const notYet = row(open({ approved: true, approvedBy: ['Ann'] }));
     assert.deepEqual([notYet.next, ...shown(notYet)], ['Approved by Ann — not mergeable yet', 'review', null]);
     assert.equal(row(open({ approved: true, approvedBy: ['Ann'], mergeStatus: 'ci_must_pass' })).next, 'Approved by Ann — not mergeable yet (GitLab: needs a passing pipeline)', 'says why');
+    assert.equal(row(open({ approved: true, approvedBy: ['Ann'], mergeStatus: 'not_approved' })).next, 'Approved by Ann — not mergeable yet (GitLab: still checking)', 'approved while GitLab rechecks');
     // comments never read: Not checked, but the row keeps its MR's title and its helper
     const unread = row({ ...open({ title: 'Fix login', branch: '1-x', ready: true, approved: true }), unread: true }, [main({ agents: [helper()] })]);
     assert.deepEqual([unread.title, unread.agentId, unread.column], ['Fix login', 'a', 'doing']);

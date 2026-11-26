@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { transcript, agentFeed } from './server/transcripts.mjs';
 import { polledSessions, startingChats } from './server/sessions.mjs';
-import { refreshAll, refreshInfo, isGitLab, mergeMr } from './server/forge.mjs';
+import { refreshAll, refreshInfo, isGitLab, mergeMr, prs, swr } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
 import { reviewRequests } from './server/reviews.mjs';
 import { limits } from './server/limits.mjs';
@@ -375,6 +375,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             // Merge of an approved GitLab MR: only a row the board shows as ready with its Merge button, at the head it showed
             if (isPost('/api/merge')) {
                 const key = url.searchParams.get('key');
+                // the board's answer may be a minute old: ask the forge again (an MR row's key is its URL), so a new comment or
+                // a withdrawn approval is seen before an irreversible merge; a failed lookup leaves the row without Merge
+                prs.delete(key);
+                swr.delete(`comments:${key}`);
+                polledSessions.stale();
                 const row = (await polledSessions()).flatMap(s => s.items ?? []).find(i => i.key === key);
                 const refused = mergeRefusal(row, url.searchParams.get('sha'));
                 if (refused) {

@@ -9,9 +9,9 @@ All four must pass before a change goes in:
 
 ```sh
 node test.mjs                  # unit tests; needs tmux on the PATH (one test types into a private tmux server)
-node tests/browser/run.mjs     # headless browser tests, a minute or two; needs a local Chrome
 ./check-types.sh               # type-checks public/*.js; fetches TypeScript through npx, so it needs the network
-(cd web && npm ci && npm run build)  # the Vue islands (web/README.md); build before the browser tests so they cover them
+(cd web && npm ci && npm run build)  # the Vue islands and their type check (web/README.md); before the browser tests, so they cover them
+node tests/browser/run.mjs     # headless browser tests, several minutes; needs a local Chrome
 ```
 
 `node test.mjs` runs the files in `tests/unit/` (one per area, shared fixtures in `helpers.mjs`) in the order its list gives; add a test to its area's file, and a new file to that list.
@@ -23,9 +23,10 @@ There is no CI yet: the unit tests need `tmux` and the browser tests need Chrome
 
 ## No dependencies
 
-Homebase runs on Node 20 or newer with nothing installed: no `npm install`, no build step, no bundler.
+Homebase runs on Node 20 or newer with nothing installed: no `npm install` and no runtime packages.
+The one build is `web/` (Vue, with Vite as a dev dependency); its output is served when it exists.
 Use what Node and the browser have.
-A change that adds a package will not be merged.
+A change that adds a runtime package, or a build step outside `web/`, will not be merged.
 
 ## Commits
 

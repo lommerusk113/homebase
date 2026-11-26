@@ -133,7 +133,7 @@ export function ghPr(pr, url) {
         approved: pr.reviewDecision === 'APPROVED',
         approvedBy: reviews.filter(r => r.state === 'APPROVED').map(r => r.author?.login).filter(Boolean),
         reviewRequired: !!pr.reviewDecision, // an empty reviewDecision: the repo requires no review (hobby repos without branch protection)
-        mergeable: pr.mergeable === 'UNKNOWN' ? null : pr.mergeable === 'MERGEABLE', // UNKNOWN: GitHub still computing
+        mergeable: pr.mergeable === 'UNKNOWN' ? null : pr.mergeable !== 'CONFLICTING', // UNKNOWN: GitHub still computing
         mergeStatus: null,
         blocked: pr.mergeable === 'CONFLICTING' ? 'conflict' : null,
         changes: pr.reviewDecision === 'CHANGES_REQUESTED',

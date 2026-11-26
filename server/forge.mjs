@@ -7,7 +7,8 @@ import { ghRun, accountOf, repoPaths } from './account.mjs';
 const run = promisify(execFile);
 
 export const PR_TTL_MS = 60_000;
-const GH_RECHECK_MS = Number(process.env.HOMEBASE_GH_RECHECK_MS ?? 2000);
+const GH_RECHECK_MS = Number(process.env.HOMEBASE_GH_RECHECK_MS ?? 2000); // a forge still computing mergeability is asked again after this
+const CHECKING = ['unchecked', 'checking', 'approvals_syncing', 'preparing'];
 export const prs = new Map(); // url -> { at, value, pending }
 
 // CI pipeline as { status, url, at } or null. GitLab passes the MR's head_pipeline (or legacy pipeline) as-is;
@@ -59,15 +60,20 @@ async function fetchPr(url) {
 
     const gl = url.match(/^https:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)/);
     if (gl) {
-        const { stdout } = await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}`], { timeout: apiTimeout() });
-        const mr = JSON.parse(stdout);
+        const ask = async () => JSON.parse((await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}`], { timeout: apiTimeout() })).stdout);
+        let mr = await ask();
+        // GitLab still computing the status with no earlier answer to keep (a first lookup): ask once more instead of guessing
+        if (mr.state === 'opened' && CHECKING.includes(mr.detailed_merge_status) && !prs.get(url)?.value) {
+            await new Promise(r => setTimeout(r, GH_RECHECK_MS));
+            mr = await ask();
+        }
         const state = { opened: 'open', merged: 'merged' }[mr.state] ?? 'closed';
         const status = mr.detailed_merge_status;
         const pipeline = pipelineOf(mr.head_pipeline ?? mr.pipeline);
         // ci_must_pass without a pipeline is a missing one, not a failing one
         const ci = status === 'ci_must_pass' && !pipeline ? null : { ci_must_pass: 'failing', ci_still_running: 'running' }[status] ?? ciOf(pipeline);
         // GitLab is still computing the status: keep what it said last, so ready doesn't flap
-        const prev = ['unchecked', 'checking', 'approvals_syncing', 'preparing'].includes(status) ? prs.get(url)?.value : null;
+        const prev = CHECKING.includes(status) ? prs.get(url)?.value : null;
         // no milestone of its own: its issue's, which beats guessing from the target branch (v1 and v2 share one branch)
         const issue = issueOf(mr.title, mr.description);
         const issueMs = !mr.milestone && issue
@@ -106,6 +112,7 @@ async function fetchPr(url) {
             target: mr.target_branch,
             issue,
             sha: mr.sha ?? mr.diff_refs?.head_sha ?? null,
+            checking: state === 'open' && CHECKING.includes(status) && !prev, // still a guess: a click's hold is kept (items.mjs)
             mergeStatus: prev ? prev.mergeStatus ?? null : status ?? null // why GitLab won't merge it yet; kept like ready while GitLab is still checking
         };
     }
@@ -153,7 +160,8 @@ export function ghPr(pr, url) {
         milestone: pr.milestone ? { id: pr.milestone.number, title: pr.milestone.title, due_date: pr.milestone.dueOn?.slice(0, 10) ?? null } : null,
         target: pr.baseRefName,
         issue: issueOf(pr.title, pr.body),
-        sha: pr.headRefOid ?? null
+        sha: pr.headRefOid ?? null,
+        checking: unknown && !prev && pr.state === 'OPEN' // still a guess: a click's hold is kept (items.mjs)
     };
 }
 

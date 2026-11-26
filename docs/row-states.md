@@ -32,7 +32,7 @@ Free text (how a reply is worded) may fill a row's text, never its group, except
 | 4 | a helper on it runs (it leads the row however quiet, over newer finished or stopped ones; of several, the first started) | Doing | the helper's current step | none |
 | 5 | a chat on its branch works, or reported `doing` | Doing | the report, else the chat's current step | none |
 | 6 | an open prompt names it and nothing runs yet (*text*) | Doing | Sent to Claude… | none |
-| 7 | its button was clicked, the MR's own kind is still the one clicked (also checked while rules 4–6 show), under 30 min ago, and no helper on it stopped since (then rule 8) | Doing | Sent to Claude (time) [· Helper finished: (outcome), when one did since] · button back at (time) | none |
+| 7 | its button was clicked, the MR's own kind is still the one clicked (also checked while rules 4–6 show; a forge still checking counts as unchanged), under 30 min ago, and no helper on it stopped since (then rule 8) | Doing | Sent to Claude (time) [· Helper finished: (outcome), when one did since] · button back at (time) | none |
 | 8 | the helper that last wrote on it stopped (a later finished helper supersedes it) | Needs you | why it stopped | Continue |
 | 9 | the forge never answered, or its comments could never be read (rules 3–8 still apply; 5 by a report only while the forge never answered) | Not checked | why the lookup failed | none |
 | 10 | the MR state, first blocker wins (below) | | | |

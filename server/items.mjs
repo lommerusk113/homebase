@@ -500,7 +500,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         if (click && prState?.state !== 'merged' && prState?.state !== 'closed') {
             const isContinue = click.kind === 'stopped' || STOPPED.has(click.kind);
             // a Continue by its helper's own kind (its prompt or a chat on the branch doesn't end it, a running helper does)
-            const nowKind = isContinue ? deriveKind(ps, agent, !!it.pr).kind : ps && !ps.unread ? deriveKind(ps, null, true).kind : click.kind; // not known yet: kept
+            const nowKind = isContinue ? deriveKind(ps, agent, !!it.pr).kind : ps && !ps.unread && !ps.checking ? deriveKind(ps, null, true).kind : click.kind; // not known yet: kept
             if (nowKind !== click.kind || now - click.at >= HOLD_MS) {
                 sent.delete(it.key);
             } else if (!chat && !asker && row.column !== 'doing' && !(agent?.status === 'stopped' && agent.updated > click.at)) { // a helper that stopped since shows its Continue

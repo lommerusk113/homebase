@@ -171,6 +171,10 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
     // a helper that finished since the click says how it went in the held text
     const fin = main({ agents: [helper({ status: 'done', outcome: 'Pipeline fails on a missing CI secret.', updated: NOW - 500 })] });
     assert.match(row(conflict, [fin], sent(NOW - 1000)).next, /^Sent to Claude \(.+\) · Helper finished: Pipeline fails on a missing CI secret · button back at /);
+    // a forge still checking (a first lookup's guess) keeps the click: the guess is no new state
+    const guess = new Map([[url, { at: NOW - 1000, kind: 'conflict' }]]);
+    assert.deepEqual(shown(row(open({ reviewers: ['Ann'], checking: true }), [main()], guess)), ['doing', null]);
+    assert.equal(guess.size, 1, 'not forgotten');
     // an MR button's click without a forge answer holds too
     assert.deepEqual(shown(row(null, [main()], sent(NOW - 1000))), ['doing', null]);
 }

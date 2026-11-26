@@ -495,8 +495,9 @@ export function summarize(entries, ageMs, marker = null, live = null) {
 
     const step = turn.state === 'working' ? turnStep(turns, turn.since) : null;
     // ponytail: silent past AGENT_TOOL_MS counts as a lost notice (a restart killed it), like agentStatus does
-    const background = ageMs < AGENT_TOOL_MS && !closedSession(entries, ageMs, live) ? backgroundTasks(entries) : new Map();
     const needsYou = turn.state === 'idle' && lastItem?.role === 'assistant' && !!lastItem.needsYou && !lastItem.answer && !lastItem.error;
+    // a pending question to the user wins over background work: the chat waits on them, whatever still runs
+    const background = !needsYou && ageMs < AGENT_TOOL_MS && !closedSession(entries, ageMs, live) ? backgroundTasks(entries) : new Map();
     const question = turn.state === 'asking' ? pendingQuestion(entries, marker) : null;
 
     return {

@@ -376,11 +376,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             if (isPost('/api/merge')) {
                 const key = url.searchParams.get('key');
                 // the board's answer may be a minute old: ask the forge again (an MR row's key is its URL), so a new comment or
-                // a withdrawn approval is seen before an irreversible merge; a failed lookup leaves the row without Merge
-                prs.delete(key);
-                swr.delete(`comments:${key}`);
+                // a withdrawn approval is seen before an irreversible merge. Expired, not dropped: the last answer stays the one
+                // GitLab's "still checking" keeps, as on every poll; a lookup that fails now refuses the merge
+                const fresh = [prs.get(key), swr.get(`comments:${key}`)].filter(Boolean);
+                fresh.forEach(hit => { hit.at = 0; });
                 polledSessions.stale();
                 const row = (await polledSessions()).flatMap(s => s.items ?? []).find(i => i.key === key);
+                if (fresh.some(hit => hit.error)) {
+                    return deny(409, `Couldn't check the MR with GitLab just now: try again`);
+                }
                 const refused = mergeRefusal(row, url.searchParams.get('sha'));
                 if (refused) {
                     return deny(409, refused);

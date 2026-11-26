@@ -334,7 +334,7 @@ export function askerFor(sessions, project, url) {
 }
 
 // What a chat reported about this MR with `homebase status` ({ phase, mr, text, at }), until its next prompt; else null.
-// mr: the MR's URL, N, or its forge's own spelling (!N on GitLab, #N on GitHub: a GitLab #N is an issue, never this MR).
+// mr: the MR's URL, N or !N, and #N on GitHub (a GitLab #N is an issue, never this MR).
 export function reportOn(s, url) {
 
     const r = s.report;
@@ -342,7 +342,9 @@ export function reportOn(s, url) {
         return null;
     }
 
-    return [url, mrRef(url), mrNumber(url)].includes(r.mr) ? r : null;
+    const n = mrNumber(url);
+
+    return [url, n, `!${n}`, url.includes('/pull/') && `#${n}`].includes(r.mr) ? r : null;
 }
 
 // The work items' raw groups: one per PR/MR (deduped across sessions and agents), plus running or stopped agents with

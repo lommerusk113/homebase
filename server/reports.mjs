@@ -35,10 +35,15 @@ export async function report(dir, sessionId, { phase, mr = null, text = null } =
     if (!valid({ phase, mr, text })) {
         throw Object.assign(new Error(`expected a phase (${PHASES.join(', ')}), an optional MR (URL, !N or #N) and text`), { status: 400 });
     }
+    // an update without --mr keeps the MR the chat named before; a report that never named one would place no row
+    const named = mr?.trim() || reports.get(sessionId)?.mr || null;
+    if (phase !== 'done' && !named) {
+        throw Object.assign(new Error('name the MR: --mr <url or !N>'), { status: 400 });
+    }
     if (phase === 'done') {
         reports.delete(sessionId);
     } else {
-        reports.set(sessionId, { phase, mr: mr?.trim() || null, text: text?.trim().slice(0, MAX) || null, at: now });
+        reports.set(sessionId, { phase, mr: named, text: text?.trim().slice(0, MAX) || null, at: now });
     }
     await save(dir);
 }

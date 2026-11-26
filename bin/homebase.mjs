@@ -15,7 +15,7 @@ const USAGE = `usage: homebase helper <command>
   stop <id> [--keep-worktree]
   send <id>... | --all          (message on stdin)
   wait <id>...                  (returns when one ends a turn or closes, with its read output)
-homebase status doing|needs-you|done [--mr <url, !N or GitHub #N>] ["<what, e.g. Running tests>"]`;
+homebase status doing|needs-you|done [--mr <url or !N>] ["<what, e.g. Running tests>"]`;
 
 const fail = (msg, code = 1) => {
     process.stderr.write(`${msg}\n`);
@@ -151,6 +151,9 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
 
     // the chat's own row: which MR it works on and what it does, so the board never guesses that from its replies
     if (group === 'status') {
+        if ('mr' in flags && !flags.mr) {
+            fail(USAGE, 2); // --mr with no value: an unquoted #12 the shell read as a comment
+        }
         await api(`/api/status?${q({ parent: needParent() })}`, { method: 'POST', body: JSON.stringify({ phase: cmd, mr: flags.mr ?? null, text: words.join(' ') || null }), env });
         console.log(`status: ${cmd}${flags.mr ? ` on ${flags.mr}` : ''}${words.length ? `: ${words.join(' ')}` : ''}`);
         return;

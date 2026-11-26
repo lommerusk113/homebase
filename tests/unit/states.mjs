@@ -205,6 +205,8 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
     const pr = 'https://github.com/o/p/pull/1';
     const x = workItems([{ ...main(), prs: [{ url: pr, at: 1 }] }, chat({ status: 'working', report: { phase: 'doing', mr: '#1', text: 'Rebasing', at: 5 } })], () => open({ blocked: 'conflict' }), NOW).find(r => r.pr === pr);
     assert.deepEqual([x.column, x.next], ['doing', 'Rebasing']);
+    const bang = workItems([{ ...main(), prs: [{ url: pr, at: 1 }] }, chat({ status: 'working', report: { phase: 'doing', mr: '!1', text: 'Rebasing', at: 5 } })], () => open({ blocked: 'conflict' }), NOW).find(r => r.pr === pr);
+    assert.equal(bang.column, 'doing', '!N, as the rules teach, works on GitHub too');
 }
 console.log('ok precedence');
 
@@ -308,6 +310,12 @@ console.log('ok merge only at the confirmed head');
     }
     await report(dir2, 'last', { phase: 'doing', mr: '!1' }, 6);
     assert.equal(Object.keys(JSON.parse(readFileSync(join(dir2, 'reports.json'), 'utf8'))).length, 16);
+    reports.clear();
+    // an update without --mr keeps the MR named before; a first report without one is refused
+    await report(dir2, 'u', { phase: 'doing', mr: '!7', text: 'Rebasing' }, 5);
+    await report(dir2, 'u', { phase: 'doing', text: 'Running tests' }, 6);
+    assert.deepEqual(reports.get('u'), { phase: 'doing', mr: '!7', text: 'Running tests', at: 6 });
+    await assert.rejects(report(dir2, 'v', { phase: 'needs-you', text: 'Which?' }), e => e.status === 400);
     reports.clear();
     // GitHub still computing mergeability keeps the conflict it saw, never flips to ready
     const pr = 'https://github.com/o/p/pull/9', base = { state: 'OPEN', title: 't', headRefName: 'b', baseRefName: 'main', isDraft: false, reviewDecision: '' };

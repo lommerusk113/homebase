@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* `homebase status --mr !N` places GitHub rows too; an update without `--mr` keeps the MR the chat named before, a first report without one is refused, and `--mr` with no value (an unquoted `#12`) fails instead of reporting nothing.
 * Clicking "Load new rules" in a chat no longer ends its `homebase status` report as if you had answered it.
 * Saving several report or click changes at once no longer corrupts reports.json or sent.json; answering a chat's question ends only its needs-you report, not the doing report of a chat that keeps working; merged or closed GitHub PRs skip the extra mergeability lookup.
 * A `homebase status` report from a chat that was cleared or closed no longer holds its MR row; an answered report stays over even once the answer scrolls out of the transcript; a GitHub PR's first lookup asks again instead of guessing while GitHub computes mergeability.

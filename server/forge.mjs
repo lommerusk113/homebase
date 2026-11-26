@@ -504,7 +504,7 @@ export async function fetchComments(url) {
         return humanComments([], null); // neither GitLab nor GitHub
     }
     const repo = repoOfUrl(url);
-    const me = (await signedIn(repo))?.username;
+    const me = (await whoAmI(repo)).username; // a failed lookup fails the comments: whose turn a thread is needs it
     const author = u => ({ ...person(u), bot: u.bot, type: u.type });
 
     if (gl) {
@@ -529,8 +529,7 @@ export async function fetchComments(url) {
         resolved: t.isResolved, notes: t.comments.nodes.map(c => ({ body: c.body, author: { name: c.author?.login, username: c.author?.login, type: c.author?.__typename } }))
     });
     const threads = await apiOnce(`gh graphql threads ${url}`, () => apiSlot(() => ghRun(repo, args, { timeout: apiTimeout() })))
-        .then(({ stdout }) => JSON.parse(stdout).data.repository.pullRequest.reviewThreads.nodes.map(toThread))
-        .catch(() => null);
+        .then(({ stdout }) => JSON.parse(stdout).data.repository.pullRequest.reviewThreads.nodes.map(toThread)); // a failure fails the comments: the last answer stays
 
     return humanComments([...issue.map(c => ({ ...of(c, c.created_at), general: true })), ...inline.map(c => of(c, c.created_at)), ...reviews.filter(r => r.submitted_at).map(r => of(r, r.submitted_at))], me, 10, threads);
 }

@@ -711,7 +711,10 @@ async function itemsOf(out) {
         return prError(url) ?? (commentsError && `comments: ${commentsError}`);
     };
     const clicks = sentRows.size;
-    const items = workItems(out, u => withThreads(states.get(u) ?? null, comments.get(u)), Date.now(), gateHeads, seeded, undefined, errorOf);
+    // comments never read (the first lookup failed): the row can't be placed, so it is Not checked and says why, rather than
+    // placed as if nobody had commented (Ready with Merge over unanswered threads)
+    const unread = u => states.get(u)?.state === 'open' && !comments.get(u) && !!swr.get(`comments:${u}`)?.error;
+    const items = workItems(out, u => (unread(u) ? null : withThreads(states.get(u) ?? null, comments.get(u))), Date.now(), gateHeads, seeded, undefined, errorOf);
     if (sentRows.size !== clicks) {
         saveSent().catch(() => {}); // a click whose row moved on is over, also after a restart
     }

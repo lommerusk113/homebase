@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A GitLab MR is Ready to merge, with its Merge button, only once someone approved it ("Approved by Ann — merge it"); a mergeable MR nobody approved stays In review.
 * Rows keep their place inside a group (newest work first, by when they first appeared) instead of reshuffling whenever a helper writes something, and two chats on one MR no longer swap the row's text from poll to poll.
 * An MR row sits in Doing, with what runs ("Running tests") and no Rebase or other MR button, while a chat or helper works on it, also when only its background tests run: found by the branch its folder has checked out (no longer the folder it started in), or by what it reported.
 * Chats report their MR work with `homebase status doing|needs-you|done --mr !N "<what>"`, and the board places rows from that instead of from how a reply is worded; the rules file tells chats to use it.

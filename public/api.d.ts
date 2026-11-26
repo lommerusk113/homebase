@@ -107,6 +107,9 @@ interface PrState {
     branch: string;
     reviewers: string[];
     ready: boolean;
+    approved?: boolean;
+    /** GitLab: who approved it, asked only once it is mergeable */
+    approvedBy?: string[];
     blocked?: 'conflict' | 'rebase' | 'blocked' | 'checks' | null;
     changes: boolean;
     changesBy: string[];

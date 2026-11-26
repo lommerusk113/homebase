@@ -80,7 +80,7 @@ function mrNext(prState, mr) {
     }
     if (prState.ready) {
         const n = prState.replied;
-        return `Approved — merge it${n ? ` · ${n} replied thread${n === 1 ? '' : 's'} still open` : ''}`;
+        return `Approved${prState.approvedBy?.length ? ` by ${prState.approvedBy.join(', ')}` : ''} — merge it${n ? ` · ${n} replied thread${n === 1 ? '' : 's'} still open` : ''}`;
     }
 
     return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';

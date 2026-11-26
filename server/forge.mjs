@@ -73,6 +73,12 @@ async function fetchPr(url) {
             ? await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/issues/${issue}`], { timeout: apiTimeout() }).then(r => JSON.parse(r.stdout).milestone, () => null)
             : null;
         const ms = mr.milestone ?? issueMs;
+        // mergeable is not approved: a project without required approvals lets an unreviewed MR merge. Asked only then.
+        const approvedBy = status === 'mergeable'
+            ? await run('glab', ['api', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}/approvals`], { timeout: apiTimeout() })
+                .then(r => (JSON.parse(r.stdout).approved_by ?? []).map(a => a.user?.name).filter(Boolean), () => null)
+            : null;
+        const approved = approvedBy ? approvedBy.length > 0 : !!prev?.approved;
 
         return {
             state,
@@ -80,10 +86,12 @@ async function fetchPr(url) {
             branch: mr.source_branch,
             updatedAt: Date.parse(mr.updated_at) || 0,
             reviewers: (mr.reviewers ?? []).map(r => r.name),
-            // ready means merge now, so a failing or running pipeline (GitLab allows it when CI isn't required) is not ready
-            ready: (status === 'mergeable' || !!prev?.ready) && !ci,
+            // ready means merge now, by someone's approval: a failing or running pipeline (GitLab allows it when CI isn't
+            // required) is not ready, nor is an MR nobody approved
+            ready: (status === 'mergeable' || !!prev?.ready) && !ci && approved,
             // approved although its pipeline may still run or fail: the stage says Approved, the column waits for CI
-            approved: status === 'mergeable' || !!prev?.approved,
+            approved,
+            approvedBy: approvedBy ?? [],
             blocked: BLOCKED[status] ?? prev?.blocked ?? null,
             // ponytail: the MR payload doesn't say which reviewer blocked; the /reviewers endpoint would
             changes: status === 'requested_changes' || status === 'discussions_not_resolved' || mr.blocking_discussions_resolved === false,

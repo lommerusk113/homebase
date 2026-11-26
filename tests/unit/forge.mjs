@@ -36,6 +36,10 @@ import { mr, fakeBin, withFakeGlab, glabMr, nextOf, colOf, actOf } from './helpe
     const url = 'https://gitlab.example.com/g/p/-/merge_requests/114';
     prs.delete(url);
     assert.equal((await glabMr({}, 114)).ready, true);
+    // mergeable but nobody approved (no approvals required): not ready, so no Merge button
+    const unapproved = await glabMr({ approved_by: [], head_pipeline: { status: 'success' } }, 115);
+    assert.deepEqual([unapproved.ready, unapproved.approved], [false, false]);
+    assert.deepEqual((await glabMr({ head_pipeline: { status: 'success' } }, 116)).approvedBy, ['Ann']);
     prs.get(url).at = 0;
     const checking = await glabMr({ detailed_merge_status: 'checking' }, 114);
     await prs.get(url).pending;

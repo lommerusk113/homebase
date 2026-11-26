@@ -16,10 +16,10 @@ const mr = (iid, o) => ({ iid, state: 'opened', title: `MR ${iid}`, source_branc
 const MRS = {
     100: mr(100, { state: 'merged', title: '#8 - Cleanup', source_branch: '8-cleanup', detailed_merge_status: 'not_open', sha: 'aaa0000' }),
     101: mr(101, { title: '#5 - Fix login redirect', source_branch: '5-fix-login', detailed_merge_status: 'not_approved', head_pipeline: { status: 'failed', web_url: `${GL}/-/pipelines/1`, finished_at: ago(900) }, sha: 'aaa1111' }),
-    102: mr(102, { title: 'Ship the audit log', source_branch: 'audit-log', detailed_merge_status: 'mergeable', head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/2`, finished_at: ago(600) }, sha: 'bbb2222abcdef' }),
+    102: mr(102, { title: 'Ship the audit log', source_branch: 'audit-log', detailed_merge_status: 'mergeable', approved_by: [{ user: ann }], head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/2`, finished_at: ago(600) }, sha: 'bbb2222abcdef' }),
     103: mr(103, { title: 'Add CSV export', source_branch: 'csv-export', detailed_merge_status: 'not_approved', reviewers: [ann], head_pipeline: { status: 'running', web_url: `${GL}/-/pipelines/3`, updated_at: ago(60) }, sha: 'ccc3333' }),
     104: mr(104, { title: 'Tune the cache TTL', source_branch: 'cache-ttl', detailed_merge_status: 'not_approved', reviewers: [ann], head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/4`, finished_at: ago(800) }, sha: 'eee5555' }),
-    105: mr(105, { title: 'Credit note is not a payment', source_branch: '9-credit-note', detailed_merge_status: 'mergeable', head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/5`, finished_at: ago(700) }, sha: 'fff6666' }),
+    105: mr(105, { title: 'Credit note is not a payment', source_branch: '9-credit-note', detailed_merge_status: 'mergeable', approved_by: [{ user: ann }], head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/5`, finished_at: ago(700) }, sha: 'fff6666' }),
     106: mr(106, { title: 'Forge-only: never in a transcript', source_branch: 'forge-only', detailed_merge_status: 'not_approved', reviewers: [ann], head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/6`, finished_at: ago(500) }, sha: 'ggg7777' }),
     107: mr(107, { title: 'Stored-only: scrolled out of every tail', source_branch: 'stored-only', detailed_merge_status: 'not_approved', head_pipeline: { status: 'success', web_url: `${GL}/-/pipelines/7`, finished_at: ago(400) }, sha: 'hhh8888' })
 };
@@ -92,6 +92,10 @@ function glab(path) {
     m = p.match(/^projects\/acme%2Falpha\/merge_requests\/(\d+)\/discussions$/);
     if (m) {
         return out(DISCUSSIONS[m[1]] ?? []);
+    }
+    m = p.match(/^projects\/acme%2Falpha\/merge_requests\/(\d+)\/approvals$/);
+    if (m && MRS[m[1]]) {
+        return out({ approved_by: MRS[m[1]].approved_by ?? [] });
     }
     m = p.match(/^projects\/acme%2Falpha\/merge_requests\/(\d+)$/);
     if (m && MRS[m[1]]) {

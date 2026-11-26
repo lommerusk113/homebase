@@ -38,7 +38,7 @@ export const withFakeGlab = async (body, fn) => {
 };
 
 // a GitLab MR as glab answers it; fields not given are the plain open, unblocked defaults
-export const glabMr = (fields, n) => withFakeGlab(`echo '${JSON.stringify({ state: 'opened', title: 't', source_branch: 'b', detailed_merge_status: 'mergeable', ...fields })}'`,
+export const glabMr = (fields, n) => withFakeGlab(`echo '${JSON.stringify({ state: 'opened', title: 't', source_branch: 'b', detailed_merge_status: 'mergeable', approved_by: [{ user: { name: 'Ann' } }], ...fields })}'`,
     () => prState(`https://gitlab.example.com/g/p/-/merge_requests/${n}`));
 
 // A row's next text, group and button for an MR state and helper, as the board shows them.

@@ -405,3 +405,4 @@ console.log('ok same repo');
     assert.equal(row(chat('!1856?', { asking: false, status: 'working' })).askedBy, null);
     console.log('ok asked rows');
 }
+assert.equal(nextOf(open({ ready: true, approvedBy: ['Ann'] }), null), 'Approved by Ann — merge it', 'says who approved it');

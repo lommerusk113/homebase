@@ -96,6 +96,11 @@ assert.deepEqual(shown(row(conflict, [main(), asks], sent(NOW - 1000))), ['needs
     assert.deepEqual(shown(row(conflict, [main({ agents: [helper()] })], clicks)), ['doing', null]);
     const after = row(conflict, [main()], clicks);
     assert.deepEqual([...shown(after), /^Sent to Claude \(/.test(after.next)], ['doing', null, true], '7 still held once the turn ended');
+    // a Continue on an MR row outlives its own prompt, and ends once the helper runs again
+    const stoppedMr = helper({ status: 'stopped', stopReason: 'api-error', updated: NOW - 5000 });
+    const contHeld = new Map([[url, { at: NOW - 1000, kind: 'api-error' }]]);
+    row(open({ reviewers: ['Ann'] }), [main({ agents: [stoppedMr], openPrompts: [{ at: new Date(NOW).toISOString(), text: "The subagent 'Fix !1' stopped — continue it" }] })], contHeld);
+    assert.deepEqual(shown(row(open({ reviewers: ['Ann'] }), [main({ agents: [stoppedMr] })], contHeld)), ['doing', null], 'still held after its prompt');
     // a Continue ends once the helper runs again
     const cont = new Map([[url, { at: NOW - 1000, kind: 'api-error' }]]);
     row(open({ reviewers: ['Ann'] }), [main({ agents: [helper()] })], cont);

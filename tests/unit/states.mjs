@@ -154,6 +154,14 @@ assert.match(row(conflict, [main(), asks]).next, /^Asks: !1: keep both migration
     assert.equal(row(open({ reviewers: ['Ann'] }), [main({ agents: [helper({ status: 'stopped' })] })]).next, 'Helper stopped — Continue resumes it');
     assert.equal(row(open({ ready: true, approved: true, replied: 2, repliedTo: ['Ann'] })).next, 'Approved — waiting for Ann to resolve 2 threads');
     assert.equal(row(open({ ready: true, approved: false })).next, 'Ready — merge it', 'GitHub without a required review: not Approved');
+    assert.equal(row(open({ ready: true, approved: false, unanswered: 1, unansweredBy: ['Bo'] })).next, "Reply to Bo's comment", 'unreviewed GitHub PR: no Approved');
+    assert.match(row(open({ approved: true, ci: 'running', unanswered: 1, unansweredBy: ['Bo'] })).next, /^Approved — 1 unanswered comment from Bo/);
+    const notYet = row(open({ approved: true, approvedBy: ['Ann'] }));
+    assert.deepEqual([notYet.next, ...shown(notYet)], ['Approved by Ann — not mergeable yet', 'review', null]);
+    // comments never read: Not checked, but the row keeps its MR's title and its helper
+    const unread = row({ ...open({ title: 'Fix login', branch: '1-x', ready: true, approved: true }), unread: true }, [main({ agents: [helper()] })]);
+    assert.deepEqual([unread.title, unread.agentId, unread.column], ['Fix login', 'a', 'doing']);
+    assert.equal(row({ ...open({ title: 'Fix login', ready: true, approved: true }), unread: true }).column, 'unknown');
 }
 console.log('ok precedence');
 

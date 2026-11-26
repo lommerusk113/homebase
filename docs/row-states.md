@@ -20,7 +20,7 @@ Free text (how a reply is worded) may fill a row's text, never its group, except
 | Button clicked | the server's record of the send | yes (`sent.json`), for 30 minutes |
 | Dismissed | `dismissed.json` | yes |
 | A died chat opened | `handled.json` (its last entry) | yes, on every device |
-| Approved by | GitLab's approvals, asked for every open MR GitLab doesn't already call unapproved | as the MR state |
+| Approved by | GitLab's approvals, asked for every open, non-draft MR GitLab doesn't already call unapproved | as the MR state |
 
 ## Precedence for an MR row
 
@@ -34,7 +34,7 @@ Free text (how a reply is worded) may fill a row's text, never its group, except
 | 6 | an open prompt names it and nothing runs yet (*text*) | Doing | Sent to Claude… | none |
 | 7 | its button was clicked, the MR's own kind is still the one clicked (also checked while rules 4–6 show), under 30 min ago, and no helper on it stopped since (then rule 8) | Doing | Sent to Claude (time) · button back at (time) | none |
 | 8 | a helper on it stopped | Needs you | why it stopped | Continue |
-| 9 | the forge never answered, or its comments could never be read (rules 3–8 still apply; 5 by a report only) | Not checked | why the lookup failed | none |
+| 9 | the forge never answered, or its comments could never be read (rules 3–8 still apply; 5 by a report only while the forge never answered) | Not checked | why the lookup failed | none |
 | 10 | the MR state, first blocker wins (below) | | | |
 
 MR state, first match wins:
@@ -50,7 +50,7 @@ MR state, first match wins:
 | replied | replied to threads, waiting on the reviewer | In review | Review |
 | pipeline | pipeline running | In review | Review |
 | ready | mergeable and approved by someone (GitLab asks its approvals; GitHub: approved, or no review required), nothing unanswered | Ready to merge | GitLab: Merge (Homebase merges after a confirm); GitHub: Merge + close issue (asks the chat to run the gate, then merge) |
-| in-review | has reviewers | In review | Review |
+| in-review | has reviewers, or approved but not mergeable yet ("Approved by Ann — not mergeable yet") | In review | Review (none once approved) |
 | needs-reviewer | no reviewer | In review | Request review |
 
 Review starts a read-only reviewer chat; it shows on every In review row that is not approved and has no button of its own.

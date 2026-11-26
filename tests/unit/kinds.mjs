@@ -69,6 +69,7 @@ assert.match(green.action.message, /^Run review-gate on !1 /);
 assert.equal(rowOf({ ...draft, replied: 1 }, null, opts).state.kind, 'draft', 'replied threads do not hide the draft');
 assert.equal(rowOf({ ...draft, ci: 'running' }, null, opts).column, 'review', 'a running pipeline is waited for');
 assert.equal(rowOf({ ...draft, ci: 'failing' }, null, opts).next, 'Pipeline failing');
-assert.equal(rowOf({ ...draft, unresolved: 2 }, null, opts).next, 'Address 2 unresolved comments');
+assert.equal(rowOf({ ...draft, unresolved: 2 }, null, opts).next, 'Approved — 2 unanswered comments', 'approved: its text says so');
+assert.equal(rowOf({ ...draft, approved: false, unresolved: 2 }, null, opts).next, 'Address 2 unresolved comments');
 assert.equal(rowOf({ ...draft, blocked: 'checks' }, null, opts).next, 'Waiting for external status checks');
 console.log('ok green draft says Ready except draft with Mark ready');

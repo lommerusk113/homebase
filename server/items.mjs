@@ -85,6 +85,10 @@ function mrNext(prState, mr) {
         return `${ok} — merge it${n ? ` · ${n} replied thread${n === 1 ? '' : 's'} still open` : ''}`;
     }
 
+    if (prState.approved) { // approved, but the forge doesn't call it mergeable yet (no pipeline yet, still checking)
+        return `Approved${prState.approvedBy?.length ? ` by ${prState.approvedBy.join(', ')}` : ''} — not mergeable yet`;
+    }
+
     return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
 }
 
@@ -111,7 +115,7 @@ function reviewComments(prState) {
         const from = by.length ? ` from ${by.join(', ')}` : '';
         const comments = n => `comment${n === 1 ? '' : 's'}`;
 
-        if (prState.ready) {
+        if (prState.approved ?? prState.ready) { // approved, not just mergeable: a GitHub PR that needs no review isn't
             return `Approved — ${u + g} unanswered ${comments(u + g)}${from}`;
         }
         if (!g) {
@@ -158,8 +162,8 @@ export function deriveKind(ps, agent, hasPr, requested = false, chat = null) {
     if (!hasPr && agent?.status === 'done') {
         return { kind: 'finished', reason: 'the helper finished without an MR' };
     }
-    if (!ps) {
-        return hasPr ? { kind: 'unknown', reason: 'no answer from the forge' } : { kind: 'idle', reason: 'nothing to do' };
+    if (!ps || ps.unread) { // unread: its comments were never read, so where it belongs is not known
+        return hasPr ? { kind: 'unknown', reason: ps ? 'its comments could not be read' : 'no answer from the forge' } : { kind: 'idle', reason: 'nothing to do' };
     }
 
     // review comments ask for a fix with or without the forge's changes flag, also on an approved MR (withThreads says so too)
@@ -172,7 +176,7 @@ export function deriveKind(ps, agent, hasPr, requested = false, chat = null) {
         : ps.replied && !ps.ready ? 'replied'
         : ps.ci === 'running' ? 'pipeline'
         : ps.ready ? 'ready'
-        : ps.reviewers?.length ? 'in-review' : 'needs-reviewer';
+        : ps.reviewers?.length || ps.approved ? 'in-review' : 'needs-reviewer';
 
     return { kind, reason: 'the MR state' };
 }
@@ -498,7 +502,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const click = sent.get(it.key);
         if (click && prState?.state !== 'merged' && prState?.state !== 'closed') {
             const isContinue = click.kind === 'stopped' || STOPPED.has(click.kind);
-            const nowKind = isContinue ? row.state.kind : ps ? deriveKind(ps, null, true).kind : click.kind; // no forge answer: unknown, kept
+            const nowKind = isContinue ? row.state.kind : ps && !ps.unread ? deriveKind(ps, null, true).kind : click.kind; // not known yet: kept
             if (nowKind !== click.kind || now - click.at >= HOLD_MS) {
                 sent.delete(it.key);
             } else if (!chat && !asker && row.column !== 'doing' && !(agent?.status === 'stopped' && agent.updated > click.at)) { // a helper that stopped since shows its Continue

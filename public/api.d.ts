@@ -110,8 +110,10 @@ interface PrState {
     reviewers: string[];
     ready: boolean;
     approved?: boolean;
-    /** GitLab: who approved it, asked only once it is mergeable */
+    /** GitLab: who approved it, asked for every open non-draft MR GitLab doesn't already call unapproved */
     approvedBy?: string[];
+    /** its comments could never be read, so the row is Not checked */
+    unread?: boolean;
     blocked?: 'conflict' | 'rebase' | 'blocked' | 'checks' | null;
     changes: boolean;
     changesBy: string[];

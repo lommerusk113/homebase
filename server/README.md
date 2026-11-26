@@ -48,7 +48,7 @@ Imports only go one way, with no cycles:
 `feed` → entries, summaries, asks.
 `turns` → entries, tmux, startup.
 `transcripts` → entries, feed, turns (and re-exports all six).
-`items` → entries, usage, forge, once.
+`items` → entries, usage, forge, once, reports.
 `sessions` → checks, reports, entries, summaries, feed, turns, usage, forge, items, tmux.
 `milestones` → forge, items, sessions.
 `reviews` → forge, account.

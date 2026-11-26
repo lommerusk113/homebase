@@ -415,9 +415,10 @@ async function agents(sessionDir, now) {
     return out.sort((a, b) => rank[a.status] - rank[b.status] || b.updated - a.updated);
 }
 
-export function status(lastTurn, ageMs, turn = { state: ageMs < WORKING_MS ? 'working' : 'idle' }) {
+// background: its own background commands or subagents still run (backgroundTasks), so an idle prompt is still work.
+export function status(lastTurn, ageMs, turn = { state: ageMs < WORKING_MS ? 'working' : 'idle' }, background = false) {
 
-    if (turn.state === 'working') {
+    if (turn.state === 'working' || (background && turn.state !== 'asking')) {
         return 'working';
     }
     if (turn.state === 'asking' || (lastTurn?.type === 'assistant' && ageMs < WAITING_MS)) {
@@ -488,7 +489,8 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         pr: last('pr-link')?.prUrl ?? null,
         prs: prLinks(entries),
         model: entries.findLast(e => e.type === 'assistant')?.message?.model ?? null,
-        status: status(lastTurn, ageMs, turn),
+        // ponytail: silent past AGENT_TOOL_MS counts as a lost notice (a restart killed it), like agentStatus does
+        status: status(lastTurn, ageMs, turn, ageMs < AGENT_TOOL_MS && !closedSession(entries, ageMs, live) && backgroundTasks(entries).size > 0),
         known: hasTurnMarkers(entries), // false: no turn markers in a recent transcript, so the status is only a guess
         asking: turn.state === 'asking',
         died: !!turn.died, // its turn never ended and nothing works on it: the board keeps a row until the user has looked

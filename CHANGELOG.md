@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A chat or helper idle at its prompt while its own background commands, Monitors or subagents still run (browser tests, `npm run ship`) shows as working, not waiting, until their completion notice arrives (or they are silent for 30 minutes); `homebase helper wait` keeps waiting meanwhile.
 * While a Review requested row's review chat, or a helper it started, is working, its Review button turns into a pulsing "Reviewing…" that opens that chat; Review comes back when they are idle.
 * A "Review requested" row has a Review button that starts a new chat in that MR's project, reading the MR with `glab` and reviewing it read-only (no push, comment or approval), and opens it.
 * A message sent while Claude's input box still holds text (a prompt Claude put back after an Esc before it answered) is no longer glued onto that text and sent as one; Homebase erases what it typed and says what is in the box, to send or clear in the terminal.

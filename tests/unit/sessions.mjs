@@ -61,6 +61,18 @@ import { liveSessions, closedSession, transcript } from '../../server/transcript
     assert.equal(summarize(turn.map(({ turnPosition, ...e }) => e), 60_000).known, false);
     assert.equal(summarize(turn.slice(0, 1).map(({ turnPosition, ...e }) => e), 60_000).known, true);
     console.log('ok busy not stuck, known flag');
+
+    // a chat idle at its prompt while its own background command runs is working until the task notice arrives
+    const launched = [...turn,
+        { type: 'user', sessionId: 's', entrypoint: 'cli', timestamp: at('55:31'), message: { content: [{ type: 'tool_result', tool_use_id: 't', content: 'Command running in background with ID: bx1. Output is being written to: /tmp/bx1.output' }] } },
+        { type: 'assistant', sessionId: 's', entrypoint: 'cli', timestamp: at('55:32'), message: { content: [{ type: 'text', text: 'Waiting for the tests.' }] } },
+        { type: 'system', subtype: 'turn_duration', sessionId: 's', timestamp: at('55:33') }];
+    const notice = { type: 'attachment', sessionId: 's', timestamp: at('59:00'), attachment: { type: 'queued_command', prompt: '<task-notification>\n<task-id>bx1</task-id>\n<status>completed</status>\n</task-notification>' } };
+    assert.equal(summarize(launched, 5 * 60_000, null, new Set(['s'])).status, 'working');
+    assert.equal(summarize([...launched, notice, launched[3], launched[4]], 5 * 60_000, null, new Set(['s'])).status, 'waiting', 'its notice ends it');
+    assert.equal(summarize(launched, 5 * 60_000, null, new Set()).status, 'waiting', 'a closed chat runs nothing');
+    assert.equal(summarize(launched, 31 * 60_000, null, new Set(['s'])).status, 'idle', 'silent past the limit: a lost notice');
+    console.log('ok background command keeps a chat working');
 }
 
 {

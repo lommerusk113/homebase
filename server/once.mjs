@@ -24,8 +24,11 @@ export const release = (map, key) => map.delete(key);
 // A click holds its row in Doing this long at most (items.mjs); kept in sent.json in the Homebase dir so a restart keeps it.
 export const HOLD_MS = 30 * 60_000;
 
+let savedIn = null; // the Homebase dir loadSent read, where saveSent writes by default
+
 export function loadSent(dir, map = sentRows, now = Date.now()) {
 
+    savedIn = dir;
     try {
         for (const [key, v] of Object.entries(JSON.parse(readFileSync(join(dir, 'sent.json'), 'utf8')))) {
             if (Number.isFinite(v?.at) && now - v.at < HOLD_MS) {
@@ -35,8 +38,11 @@ export function loadSent(dir, map = sentRows, now = Date.now()) {
     } catch {} // missing or broken: no holds, rows show their buttons
 }
 
-export async function saveSent(dir, map = sentRows, now = Date.now()) {
+export async function saveSent(dir = savedIn, map = sentRows, now = Date.now()) {
 
+    if (!dir) {
+        return;
+    }
     const keep = Object.fromEntries([...map].filter(([, v]) => now - v.at < HOLD_MS));
     const file = join(dir, 'sent.json'), tmp = `${file}.tmp`;
     await mkdir(dir, { recursive: true });

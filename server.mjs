@@ -355,17 +355,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     }
                     const repo = repoPaths.get(row.project);
                     const once = url.searchParams.get('once');
-                    if (once && !claim(sentRows, once, row.state?.kind)) {
+                    // its own key: a reviewer start is no click that holds the row in Doing (items.mjs reads sentRows by row key)
+                    if (once && !claim(sentRows, `review:${once}`, row.state?.kind)) {
                         res.setHeader('x-homebase-once', '1');
                         return deny(409, 'Already sent');
                     }
-                    saveSent(DATA_DIR).catch(() => {});
                     try {
                         await startReviewer(DATA_DIR, { key, cwd, gitlab: !!repo && isGitLab(repo), sha: row.prState?.sha });
                     } catch (e) {
                         if (once) {
-                            release(sentRows, once);
-                            saveSent(DATA_DIR).catch(() => {});
+                            release(sentRows, `review:${once}`);
                         }
                         throw e;
                     }

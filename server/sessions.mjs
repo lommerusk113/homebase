@@ -15,6 +15,7 @@ import { loadStore, record, seeds, flush, gateHeadsOf, STORE_FILE } from './stor
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { isManual } from './manual.mjs';
 import { reports } from './reports.mjs';
+import { sentRows, saveSent } from './once.mjs';
 import { canned } from '../web/src/lib/canned.ts';
 import { repoPaths, accountOf } from './account.mjs';
 import { pushBlocked } from './gitpush.mjs';
@@ -700,7 +701,11 @@ async function itemsOf(out) {
         const commentsError = problemText(swr.get(`comments:${url}`)?.error, forgeWords(project, url).cli);
         return prError(url) ?? (commentsError && `comments: ${commentsError}`);
     };
+    const clicks = sentRows.size;
     const items = workItems(out, u => withThreads(states.get(u) ?? null, comments.get(u)), Date.now(), gateHeads, seeded, undefined, errorOf);
+    if (sentRows.size !== clicks) {
+        saveSent().catch(() => {}); // a click whose row moved on is over, also after a restart
+    }
     for (const it of items) {
         // only an already fetched milestone list; /api/milestones fills it for the projects on the board
         it.milestone = milestoneOf(it.prState, swr.get(`ms:${it.project}`)?.value ?? []);

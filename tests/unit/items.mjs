@@ -46,6 +46,7 @@ assert.equal(nextOf(open({ changes: true, reviewers: ['Ann'], changesBy: ['bob']
 assert.equal(nextOf(open({ reviewers: ['Ann', 'Bo'] }), { status: 'done' }), 'Waiting for review by Ann, Bo');
 assert.equal(nextOf(open(), null), 'Needs a reviewer');
 assert.equal(nextOf(open({ ready: true }), null), 'Approved — merge it');
+assert.equal(nextOf(open({ ready: true, approvedBy: ['Ann'] }), null), 'Approved by Ann — merge it', 'says who approved it');
 assert.equal(nextOf(open({ ci: 'failing' }), null), 'Pipeline failing');
 assert.equal(nextOf(open({ ci: 'running' }), null), 'Pipeline running');
 assert.equal(nextOf(open({ draft: true }), null), 'Ready except draft: mark ready');
@@ -129,7 +130,9 @@ assert.deepEqual(forged.map(i => [i.key, i.sessionId, i.column]), [[mr(1), 'old'
     assert.deepEqual([clicked.column, clicked.action, /^Sent to Claude/.test(clicked.next)], ['doing', null, true]);
     const moved = workItems([main], () => open({ branch: '2284-x', reviewers: ['Ann'] }), 10, new Map(), [], new Map(), () => null, sent)[0];
     assert.equal(moved.column, 'review', 'the conflict is gone: the click no longer holds it');
-    const late = workItems([main], conflict, 7 + HOLD_MS, new Map(), [], new Map(), () => null, sent)[0];
+    assert.equal(sent.has(mr(58)), false, 'and is over: a later conflict shows its button again');
+    sent.set(mr(58), { at: 7, kind: 'conflict' });
+    const late = workItems([main], conflict, 7 + HOLD_MS, new Map(), [], new Map(), () => null, new Map(sent))[0];
     assert.deepEqual([late.column, late.action?.label], ['needs-you', 'Rebase'], 'after HOLD_MS the button is back');
 
     // a restart keeps the hold: saved, then loaded into a fresh map
@@ -405,4 +408,3 @@ console.log('ok same repo');
     assert.equal(row(chat('!1856?', { asking: false, status: 'working' })).askedBy, null);
     console.log('ok asked rows');
 }
-assert.equal(nextOf(open({ ready: true, approvedBy: ['Ann'] }), null), 'Approved by Ann — merge it', 'says who approved it');

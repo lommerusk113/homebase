@@ -49,6 +49,7 @@ const rules = [
     ['5 a chat working on its branch', conflict, [main(), chat({ status: 'working', head: '1-x' })], 'doing', null],
     ['5 a chat on another branch is not it', conflict, [main(), chat({ status: 'working', head: 'main' })], 'needs-you', 'Rebase'],
     ['5 a reported doing', conflict, [main(), chat({ status: 'working', report: { phase: 'doing', mr: '!1', text: 'Rebasing', at: 5 } })], 'doing', null],
+    ['5 a working chat beats its own open prompt', conflict, [main(), chat({ status: 'working', head: '1-x', openPrompts: [{ at: new Date(NOW).toISOString(), text: 'rebase !1' }] })], 'doing', null],
     ['6 an open prompt names it', conflict, [main({ openPrompts: [{ at: new Date(NOW).toISOString(), text: 'rebase !1' }] })], 'doing', null],
     ['8 a stopped helper', open({ reviewers: ['Ann'] }), [main({ agents: [helper({ status: 'stopped', stopReason: 'api-error' })] })], 'needs-you', 'Continue'],
     ['9 no forge answer', null, [main()], 'unknown', null]
@@ -61,6 +62,14 @@ const sent = at => new Map([[url, { at, kind: 'conflict' }]]);
 assert.deepEqual(shown(row(conflict, [main()], sent(NOW - 1000))), ['doing', null], '7 a fresh click holds it in Doing');
 assert.deepEqual(shown(row(conflict, [main()], sent(NOW - HOLD_MS))), ['needs-you', 'Rebase'], '7 an old click no longer holds it');
 assert.deepEqual(shown(row(open({ reviewers: ['Ann'] }), [main()], sent(NOW - 1000))), ['review', 'Review'], '7 a changed MR ends the hold');
+assert.equal(row(conflict, [main(), chat({ status: 'working', head: '1-x', step: 'running tests', openPrompts: [{ at: new Date(NOW).toISOString(), text: 'rebase !1' }] })]).next, 'Running tests', '5 says what the chat does');
+{
+    // a changed kind ends the click: the same failure coming back later shows its button
+    const clicks = sent(NOW - 1000);
+    row(open({ ci: 'running', reviewers: ['Ann'] }), [main()], clicks);
+    assert.deepEqual(shown(row(conflict, [main()], clicks)), ['needs-you', 'Rebase'], '7 the conflict is back after the MR moved on');
+}
+assert.deepEqual(shown(row(conflict, [main(), asks], sent(NOW - 1000))), ['needs-you', 'Rebase'], '3 a question beats a held click, with the MR step button');
 console.log('ok precedence');
 
 // a helper without an MR (table "A helper without an MR")
@@ -70,6 +79,12 @@ for (const why of ['api-error', 'rate-limit', 'interrupted', 'closed', 'silent']
     assert.deepEqual(shown(loose(helper({ prs: [], description: 'Tidy', status: 'stopped', stopReason: why }))), ['needs-you', 'Continue'], why);
 }
 assert.deepEqual(shown(loose(helper({ prs: [], description: 'Tidy', status: 'done' }))), ['finished', null]);
+{
+    const stopped = helper({ prs: [], description: 'Tidy', status: 'stopped', stopReason: 'api-error' });
+    const held = new Map([['a', { at: NOW - 1000, kind: 'api-error' }]]);
+    const x = workItems([{ ...main(), prs: [], agents: [stopped] }], () => null, NOW, new Map(), [], new Map(), () => null, held).find(r => !r.pr);
+    assert.deepEqual(shown(x), ['doing', null], 'a clicked Continue holds a helper row too, on every device');
+}
 assert.equal(loose(helper({ prs: [], description: 'Tidy', status: 'done', updated: NOW - 3 * 3600_000 })), undefined, 'gone after 2 hours');
 console.log('ok helpers without an MR');
 

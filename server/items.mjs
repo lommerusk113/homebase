@@ -137,15 +137,16 @@ export function deriveKind(ps, agent, hasPr, requested = false, chat = null) {
     if (ps?.state === 'closed') {
         return { kind: 'abandoned', reason: 'the forge says closed' };
     }
-    if (requested) {
-        return { kind: 'requested', reason: 'named in an open prompt' };
-    }
     if (agent?.status === 'running') {
         return { kind: 'running', reason: 'the helper is working' };
     }
-    // its chat works on the MR's branch (a local rebase and test run the forge can't see yet): no forge step while it does
+    // its chat works on the MR's branch (a local rebase and test run the forge can't see yet): no forge step while it does;
+    // what it does says more than the prompt that asked for it
     if (chat) {
         return { kind: 'chat-working', reason: 'its chat is working' };
+    }
+    if (requested) {
+        return { kind: 'requested', reason: 'named in an open prompt' };
     }
     if (agent?.status === 'stopped') {
         return { kind: STOPPED.has(agent.stopReason) ? agent.stopReason : 'stopped', reason: agent.stopReason ?? 'no reason given' };
@@ -479,16 +480,22 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             .toSorted((a, b) => !!b.report - !!a.report || a.id.localeCompare(b.id))[0] ?? null : null; // a report says more than a branch; the id keeps it the same every poll
         const row = rowOf(ps, agent, { pr: it.pr, title, mr: w.mr, aMr: w.aMr, requested: !!requested, now, error: it.pr ? errorOf(it.pr, it.project) : null, chat });
 
-        // the user's click on its button holds it in Doing until its state kind changes (the forge saw the work), not until
-        // the chat's turn ends, for HOLD_MS at most: then the button is back, as the chat did nothing the forge saw
-        const click = !chat && isOpen && now - (sent.get(it.key)?.at ?? -Infinity) < HOLD_MS ? sent.get(it.key) : null;
-        if (click?.kind === row.state.kind && row.column !== 'doing') {
-            Object.assign(row, { column: 'doing', next: `Sent to Claude (${clock(click.at)})`, action: null });
-        }
         // a chat waiting on you about the open MR puts its row in Needs you, its question before the row's own reason: what
         // it reported first, else the lead MR of its question
         const reported = isOpen ? live.filter(s => s.project === it.project && s.status !== 'working' && reportOn(s, it.pr)?.phase === 'needs-you').toSorted((a, b) => a.id.localeCompare(b.id))[0] : null;
         const asker = reported ? { id: reported.id, asks: reported.report.text } : isOpen ? askerFor(live, it.project, it.pr) : null;
+
+        // the user's click on its button holds it in Doing while its state kind is the one clicked, not until the chat's turn
+        // ends, for HOLD_MS at most: then the button is back, as the chat did nothing the forge saw. A changed kind ends the
+        // click for good, so the same failure coming back later shows its button. Not while a chat works on it or asks about it.
+        const click = sent.get(it.key);
+        if (click && !chat && !asker && (it.pr ? isOpen : true)) {
+            if (click.kind !== row.state.kind || now - click.at >= HOLD_MS) {
+                sent.delete(it.key);
+            } else if (row.column !== 'doing') {
+                Object.assign(row, { column: 'doing', next: `Sent to Claude (${clock(click.at)})`, action: null });
+            }
+        }
         if (asker) {
             Object.assign(row, { column: 'needs-you', next: `Asks: ${asker.asks.split('\n')[0]} · ${row.next}` });
         }

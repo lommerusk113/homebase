@@ -40,19 +40,27 @@ export async function report(dir, sessionId, { phase, mr = null, text = null } =
     } else {
         reports.set(sessionId, { phase, mr: mr?.trim() || null, text: text?.trim().slice(0, MAX) || null, at: now });
     }
-    // ponytail: the newest MAX chats only
-    const keep = [...reports].slice(-MAX);
+    await save(dir);
+}
 
+// One write at a time, each of the map as it is then: two at once would share the temp file and leave a broken one
+let saving = Promise.resolve();
+const save = dir => (saving = saving.catch(() => {}).then(async () => {
+    const keep = [...reports].slice(-MAX); // ponytail: the newest MAX chats only
     const file = join(dir, 'reports.json'), tmp = `${file}.tmp`;
     await mkdir(dir, { recursive: true });
     await writeFile(tmp, JSON.stringify(Object.fromEntries(keep)), { mode: 0o600 });
     await rename(tmp, file);
-}
+}));
+
+// When a report is over: a doing report at the chat's next prompt, a needs-you one also at an answer to its question.
+// s: a session with lastPromptAt and lastAnswerAt.
+export const endsAt = (s, r) => (r.phase === 'needs-you' ? s.lastAnswerAt ?? s.lastPromptAt : s.lastPromptAt) ?? 0;
 
 // Forgets a chat's report (answered since, see sessions.mjs attachReports) and saves that, so a restart doesn't bring it back.
 export function forgetReport(sessionId) {
 
     if (reports.delete(sessionId) && savedIn) {
-        report(savedIn, sessionId, { phase: 'done' }).catch(() => {});
+        save(savedIn).catch(() => {});
     }
 }

@@ -5,6 +5,7 @@ import { mentionsMr, namesMr, mrRef, mrNumber, forgeWords } from './forge.mjs';
 import { waitsOnYou } from '../web/src/lib/waiting.ts';
 import { canned } from '../web/src/lib/canned.ts';
 import { sentRows, HOLD_MS } from './once.mjs';
+import { endsAt } from './reports.mjs';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
@@ -337,7 +338,7 @@ export function askerFor(sessions, project, url) {
 export function reportOn(s, url) {
 
     const r = s.report;
-    if (!r?.mr || r.at <= (s.lastPromptAt ?? 0)) {
+    if (!r?.mr || r.at <= endsAt(s, r)) {
         return null;
     }
 

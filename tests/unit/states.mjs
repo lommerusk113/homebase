@@ -3,10 +3,10 @@
 // own rows and Dismiss are the page's: tests/browser/work.test.mjs and edges.test.mjs check them.
 import assert from 'node:assert/strict';
 import { workItems } from '../../server/items.mjs';
-import { loadReports, reports } from '../../server/reports.mjs';
+import { loadReports, reports, report, forgetReport } from '../../server/reports.mjs';
 import { lastAnswerAt, attachReports } from '../../server/sessions.mjs';
 import { ghPr, prs } from '../../server/forge.mjs';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { withThreads } from '../../server/forge.mjs';
@@ -281,6 +281,25 @@ console.log('ok merge only at the confirmed head');
     attachReports(list, new Map([['old', 't'], ['new', 't'], ['ok', 't'], ['answered', 't']]), reports);
     assert.deepEqual(list.map(s => !!s.report), [false, false, false, true, false]);
     assert.equal(reports.has('answered'), false, 'answered: forgotten');
+    reports.clear();
+    // an answered question ends a needs-you report, not the doing report of a chat that keeps working
+    const mid = [{ id: 'd', lastPromptAt: 1, lastAnswerAt: 9 }, { id: 'n', lastPromptAt: 1, lastAnswerAt: 9 }];
+    reports.set('d', { phase: 'doing', mr: '!1', text: 'Rebasing', at: 5 });
+    reports.set('n', { phase: 'needs-you', mr: '!1', text: 'Which?', at: 5 });
+    attachReports(mid, null, reports);
+    assert.deepEqual(mid.map(x => !!x.report), [true, false]);
+    reports.clear();
+    // many reports forgotten in one poll: one write at a time, so reports.json stays whole
+    const dir2 = mkdtempSync(join(tmpdir(), 'hb-reports-'));
+    loadReports(dir2);
+    for (let i = 0; i < 30; i++) {
+        await report(dir2, `s${i}`, { phase: 'doing', mr: '!1', text: 'x' }, 5);
+    }
+    for (let i = 0; i < 30; i += 2) {
+        forgetReport(`s${i}`);
+    }
+    await report(dir2, 'last', { phase: 'doing', mr: '!1' }, 6);
+    assert.equal(Object.keys(JSON.parse(readFileSync(join(dir2, 'reports.json'), 'utf8'))).length, 16);
     reports.clear();
     // GitHub still computing mergeability keeps the conflict it saw, never flips to ready
     const pr = 'https://github.com/o/p/pull/9', base = { state: 'OPEN', title: 't', headRefName: 'b', baseRefName: 'main', isDraft: false, reviewDecision: '' };

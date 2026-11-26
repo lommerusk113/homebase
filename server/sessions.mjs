@@ -14,7 +14,7 @@ import { waitingQuestion } from './asks.mjs';
 import { loadStore, record, seeds, flush, gateHeadsOf, STORE_FILE } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr } from './forge.mjs';
 import { isManual } from './manual.mjs';
-import { reports, forgetReport } from './reports.mjs';
+import { reports, forgetReport, endsAt } from './reports.mjs';
 import { sentRows, saveSent } from './once.mjs';
 import { canned } from '../web/src/lib/canned.ts';
 import { repoPaths, accountOf } from './account.mjs';
@@ -468,10 +468,10 @@ export function attachReports(list, live, all = reports) {
     const cleared = new Set(list.map(s => s.clearedFrom).filter(Boolean));
     for (const s of list) {
         const r = all.get(s.id);
-        if (r && r.at <= (s.lastPromptAt ?? 0)) {
+        if (r && r.at <= endsAt(s, r)) {
             forgetReport(s.id);
         }
-        s.report = r && r.at > (s.lastPromptAt ?? 0) && (!live || live.has(s.id)) && !cleared.has(s.id) ? r : null;
+        s.report = r && r.at > endsAt(s, r) && (!live || live.has(s.id)) && !cleared.has(s.id) ? r : null;
     }
 }
 
@@ -552,7 +552,8 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         stepAt: step?.at ?? null, // when that call started, for "for 2m" on the Now line
         queued: queuedPrompts(entries).map(q => q.text),
         lastPrompt: textOf(entries.findLast(isHumanPrompt)),
-        lastPromptAt: lastAnswerAt(entries), // a report (homebase status) older than it is over
+        lastPromptAt: Date.parse(entries.findLast(isHumanPrompt)?.timestamp) || null, // a report (homebase status) older than it is over
+        lastAnswerAt: lastAnswerAt(entries), // a needs-you report older than this is answered (reports.mjs endsAt)
         lastReply: textOf(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)),
         lastReplyAt: Date.parse(entries.findLast(e => e.type === 'assistant' && textOf(e) && !e.isSidechain)?.timestamp) || null, // for `homebase helper wait`: a reply newer than the wait
         sidechain: !!entries.find(e => e.type === 'user' || e.type === 'assistant')?.isSidechain, // a transcript a subagent wrote

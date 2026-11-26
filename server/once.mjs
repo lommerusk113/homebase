@@ -25,6 +25,7 @@ export const release = (map, key) => map.delete(key);
 export const HOLD_MS = 30 * 60_000;
 
 let savedIn = null; // the Homebase dir loadSent read, where saveSent writes by default
+let saving = Promise.resolve();
 
 export function loadSent(dir, map = sentRows, now = Date.now()) {
 
@@ -43,11 +44,16 @@ export async function saveSent(dir = savedIn, map = sentRows, now = Date.now()) 
     if (!dir) {
         return;
     }
-    const keep = Object.fromEntries([...map].filter(([, v]) => now - v.at < HOLD_MS));
-    const file = join(dir, 'sent.json'), tmp = `${file}.tmp`;
-    await mkdir(dir, { recursive: true });
-    await writeFile(tmp, JSON.stringify(keep), { mode: 0o600 });
-    await rename(tmp, file);
+    // one write at a time, each of the map as it is then: two at once would share the temp file
+    saving = saving.catch(() => {}).then(async () => {
+        const keep = Object.fromEntries([...map].filter(([, v]) => now - v.at < HOLD_MS));
+        const file = join(dir, 'sent.json'), tmp = `${file}.tmp`;
+        await mkdir(dir, { recursive: true });
+        await writeFile(tmp, JSON.stringify(keep), { mode: 0o600 });
+        await rename(tmp, file);
+    });
+
+    return saving;
 }
 
 // Why a Merge click is refused, or null: only a row the board shows with its Merge button, at the head the user confirmed

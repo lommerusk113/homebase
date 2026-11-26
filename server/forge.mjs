@@ -117,7 +117,7 @@ async function fetchPr(url) {
     const ask = () => view(fields).catch(e => (/required scopes/.test(e.message) ? view(fields.replace('reviewRequests,', '')) : Promise.reject(e)));
     let pr = JSON.parse((await ask()).stdout);
     // GitHub computes mergeability on the first ask: with no earlier answer to keep, ask once more instead of showing a guess
-    if (pr.mergeable === 'UNKNOWN' && !prs.get(url)?.value) {
+    if (pr.state === 'OPEN' && pr.mergeable === 'UNKNOWN' && !prs.get(url)?.value) {
         await new Promise(r => setTimeout(r, GH_RECHECK_MS));
         pr = JSON.parse((await ask()).stdout);
     }

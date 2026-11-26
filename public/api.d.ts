@@ -142,7 +142,7 @@ interface RowAction {
     label: string;
     message: string;
     /** a review chat's button: Review starts the reviewer, Reviewing… waits, Send findings types its last message into the row's chat (the others send `message` as is) */
-    kind?: 'review' | 'reviewing' | 'findings';
+    kind?: 'review' | 'reviewing' | 'findings' | 'merge'; // merge: Homebase merges the approved GitLab MR itself (POST /api/merge), after a confirm
     hint?: string; // the tooltip, when the message is too long for one
     reviewerId?: string;
 }

@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, statSync } from 'node:fs
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { prState, prs } from '../../server/forge.mjs';
+import { prState, prs, mergeMr } from '../../server/forge.mjs';
 import { mr, fakeBin, withFakeGlab, glabMr, nextOf, colOf, actOf } from './helpers.mjs';
 
 {
@@ -103,4 +103,16 @@ import { mr, fakeBin, withFakeGlab, glabMr, nextOf, colOf, actOf } from './helpe
     assert.deepEqual(JSON.parse(out2.trim().split('\n').at(-1)), ['comments: the lookup failed']);
     rmSync(home2, { recursive: true, force: true });
     console.log('ok comment error shown');
+}
+
+// Merge: one PUT pinned to the head the board showed, no auto-merge; GitLab's refusal is the error. Fake exec only.
+{
+    const calls = [];
+    await mergeMr(mr(7), 'abc1234', async (cmd, args) => { calls.push([cmd, ...args]); return { stdout: '{}' }; });
+    assert.deepEqual(calls, [['glab', 'api', '-X', 'PUT', 'projects/g%2Fp/merge_requests/7/merge', '-f', 'sha=abc1234']]);
+    await assert.rejects(mergeMr(mr(7), null, async () => assert.fail('no call without a head')), { status: 400 });
+    await assert.rejects(mergeMr('https://github.com/o/r/pull/7', 'abc1234', async () => assert.fail('no GitHub merge')), { status: 400 });
+    await assert.rejects(mergeMr(mr(7), 'abc1234', async () => { throw Object.assign(new Error('x'), { stderr: 'glab: 406 Branch cannot be merged (HTTP 406)\n' }); }),
+        { status: 409, message: "Couldn't merge: glab: 406 Branch cannot be merged (HTTP 406)" });
+    console.log('ok merge');
 }

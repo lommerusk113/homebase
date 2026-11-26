@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { transcript, agentFeed } from './server/transcripts.mjs';
 import { polledSessions, startingChats } from './server/sessions.mjs';
-import { refreshAll, refreshInfo, isGitLab } from './server/forge.mjs';
+import { refreshAll, refreshInfo, isGitLab, mergeMr } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
 import { reviewRequests } from './server/reviews.mjs';
 import { limits } from './server/limits.mjs';
@@ -371,6 +371,26 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     }
                 }
                 polledSessions.stale();
+                return res.end('ok');
+            }
+            // Merge of an approved GitLab MR: only a row the board shows as ready with its Merge button, at the head it showed
+            if (isPost('/api/merge')) {
+                const key = url.searchParams.get('key');
+                const row = (await polledSessions()).flatMap(s => s.items ?? []).find(i => i.key === key);
+                if (row?.action?.kind !== 'merge') {
+                    return deny(409, 'This row has no Merge button any more: reload the board');
+                }
+                if (!claim(sentRows, `merge:${key}`, row.prState?.sha)) {
+                    return deny(409, 'Already merging');
+                }
+                try {
+                    await mergeMr(row.pr, row.prState?.sha);
+                } catch (e) {
+                    release(sentRows, `merge:${key}`);
+                    throw e;
+                } finally {
+                    polledSessions.stale();
+                }
                 return res.end('ok');
             }
             if (isPost('/api/rules/seen')) {

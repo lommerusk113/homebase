@@ -62,6 +62,26 @@ async function startReview(x: WorkItem) {
     }
 }
 
+const merging = new Set<string>(); // rows whose merge POST is in flight
+
+/** Merge: Homebase merges the approved GitLab MR (POST /api/merge); the row says Merged from the next poll. */
+async function merge(x: WorkItem) {
+
+    if (merging.has(x.key)) {
+        return;
+    }
+    merging.add(x.key);
+    try {
+        const r = await api(`/api/merge?key=${encodeURIComponent(x.key)}`, { method: 'POST' }).catch(() => null);
+        if (!r?.ok) {
+            useNotice().showError(r ? await r.text() : 'Couldn’t reach Homebase to merge');
+        }
+        await hooks.refresh();
+    } finally {
+        merging.delete(x.key);
+    }
+}
+
 /** Sends the row's one-click command to its session; the row turns into an in-progress one at once, so it can't be sent twice. */
 async function send(x: WorkItem) {
 
@@ -102,7 +122,9 @@ export function useSentMarks() {
 
     // On a touch screen the tooltip with the message never shows and a thumb can miss the row, so a tap asks first
     // (the dialog of the a key); its Send clicks the button from script, which is not a tap.
-    const press = (x: WorkItem, tapped: boolean) => (tapped && touch() ? confirmAction(x as WorkItem & { action: RowAction }) : send(x));
+    // Merge can't be undone, so it always asks first, click or tap
+    const press = (x: WorkItem, tapped: boolean) => (x.action?.kind === 'merge' ? confirmAction(x as WorkItem & { action: RowAction }, () => merge(x))
+        : tapped && touch() ? confirmAction(x as WorkItem & { action: RowAction }) : send(x));
 
     return { optimistic, press, noReply };
 }

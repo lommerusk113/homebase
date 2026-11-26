@@ -86,16 +86,14 @@ function mrNext(prState, mr) {
     return prState.reviewers?.length ? `Waiting for review by ${prState.reviewers.join(', ')}` : 'Needs a reviewer';
 }
 
-const GATE_STEP = 'Gate not passed for the latest commit — run review-gate';
-
-// An approved MR is only ready to merge once the gate passed for its head and no thread is open; otherwise it stays in review with the first blocker named.
-function demote(prState, gate) {
+// A mergeable MR is only ready once no thread is open; otherwise it stays approved in review with the threads named.
+// The gate doesn't hold it back: its verdict is the row's badge, the merge is the reviewer's approval.
+function demote(prState) {
 
     if (!prState?.ready) {
         return prState;
     }
-    const notReady = gate?.verdict !== 'ready' || gate.stale ? GATE_STEP
-        : prState.replied ? `${prState.replied} thread${prState.replied === 1 ? '' : 's'} still open — resolve them` : null;
+    const notReady = prState.replied ? `${prState.replied} thread${prState.replied === 1 ? '' : 's'} still open — resolve them` : null;
 
     return notReady ? { ...prState, ready: false, approved: true, notReady } : prState;
 }
@@ -165,7 +163,6 @@ export function deriveKind(ps, agent, hasPr, requested = false, chat = null) {
         : ps.blocked === 'conflict' || ps.blocked === 'rebase' ? 'conflict'
         : ps.blocked ? 'blocked'
         : ps.draft && ps.ci !== 'running' ? 'draft' // nothing blocks it but the draft flag: the user takes it out of draft
-        : ps.notReady === GATE_STEP ? 'gate'
         : ps.notReady ? 'threads'
         : ps.replied && !ps.ready ? 'replied'
         : ps.ci === 'running' ? 'pipeline'
@@ -188,6 +185,10 @@ const silentText = c => {
     const m = c.agent.updated ? Math.max(1, Math.round((c.now - c.agent.updated) / 60_000)) : null;
     return m ? `No output for ${m}m — may still be working · Continue nudges it` : 'No recent output — may still be working · Continue nudges it';
 };
+// GitLab: Merge merges it from Homebase (POST /api/merge, after a confirm); a GitHub PR still asks its chat.
+const mergeAction = c => (/\/-\/merge_requests\//.test(c.pr)
+    ? { label: 'Merge', kind: 'merge', message: `Merge ${mrRef(c.pr)} on GitLab now. This can't be undone.` }
+    : canned('merge', mrRefOf(c)));
 const baseStage = c => stageOf(c.pr, c.ps, c.agent);
 const noButton = () => null;
 const mrKind = (column, action = noButton) => ({ column, action: c => (c.pr ? action(c) : null), next: c => mrNext(c.ps, c.mr), stage: baseStage });
@@ -217,12 +218,11 @@ export const KINDS = {
     failing: mrKind('needs-you', c => canned('pipeline', mrRefOf(c))),
     conflict: mrKind('needs-you', c => canned('rebase', mrRefOf(c))),
     blocked: mrKind('review'),
-    gate: { ...mrKind('review', c => canned('gate', mrRefOf(c))), stage: () => 2 }, // approved but not through the gate: still in review
     threads: mrKind('review'),
     replied: mrKind('review'),
     pipeline: mrKind('review'),
     draft: { ...mrKind('needs-you', c => canned('ready', mrRefOf(c))), next: () => 'Ready except draft: mark ready' },
-    ready: mrKind('ready', c => canned('merge', mrRefOf(c))),
+    ready: mrKind('ready', mergeAction),
     'in-review': mrKind('review'),
     'needs-reviewer': mrKind('review', c => canned('review', mrRefOf(c)))
 };
@@ -464,7 +464,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         const gates = it.pr ? sessions.filter(s => s.project === it.project).flatMap(s => [...s.gates ?? [], ...(s.agents ?? []).flatMap(a => a.gates ?? [])]) : [];
         const run = it.pr ? gateFor(gates, it.pr, prState?.branch) : null;
         const gate = it.pr ? toGate(run, prState?.sha, heads, STARTED) : null;
-        const ps = demote(prState, gate);
+        const ps = demote(prState);
         // asked in the master's open turn but no agent runs for it yet: show it as in progress, without the button
         const requested = it.pr && agent?.status !== 'running' && prState?.state !== 'merged' && prState?.state !== 'closed'
             ? requestFor(sessions, it.project, it.pr, prState) : null;
@@ -491,7 +491,8 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         if (asker) {
             Object.assign(row, { column: 'needs-you', next: `Asks: ${asker.asks.split('\n')[0]} · ${row.next}` });
         }
-        const rev = !row.action && row.column === 'review' ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now, prState?.sha) : null;
+        // an approved MR needs no reviewer: its row says what still stops the merge instead
+        const rev = !row.action && row.column === 'review' && !prState?.approved ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now, prState?.sha) : null;
 
         return {
             key: it.key,

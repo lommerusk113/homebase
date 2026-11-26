@@ -13,7 +13,7 @@
 | `usage.mjs` | Token usage read by byte offset, duration and token formatting |
 | `sessions.mjs` | Repo names, subagent summaries and status, session summaries, `sessions()`, and `polledSessions()` (one shared build, reused for a second) for `/api/sessions` |
 | `items.mjs` | Work-item rules (pure): columns, lifecycle, next step, row action, gate badge, milestone of an MR |
-| `forge.mjs` | glab/gh calls: PR/MR state, comments and threads, limiter, dedupe, the `prs` and `swr` caches, refresh button |
+| `forge.mjs` | glab/gh calls: PR/MR state, `mergeMr` (the one write, behind POST `/api/merge` for a row with a Merge button), comments and threads, limiter, dedupe, the `prs` and `swr` caches, refresh button |
 | `reviews.mjs` | MRs by others that ask me for a review (`/api/reviews`), read-only, cached |
 | `milestones.mjs` | Milestones tab: milestone lists, issue groups, linked MRs, start-up warm-up |
 | `log.mjs` | Activity log (☰ → Activity log…): finished subagents, git commits, chat topics and closed MRs of a project's last 7 days, `log()` for `/api/log` |

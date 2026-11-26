@@ -75,7 +75,12 @@ assert.deepEqual(perks(3 * 3600_000), []);
 assert.deepEqual(workItems([{ id: 'm', project: 'p', prs: [], agents: [agent('r', 0, { description: 'Also rebase', firstDescription: 'Fix login' })] }], () => null, 0)
     .map(i => [i.title, i.firstTitle]), [['Also rebase', 'Fix login']]);
 const one = prOf => workItems([{ id: 's', project: 'p', prs: [{ url: mr(5), at: 1 }], agents: [] }], prOf, 0, new Map())[0];
-assert.equal(one(() => open({ ready: true })).stageLabel, 'Review', 'approved but no gate yet: demoted to in review'); // with a passed gate it reads Approved
+assert.deepEqual((({ column, stageLabel, action }) => [column, stageLabel, action.kind])(one(() => open({ ready: true }))), ['ready', 'Approved', 'merge'], 'mergeable without a gate run: Merge, no gate step');
+// approved by a reviewer: Merge without the gate; while something still stops the merge, that reason and no Review button
+const approved = one(() => open({ ready: true, approved: true, sha: 'abc1234' }));
+assert.deepEqual([approved.column, approved.stageLabel, approved.action?.kind], ['ready', 'Approved', 'merge']);
+const waiting = one(() => open({ approved: true, ci: 'running' }));
+assert.deepEqual([waiting.column, waiting.next, waiting.action, waiting.note], ['review', 'Pipeline running', null, null]);
 assert.deepEqual((({ column, stageLabel, next }) => [column, stageLabel, next])(one(() => ({ state: 'closed' }))), ['closed', 'Closed', 'Closed without merging']);
 const verifying = workItems([{ id: 's', project: 'p', prs: [], agents: [agent('v', 1, { status: 'running', stage: 2 })] }], () => null, 0, new Map());
 assert.deepEqual(verifying.map(i => i.stageLabel), ['Verify']);
@@ -213,7 +218,7 @@ assert.equal(repoName('git@gitlab.com:tritt/accounting/pracsys.git'), 'pracsys')
 assert.equal(repoName('https://github.com/contaas/portal-frontend'), 'portal-frontend');
 console.log('ok repo name');
 const act = (prState, agent, url = mr(4)) => actOf(url, prState, agent, 'T');
-assert.deepEqual(act(open({ ready: true, reviewers: ['Ann'] }), null), { label: 'Merge + close issue', message: `Run review-gate on !4 (${mr(4)}). If the verdict is ready, merge it and close its issue. If it's fix first, show me the findings and don't merge.` });
+assert.deepEqual(act(open({ ready: true, reviewers: ['Ann'] }), null), { label: 'Merge', kind: 'merge', message: "Merge !4 on GitLab now. This can't be undone." });
 assert.equal(act(open({ ready: true }), null, 'https://github.com/o/r/pull/9').message.slice(0, 63), 'Run review-gate on #9 (https://github.com/o/r/pull/9). If the v');
 assert.deepEqual(act(open({ changes: true, reviewers: ['Ann'] }), null), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
 // one precedence with nextStep: a stopped agent wins over the MR's own ask, but not over a merged MR; a running pipeline asks nothing
@@ -284,14 +289,16 @@ assert.deepEqual(toGate(runs[0], 'bbb222', heads), { verdict: 'fix first', at: r
 assert.equal(toGate(null, 'x'), null);
 const gated = workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: runs, agents: [] }], () => open({ ready: true, sha: 'abc' }), 0, new Map());
 assert.equal(gated[0].gate.verdict, 'fix first');
-// approved + CI green but the gate warns and 3 threads are open: not ready, no merge, Next names the gate
-const notReady = workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: runs, agents: [] }], () => open({ ready: true, ci: 'success', replied: 3, sha: 'abc' }), 0, new Map())[0];
-assert.deepEqual([notReady.column, notReady.stageLabel, notReady.next, notReady.action.label], ['review', 'Review', 'Gate not passed for the latest commit — run review-gate', 'Run gate']);
-// gate passed for the head: the open threads are the blocker, with no button; with none open it is ready
+// the gate's fix first doesn't hold back a mergeable MR: Merge, the verdict stays the badge
+const warned = workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: runs, agents: [] }], () => open({ ready: true, ci: 'success', sha: 'abc' }), 0, new Map())[0];
+assert.deepEqual([warned.column, warned.gate.verdict, warned.action.label], ['ready', 'fix first', 'Merge']);
+// open threads are the blocker, with the reviewer's button; with none open it is ready
 const passed = [{ ...runs[1], verdict: 'ready', commit: 'abc1234' }];
 const withGate = pr => workItems([{ id: 's', project: 'p', prs: [{ url: mr(4), at: 1 }], gates: passed, agents: [] }], () => open({ ready: true, sha: 'abc1234ff', branch: 'kjn-gate', ...pr }), 0, new Map())[0];
 assert.deepEqual([withGate({ replied: 3 }).next, withGate({ replied: 3 }).action?.label, withGate({ replied: 3 }).column], ['3 threads still open — resolve them', 'Review', 'review']);
-assert.deepEqual([withGate({}).column, withGate({}).action.label], ['ready', 'Merge + close issue']);
+assert.deepEqual([withGate({}).column, withGate({}).action.label], ['ready', 'Merge']);
+// approved by a reviewer with threads open: they are the blocker, and no Review button
+assert.deepEqual([withGate({ replied: 3, approved: true }).next, withGate({ replied: 3, approved: true }).action], ['3 threads still open — resolve them', null]);
 console.log('ok review gate');
 assert.equal(items[1].action.label, 'Review'); // waiting on review: the reviewer chat's button (review-chat.mjs)
 console.log('ok actions');

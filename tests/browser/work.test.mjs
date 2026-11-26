@@ -88,7 +88,7 @@ export default {
         assert.match(await page.ev(`${row(`asking:${IDS.master}`)}.querySelector('.next').textContent`), /^alpha · Login work · \w+( ago)?$/);
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.next').textContent`), "Next: Reply to Ann Reviewer's comment💬 1");
         assert.equal(await page.ev(`${row(MR(104))}.querySelector('.act-btn').textContent`), 'Fix & reply');
-        assert.equal(await page.ev(`${row(MR(102))}.querySelector('.act-btn').textContent`), 'Merge + close issue');
+        assert.equal(await page.ev(`${row(MR(102))}.querySelector('.act-btn').textContent`), 'Merge');
         await page.waitFor(`!${row(MR(101))}.querySelector('.ms-tag')`, { what: 'no milestone tag while the pill has Sprint 12 picked' });
         assert.equal(await page.ev(`${row(MR(101))}.querySelector('a.chip').textContent`), '!101', 'an open MR shows no "open"');
     },
@@ -332,5 +332,18 @@ export default {
         assert.equal(await page.ev(`location.hash`), `#chat=${IDS.master}&agent=agent-stopped`, 'deep link');
         await page.clickOn(`document.getElementById('c-back')`);
         await page.waitFor(`document.getElementById('c-back').hidden && !document.getElementById('feed').textContent.includes('Find out why the auth test is flaky') && location.hash === ''`, { what: 'the chat back' });
+    },
+
+    'Merge on an approved MR asks first and merges nothing on Cancel': async ({ page, open }) => {
+        await open();
+        const btn = `#masters tr[data-key="${MR(102)}"] .act-btn`, merges = () => page.posts.filter(p => p.url.includes('/api/merge'));
+        const cancel = `[...document.querySelectorAll('wa-dialog[open] wa-button[slot="footer"]')].at(0)`;
+        await page.waitFor(`document.querySelector('${btn}')`, { what: 'the Merge button' });
+        await page.click(btn);
+        assert.equal(await page.waitFor(`document.querySelector('wa-dialog[open] pre')?.textContent`, { what: 'the merge confirm' }), "Merge !102 on GitLab now. This can't be undone.");
+        await page.waitFor(`(() => { const r = JSON.stringify(${cancel}?.getBoundingClientRect()), still = r && r === window.__at; window.__at = r; return still; })()`, { what: 'Cancel at rest' });
+        await page.clickOn(cancel, 'Cancel');
+        await page.waitFor(`!document.querySelector('wa-dialog[open]')`, { what: 'the dialog to close' });
+        assert.equal(merges().length, 0, 'nothing merged');
     }
 };

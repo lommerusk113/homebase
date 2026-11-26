@@ -1,4 +1,4 @@
-// GitLab/GitHub via glab/gh (read-only): PR/MR state, review comments and threads, the shared limiter and dedupe,
+// GitLab/GitHub via glab/gh (read-only but mergeMr): PR/MR state, review comments and threads, the shared limiter and dedupe,
 // the stale-while-revalidate caches (prs, swr) and the refresh button.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -134,6 +134,23 @@ export function ghPr(pr, url) {
         issue: issueOf(pr.title, pr.body),
         sha: pr.headRefOid ?? null
     };
+}
+
+// The one write: merges a GitLab MR now, only while its head is still `sha` (what the board showed approved). No auto-merge;
+// the source branch goes or stays as the MR says. Throws with status 409 and GitLab's reason when it can't merge.
+export async function mergeMr(url, sha, exec = run) {
+
+    const gl = url.match(/^https:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)$/);
+    if (!gl || !/^[0-9a-f]{7,40}$/.test(sha ?? '')) {
+        throw Object.assign(new Error('Only an open GitLab MR with a known head can be merged here'), { status: 400 });
+    }
+    try {
+        await exec('glab', ['api', '-X', 'PUT', `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}/merge`, '-f', `sha=${sha}`], { timeout: apiTimeout() });
+    } catch (e) {
+        throw Object.assign(new Error(`Couldn't merge: ${String(e.stderr || e.message).trim().split('\n')[0]}`), { status: 409 });
+    } finally {
+        prs.delete(url);
+    }
 }
 
 // The issue an MR works on: "#2219 - …" in its title, else "Closes #2219" in its description.

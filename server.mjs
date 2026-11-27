@@ -35,6 +35,7 @@ import { loadReports, report } from './server/reports.mjs';
 import { loadSends, logHousekeeping } from './server/sendlog.mjs';
 import { setAutoSender } from './server/autosend.mjs';
 import { loadRetries } from './server/autoretry.mjs';
+import { cleanupWorktrees } from './server/worktrees.mjs';
 import { loadReviewers, startReviewer, markFindingsSent } from './server/reviewer.mjs';
 import { loadHelpers, startHelper, closeHelper, chatIn, parentOf, parentTmux, findHelper, helperView, ahead, writeToken, reapHelpers } from './server/helpers.mjs';
 
@@ -686,9 +687,19 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             console.error(`helper reaper: ${e.message}`);
         }
     };
+    // Issue worktrees (server/worktrees.mjs) of merged or closed MRs: removed when clean and unused, at start and every 5 min.
+    const tidy = async () => {
+        try {
+            await cleanupWorktrees(await polledSessions(), await liveTmux());
+        } catch (e) {
+            console.error(`worktree cleanup: ${e.message}`);
+        }
+    };
     if (!DEMO) {
         reap();
         setInterval(reap, 60_000);
+        tidy();
+        setInterval(tidy, 5 * 60_000);
     }
     // With no page polling /api/sessions, the push watcher looks every 5s itself, and only while a device is subscribed.
     setInterval(async () => {

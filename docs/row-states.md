@@ -107,3 +107,8 @@ It leaves the queue, and the row says "Left the merge queue: <why>" while the MR
 A click on a row's button is the only manual move: the row goes to Doing at once (rule 7) and stays there while its kind is the one clicked, across restarts, for at most 30 minutes.
 When the kind changes the click is over, so the same failure coming back later shows its button again; after 30 minutes the button is back too, because the chat did nothing the forge can see.
 Review, Send findings and Merge are not holds: Review shows Reviewing… on its row, Send findings hands the reviewer's findings to the chat, Merge puts the MR in the merge queue (Queued to merge, then Merged).
+
+## Issue worktrees
+
+Not a row state: once an issue's MR is merged or closed, `server/worktrees.mjs` removes the worktree "Start from issue" made for it (`<repo>/.claude/worktrees/<iid>-<slug>`) with `git worktree remove`, and its local branch with `git branch -d`, only when the worktree has no uncommitted or untracked files, no unpushed commits and no chat or tmux session in it.
+Otherwise it stays and the server log says why, once.

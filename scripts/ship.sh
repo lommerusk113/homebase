@@ -32,6 +32,10 @@ if [ -z "$no_browser" ]; then
     echo "$log" | grep -E 'passed'
 fi
 
+# the running Homebase serves web/dist, which is gitignored: build it from this main, or the page keeps an old UI
+(cd web && npm run build >/dev/null 2>&1) || die "web build failed (run: cd web && npm run build)"
+echo "web build: exit 0"
+
 [ -n "$dry" ] && { echo "dry run: push and reload skipped"; exit 0; }
 git push origin HEAD:main || die "push failed"
 

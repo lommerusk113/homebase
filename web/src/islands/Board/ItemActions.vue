@@ -6,6 +6,7 @@ import SentPill from './SentPill.vue';
 import ActionButton from './ActionButton.vue';
 import StepInButton from './StepInButton.vue';
 import StopButton from './StopButton.vue';
+import QueueButton from './QueueButton.vue';
 import { useHelperStop } from '@/composables/useHelperStop';
 
 const item = useInjected(ItemKey);
@@ -19,10 +20,11 @@ const { canStop } = useHelperStop();
             <span class="sl sl-i"><StepInButton /></span>
             <span class="sl sl-b">
                 <SentPill v-if="item.sent || item.requested" />
-                <ActionButton v-else-if="item.action && (item.sessionId || item.action.kind === 'merge')" />
+                <ActionButton v-else-if="item.action && (item.sessionId || ['merge', 'rebase'].includes(item.action.kind ?? ''))" />
                 <StopButton v-else-if="canStop(item)" />
                 <small v-else-if="item.note" class="muted">{{ item.note }}</small>
             </span>
+            <span class="sl sl-b"><QueueButton v-if="item.queue && !item.sent" /></span>
         </span>
     </td>
 </template>

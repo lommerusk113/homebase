@@ -92,6 +92,16 @@ const forged = workItems([
     { id: 'q', project: 'q', updated: 99, prs: [], agents: [] }
 ], () => open(), 0, new Map(), [{ url: mr(1), project: 'p' }, { url: mr(7), project: 'p' }, { url: mr(7), project: 'p' }]);
 assert.deepEqual(forged.map(i => [i.key, i.sessionId, i.column]), [[mr(1), 'old', 'review'], [mr(7), 'new', 'review']]);
+// Rebase: a GitLab MR that is only behind asks GitLab (kind rebase, the chat message kept as the fallback); a conflicted one asks the chat
+{
+    const rows = blocked => workItems([{ id: 's', project: 'p', prs: [{ url: mr(71), at: 1 }], agents: [] }], () => open({ blocked, branch: 'b71' }), 10, new Map());
+    const [behind] = rows('rebase'), [conflicted] = rows('conflict');
+    assert.equal(behind.action.kind, 'rebase');
+    assert.match(behind.action.message, /^Rebase !71 .*onto its target/);
+    assert.equal(conflicted.action.kind, undefined);
+    assert.match(conflicted.action.message, /^Rebase !71 .*onto its target/);
+}
+
 // a stopped agent retried by a later one with the same description no longer offers Continue on the MR
 {
     const review = () => ({ state: 'open', reviewers: ['Ann'], issue: '7', branch: 'b7' });

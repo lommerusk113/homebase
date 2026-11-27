@@ -44,7 +44,7 @@ MR state, first match wins:
 |---|---|---|---|
 | changes | review comments to fix or answer, or changes requested, also on an approved MR (its text then starts Approved) | Needs you | Fix & reply |
 | failing | pipeline failed | Needs you | Fix pipeline |
-| conflict | conflicts, or needs a rebase | Needs you | Rebase |
+| conflict | conflicts, or needs a rebase | Needs you | Rebase (GitLab, behind only: GitLab rebases it, "Rebasing on GitLab…" until done, the chat is asked only if GitLab fails; otherwise the chat is asked) |
 | blocked | blocked by another MR or external checks | In review | Review |
 | draft | nothing blocks it but the draft flag | Needs you | Mark ready |
 | replied | not mergeable, and the threads open are ones you replied to (the project requires them resolved): waiting on the reviewer | In review | Review (none once approved) |
@@ -78,6 +78,12 @@ Two chats on one MR: the one that reported wins, then the lower session id, so t
 Newest work first, never by last activity: an MR by when it was opened on the forge (else when Homebase first saw it), a helper by when it started, a chat by when it started; ties by key.
 A group lists its work rows first, then the chats' own rows.
 A row never moves inside its group; it only moves when its group changes.
+
+## Merge queue
+
+Every open GitLab MR that is not a draft has a second button, Merge when ready (after a confirm), which puts it in the queue (`server/queue.mjs`): the row goes to Doing as "Queued to merge (n of m onto <target>) — <step>" with an Unqueue button.
+One MR per project and target branch moves at a time, the oldest first: behind its target → GitLab rebases it; running pipeline or GitLab still checking → waits; ready → merged at the commit seen.
+It leaves the queue, and the row says "Left the merge queue: <why>" while the MR is unchanged, on: conflicts, failed pipeline, needs approval, unresolved discussions (changes requested, or the project requires them resolved), draft, closed (a merge elsewhere just ends it).
 
 ## Moving a row by hand
 

@@ -12,6 +12,7 @@ import { readUsage, usageCache } from './usage.mjs';
 import { chatItems, handled } from './feed.mjs';
 import { isHousekeeping } from './sendlog.mjs';
 import { waitingQuestion } from './asks.mjs';
+import { restoreQueue, advanceQueue } from './queue.mjs';
 import { loadStore, record, seeds, flush, gateHeadsOf, seedForge, STORE_FILE } from './store.mjs';
 import { PR_TTL_MS, openMrUrls, prState, prError, problemText, forgeWords, forgeStatus, swrEntry, fetchComments, withThreads, swr, prs } from './forge.mjs';
 import { isManual } from './manual.mjs';
@@ -42,6 +43,7 @@ const AGENT_IDLE_MS = 2 * 60_000; // ended its turn with text but never handed b
 
 const store = loadStore();
 const gateHeads = gateHeadsOf(store);
+restoreQueue(store);
 seedForge(store, prs, swr); // the last forge answers: a restart serves them at once and asks again in the background
 const projects = new Map(); // cwd -> repo name
 export { repoPaths }; // repo name -> { host, path }, from the origin URL
@@ -783,6 +785,7 @@ async function itemsOf(out) {
     }
     record(store, items);
     flush(store);
+    advanceQueue(items, () => polledSessions.stale());
     items.filter(i => i.pr && i.since == null).forEach(i => { i.since = store.data[i.project]?.[i.pr]?.firstSeen ?? null; });
     items.forEach(i => { delete i.agentLinks; delete i.gateHead; delete i.forgeAnswers; });
 

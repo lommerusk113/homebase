@@ -128,7 +128,7 @@ function help() {
 /** @param {{ key: string, action: { label: string, message: string, kind?: string } }} x @param {() => void} [onGo] */
 export function confirmAction(x, onGo) {
     const btn = /** @type {HTMLElement | null} */ (rowOf(x.key)?.querySelector('.act-btn'));
-    if (x.action.kind === 'merge' && !onGo) {
+    if ((x.action.kind === 'merge' || x.action.kind === 'rebase') && !onGo) {
         return btn?.click(); // the button asks itself
     }
     const cancel = waButton('Cancel'), go = waButton(onGo ? x.action.label : `Send "${x.action.label}"`, null, { variant: onGo ? 'danger' : 'brand', appearance: 'accent' });
@@ -194,7 +194,7 @@ function onKey(e) {
         open: () => (card ? card.dataset.url && window.open(card.dataset.url, '_blank', 'noopener') : x?.pr && window.open(x.pr, '_blank', 'noopener')),
         act: () => (card?.dataset.msg
             ? card.querySelector('.act-btn:not([disabled])') && confirmAction({ key: focusKey, action: { label: card.dataset.label, message: card.dataset.msg } })
-            : x?.action && (x.sessionId || x.action.kind === 'merge') && rowOf(x.key)?.querySelector('.act-btn') && confirmAction(x)),
+            : x?.action && (x.sessionId || x.action.kind === 'merge' || x.action.kind === 'rebase') && rowOf(x.key)?.querySelector('.act-btn') && confirmAction(x)),
         chat: () => $('msg').focus(),
         escape: () => {
             if (activeTab() === 'issues') {

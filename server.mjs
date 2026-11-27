@@ -7,8 +7,9 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { transcript, agentFeed } from './server/transcripts.mjs';
+import { mergeQueue, queueStops } from './server/queue.mjs';
 import { polledSessions, startingChats } from './server/sessions.mjs';
-import { refreshAll, refreshInfo, isGitLab, mergeMr, prs, swr } from './server/forge.mjs';
+import { refreshAll, refreshInfo, isGitLab, mergeMr, rebaseMr, prs, swr } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
 import { reviewRequests } from './server/reviews.mjs';
 import { limits } from './server/limits.mjs';
@@ -413,6 +414,40 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 } finally {
                     polledSessions.stale();
                 }
+                return res.end('ok');
+            }
+            // Rebase of a GitLab MR that is only behind its target: GitLab does it; a failure is a 409 and the page asks the chat
+            if (isPost('/api/rebase')) {
+                const key = url.searchParams.get('key');
+                const row = (await polledSessions()).flatMap(s => s.items ?? []).find(i => i.key === key);
+                if (row?.action?.kind !== 'rebase') {
+                    return deny(409, 'This row has no GitLab rebase button any more: reload the board');
+                }
+                if (!claim(sentRows, `rebase:${key}`, row.prState?.sha)) {
+                    return deny(409, 'Already rebasing');
+                }
+                try {
+                    await rebaseMr(row.pr);
+                } finally {
+                    release(sentRows, `rebase:${key}`);
+                    polledSessions.stale();
+                }
+                return res.end('ok');
+            }
+            // Merge when ready: puts a GitLab MR in the merge queue (on=1), or takes it out (on=0); server/queue.mjs works it off
+            if (isPost('/api/queue')) {
+                const key = url.searchParams.get('key'), on = url.searchParams.get('on') !== '0';
+                const row = (await polledSessions()).flatMap(s => s.items ?? []).find(i => i.key === key);
+                if (row?.queue?.kind !== (on ? 'queue' : 'unqueue')) {
+                    return deny(409, `This row can't ${on ? 'be queued' : 'leave the queue'} any more: reload the board`);
+                }
+                if (on) {
+                    mergeQueue.set(row.pr, { at: Date.now(), project: row.project, target: row.prState.target, step: null });
+                    queueStops.delete(row.pr);
+                } else {
+                    mergeQueue.delete(row.pr);
+                }
+                polledSessions.stale();
                 return res.end('ok');
             }
             if (isPost('/api/rules/seen')) {

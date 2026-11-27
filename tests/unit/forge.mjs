@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, statSync } from 'node:fs
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { prState, prs, mergeMr } from '../../server/forge.mjs';
+import { prState, prs, mergeMr, rebaseMr } from '../../server/forge.mjs';
 import { mr, fakeBin, withFakeGlab, glabMr, nextOf, colOf, actOf } from './helpers.mjs';
 
 {
@@ -146,4 +146,18 @@ import { mr, fakeBin, withFakeGlab, glabMr, nextOf, colOf, actOf } from './helpe
     await assert.rejects(mergeMr(mr(7), 'abc1234', async () => { throw Object.assign(new Error('x'), { stderr: 'glab: 406 Branch cannot be merged (HTTP 406)\n' }); }),
         { status: 409, message: "Couldn't merge: glab: 406 Branch cannot be merged (HTTP 406)" });
     console.log('ok merge');
+}
+
+// Rebase: one PUT, then polls the MR until GitLab is done; merge_error or a refusal is a 409 with the reason. Fake exec only.
+{
+    const calls = [];
+    const gets = [{ rebase_in_progress: true }, { rebase_in_progress: false }];
+    const exec = async (cmd, args) => { calls.push(args.slice(1).join(' ')); return { stdout: JSON.stringify(args.includes('-X') ? {} : gets.shift()) }; };
+    await rebaseMr(mr(7), exec, { every: 1 });
+    assert.deepEqual(calls, ['-X PUT projects/g%2Fp/merge_requests/7/rebase', 'projects/g%2Fp/merge_requests/7?include_rebase_in_progress=true', 'projects/g%2Fp/merge_requests/7?include_rebase_in_progress=true']);
+    await assert.rejects(rebaseMr(mr(7), async (c, a) => ({ stdout: JSON.stringify(a.includes('-X') ? {} : { merge_error: 'Rebase failed: conflict' }) }), { every: 1 }),
+        { status: 409, message: "Couldn't rebase: Rebase failed: conflict" });
+    await assert.rejects(rebaseMr(mr(7), async () => { throw Object.assign(new Error('x'), { stderr: 'glab: 403 Forbidden\n' }); }, { every: 1 }), { status: 409, message: "Couldn't rebase: glab: 403 Forbidden" });
+    await assert.rejects(rebaseMr('https://github.com/o/r/pull/7', async () => assert.fail('no GitHub rebase'), { every: 1 }), { status: 400 });
+    console.log('ok rebase');
 }

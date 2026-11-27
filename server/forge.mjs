@@ -191,6 +191,38 @@ export async function mergeMr(url, sha, exec = run) {
     }
 }
 
+// Rebases a GitLab MR onto its target through GitLab (no conflicts: a conflicted one fails with GitLab's reason) and waits
+// until GitLab is done. Throws with status 409 and the reason when it can't, so the board falls back to asking a chat.
+export async function rebaseMr(url, exec = run, { every = 2000, tries = 60 } = {}) {
+
+    const gl = url.match(/^https:\/\/[^/]+\/(.+?)\/-\/merge_requests\/(\d+)$/);
+    if (!gl) {
+        throw Object.assign(new Error('Only a GitLab MR can be rebased here'), { status: 400 });
+    }
+
+    const path = `projects/${encodeURIComponent(gl[1])}/merge_requests/${gl[2]}`;
+    const fail = why => Object.assign(new Error(`Couldn't rebase: ${why}`), { status: 409 });
+
+    try {
+        await exec('glab', ['api', '-X', 'PUT', `${path}/rebase`], { timeout: apiTimeout() }).catch(e => {
+            throw fail(String(e.stderr || e.message).trim().split('\n')[0]);
+        });
+        for (let i = 0; i < tries; i++) {
+            await new Promise(r => setTimeout(r, every));
+            const mr = JSON.parse((await exec('glab', ['api', `${path}?include_rebase_in_progress=true`], { timeout: apiTimeout() })).stdout);
+            if (mr.merge_error) {
+                throw fail(mr.merge_error);
+            }
+            if (!mr.rebase_in_progress) {
+                return;
+            }
+        }
+        throw fail('GitLab is still rebasing it');
+    } finally {
+        prs.delete(url);
+    }
+}
+
 // The issue an MR works on: "#2219 - …" in its title, else "Closes #2219" in its description.
 export function issueOf(title, body) {
     return title?.match(/#(\d+)/)?.[1] ?? body?.match(/\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/i)?.[1] ?? null;

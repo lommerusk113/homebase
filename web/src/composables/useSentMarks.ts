@@ -1,3 +1,4 @@
+import { reactive } from 'vue';
 import { chatSession, bindChat, sendText } from 'old/chat.js';
 import { renderBoard } from 'old/list.js';
 import { confirmAction } from 'old/keys.js';
@@ -25,6 +26,10 @@ const save = () => {
 /** The row as the board shows it: in Doing as "Sent to Claude…" while its mark is fresh. */
 function optimistic(x: WorkItem, now = Date.now()): WorkItem {
 
+    if (rebasing.has(x.key)) {
+        return { ...x, column: 'doing', next: 'Rebasing on GitLab…', action: null };
+    }
+
     const at = sent.get(x.key);
     if (at == null) {
         return x;
@@ -41,6 +46,54 @@ function optimistic(x: WorkItem, now = Date.now()): WorkItem {
 
     return { ...x, sent: at, column: 'doing', next: `Sent to Claude (${new Date(at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })})` };
 }
+
+const rebasing = reactive(new Set<string>()); // rows GitLab is rebasing (POST /api/rebase in flight)
+
+/** Rebase of an MR that is only behind: GitLab does it; when it can't, the row says why and the chat gets the usual message. */
+async function rebase(x: WorkItem) {
+
+    if (rebasing.has(x.key)) {
+        return;
+    }
+    rebasing.add(x.key);
+    let why = '';
+    try {
+        const r = await api(`/api/rebase?key=${encodeURIComponent(x.key)}`, { method: 'POST' }).catch(() => null);
+        why = r?.ok ? '' : r ? await r.text() : 'Couldn’t reach Homebase to rebase';
+    } finally {
+        rebasing.delete(x.key);
+    }
+    if (why) {
+        useNotice().showError(x.sessionId ? `${why} — asking Claude to rebase it` : why);
+        x.sessionId && await send({ ...x, action: { ...x.action!, kind: undefined } });
+    }
+    await hooks.refresh();
+}
+
+const queueing = new Set<string>(); // rows whose queue POST is in flight
+
+/** Merge when ready / Unqueue: puts the MR in Homebase's merge queue or takes it out (POST /api/queue). */
+async function queue(x: WorkItem) {
+
+    if (!x.queue || queueing.has(x.key)) {
+        return;
+    }
+    queueing.add(x.key);
+    try {
+        const r = await api(`/api/queue?key=${encodeURIComponent(x.key)}&on=${x.queue.kind === 'queue' ? 1 : 0}`, { method: 'POST' }).catch(() => null);
+        if (!r?.ok) {
+            useNotice().showError(r ? await r.text() : 'Couldn’t reach Homebase to queue the merge');
+        }
+        await hooks.refresh();
+    } finally {
+        queueing.delete(x.key);
+    }
+}
+
+/** Queuing a merge can't be undone, so it asks first; taking the MR out does not. */
+const pressQueue = (x: WorkItem) => (x.queue?.kind === 'queue'
+    ? confirmAction({ key: x.key, action: { label: x.queue.label, message: x.queue.message, kind: 'merge' } }, () => queue(x))
+    : queue(x));
 
 const reviewing = new Set<string>(); // rows whose Review POST is in flight, so a double click starts one reviewer
 
@@ -86,6 +139,9 @@ async function merge(x: WorkItem) {
 /** Sends the row's one-click command to its session; the row turns into an in-progress one at once, so it can't be sent twice. */
 async function send(x: WorkItem) {
 
+    if (x.action?.kind === 'rebase') {
+        return rebase(x);
+    }
     if (x.action?.kind === 'review') {
         return startReview(x);
     }
@@ -130,5 +186,5 @@ export function useSentMarks() {
     const press = (x: WorkItem, tapped: boolean) => (x.action?.kind === 'merge' ? confirmAction(x as WorkItem & { action: RowAction }, () => merge(x))
         : tapped && touch() ? confirmAction(x as WorkItem & { action: RowAction }) : send(x));
 
-    return { optimistic, press, noReply };
+    return { optimistic, press, pressQueue, noReply };
 }

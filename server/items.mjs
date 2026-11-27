@@ -5,6 +5,7 @@ import { mentionsMr, namesMr, mrRef, mrNumber, forgeWords } from './forge.mjs';
 import { waitsOnYou } from '../web/src/lib/waiting.ts';
 import { canned } from '../web/src/lib/canned.ts';
 import { sentRows, HOLD_MS } from './once.mjs';
+import { mergeQueue, queueStops, placeOf, isGitLabMr } from './queue.mjs';
 
 const RECENT_DONE_MS = 2 * 3600_000;
 
@@ -193,6 +194,11 @@ const silentText = c => {
 const mergeAction = c => (/\/-\/merge_requests\//.test(c.pr)
     ? { label: 'Merge', kind: 'merge', message: `Merge ${mrRef(c.pr)} on GitLab now. This can't be undone.` }
     : canned('merge', mrRefOf(c)));
+// A GitLab MR that is only behind its target: Rebase asks GitLab to (POST /api/rebase); its message is the fallback for the
+// chat when GitLab can't. A conflicted MR, and a GitHub PR, always ask the chat.
+const rebaseAction = c => (/\/-\/merge_requests\//.test(c.pr) && c.ps.blocked === 'rebase'
+    ? { ...canned('rebase', mrRefOf(c)), kind: 'rebase' }
+    : canned('rebase', mrRefOf(c)));
 const baseStage = c => stageOf(c.pr, c.ps, c.agent);
 const noButton = () => null;
 const mrKind = (column, action = noButton) => ({ column, action: c => (c.pr ? action(c) : null), next: c => mrNext(c.ps, c.mr), stage: baseStage });
@@ -220,7 +226,7 @@ export const KINDS = {
     unknown: { ...mrKind('unknown'), next: c => (c.error ? `Couldn't check the ${c.mr}: ${c.error}` : mrNext(null, c.mr)) },
     changes: mrKind('needs-you', c => canned('fix', mrRefOf(c))),
     failing: mrKind('needs-you', c => canned('pipeline', mrRefOf(c))),
-    conflict: mrKind('needs-you', c => canned('rebase', mrRefOf(c))),
+    conflict: mrKind('needs-you', rebaseAction),
     blocked: mrKind('review'),
     replied: mrKind('review'),
     pipeline: mrKind('review'),
@@ -459,7 +465,7 @@ function withPin(x) {
 
 // One row per work item, newest agent first, with its column, stage, next step, action, gate badge and usage.
 // Without the rows the user dismissed.
-export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads, seeds = [], reviews = reviewers, errorOf = () => null, sent = sentRows) {
+export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads, seeds = [], reviews = reviewers, errorOf = () => null, sent = sentRows, queue = mergeQueue, stops = queueStops) {
 
     // a reviewer chat is not work on the MR it reviews: it never becomes a row or its working chat
     const reviewerIds = new Set([...reviews.values()].map(r => r.id));
@@ -516,6 +522,21 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         if (asker) {
             Object.assign(row, { column: 'needs-you', next: `Asks: ${asker.asks.split('\n')[0]} · ${row.next}` });
         }
+        // Merge when ready (server/queue.mjs): a queued MR is in Doing with its place and step; one that left the queue says why
+        // while its head is unchanged. Offered on every open GitLab MR that is not a draft
+        let mergeQueueButton = null;
+        if (isGitLabMr(it.pr) && prState?.state === 'open') {
+            const q = queue.get(it.pr), at = placeOf(it.pr, queue), stop = stops.get(it.pr);
+            if (q) {
+                Object.assign(row, { column: 'doing', next: `Queued to merge (${at.n} of ${at.of} onto ${prState.target})${q.step ? ` — ${q.step}` : ''}`, action: null });
+                mergeQueueButton = { label: 'Unqueue', kind: 'unqueue', message: `Take ${mrRef(it.pr)} out of the merge queue.` };
+            } else if (!prState.draft) {
+                if (stop && stop.sha === prState.sha) {
+                    row.next = `Left the merge queue: ${stop.reason} · ${row.next}`;
+                }
+                mergeQueueButton = { label: 'Merge when ready', kind: 'queue', message: `Rebase, wait for the pipeline and merge ${mrRef(it.pr)} when it is its turn, without asking again. This can't be undone.` };
+            }
+        }
         // an approved MR needs no reviewer: its row says what still stops the merge instead
         const rev = !row.action && row.column === 'review' && !prState?.approved ? reviewAction(reviews.get(it.key), sessions.find(s => s.id === reviews.get(it.key)?.id), now, prState?.sha) : null;
 
@@ -550,6 +571,8 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             activity: agents.filter(a => a !== agent).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
             next: row.next,
+            queue: mergeQueueButton,
+            queued: queue.has(it.pr) ? { at: queue.get(it.pr).at, target: prState?.target ?? queue.get(it.pr).target } : null, // for the store
             action: row.action ?? (rev?.label ? rev : null),
             note: row.action ? null : rev?.note ?? null,
             checks: sessions.find(s => s.id === (agent?.sessionId ?? it.linkSession))?.checks ?? null,

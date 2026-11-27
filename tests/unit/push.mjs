@@ -45,6 +45,7 @@ assert.equal(reviewNote([]), '');
     assert.ok(r.names.includes('CLAUDE.md') && r.at >= 2_000_000);
     assert.ok(r.reload.startsWith('The rules changed. Re-read /') && r.reload.includes(`${rulesSources().at(-1).split("/").pop()}, ~/.claude/CLAUDE.md and ${join(cwd, 'CLAUDE.md')} now and follow them`), r.reload);
     assert.equal(reloadMessage(), `The rules changed. Re-read ${[...rulesSources(), '~/.claude/CLAUDE.md'].join(' and ').replace(/ and (?=.* and )/g, ', ')} now and follow them from here on (they override your earlier instructions where they differ).`);
+    assert.equal(reloadMessage(rulesSources()), reloadMessage(), 'a rules file inside the project (codetool itself) is named once');
     touch(join(cwd, 'AGENTS.md'), 5_000_000);
     assert.ok(!(await stale(1_500_000, 1e14 + 1000)).names.includes('AGENTS.md'), 'mtimes are cached for 10s');
     assert.ok((await stale(1_500_000, 1e14 + 20_000)).names.includes('AGENTS.md'));

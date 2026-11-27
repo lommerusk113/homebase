@@ -56,8 +56,9 @@ export async function rulesStale(startedAt, cwd, now = Date.now(), home = homedi
     return names.size ? { names: [...names], at, reload: reloadMessage(project) } : undefined;
 }
 
-// What "Load new rules" types into the chat: re-read the global rules, plus the project's own files that changed.
-export const reloadMessage = (project = []) => canned('rules', [...rulesSources(), '~/.claude/CLAUDE.md', ...project].join(' and ').replace(/ and (?=.* and )/g, ', ')).message;
+// What "Load new rules" types into the chat: re-read the global rules, plus the project's own files that changed (once each:
+// in codetool itself the global rules are project files too).
+export const reloadMessage = (project = []) => canned('rules', [...new Set([...rulesSources(), '~/.claude/CLAUDE.md', ...project])].join(' and ').replace(/ and (?=.* and )/g, ', ')).message;
 
 // Which rules a chat has been told about (loaded or dismissed) is a fact about the chat, so it lives here (rules-seen.json: id -> newest mtime), not in each browser.
 const SEEN_DIR = () => process.env.HOMEBASE_DIR ?? join(homedir(), '.claude', 'homebase');

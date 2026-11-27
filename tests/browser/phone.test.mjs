@@ -104,7 +104,7 @@ export default {
         await asPhone(page, async () => {
             await open();
             await pane(page, 'work');
-            const btn = `#masters tr[data-key="${MR(104)}"] .act-btn`, sends = () => page.posts.filter(p => p.url.includes('/api/send'));
+            const btn = `#masters tr[data-key="agent-stopped"] .act-btn`, sends = () => page.posts.filter(p => p.url.includes('/api/send'));
             const foot = n => `[...document.querySelectorAll('wa-dialog[open] wa-button[slot="footer"]')].at(${n})`;
             // the dialog animates in: a button is tapped once it has stopped moving (two polls at the same place)
             const tap = async (n, what) => {

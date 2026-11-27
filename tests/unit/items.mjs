@@ -94,8 +94,10 @@ const forged = workItems([
 assert.deepEqual(forged.map(i => [i.key, i.sessionId, i.column]), [[mr(1), 'old', 'review'], [mr(7), 'new', 'review']]);
 // Rebase: a GitLab MR that is only behind asks GitLab (kind rebase, the chat message kept as the fallback); a conflicted one asks the chat
 {
-    const rows = blocked => workItems([{ id: 's', project: 'p', prs: [{ url: mr(71), at: 1 }], agents: [] }], () => open({ blocked, branch: 'b71' }), 10, new Map());
-    const [behind] = rows('rebase'), [conflicted] = rows('conflict');
+    const rows = (blocked, more) => workItems([{ id: 's', project: 'p', prs: [{ url: mr(71), at: 1 }], agents: [] }], () => open({ blocked, branch: 'b71', ...more }), 10, new Map());
+    const [behind] = rows('rebase', { reviewRequired: true }), [conflicted] = rows('conflict');
+    // behind and nothing else in the way: Ready to merge, the one Merge button (the queue rebases it)
+    assert.deepEqual((([r]) => [r.column, r.action.kind, r.action.label])(rows('rebase', { approved: true, reviewRequired: true })), ['ready', 'merge', 'Merge']);
     assert.equal(behind.action.kind, 'rebase');
     assert.match(behind.action.message, /^Rebase !71 .*onto its target/);
     assert.equal(conflicted.action.kind, undefined);
@@ -237,7 +239,7 @@ assert.equal(repoName('git@gitlab.com:tritt/accounting/pracsys.git'), 'pracsys')
 assert.equal(repoName('https://github.com/contaas/portal-frontend'), 'portal-frontend');
 console.log('ok repo name');
 const act = (prState, agent, url = mr(4)) => actOf(url, prState, agent, 'T');
-assert.deepEqual(act(open({ ready: true, reviewers: ['Ann'] }), null), { label: 'Merge', kind: 'merge', message: "Merge !4 on GitLab now. This can't be undone." });
+assert.deepEqual(act(open({ ready: true, reviewers: ['Ann'] }), null), { label: 'Merge', kind: 'merge', message: "Merge !4 on GitLab: rebase it if it is behind, wait for the pipeline, then merge it in its turn, without asking again. This can't be undone." });
 assert.equal(act(open({ ready: true }), null, 'https://github.com/o/r/pull/9').message.slice(0, 63), 'Run review-gate on #9 (https://github.com/o/r/pull/9). If the v');
 assert.deepEqual(act(open({ changes: true, reviewers: ['Ann'] }), null), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
 // one precedence with nextStep: a stopped agent wins over the MR's own ask, but not over a merged MR; a running pipeline asks nothing

@@ -28,7 +28,10 @@ const kinds = [
     ['changes', open({ changes: true, ci: 'failing', blocked: 'conflict' }), 'needs-you', 'Fix & reply'],
     ['failing', open({ ci: 'failing', blocked: 'conflict' }), 'needs-you', 'Fix pipeline'],
     ['conflict', open({ blocked: 'conflict' }), 'needs-you', 'Rebase'],
-    ['conflict', open({ blocked: 'rebase' }), 'needs-you', 'Rebase'],
+    ['conflict', open({ blocked: 'rebase', reviewRequired: true }), 'needs-you', 'Rebase'], // behind, but not approved: the chat's Rebase
+    ['conflict', open({ blocked: 'rebase', approved: true, reviewRequired: true, draft: true }), 'needs-you', 'Rebase'],
+    ['ready', open({ blocked: 'rebase', approved: true }), 'ready', 'Merge'], // only behind: Merge queues it, the queue rebases it
+    ['ready', open({ blocked: 'rebase', reviewRequired: false }), 'ready', 'Merge'],
     ['blocked', open({ blocked: 'checks', draft: true }), 'review', 'Review'],
     ['draft', open({ draft: true }), 'needs-you', 'Mark ready'],
     ['pipeline', open({ draft: true, ci: 'running' }), 'review', 'Review'],
@@ -256,6 +259,16 @@ console.log('ok order by first appearance');
     assert.match(mergeRefusal(row(open({ reviewers: ['Ann'] })), 'abc1234'), /no Merge button/);
 }
 console.log('ok merge only at the confirmed head');
+
+// the merge queue: one button, Merge, then Unqueue while queued
+{
+    const mr = 'https://gitlab.com/g/p/-/merge_requests/4', ps = open({ blocked: 'rebase', approved: true, target: 'main', sha: 'abc1234' });
+    const q = new Map([[mr, { at: 1, project: 'p', target: 'main', step: 'rebasing on GitLab' }]]);
+    const queued = workItems([main({ prs: [{ url: mr, at: 1 }] })], () => ps, NOW, new Map(), [], new Map(), () => null, new Map(), q, new Map()).find(x => x.pr === mr);
+    assert.deepEqual([queued.column, queued.action.label, queued.action.kind, queued.next], ['doing', 'Unqueue', 'unqueue', 'Queued to merge (1 of 1 onto main) — rebasing on GitLab']);
+    assert.equal(queued.queue, undefined, 'no second button');
+}
+console.log('ok merge queue is the Merge button');
 
 // inputs that must never take the board down or leave a row stuck
 {

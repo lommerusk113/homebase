@@ -1,4 +1,4 @@
-// The merge queue: GitLab MRs the user marked "Merge when ready". Works one MR per project and target branch at a time (a
+// The merge queue: GitLab MRs the user queued with Merge. Works one MR per project and target branch at a time (a
 // fast-forward project's every merge puts the others behind again): rebase the head through GitLab if it is behind, wait for
 // its pipeline and mergeability, merge it, move on. Polled on the board's own poll, from the forge's settled answers.
 // Kept in items.json with each MR (store.mjs: `queued`), so a restart goes on where it was.

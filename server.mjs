@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto';
 import { transcript, agentFeed } from './server/transcripts.mjs';
 import { mergeQueue, queueStops } from './server/queue.mjs';
 import { polledSessions, startingChats } from './server/sessions.mjs';
-import { refreshAll, refreshInfo, isGitLab, mergeMr, rebaseMr, prs, swr } from './server/forge.mjs';
+import { refreshAll, refreshInfo, isGitLab, rebaseMr, prs, swr } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
 import { reviewRequests } from './server/reviews.mjs';
 import { limits } from './server/limits.mjs';
@@ -386,36 +386,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 polledSessions.stale();
                 return res.end('ok');
             }
-            // Merge of an approved GitLab MR: only a row the board shows as ready with its Merge button, at the head it showed
-            if (isPost('/api/merge')) {
-                const key = url.searchParams.get('key');
-                // the board's answer may be a minute old: ask the forge again (an MR row's key is its URL), so a new comment or
-                // a withdrawn approval is seen before an irreversible merge. Expired, not dropped: the last answer stays the one
-                // GitLab's "still checking" keeps, as on every poll; a lookup that fails now refuses the merge
-                const fresh = [prs.get(key), swr.get(`comments:${key}`)].filter(Boolean);
-                fresh.forEach(hit => { hit.at = 0; });
-                polledSessions.stale();
-                const row = (await polledSessions()).flatMap(s => s.items ?? []).find(i => i.key === key);
-                if (fresh.some(hit => hit.error)) {
-                    return deny(409, `Couldn't check the MR with GitLab just now: try again`);
-                }
-                const refused = mergeRefusal(row, url.searchParams.get('sha'));
-                if (refused) {
-                    return deny(409, refused);
-                }
-                if (!claim(sentRows, `merge:${key}`, row.prState?.sha)) {
-                    return deny(409, 'Already merging');
-                }
-                try {
-                    await mergeMr(row.pr, row.prState?.sha);
-                } catch (e) {
-                    release(sentRows, `merge:${key}`);
-                    throw e;
-                } finally {
-                    polledSessions.stale();
-                }
-                return res.end('ok');
-            }
             // Rebase of a GitLab MR that is only behind its target: GitLab does it; a failure is a 409 and the page asks the chat
             if (isPost('/api/rebase')) {
                 const key = url.searchParams.get('key');
@@ -434,12 +404,23 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 }
                 return res.end('ok');
             }
-            // Merge when ready: puts a GitLab MR in the merge queue (on=1), or takes it out (on=0); server/queue.mjs works it off
+            // Merge (on=1) puts a GitLab MR in the merge queue, Unqueue (on=0) takes it out; server/queue.mjs works the queue off.
+            // Only a row the board shows with that button, at the head the user confirmed
             if (isPost('/api/queue')) {
                 const key = url.searchParams.get('key'), on = url.searchParams.get('on') !== '0';
+                // the board's answer may be a minute old: ask the forge again (an MR row's key is its URL), so a new comment or a
+                // withdrawn approval is seen before an irreversible merge. Expired, not dropped: the last answer stays the one
+                // GitLab's "still checking" keeps, as on every poll; a lookup that fails now refuses it
+                const fresh = on ? [prs.get(key), swr.get(`comments:${key}`)].filter(Boolean) : [];
+                fresh.forEach(hit => { hit.at = 0; });
+                polledSessions.stale();
                 const row = (await polledSessions()).flatMap(s => s.items ?? []).find(i => i.key === key);
-                if (row?.queue?.kind !== (on ? 'queue' : 'unqueue')) {
-                    return deny(409, `This row can't ${on ? 'be queued' : 'leave the queue'} any more: reload the board`);
+                if (fresh.some(hit => hit.error)) {
+                    return deny(409, `Couldn't check the MR with GitLab just now: try again`);
+                }
+                const refused = on ? mergeRefusal(row, url.searchParams.get('sha')) : row?.action?.kind !== 'unqueue' && 'This MR is not in the merge queue any more: reload the board';
+                if (refused) {
+                    return deny(409, refused);
                 }
                 if (on) {
                     mergeQueue.set(row.pr, { at: Date.now(), project: row.project, target: row.prState.target, step: null });

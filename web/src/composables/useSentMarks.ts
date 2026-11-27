@@ -70,31 +70,6 @@ async function rebase(x: WorkItem) {
     await hooks.refresh();
 }
 
-const queueing = new Set<string>(); // rows whose queue POST is in flight
-
-/** Merge when ready / Unqueue: puts the MR in Homebase's merge queue or takes it out (POST /api/queue). */
-async function queue(x: WorkItem) {
-
-    if (!x.queue || queueing.has(x.key)) {
-        return;
-    }
-    queueing.add(x.key);
-    try {
-        const r = await api(`/api/queue?key=${encodeURIComponent(x.key)}&on=${x.queue.kind === 'queue' ? 1 : 0}`, { method: 'POST' }).catch(() => null);
-        if (!r?.ok) {
-            useNotice().showError(r ? await r.text() : 'Couldn’t reach Homebase to queue the merge');
-        }
-        await hooks.refresh();
-    } finally {
-        queueing.delete(x.key);
-    }
-}
-
-/** Queuing a merge can't be undone, so it asks first; taking the MR out does not. */
-const pressQueue = (x: WorkItem) => (x.queue?.kind === 'queue'
-    ? confirmAction({ key: x.key, action: { label: x.queue.label, message: x.queue.message, kind: 'merge' } }, () => queue(x))
-    : queue(x));
-
 const reviewing = new Set<string>(); // rows whose Review POST is in flight, so a double click starts one reviewer
 
 /** Review: starts the row's reviewer chat (POST /api/reviewer); the row says "Reviewing…" from the next poll. */
@@ -115,24 +90,24 @@ async function startReview(x: WorkItem) {
     }
 }
 
-const merging = new Set<string>(); // rows whose merge POST is in flight
+const queueing = new Set<string>(); // rows whose queue POST is in flight
 
-/** Merge: Homebase merges the approved GitLab MR (POST /api/merge); the row says Merged from the next poll. */
-async function merge(x: WorkItem) {
+/** Merge / Unqueue: puts the MR in Homebase's merge queue (on) or takes it out (POST /api/queue); the row shows its queue step from the next poll. */
+async function queue(x: WorkItem, on: boolean) {
 
-    if (merging.has(x.key)) {
+    if (queueing.has(x.key)) {
         return;
     }
-    merging.add(x.key);
+    queueing.add(x.key);
     try {
         // the head the row showed when Merge was clicked: the server refuses if the MR moved since
-        const r = await api(`/api/merge?key=${encodeURIComponent(x.key)}&sha=${encodeURIComponent(x.prState?.sha ?? '')}`, { method: 'POST' }).catch(() => null);
+        const r = await api(`/api/queue?key=${encodeURIComponent(x.key)}&on=${on ? 1 : 0}&sha=${encodeURIComponent(x.prState?.sha ?? '')}`, { method: 'POST' }).catch(() => null);
         if (!r?.ok) {
-            useNotice().showError(r ? await r.text() : 'Couldn’t reach Homebase to merge');
+            useNotice().showError(r ? await r.text() : 'Couldn’t reach Homebase to queue the merge');
         }
         await hooks.refresh();
     } finally {
-        merging.delete(x.key);
+        queueing.delete(x.key);
     }
 }
 
@@ -141,6 +116,9 @@ async function send(x: WorkItem) {
 
     if (x.action?.kind === 'rebase') {
         return rebase(x);
+    }
+    if (x.action?.kind === 'unqueue') {
+        return queue(x, false);
     }
     if (x.action?.kind === 'review') {
         return startReview(x);
@@ -182,9 +160,9 @@ export function useSentMarks() {
 
     // On a touch screen the tooltip with the message never shows and a thumb can miss the row, so a tap asks first
     // (the dialog of the a key); its Send clicks the button from script, which is not a tap.
-    // Merge can't be undone, so it always asks first, click or tap
-    const press = (x: WorkItem, tapped: boolean) => (x.action?.kind === 'merge' ? confirmAction(x as WorkItem & { action: RowAction }, () => merge(x))
+    // Merge can't be undone, so it always asks first, click or tap; Unqueue just does it
+    const press = (x: WorkItem, tapped: boolean) => (x.action?.kind === 'merge' ? confirmAction(x as WorkItem & { action: RowAction }, () => queue(x, true))
         : tapped && touch() ? confirmAction(x as WorkItem & { action: RowAction }) : send(x));
 
-    return { optimistic, press, pressQueue, noReply };
+    return { optimistic, press, noReply };
 }

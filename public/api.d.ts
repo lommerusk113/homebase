@@ -153,7 +153,7 @@ interface RowAction {
     label: string;
     message: string;
     /** a review chat's button: Review starts the reviewer, Reviewing… waits, Send findings types its last message into the row's chat (the others send `message` as is) */
-    kind?: 'review' | 'reviewing' | 'findings' | 'merge' | 'rebase'; // rebase: Homebase asks GitLab to rebase an MR that is only behind (POST /api/rebase), the chat message is its fallback; merge: Homebase merges the approved GitLab MR itself (POST /api/merge), after a confirm
+    kind?: 'review' | 'reviewing' | 'findings' | 'merge' | 'rebase' | 'unqueue'; // rebase: Homebase asks GitLab to rebase an MR that is only behind (POST /api/rebase), the chat message is its fallback; merge: puts the GitLab MR in Homebase's merge queue (POST /api/queue), after a confirm, which rebases it if behind and merges it; unqueue takes it out (POST /api/queue?on=0)
     hint?: string; // the tooltip, when the message is too long for one
     reviewerId?: string;
 }
@@ -203,8 +203,6 @@ interface WorkItem {
     activity: Activity[];
     requested: { at: number; text: string } | null;
     state?: { kind: string; reason: string };
-    /** the second button: Merge when ready (POST /api/queue?on=1) or Unqueue (on=0), on a GitLab MR that is open; its message is the confirm's text */
-    queue?: { label: string; message: string; kind: 'queue' | 'unqueue' } | null;
     next: string;
     action: RowAction | null;
     /** a quiet line in the button's slot when there is no button, e.g. 'Reviewed twice' */

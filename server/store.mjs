@@ -76,7 +76,7 @@ export function record(store, items, now = Date.now()) {
             // the forge's last answers (MR state and comments) with when they came, served after a restart (seedForge)
             forge: it.forgeAnswers?.forge ?? old?.forge ?? null,
             forgeAt: it.forgeAnswers?.forgeAt ?? old?.forgeAt ?? null,
-            ...(it.queued && { queued: it.queued }), // "Merge when ready" (server/queue.mjs): kept so a restart goes on with the queue
+            ...(it.queued && { queued: it.queued }), // the merge queue (server/queue.mjs): kept so a restart goes on with the queue
             comments: it.forgeAnswers?.comments ?? old?.comments ?? null,
             commentsAt: it.forgeAnswers?.commentsAt ?? old?.commentsAt ?? null
         };

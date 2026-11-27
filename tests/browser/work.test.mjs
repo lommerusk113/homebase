@@ -334,16 +334,16 @@ export default {
         await page.waitFor(`document.getElementById('c-back').hidden && !document.getElementById('feed').textContent.includes('Find out why the auth test is flaky') && location.hash === ''`, { what: 'the chat back' });
     },
 
-    'Merge on an approved MR asks first and merges nothing on Cancel': async ({ page, open }) => {
+    'Merge on an approved MR asks first and queues nothing on Cancel': async ({ page, open }) => {
         await open();
-        const btn = `#masters tr[data-key="${MR(102)}"] .act-btn`, merges = () => page.posts.filter(p => p.url.includes('/api/merge'));
+        const btn = `#masters tr[data-key="${MR(102)}"] .act-btn`, merges = () => page.posts.filter(p => p.url.includes('/api/queue'));
         const cancel = `[...document.querySelectorAll('wa-dialog[open] wa-button[slot="footer"]')].at(0)`;
         await page.waitFor(`document.querySelector('${btn}')`, { what: 'the Merge button' });
         await page.click(btn);
-        assert.equal(await page.waitFor(`document.querySelector('wa-dialog[open] pre')?.textContent`, { what: 'the merge confirm' }), "Merge !102 on GitLab now. This can't be undone.");
+        assert.match(await page.waitFor(`document.querySelector('wa-dialog[open] pre')?.textContent`, { what: 'the merge confirm' }), /^Merge !102 on GitLab: rebase it if it is behind/);
         await page.waitFor(`(() => { const r = JSON.stringify(${cancel}?.getBoundingClientRect()), still = r && r === window.__at; window.__at = r; return still; })()`, { what: 'Cancel at rest' });
         await page.clickOn(cancel, 'Cancel');
         await page.waitFor(`!document.querySelector('wa-dialog[open]')`, { what: 'the dialog to close' });
-        assert.equal(merges().length, 0, 'nothing merged');
+        assert.equal(merges().length, 0, 'nothing queued');
     }
 };

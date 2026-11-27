@@ -101,6 +101,9 @@ function mrNext(prState, mr) {
 
 // Replied threads are what stops the merge only when the forge says so: GitLab's discussions_not_resolved (the project
 // requires them resolved). On GitHub a PR that can't merge always has another reason (review, draft, CI, conflict).
+// An MR whose one blocker is being behind its target (GitLab only; a real conflict, draft, missing approval, threads and a
+// pipeline each keep it in Needs you with the chat's Rebase).
+const behindOnly = ps => ps.blocked === 'rebase' && !ps.draft && !ps.ci && (ps.approved || !ps.reviewRequired) && ps.mergeStatus !== 'discussions_not_resolved';
 const waitsOnThreads = ps => !!ps.replied && !ps.ready && ps.mergeStatus === 'discussions_not_resolved';
 
 // The step review comments ask for, or null when there are none.
@@ -166,6 +169,7 @@ export function deriveKind(ps, agent, hasPr, requested = false, chat = null) {
     // review comments ask for a fix with or without the forge's changes flag, also on an approved MR (withThreads says so too)
     const kind = ps.changes || ps.unresolved || ps.unanswered ? 'changes'
         : ps.ci === 'failing' ? 'failing'
+        : behindOnly(ps) ? 'ready' // only behind its target: Merge queues it and the queue has GitLab rebase it
         : ps.blocked === 'conflict' || ps.blocked === 'rebase' ? 'conflict'
         : ps.blocked ? 'blocked'
         : ps.draft && ps.ci !== 'running' ? 'draft' // nothing blocks it but the draft flag: the user takes it out of draft
@@ -190,9 +194,10 @@ const silentText = c => {
     const m = c.agent.updated ? Math.max(1, Math.round((c.now - c.agent.updated) / 60_000)) : null;
     return m ? `No output for ${m}m — may still be working · Continue nudges it` : 'No recent output — may still be working · Continue nudges it';
 };
-// GitLab: Merge merges it from Homebase (POST /api/merge, after a confirm); a GitHub PR still asks its chat.
+// GitLab: Merge puts it in Homebase's merge queue (POST /api/queue, after a confirm), which rebases it if it is behind and merges it
+// in its turn; a GitHub PR still asks its chat.
 const mergeAction = c => (/\/-\/merge_requests\//.test(c.pr)
-    ? { label: 'Merge', kind: 'merge', message: `Merge ${mrRef(c.pr)} on GitLab now. This can't be undone.` }
+    ? { label: 'Merge', kind: 'merge', message: `Merge ${mrRef(c.pr)} on GitLab: rebase it if it is behind, wait for the pipeline, then merge it in its turn, without asking again. This can't be undone.` }
     : canned('merge', mrRefOf(c)));
 // A GitLab MR that is only behind its target: Rebase asks GitLab to (POST /api/rebase); its message is the fallback for the
 // chat when GitLab can't. A conflicted MR, and a GitHub PR, always ask the chat.
@@ -231,7 +236,7 @@ export const KINDS = {
     replied: mrKind('review'),
     pipeline: mrKind('review'),
     draft: { ...mrKind('needs-you', c => canned('ready', mrRefOf(c))), next: () => 'Ready except draft: mark ready' },
-    ready: mrKind('ready', mergeAction),
+    ready: { ...mrKind('ready', mergeAction), next: c => (c.ps.blocked === 'rebase' ? 'Behind its target — Merge rebases it first' : mrNext(c.ps, c.mr)) },
     'in-review': mrKind('review'),
     'needs-reviewer': mrKind('review', c => canned('review', mrRefOf(c)))
 };
@@ -522,19 +527,14 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
         if (asker) {
             Object.assign(row, { column: 'needs-you', next: `Asks: ${asker.asks.split('\n')[0]} · ${row.next}` });
         }
-        // Merge when ready (server/queue.mjs): a queued MR is in Doing with its place and step; one that left the queue says why
-        // while its head is unchanged. Offered on every open GitLab MR that is not a draft
-        let mergeQueueButton = null;
+        // the merge queue (server/queue.mjs): a queued MR is in Doing with its place and step, its one button Unqueue; one that
+        // left the queue says why while its head is unchanged
         if (isGitLabMr(it.pr) && prState?.state === 'open') {
             const q = queue.get(it.pr), at = placeOf(it.pr, queue), stop = stops.get(it.pr);
             if (q) {
-                Object.assign(row, { column: 'doing', next: `Queued to merge (${at.n} of ${at.of} onto ${prState.target})${q.step ? ` — ${q.step}` : ''}`, action: null });
-                mergeQueueButton = { label: 'Unqueue', kind: 'unqueue', message: `Take ${mrRef(it.pr)} out of the merge queue.` };
-            } else if (!prState.draft) {
-                if (stop && stop.sha === prState.sha) {
-                    row.next = `Left the merge queue: ${stop.reason} · ${row.next}`;
-                }
-                mergeQueueButton = { label: 'Merge when ready', kind: 'queue', message: `Rebase, wait for the pipeline and merge ${mrRef(it.pr)} when it is its turn, without asking again. This can't be undone.` };
+                Object.assign(row, { column: 'doing', next: `Queued to merge (${at.n} of ${at.of} onto ${prState.target})${q.step ? ` — ${q.step}` : ''}`, action: { label: 'Unqueue', kind: 'unqueue', message: `Take ${mrRef(it.pr)} out of the merge queue.` } });
+            } else if (stop && stop.sha === prState.sha) {
+                row.next = `Left the merge queue: ${stop.reason} · ${row.next}`;
             }
         }
         // an approved MR needs no reviewer: its row says what still stops the merge instead
@@ -571,7 +571,6 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             activity: agents.filter(a => a !== agent).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
             next: row.next,
-            queue: mergeQueueButton,
             queued: queue.has(it.pr) ? { at: queue.get(it.pr).at, target: prState?.target ?? queue.get(it.pr).target } : null, // for the store
             action: row.action ?? (rev?.label ? rev : null),
             note: row.action ? null : rev?.note ?? null,

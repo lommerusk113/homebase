@@ -44,12 +44,12 @@ MR state, first match wins:
 |---|---|---|---|
 | changes | review comments to fix or answer, or changes requested, also on an approved MR (its text then starts Approved) | Needs you | Fix & reply |
 | failing | pipeline failed | Needs you | Fix pipeline |
-| conflict | conflicts, or needs a rebase | Needs you | Rebase (GitLab, behind only: GitLab rebases it, "Rebasing on GitLab…" until done, the chat is asked only if GitLab fails; otherwise the chat is asked) |
+| conflict | conflicts, or behind its target with another blocker (draft, no approval, pipeline running, discussions to resolve) | Needs you | Rebase (GitLab, behind only: GitLab rebases it, "Rebasing on GitLab…" until done, the chat is asked only if GitLab fails; a real conflict asks the chat) |
 | blocked | blocked by another MR or external checks | In review | Review |
 | draft | nothing blocks it but the draft flag | Needs you | Mark ready |
 | replied | not mergeable, and the threads open are ones you replied to (the project requires them resolved): waiting on the reviewer | In review | Review (none once approved) |
 | pipeline | pipeline running | In review | Review |
-| ready | mergeable and approved by someone (GitLab asks its approvals; GitHub: approved, or no review required), nothing unanswered; open threads the project lets stay open are counted in the text ("Approved by Børre — merge it · 2 open threads"), never a blocker | Ready to merge | GitLab: Merge (after a confirm Homebase asks GitLab again and merges only if the row still offers Merge at the head you confirmed); GitHub: Merge + close issue (asks the chat to run the gate, then merge) |
+| ready | mergeable and approved by someone (GitLab: also one whose only blocker is being behind its target; the text says so, and Merge has GitLab rebase it) (GitLab asks its approvals; GitHub: approved, or no review required), nothing unanswered; open threads the project lets stay open are counted in the text ("Approved by Børre — merge it · 2 open threads"), never a blocker | Ready to merge | GitLab: Merge (after a confirm Homebase asks GitLab again and queues it only if the row still offers Merge at the head you confirmed, see Merge queue); GitHub: Merge + close issue (asks the chat to run the gate, then merge) |
 | in-review | has reviewers, or approved but not mergeable yet ("Approved by Ann — not mergeable yet (GitLab: needs a passing pipeline)") | In review | Review (none once approved) |
 | needs-reviewer | no reviewer | In review | Request review |
 
@@ -81,7 +81,7 @@ A row never moves inside its group; it only moves when its group changes.
 
 ## Merge queue
 
-Every open GitLab MR that is not a draft has a second button, Merge when ready (after a confirm), which puts it in the queue (`server/queue.mjs`): the row goes to Doing as "Queued to merge (n of m onto <target>) — <step>" with an Unqueue button.
+Merge on a GitLab MR (ready, or only behind its target) is the queue's button: after a confirm it puts the MR in the queue (`server/queue.mjs`), and the row goes to Doing as "Queued to merge (n of m onto <target>) — <step>" with the same button reading Unqueue. There is no second button.
 One MR per project and target branch moves at a time, the oldest first: behind its target → GitLab rebases it; running pipeline or GitLab still checking → waits; ready → merged at the commit seen.
 It leaves the queue, and the row says "Left the merge queue: <why>" while the MR is unchanged, on: conflicts, failed pipeline, needs approval, unresolved discussions (changes requested, or the project requires them resolved), draft, closed (a merge elsewhere just ends it).
 
@@ -89,4 +89,4 @@ It leaves the queue, and the row says "Left the merge queue: <why>" while the MR
 
 A click on a row's button is the only manual move: the row goes to Doing at once (rule 7) and stays there while its kind is the one clicked, across restarts, for at most 30 minutes.
 When the kind changes the click is over, so the same failure coming back later shows its button again; after 30 minutes the button is back too, because the chat did nothing the forge can see.
-Review, Send findings and Merge are not holds: Review shows Reviewing… on its row, Send findings hands the reviewer's findings to the chat, Merge turns the row Merged.
+Review, Send findings and Merge are not holds: Review shows Reviewing… on its row, Send findings hands the reviewer's findings to the chat, Merge puts the MR in the merge queue (Queued to merge, then Merged).

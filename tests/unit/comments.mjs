@@ -156,7 +156,7 @@ assert.deepEqual([asked.unanswered, asked.unansweredBy], [1, ['Børre']]);
 const askedPr = withThreads(waiting, asked);
 assert.equal(colOf(askedPr, null, true), 'needs-you');
 assert.equal(nextOf(askedPr, null), "Reply to Børre's comment");
-assert.deepEqual(actOf(mr(4), askedPr, null, 'T'), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
+assert.deepEqual((a => [a.label, a.kind, a.helper])(actOf(mr(4), askedPr, null, 'T')), ['Fix & reply', 'helper', 'changes']);
 assert.equal(withThreads(waiting, humanComments([note(B, 2), note(ME, 3, false)], 'me', 10, [])), waiting); // my later thread note answers it
 assert.equal(withThreads(waiting, humanComments([note(ME, 1), note(BOT, 2)], 'me', 10, [])), waiting); // bots don't count
 assert.equal(nextOf(withThreads(waiting, humanComments([note(ME, 1), note(B, 2), note(ANN, 3)], 'me')), null), 'Answer 2 comments from Ann, Børre');

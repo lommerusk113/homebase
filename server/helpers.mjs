@@ -94,7 +94,7 @@ async function mainCheckout(git, cwd) {
 }
 
 // Starts a helper for parent session { id, cwd, project } with `brief` as its first message. Over the limits: 429 with the running list.
-export async function startHelper(dir, parent, { brief, title, model = 'sonnet', base = null, branch = null, worktree = true },
+export async function startHelper(dir, parent, { brief, title, model = 'sonnet', base = null, branch = null, worktree = true, meta = {} },
                                   { tm = tmux, git = gitRun, now = Date.now(), newId = randomUUID, trust = trustNewProject, hex = () => randomBytes(2).toString('hex') } = {}) {
 
     const text = String(brief ?? '').trim();
@@ -140,7 +140,7 @@ export async function startHelper(dir, parent, { brief, title, model = 'sonnet',
             }
             throw e;
         }
-        const h = { id, parent: parent.id, parentTmux: parent.tmux, project: parent.project ?? null, top, cwd, branch: br, base: from, slug: s, title, model, at: now, closedAt: null };
+        const h = { ...meta, id, parent: parent.id, parentTmux: parent.tmux, project: parent.project ?? null, top, cwd, branch: br, base: from, slug: s, title, model, at: now, closedAt: null };
         helpers.set(id, h);
         await save(dir);
         if (worktree) {

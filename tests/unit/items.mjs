@@ -100,8 +100,7 @@ assert.deepEqual(forged.map(i => [i.key, i.sessionId, i.column]), [[mr(1), 'old'
     assert.deepEqual((([r]) => [r.column, r.action.kind, r.action.label])(rows('rebase', { approved: true, reviewRequired: true })), ['ready', 'merge', 'Merge']);
     assert.equal(behind.action.kind, 'rebase');
     assert.match(behind.action.message, /^Rebase !71 .*onto its target/);
-    assert.equal(conflicted.action.kind, undefined);
-    assert.match(conflicted.action.message, /^Rebase !71 .*onto its target/);
+    assert.deepEqual([conflicted.action.kind, conflicted.action.helper, conflicted.action.label], ['helper', 'conflict', 'Rebase']);
 }
 
 // a stopped agent retried by a later one with the same description no longer offers Continue on the MR
@@ -241,13 +240,14 @@ console.log('ok repo name');
 const act = (prState, agent, url = mr(4)) => actOf(url, prState, agent, 'T');
 assert.deepEqual(act(open({ ready: true, reviewers: ['Ann'] }), null), { label: 'Merge', kind: 'merge', message: "Merge !4 on GitLab: rebase it if it is behind, wait for the pipeline, then merge it in its turn, without asking again. This can't be undone." });
 assert.equal(act(open({ ready: true }), null, 'https://github.com/o/r/pull/9').message.slice(0, 63), 'Run review-gate on #9 (https://github.com/o/r/pull/9). If the v');
-assert.deepEqual(act(open({ changes: true, reviewers: ['Ann'] }), null), { label: 'Fix & reply', message: `Address the review comments on !4 (${mr(4)}), push, and reply in each thread.` });
+// Rebase (conflict), Fix pipeline and Fix & reply start a helper (server/actions.mjs) instead of typing into the chat
+assert.deepEqual((a => [a.label, a.kind, a.helper])(act(open({ changes: true, reviewers: ['Ann'] }), null)), ['Fix & reply', 'helper', 'changes']);
 // one precedence with nextStep: a stopped agent wins over the MR's own ask, but not over a merged MR; a running pipeline asks nothing
 assert.deepEqual([open({ changes: true }), open({ ready: true })].map(p => act(p, { status: 'stopped' }).label), ['Continue', 'Continue']);
 assert.equal(nextOf(open({ ready: true }), { status: 'stopped' }), 'Helper stopped — Continue resumes it');
 assert.equal(act({ state: 'merged' }, { status: 'stopped' }), null);
 assert.equal(act(open({ ci: 'running' }), null), null);
-assert.deepEqual(act(open({ ci: 'failing', reviewers: ['Ann'] }), null), { label: 'Fix pipeline', message: `The pipeline on !4 (${mr(4)}) is failing — find out why and fix it.` });
+assert.deepEqual((a => [a.label, a.kind, a.helper])(act(open({ ci: 'failing', reviewers: ['Ann'] }), null)), ['Fix pipeline', 'helper', 'failing']);
 assert.deepEqual(act(open(), { status: 'done' }), { label: 'Request review', message: `Assign a reviewer to !4 (${mr(4)}) — suggest who.` });
 assert.equal(act(open(), null, 'https://github.com/o/r/pull/9').message, 'Assign a reviewer to #9 (https://github.com/o/r/pull/9) — suggest who.');
 assert.deepEqual(actOf(null, null, { status: 'stopped' }, 'Implement #9'), { label: 'Continue', message: "The subagent 'Implement #9' stopped — check why and continue it." });

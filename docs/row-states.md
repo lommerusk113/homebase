@@ -42,9 +42,9 @@ MR state, first match wins:
 
 | Kind | When | Group | Button |
 |---|---|---|---|
-| changes | review comments to fix or answer, or changes requested, also on an approved MR (its text then starts Approved) | Needs you | Fix & reply |
-| failing | pipeline failed | Needs you | Fix pipeline |
-| conflict | conflicts, or behind its target with another blocker (draft, no approval, pipeline running, discussions to resolve) | Needs you | Rebase (GitLab, behind only: GitLab rebases it, "Rebasing on GitLab…" until done, the chat is asked only if GitLab fails; a real conflict asks the chat) |
+| changes | review comments to fix or answer, or changes requested, also on an approved MR (its text then starts Approved) | Needs you | Fix & reply (starts a helper) |
+| failing | pipeline failed | Needs you | Fix pipeline (starts a helper) |
+| conflict | conflicts, or behind its target with another blocker (draft, no approval, pipeline running, discussions to resolve) | Needs you | Rebase (GitLab, behind only: GitLab rebases it, "Rebasing on GitLab…" until done, the chat is asked only if GitLab fails; a real conflict starts a helper) |
 | blocked | blocked by another MR or external checks | In review | Review |
 | draft | nothing blocks it but the draft flag | Needs you | Mark ready |
 | replied | not mergeable, and the threads open are ones you replied to (the project requires them resolved): waiting on the reviewer | In review | Review (none once approved) |
@@ -52,6 +52,10 @@ MR state, first match wins:
 | ready | mergeable and approved by someone (GitLab: also one whose only blocker is being behind its target; the text says so, and Merge has GitLab rebase it) (GitLab asks its approvals; GitHub: approved, or no review required), nothing unanswered; open threads the project lets stay open are counted in the text ("Approved by Børre — merge it · 2 open threads"), never a blocker | Ready to merge | GitLab: Merge (no confirm; the row shows queued at once and goes back with the error if refused; the server queues it only if the cached row still offers Merge at the head clicked, see Merge queue); GitHub: Merge + close issue (asks the chat to run the gate, then merge) |
 | in-review | has reviewers, or approved but not mergeable yet ("Approved by Ann — not mergeable yet (GitLab: needs a passing pipeline)") | In review | Review (none once approved) |
 | needs-reviewer | no reviewer | In review | Request review |
+
+Rebase (a real conflict), Fix pipeline and Fix & reply start a fresh helper (`server/actions.mjs`, POST `/api/action`) instead of typing into the MR's chat: its own Claude, tmux and worktree from the MR's source branch, with a fixed brief naming the MR and its job.
+Its row nests under the MR's row (the helper's title names the MR); the click shows "Sent to a helper…" at once and holds the row in Doing like any click (rule 7), and one helper runs per MR and action, a second click opening it.
+Continue still types into the existing chat.
 
 Review starts a read-only reviewer chat; it shows on every In review row that is not approved and has no button of its own.
 Two chats on one MR: the one that reported wins, then the lower session id, so the text is the same every poll.

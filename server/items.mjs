@@ -203,13 +203,16 @@ const mergeAction = c => (/\/-\/merge_requests\//.test(c.pr)
 // chat when GitLab can't. A conflicted MR, and a GitHub PR, always ask the chat.
 const rebaseAction = c => (/\/-\/merge_requests\//.test(c.pr) && c.ps?.blocked === 'rebase'
     ? { ...canned('rebase', mrRefOf(c)), kind: 'rebase' }
-    : canned('rebase', mrRefOf(c)));
+    : helperAction('rebase', 'conflict', 'rebases it onto its target and resolves the conflicts by meaning, then pushes with --force-with-lease', c));
 // What the merge queue (queue.mjs) asks a queued MR's chat when a conflict or failed pipeline stops it: the same message as the row's Rebase or Fix pipeline button.
 const fixOf = (ps, pr) => {
     const kind = ps?.blocked === 'conflict' ? 'conflict' : ps?.ci === 'failing' ? 'pipeline' : null;
 
     return kind ? { kind, message: canned(kind === 'conflict' ? 'rebase' : 'pipeline', mrRefOf({ pr })).message } : null;
 };
+// Rebase (a real conflict), Fix pipeline and Fix & reply start a fresh helper on the MR's branch (POST /api/action, server/actions.mjs)
+// rather than typing into the MR's chat, which is often busy. The label is the canned one; `helper` names the action.
+const helperAction = (key, helper, what, c) => ({ label: canned(key, '').label, kind: 'helper', helper, message: `Starts a fresh helper on ${mrRef(c.pr)} that ${what}` });
 const baseStage = c => stageOf(c.pr, c.ps, c.agent);
 const noButton = () => null;
 const mrKind = (column, action = noButton) => ({ column, action: c => (c.pr ? action(c) : null), next: c => mrNext(c.ps, c.mr), stage: baseStage });
@@ -235,8 +238,8 @@ export const KINDS = {
     finished: agentKind('finished', c => `Finished without ${c.aMr}`),
     idle: mrKind('idle'),
     unknown: { ...mrKind('unknown'), next: c => (c.error ? `Couldn't check the ${c.mr}: ${c.error}` : mrNext(null, c.mr)) },
-    changes: mrKind('needs-you', c => canned('fix', mrRefOf(c))),
-    failing: mrKind('needs-you', c => canned('pipeline', mrRefOf(c))),
+    changes: mrKind('needs-you', c => helperAction('fix', 'changes', 'works through the open review threads, pushes and replies on each', c)),
+    failing: mrKind('needs-you', c => helperAction('pipeline', 'failing', 'reads the failed job log, fixes the pipeline and pushes', c)),
     conflict: mrKind('needs-you', rebaseAction),
     blocked: mrKind('review'),
     replied: mrKind('review'),
@@ -531,7 +534,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             } else if (!chat && !asker && row.column !== 'doing' && !(agent?.status === 'stopped' && agent.updated > click.at)) { // a helper that stopped since shows its Continue
                 // a helper that finished since says how it went, so the held row never hides that
                 const told = agent?.status === 'done' && agent.outcome && agent.updated > click.at ? ` · Helper finished: ${agent.outcome.replace(/[.!]$/, '')}` : '';
-                Object.assign(row, { column: 'doing', next: `Sent to Claude (${clock(click.at)})${told} · button back at ${clock(click.at + HOLD_MS)}`, action: null });
+                Object.assign(row, { column: 'doing', next: `${click.helper ? 'Sent to a helper' : 'Sent to Claude'} (${clock(click.at)})${told} · button back at ${clock(click.at + HOLD_MS)}`, action: null });
             }
         }
         if (asker) {

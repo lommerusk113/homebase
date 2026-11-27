@@ -19,7 +19,7 @@ const { canStop } = useHelperStop();
             <span class="sl sl-i"><StepInButton /></span>
             <span class="sl sl-b">
                 <SentPill v-if="item.sent || item.requested" />
-                <ActionButton v-else-if="item.action && (item.sessionId || ['merge', 'rebase', 'unqueue'].includes(item.action.kind ?? ''))" />
+                <ActionButton v-else-if="item.action && (item.sessionId || ['merge', 'rebase', 'unqueue', 'helper'].includes(item.action.kind ?? ''))" />
                 <StopButton v-else-if="canStop(item)" />
                 <small v-else-if="item.note" class="muted">{{ item.note }}</small>
             </span>

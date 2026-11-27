@@ -34,6 +34,10 @@ function optimistic(x: WorkItem, now = Date.now()): WorkItem {
         return { ...x, column: 'doing', next: 'Queued to merge…', action: { label: 'Unqueue', kind: 'unqueue', message: 'Take this MR out of the merge queue.' } };
     }
 
+    if (starting.has(x.key)) {
+        return { ...x, column: 'doing', next: 'Sent to a helper…', action: null };
+    }
+
     const at = sent.get(x.key);
     if (at == null) {
         return x;
@@ -72,6 +76,31 @@ async function rebase(x: WorkItem) {
         x.sessionId && await send({ ...x, action: { ...x.action!, kind: undefined } });
     }
     await hooks.refresh();
+}
+
+const starting = reactive(new Set<string>()); // rows whose helper start (POST /api/action) is in flight: shown as sent to a helper at once
+
+/** Rebase / Fix pipeline / Fix & reply: Homebase starts a fresh helper on the MR's branch (POST /api/action); a second click opens the running one. */
+async function startHelper(x: WorkItem) {
+
+    if (starting.has(x.key)) {
+        return;
+    }
+    starting.add(x.key);
+    try {
+        const r = await api(`/api/action?key=${encodeURIComponent(x.key)}`, { method: 'POST' }).catch(() => null);
+        if (!r?.ok) {
+            useNotice().showError(r ? await r.text() : 'Couldn’t reach Homebase to start the helper');
+        } else {
+            const out = await r.json();
+            if (out.existing) {
+                bindChat(out.id);
+            }
+        }
+        await hooks.refresh();
+    } finally {
+        starting.delete(x.key);
+    }
 }
 
 const reviewing = new Set<string>(); // rows whose Review POST is in flight, so a double click starts one reviewer
@@ -123,6 +152,9 @@ async function send(x: WorkItem) {
     }
     if (x.action?.kind === 'unqueue') {
         return queue(x, false);
+    }
+    if (x.action?.kind === 'helper') {
+        return startHelper(x);
     }
     if (x.action?.kind === 'review') {
         return startReview(x);

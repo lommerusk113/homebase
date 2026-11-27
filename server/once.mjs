@@ -33,7 +33,7 @@ export function loadSent(dir, map = sentRows, now = Date.now()) {
     try {
         for (const [key, v] of Object.entries(JSON.parse(readFileSync(join(dir, 'sent.json'), 'utf8')))) {
             if (Number.isFinite(v?.at) && now - v.at < HOLD_MS) {
-                map.set(key, { at: v.at, kind: v.kind ?? null });
+                map.set(key, { at: v.at, kind: v.kind ?? null, ...(v.helper && { helper: true }) });
             }
         }
     } catch {} // missing or broken: no holds, rows show their buttons

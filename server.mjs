@@ -37,6 +37,7 @@ import { setAutoSender } from './server/autosend.mjs';
 import { loadRetries } from './server/autoretry.mjs';
 import { cleanupWorktrees } from './server/worktrees.mjs';
 import { loadReviewers, startReviewer, markFindingsSent } from './server/reviewer.mjs';
+import { startActionHelper } from './server/actions.mjs';
 import { loadHelpers, startHelper, closeHelper, chatIn, parentOf, parentTmux, findHelper, helperView, ahead, writeToken, reapHelpers } from './server/helpers.mjs';
 
 import { version, replaceSelf, listenRetry } from './server/reload.mjs';
@@ -408,6 +409,27 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                     polledSessions.stale();
                 }
                 return res.end('ok');
+            }
+            // Rebase (a real conflict), Fix pipeline and Fix & reply: a fresh helper on the MR's branch, nested under its row
+            // (server/actions.mjs). A repeat for the same MR and action answers with the running helper
+            if (isPost('/api/action')) {
+                if (remote) {
+                    return deny(403, 'start helpers from the Mac');
+                }
+                const key = url.searchParams.get('key');
+                const list = await polledSessions();
+                const row = list.flatMap(s => s.items ?? []).find(i => i.key === key);
+                if (row?.action?.kind !== 'helper') {
+                    return deny(409, 'This row has no helper button any more: reload the board');
+                }
+                const p = row.prState ?? {};
+                const { helper, existing } = await startActionHelper(DATA_DIR, { key, pr: row.pr, project: row.project, title: row.title, source: p.branch, target: p.target, sha: p.sha, sessionId: row.sessionId }, row.action.helper, list);
+                if (!existing && claim(sentRows, key, row.state?.kind)) {
+                    sentRows.get(key).helper = true; // the row holds in Doing as "Sent to a helper" (items.mjs)
+                    saveSent(DATA_DIR).catch(() => {});
+                }
+                polledSessions.stale();
+                return json({ id: helper.id, existing });
             }
             // Merge (on=1) puts a GitLab MR in the merge queue, Unqueue (on=0) takes it out; server/queue.mjs works the queue off.
             // Only a row the board shows with that button, at the head the user saw

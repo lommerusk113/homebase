@@ -62,6 +62,21 @@ Two chats on one MR: the one that reported wins, then the lower session id, so t
 |---|---|---|
 | running | Doing | none |
 | stopped (API error, rate limit, interrupted, chat closed, silent) | Needs you | Continue (a click holds it in Doing as rule 7 does) |
+| stopped on a transient API error, or silent, and Homebase is continuing it (below) | Doing, "Retrying (2/3)…" or "Nudging (2/3)…" | none |
+
+A helper's chat whose last turn failed on the API is a stopped helper too (API error, or rate limit), not a finished one.
+
+### Automatic Continue
+
+`server/autoretry.mjs`, on every poll, sends the canned Continue to a chat with a live Claude (never starts one):
+
+| Stopped on | What happens | Then |
+|---|---|---|
+| a transient API error (overloaded, server error, "computer went to sleep"; not a login or request error) | Continue 30 s, 2 min and 5 min after the failure, one per failure; the row is Doing "Retrying (n/3)…" | after the third the row is Needs you with Continue and "retried 3 times"; the count starts again after 10 min without a failure |
+| a rate limit | nothing, unless the message says when it resets ("resets 5pm", local zone): one Continue 30 s after | as before |
+| silent (a subagent, no output for 10 to 30 min) | Continue at once, then every 60 s, at most 3 times; the row is Doing "Nudging (n/3)…" | Needs you, "nudged 3 times" |
+
+Each send is in the send log (`sends.json`), so the feed, reports and holds treat it as Homebase's note; the counts are in `retries.json`.
 | done, under 2 hours ago | Recently finished | Dismiss |
 
 ## A chat's own row (main chats)

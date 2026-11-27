@@ -33,6 +33,8 @@ import { loadDismissed, dismiss } from './server/dismissed.mjs';
 import { loadPins, pin } from './server/pins.mjs';
 import { loadReports, report } from './server/reports.mjs';
 import { loadSends, logHousekeeping } from './server/sendlog.mjs';
+import { setAutoSender } from './server/autosend.mjs';
+import { loadRetries } from './server/autoretry.mjs';
 import { loadReviewers, startReviewer, markFindingsSent } from './server/reviewer.mjs';
 import { loadHelpers, startHelper, closeHelper, chatIn, parentOf, parentTmux, findHelper, helperView, ahead, writeToken, reapHelpers } from './server/helpers.mjs';
 
@@ -131,6 +133,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     loadReports(DATA_DIR);
     loadSends(DATA_DIR);
     loadSent(DATA_DIR);
+    loadRetries(DATA_DIR);
+    setAutoSender((id, text) => send(id, text)); // a canned send: an open question is refused, never declined
     loadReviewers(DATA_DIR);
     loadHelpers(DATA_DIR);
     writeToken(DATA_DIR, TOKEN); // for bin/homebase.mjs, owner-only

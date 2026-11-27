@@ -201,7 +201,7 @@ const mergeAction = c => (/\/-\/merge_requests\//.test(c.pr)
     : canned('merge', mrRefOf(c)));
 // A GitLab MR that is only behind its target: Rebase asks GitLab to (POST /api/rebase); its message is the fallback for the
 // chat when GitLab can't. A conflicted MR, and a GitHub PR, always ask the chat.
-const rebaseAction = c => (/\/-\/merge_requests\//.test(c.pr) && c.ps.blocked === 'rebase'
+const rebaseAction = c => (/\/-\/merge_requests\//.test(c.pr) && c.ps?.blocked === 'rebase'
     ? { ...canned('rebase', mrRefOf(c)), kind: 'rebase' }
     : canned('rebase', mrRefOf(c)));
 const baseStage = c => stageOf(c.pr, c.ps, c.agent);
@@ -501,6 +501,10 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             .filter(s => s.report || (!!prState?.branch && (s.head ?? s.branch) === prState.branch))
             .toSorted((a, b) => !!b.report - !!a.report || a.id.localeCompare(b.id))[0] ?? null : null; // a report says more than a branch; the id keeps it the same every poll
         const row = rowOf(ps, agent, { pr: it.pr, title, mr: w.mr, aMr: w.aMr, requested: !!requested, now, error: it.pr ? errorOf(it.pr, it.project) : null, chat });
+        // a stopped helper Homebase continues on its own (server/autoretry.mjs): Doing with the try it is on; out of tries it says so and keeps its button
+        if (agent?.retry && STOPPED.has(row.state.kind)) {
+            Object.assign(row, agent.retry.text ? { column: 'doing', next: agent.retry.text, action: null } : { next: `${row.next} · ${agent.retry.gaveUp}` });
+        }
 
         // a chat waiting on you about the open MR puts its row in Needs you, its question before the row's own reason: what
         // it reported first, else the lead MR of its question

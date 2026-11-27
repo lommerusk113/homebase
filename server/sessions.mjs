@@ -28,6 +28,7 @@ import { rulesStale, readSeen } from './rules.mjs';
 import { checksStatus } from './checks.mjs';
 import { aliases, clears, CLEAR_WAIT_MS, tmuxFor, findClearedSuccessor, linkClears, liveTmux, mapNewProjects, startingProjects } from './tmux.mjs';
 import { nestHelpers } from './helpers.mjs';
+import { apiErrorOf, autoContinue } from './autoretry.mjs';
 
 const run = promisify(execFile);
 
@@ -290,6 +291,7 @@ export function summarizeAgent(meta, entries, ageMs, id) {
     const handback = uses.findLast(b => b.name === 'SubagentHandback')?.input?.message;
     const report = handback ?? textOf(entries.findLast(e => e.type === 'assistant' && textOf(e))) ?? '';
     const { status, stopReason } = agentStatus(meta, entries, ageMs);
+    const lastError = stopReason === 'api-error' ? entries.findLast(e => e.type === 'assistant' && e.isApiErrorMessage) : null;
     const { tldr, text: body } = splitTldr(report);
     const outcome = status === 'done' ? outcomeOf(tldr || body) : null;
     const stage = Math.max(agentStage(uses, report, status === 'done'), stagePeak.get(id) ?? 0);
@@ -302,6 +304,7 @@ export function summarizeAgent(meta, entries, ageMs, id) {
         description: meta.description ?? meta.agentType,
         status,
         stopReason,
+        errorKind: lastError ? apiErrorOf(lastError).kind : null, // 'transient' stops are retried on their own (autoretry.mjs)
         outcome,
         stage,
         stageLabel: STAGES[stage],
@@ -553,6 +556,7 @@ export function summarize(entries, ageMs, marker = null, live = null) {
         status: status(lastTurn, ageMs, turn, background.size > 0),
         known: hasTurnMarkers(entries), // false: no turn markers in a recent transcript, so the status is only a guess
         asking: turn.state === 'asking',
+        apiError: lastTurn?.type === 'assistant' && lastTurn.isApiErrorMessage && turn.state === 'idle' ? { ...apiErrorOf(lastTurn), at: Date.parse(lastTurn.timestamp) || null } : null, // its last turn failed on the API: auto-retry (autoretry.mjs)
         died: !!turn.died, // its turn never ended and nothing works on it: the board keeps a row until the user has looked
         question,
         needsYou,
@@ -904,6 +908,7 @@ export async function sessions() {
     await attachTmux(out, now, live); // first: it sets clearedFrom, which attachItems follows
     attachReports(out, live);
     nestHelpers(out, new Set((await liveTmux()).map(t => t.name)), now); // before the items: a helper's row is an agent of its parent
+    autoContinue(out, live, now); // marks `retry` on what it continues, before the rows are built
     attachItems(out, await itemsOf(out), now);
     for (const s of out) {
         s.manual = isManual(s.id);

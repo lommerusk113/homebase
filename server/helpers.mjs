@@ -268,12 +268,13 @@ export function nestHelpers(list, live, now = Date.now(), registry = helpers) {
             continue;
         }
         const v = helperView(h, list, live, now), running = !v.done;
+        const failed = !running && !h.closedAt && s?.apiError ? s.apiError : null; // its last turn failed on the API: stopped, not finished
         const { tldr, text: body } = splitTldr(s?.lastReply ?? '');
         const waits = v.status === 'asking' || v.status === 'needs you';
         (parent.agents ??= []).push({
             id: h.id, helperSession: h.id, helperClosed: !!h.closedAt, description: h.title,
-            status: running ? 'running' : 'done', stopReason: null,
-            outcome: running ? null : (tldr || body).split('\n').find(l => l.trim())?.slice(0, 120) ?? null,
+            status: running ? 'running' : failed ? 'stopped' : 'done', stopReason: failed ? (failed.kind === 'rate-limit' ? 'rate-limit' : 'api-error') : null,
+            outcome: running || failed ? null : (tldr || body).split('\n').find(l => l.trim())?.slice(0, 120) ?? null,
             stage: running ? 1 : 4, step: waits ? `Needs you: ${s?.question ?? s?.needsText ?? 'see its chat'}` : s?.step ?? null, stepAt: s?.stepAt ?? null,
             tldr: tldr || null, body, branch: h.branch ?? s?.head ?? null, branches: [...new Set([h.branch, s?.head].filter(Boolean))], prs: (s?.prs ?? []).map(p => p.url),
             worktreePath: h.branch || h.cwd?.includes('/.claude/worktrees/') ? h.cwd : null, files: s?.files ?? [], updated: s?.lastActivity ?? s?.updated ?? h.at, started: h.at

@@ -3,20 +3,19 @@
 // its pipeline and mergeability, merge it, move on. Polled on the board's own poll, from the forge's settled answers.
 // Kept in items.json with each MR (store.mjs: `queued`), so a restart goes on where it was.
 import { rebaseMr, mergeMr } from './forge.mjs';
-import { autoSend, canAutoSend } from './autosend.mjs';
 
-export const FIX_GRACE_MS = 2 * 60_000; // the chat is given this long to start on its fix
+export const FIX_GRACE_MS = 2 * 60_000; // the helper is given this long to start on its fix
 export const FIX_SETTLE_MS = 90_000; // idle this long with the MR still broken: its fix failed (a push needs a forge lookup to show)
 export const FIX_MAX_MS = 6 * 3600_000;
-export const FIX_MAX_EPISODES = 3; // fixes asked of the chat for one MR while it stays queued
+export const FIX_MAX_EPISODES = 3; // fix helpers started for one MR while it stays queued
 
-export const mergeQueue = new Map(); // MR url -> { at, project, target, step, fix?: { kind, at, sha, idleSince }, fixes? }
+export const mergeQueue = new Map(); // MR url -> { at, project, target, step, fix?: { kind, at, sha, idleSince, helper }, fixes? }
 export const queueStops = new Map(); // MR url -> { reason, sha }: why it left the queue, shown on its row while its head is unchanged
 const busy = new Set(); // MR urls with a rebase or merge in flight
 
 export const isGitLabMr = url => /\/-\/merge_requests\/\d+$/.test(url ?? '');
 
-/** What the head of a line does next, from its settled forge state: { do: 'done' | 'stop' | 'fix' | 'rebase' | 'merge' | 'wait', why }. A conflict or failed pipeline is 'fix' (kind): its chat is asked to fix it. */
+/** What the head of a line does next, from its settled forge state: { do: 'done' | 'stop' | 'fix' | 'rebase' | 'merge' | 'wait', why }. A conflict or failed pipeline is 'fix' (kind): a helper is started to fix it. */
 export function queueStep(ps) {
 
     const stop = why => ({ do: 'stop', why });
@@ -67,12 +66,12 @@ export function placeOf(url, queue = mergeQueue) {
 
 /**
  * One pass over the board's rows ({ pr, project, prState, sessionId, fix }): drops merged and closed MRs and starts the next step of
- * each line's head. A head with a conflict or failed pipeline is not dropped: its chat gets the row's canned Rebase or Fix-pipeline
- * prompt once and the MR waits in the queue ("waiting for its chat to fix it") while the next MR of the line goes; clean again, it
- * takes its turn. It leaves, with the reason, when there is no chat, the send fails, the chat goes idle with the MR still broken, or
- * after FIX_MAX_MS. A rebase or merge runs on in the background; onChange says when one ended. Never throws.
+ * each line's head. A head with a conflict or failed pipeline is not dropped: `start(row, action)` (startActionHelper) starts the
+ * row's Rebase or Fix-pipeline helper, or hands back the one already running, and the MR waits in the queue ("waiting for its
+ * helper to fix it") while the next MR of the line goes; clean again, it takes its turn. It leaves, with the reason, when the
+ * helper can't be started, the helper goes idle with the MR still broken, or after FIX_MAX_MS. A rebase or merge runs on in the background; onChange says when one ended. Never throws.
  */
-export function advanceQueue(items, onChange = () => {}, { rebase = rebaseMr, merge = mergeMr, queue = mergeQueue, stops = queueStops, send = autoSend, ready = canAutoSend, chat = () => null, now = Date.now() } = {}) {
+export function advanceQueue(items, onChange = () => {}, { rebase = rebaseMr, merge = mergeMr, queue = mergeQueue, stops = queueStops, start = async () => { throw new Error('no helper starter'); }, chat = () => null, now = Date.now() } = {}) {
 
     const rows = new Map(items.filter(i => i.pr && i.prState && !i.prState.unread).map(i => [i.pr, i]));
     const states = new Map([...rows].map(([url, i]) => [url, i.prState]));
@@ -105,18 +104,18 @@ export function advanceQueue(items, onChange = () => {}, { rebase = rebaseMr, me
         } else if (step.kind !== fix.kind) { // the fix worked, something else broke: asked again below
             delete q.fix;
         } else if (now - fix.at >= FIX_MAX_MS) {
-            leave(url, `its chat did not fix it in ${FIX_MAX_MS / 3600_000} hours`, ps.sha);
+            leave(url, `its helper did not fix it in ${FIX_MAX_MS / 3600_000} hours`, ps.sha);
         } else {
-            fix.idleSince = chat(rows.get(url)?.sessionId)?.status === 'working' ? null : fix.idleSince ?? now;
+            fix.idleSince = !fix.helper || chat(fix.helper)?.status === 'working' ? null : fix.idleSince ?? now; // no helper id yet: still starting
             if (fix.idleSince != null && now - fix.idleSince >= FIX_SETTLE_MS && now - fix.at >= FIX_GRACE_MS) {
-                leave(url, `its chat could not fix ${fix.kind === 'conflict' ? 'the merge conflicts' : 'the pipeline'}`, ps.sha);
+                leave(url, `its helper could not fix ${fix.kind === 'conflict' ? 'the merge conflicts' : 'the pipeline'}`, ps.sha);
             } else {
-                q.step = `waiting for its chat to fix ${fix.kind === 'conflict' ? 'the conflict' : 'the pipeline'}`;
+                q.step = `waiting for its helper to fix ${fix.kind === 'conflict' ? 'the conflict' : 'the pipeline'}`;
             }
         }
     }
 
-    // each line's first MR not being fixed; one that needs a fix hands it to its chat and the next of the line goes meanwhile
+    // each line's first MR not being fixed; one that needs a fix hands it to a helper and the next of the line goes meanwhile
     const lines = new Map();
     for (const [url, q] of order) {
         if (queue.has(url) && states.has(url) && !q.fix) {
@@ -133,8 +132,8 @@ export function advanceQueue(items, onChange = () => {}, { rebase = rebaseMr, me
             }
             q.step = step.why;
             if (step.do === 'fix') {
-                askChat(url, q, ps, step, rows.get(url));
-                if (queue.has(url)) { // handed to its chat: the line goes on
+                askHelper(url, q, ps, step, rows.get(url));
+                if (queue.has(url)) { // handed to its helper: the line goes on
                     continue;
                 }
             } else if (step.do === 'stop') {
@@ -153,20 +152,23 @@ export function advanceQueue(items, onChange = () => {}, { rebase = rebaseMr, me
         }
     }
 
-    // Sends the row's Rebase or Fix-pipeline prompt to its chat, or drops the MR with today's reason when there is nobody to fix it.
-    function askChat(url, q, ps, step, row) {
+    // Starts (or reuses) the row's fix helper; over the episode cap, or when no helper can be started, the MR leaves with the reason.
+    function askHelper(url, q, ps, step, row) {
 
-        const text = row?.fix?.kind === step.kind ? row.fix.message : null;
-        if (!text || !row.sessionId || !chat(row.sessionId) || !ready() || (q.fixes ?? 0) >= FIX_MAX_EPISODES) {
+        if (!row || (q.fixes ?? 0) >= FIX_MAX_EPISODES) {
             return leave(url, step.why, ps.sha);
         }
-        q.fix = { kind: step.kind, at: now, sha: ps.sha, idleSince: null };
+        const fix = { kind: step.kind, at: now, sha: ps.sha, idleSince: null, helper: null };
+        q.fix = fix;
         q.fixes = (q.fixes ?? 0) + 1;
-        q.step = `waiting for its chat to fix ${step.kind === 'conflict' ? 'the conflict' : 'the pipeline'}`;
+        q.step = `waiting for its helper to fix ${step.kind === 'conflict' ? 'the conflict' : 'the pipeline'}`;
         onChange();
-        send(row.sessionId, text).catch(e => {
-            console.error(`merge queue: could not ask the chat to fix ${url}: ${e.message}`);
-            leave(url, `${step.why} and its chat could not be asked (${e.message})`, ps.sha);
+        start(row, step.kind === 'conflict' ? 'conflict' : 'failing').then(r => {
+            fix.helper = r.helper.id;
+            onChange();
+        }, e => {
+            console.error(`merge queue: could not start a helper to fix ${url}: ${e.message}`);
+            leave(url, `${step.why} and its helper could not be started (${e.message})`, ps.sha);
         });
     }
 }

@@ -48,9 +48,10 @@ console.log('ok queue step');
     await new Promise(r => setTimeout(r, 5));
     assert.equal(queue.has(mr(1)), false);
     assert.deepEqual(stops.get(mr(1)), { reason: 'glab: 406 Branch cannot be merged', sha: 'aaa1111' });
-    advanceQueue(rows({ 2: { ci: 'failing' } }), () => {}, deps);
-    assert.equal(queue.has(mr(2)), false, 'its pipeline failed: out of the queue');
-    assert.equal(stops.get(mr(2)).reason, 'its pipeline failed');
+    advanceQueue(rows({ 2: { ci: 'failing' } }), () => {}, { ...deps, start: async () => { throw new Error('no chat of this project is open'); } });
+    await new Promise(r => setTimeout(r, 5));
+    assert.equal(queue.has(mr(2)), false, 'its pipeline failed and no helper can fix it: out of the queue');
+    assert.equal(stops.get(mr(2)).reason, 'its pipeline failed and its helper could not be started (no chat of this project is open)');
     console.log('ok queue');
 }
 
@@ -63,28 +64,29 @@ console.log('ok queue step');
     console.log('ok queue restored');
 }
 
-// a conflict or failed pipeline: the chat is asked once, the MR stays queued while the next of its line goes, and it is back in turn when clean
+// a conflict or failed pipeline: a fix helper is started once, the MR stays queued while the next of its line goes, and it is back in turn when clean
 {
-    const sent = [], calls = [], queue = new Map(), stops = new Map();
+    const started = [], calls = [], queue = new Map(), stops = new Map();
     const mr = n => `https://gitlab.com/g/p/-/merge_requests/${n}`;
     queue.set(mr(1), { at: 1, project: 'p', target: 'main' });
     queue.set(mr(2), { at: 2, project: 'p', target: 'main' });
     let status = 'idle';
-    const row = (n, ps = {}, extra = {}) => ({ pr: mr(n), prState: { ...ok, ...ps }, sessionId: `chat${n}`, fix: ps.blocked === 'conflict' ? { kind: 'conflict', message: `Rebase !${n}` } : ps.ci === 'failing' ? { kind: 'pipeline', message: `Fix !${n}` } : null, ...extra });
-    const run = (rows, now, over = {}) => advanceQueue(rows, () => {}, { rebase: async u => { calls.push(['rebase', u]); }, merge: async (u, sha) => { calls.push(['merge', u, sha]); }, queue, stops, send: async (id, text) => { sent.push([id, text]); }, ready: () => true, chat: id => (id ? { id, status } : null), now, ...over });
+    const row = (n, ps = {}, extra = {}) => ({ pr: mr(n), prState: { ...ok, ...ps }, sessionId: `chat${n}`, ...extra });
+    const start = async (r, action) => { started.push([r.pr, action]); return { helper: { id: `helper${started.length}` } }; };
+    const run = (rows, now, over = {}) => advanceQueue(rows, () => {}, { rebase: async u => { calls.push(['rebase', u]); }, merge: async (u, sha) => { calls.push(['merge', u, sha]); }, queue, stops, start, chat: id => (id ? { id, status } : null), now, ...over });
     const tick = () => new Promise(r => setTimeout(r, 5));
 
     run([row(1, { blocked: 'conflict', ready: false }), row(2)], 1000);
     await tick();
-    assert.deepEqual(sent, [['chat1', 'Rebase !1']], 'its chat is asked once');
+    assert.deepEqual(started, [[mr(1), 'conflict']], 'its helper is started once');
     assert.deepEqual(calls, [['merge', mr(2), 'aaa1111']], 'the next MR of the line goes meanwhile');
-    assert.equal(queue.get(mr(1)).step, 'waiting for its chat to fix the conflict');
-    assert.equal(queue.has(mr(1)), true);
-    // still broken while its chat works: nothing more is sent, nothing dropped
+    assert.equal(queue.get(mr(1)).step, 'waiting for its helper to fix the conflict');
+    assert.equal(queue.get(mr(1)).fix.helper, 'helper1', 'the helper is remembered, its chat is the one watched');
+    // still broken while its helper works: nothing more is started, nothing dropped
     status = 'working';
     run([row(1, { blocked: 'conflict', ready: false })], 1000 + 10 * 60_000);
     run([row(1, { blocked: 'conflict', ready: false })], 1000 + 20 * 60_000);
-    assert.equal(sent.length, 1);
+    assert.equal(started.length, 1);
     assert.equal(queue.has(mr(1)), true);
     // clean again: it is the head again and merges in turn
     calls.length = 0;
@@ -92,25 +94,24 @@ console.log('ok queue step');
     await tick();
     assert.deepEqual(calls, [['merge', mr(1), 'aaa1111']]);
 
-    // the chat goes idle and the MR is still broken: its fix failed, with the reason
+    // the helper goes idle and the MR is still broken: its fix failed, with the reason
     queue.set(mr(1), { at: 1, project: 'p', target: 'main' });
-    sent.length = 0;
+    started.length = 0;
     status = 'idle';
     run([row(1, { ci: 'failing' })], 5_000_000);
-    assert.deepEqual(sent, [['chat1', 'Fix !1']]);
+    await tick();
+    assert.deepEqual(started, [[mr(1), 'failing']]);
     run([row(1, { ci: 'failing' })], 5_000_000 + 60_000); // idle, but not for long enough yet
     assert.equal(queue.has(mr(1)), true);
     run([row(1, { ci: 'failing' })], 5_000_000 + 160_000);
     assert.equal(queue.has(mr(1)), false);
-    assert.equal(stops.get(mr(1)).reason, 'its chat could not fix the pipeline');
+    assert.equal(stops.get(mr(1)).reason, 'its helper could not fix the pipeline');
 
-    // another cause while it waits, no chat, a refused send, no sender: dropped with the reason as today
+    // another cause while it waits, a helper that can't be started (also: no chat is open), the episode cap: dropped with the reason
     for (const [name, rows, over, reason] of [
         ['threads', [row(1, { ci: 'failing' })], {}, null],
-        ['no chat', [row(1, { blocked: 'conflict' }, { sessionId: null })], {}, 'it has merge conflicts'],
-        ['no message', [row(1, { blocked: 'conflict' }, { fix: null })], {}, 'it has merge conflicts'],
-        ['no sender', [row(1, { ci: 'failing' })], { ready: () => false }, 'its pipeline failed'],
-        ['refused', [row(1, { ci: 'failing' })], { send: async () => { throw new Error('Closed'); } }, 'its pipeline failed and its chat could not be asked (Closed)']
+        ['refused', [row(1, { ci: 'failing' })], { start: async () => { throw new Error('no chat of this project is open'); } }, 'its pipeline failed and its helper could not be started (no chat of this project is open)'],
+        ['no starter', [row(1, { blocked: 'conflict' })], { start: undefined }, 'it has merge conflicts and its helper could not be started (no helper starter)']
     ]) {
         queue.clear();
         stops.clear();
@@ -125,6 +126,11 @@ console.log('ok queue step');
         }
         assert.equal(queue.has(mr(1)), false, name);
     }
+    queue.clear();
+    stops.clear();
+    queue.set(mr(1), { at: 1, project: 'p', target: 'main', fixes: 3 });
+    run([row(1, { ci: 'failing' })], 9_000_000);
+    assert.equal(stops.get(mr(1)).reason, 'its pipeline failed', 'after three helpers it leaves');
     // a restart keeps that it was asked
     const restored = new Map();
     restoreQueue({ data: { p: { [mr(1)]: { state: 'open', queued: { at: 5, target: 'main', fix: { kind: 'conflict', at: 7, sha: 'a' }, fixes: 1 } } } } }, restored);

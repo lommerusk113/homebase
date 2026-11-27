@@ -204,12 +204,6 @@ const mergeAction = c => (/\/-\/merge_requests\//.test(c.pr)
 const rebaseAction = c => (/\/-\/merge_requests\//.test(c.pr) && c.ps?.blocked === 'rebase'
     ? { ...canned('rebase', mrRefOf(c)), kind: 'rebase' }
     : helperAction('rebase', 'conflict', 'rebases it onto its target and resolves the conflicts by meaning, then pushes with --force-with-lease', c));
-// What the merge queue (queue.mjs) asks a queued MR's chat when a conflict or failed pipeline stops it: the same message as the row's Rebase or Fix pipeline button.
-const fixOf = (ps, pr) => {
-    const kind = ps?.blocked === 'conflict' ? 'conflict' : ps?.ci === 'failing' ? 'pipeline' : null;
-
-    return kind ? { kind, message: canned(kind === 'conflict' ? 'rebase' : 'pipeline', mrRefOf({ pr })).message } : null;
-};
 // Rebase (a real conflict), Fix pipeline and Fix & reply start a fresh helper on the MR's branch (POST /api/action, server/actions.mjs)
 // rather than typing into the MR's chat, which is often busy. The label is the canned one; `helper` names the action.
 const helperAction = (key, helper, what, c) => ({ label: canned(key, '').label, kind: 'helper', helper, message: `Starts a fresh helper on ${mrRef(c.pr)} that ${what}` });
@@ -584,8 +578,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             activity: agents.filter(a => a !== agent).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
             next: row.next,
-            queued: queue.has(it.pr) ? { at: queue.get(it.pr).at, target: prState?.target ?? queue.get(it.pr).target, ...(queue.get(it.pr).fix && { fix: { kind: queue.get(it.pr).fix.kind, at: queue.get(it.pr).fix.at, sha: queue.get(it.pr).fix.sha }, fixes: queue.get(it.pr).fixes }) } : null, // for the store
-            fix: isGitLabMr(it.pr) ? fixOf(prState, it.pr) : null, // what the merge queue asks the chat; dropped before the response
+            queued: queue.has(it.pr) ? { at: queue.get(it.pr).at, target: prState?.target ?? queue.get(it.pr).target, ...(queue.get(it.pr).fix && { fix: { kind: queue.get(it.pr).fix.kind, at: queue.get(it.pr).fix.at, sha: queue.get(it.pr).fix.sha, helper: queue.get(it.pr).fix.helper }, fixes: queue.get(it.pr).fixes }) } : null, // for the store
             action: row.action ?? (rev?.label ? rev : null),
             note: row.action ? null : rev?.note ?? null,
             checks: sessions.find(s => s.id === (agent?.sessionId ?? it.linkSession))?.checks ?? null,

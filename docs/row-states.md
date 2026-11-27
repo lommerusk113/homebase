@@ -98,7 +98,9 @@ A row never moves inside its group; it only moves when its group changes.
 
 Merge on a GitLab MR (ready, or only behind its target) is the queue's button: it puts the MR in the queue at once, the row first shown queued by the page before the POST answers, (`server/queue.mjs`), and the row goes to Doing as "Queued to merge (n of m onto <target>) — <step>" with the same button reading Unqueue. There is no second button.
 One MR per project and target branch moves at a time, the oldest first: behind its target → GitLab rebases it; running pipeline or GitLab still checking → waits; ready → merged at the commit seen.
-It leaves the queue, and the row says "Left the merge queue: <why>" while the MR is unchanged, on: conflicts, failed pipeline, needs approval, unresolved discussions (changes requested, or the project requires them resolved), draft, closed (a merge elsewhere just ends it).
+A conflict or a failed pipeline does not drop it: when nothing else would stop it (approval, threads, draft) and the MR has a chat, that chat gets the row's own Rebase or Fix pipeline message once, and the MR stays queued as "waiting for its chat to fix the conflict / the pipeline" while the next MR of its line goes.
+Clean again (no conflict, pipeline not failing) it takes its place in the line and merges in turn; if the problem is another one it asks again, at most 3 times per MR.
+It leaves the queue, and the row says "Left the merge queue: <why>" while the MR is unchanged, on: conflicts or a failed pipeline with no chat to ask (or one that can't be asked), its chat going idle for 90 s (after 2 min) with the MR still broken ("its chat could not fix the pipeline"), or still broken after 6 hours, needs approval, unresolved discussions (changes requested, or the project requires them resolved), draft, closed (a merge elsewhere just ends it).
 
 ## Moving a row by hand
 

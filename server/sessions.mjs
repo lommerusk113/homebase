@@ -789,9 +789,9 @@ async function itemsOf(out) {
     }
     record(store, items);
     flush(store);
-    advanceQueue(items, () => polledSessions.stale());
+    advanceQueue(items, () => polledSessions.stale(), { chat: id => out.find(s => s.id === id) });
     items.filter(i => i.pr && i.since == null).forEach(i => { i.since = store.data[i.project]?.[i.pr]?.firstSeen ?? null; });
-    items.forEach(i => { delete i.agentLinks; delete i.gateHead; delete i.forgeAnswers; });
+    items.forEach(i => { delete i.agentLinks; delete i.gateHead; delete i.forgeAnswers; delete i.fix; });
 
     return items;
 }

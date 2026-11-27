@@ -204,6 +204,12 @@ const mergeAction = c => (/\/-\/merge_requests\//.test(c.pr)
 const rebaseAction = c => (/\/-\/merge_requests\//.test(c.pr) && c.ps?.blocked === 'rebase'
     ? { ...canned('rebase', mrRefOf(c)), kind: 'rebase' }
     : canned('rebase', mrRefOf(c)));
+// What the merge queue (queue.mjs) asks a queued MR's chat when a conflict or failed pipeline stops it: the same message as the row's Rebase or Fix pipeline button.
+const fixOf = (ps, pr) => {
+    const kind = ps?.blocked === 'conflict' ? 'conflict' : ps?.ci === 'failing' ? 'pipeline' : null;
+
+    return kind ? { kind, message: canned(kind === 'conflict' ? 'rebase' : 'pipeline', mrRefOf({ pr })).message } : null;
+};
 const baseStage = c => stageOf(c.pr, c.ps, c.agent);
 const noButton = () => null;
 const mrKind = (column, action = noButton) => ({ column, action: c => (c.pr ? action(c) : null), next: c => mrNext(c.ps, c.mr), stage: baseStage });
@@ -575,7 +581,8 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             activity: agents.filter(a => a !== agent).map(a => ({ id: a.id, description: a.description, status: a.status, tldr: a.tldr })),
             requested: requested && { at: requested.at, text: requested.text.slice(0, 200) },
             next: row.next,
-            queued: queue.has(it.pr) ? { at: queue.get(it.pr).at, target: prState?.target ?? queue.get(it.pr).target } : null, // for the store
+            queued: queue.has(it.pr) ? { at: queue.get(it.pr).at, target: prState?.target ?? queue.get(it.pr).target, ...(queue.get(it.pr).fix && { fix: { kind: queue.get(it.pr).fix.kind, at: queue.get(it.pr).fix.at, sha: queue.get(it.pr).fix.sha }, fixes: queue.get(it.pr).fixes }) } : null, // for the store
+            fix: isGitLabMr(it.pr) ? fixOf(prState, it.pr) : null, // what the merge queue asks the chat; dropped before the response
             action: row.action ?? (rev?.label ? rev : null),
             note: row.action ? null : rev?.note ?? null,
             checks: sessions.find(s => s.id === (agent?.sessionId ?? it.linkSession))?.checks ?? null,

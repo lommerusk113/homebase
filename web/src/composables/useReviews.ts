@@ -1,11 +1,12 @@
 import { computed, reactive } from 'vue';
 import { api, state } from 'old/core.js';
-import { bindChat } from 'old/chat.js';
+import { bindChat, sendText } from 'old/chat.js';
 import { oldState } from '@/old';
 import { useNotice } from '@/composables/useNotice';
 import { reviewChat } from '@/lib/board';
 
 const starting = reactive(new Set<string>()); // urls whose review chat is being started
+const sentNow = reactive(new Map<string, string | null>()); // url -> head whose findings were just sent: the row says so before the server does
 
 /** "Review requested": open MRs by someone else that ask the user for a review, in the picked project. */
 export function useReviews() {
@@ -18,6 +19,9 @@ export function useReviews() {
     });
     /** Its review chat, or a helper that chat started, is busy: the row says Reviewing… and opens the chat. */
     const reviewing = (r: ReviewRequest) => !!reviewChat(oldState.value.sessions, r);
+    /** What the row offers: the server's findings, or "sent" at once after a click (for that head only). */
+    const findings = (r: ReviewRequest): ReviewFindings | null =>
+        sentNow.has(r.url) && sentNow.get(r.url) === r.sha ? { kind: 'sent' } : r.findings ?? null;
     const byUrl = computed(() => new Map(reviews.value.map(r => [r.url, r])));
 
     /** Review: the server starts a chat in the MR's project that reviews it read-only; this opens that chat. */
@@ -55,5 +59,27 @@ export function useReviews() {
         }
     }
 
-    return { reviews, byUrl, starting, review, reviewing, open: (r: ReviewRequest) => window.open(r.url, '_blank', 'noopener') };
+    /** Send findings / Approve: types the fixed prompt into the review chat, then remembers the head as sent. Goes back on error. */
+    async function sendFindings(r: ReviewRequest) {
+
+        const f = r.findings;
+        if (!f?.message || !f.sessionId || sentNow.has(r.url)) {
+            return;
+        }
+        sentNow.set(r.url, r.sha);
+        try {
+            if (!await sendText(f.sessionId, f.message, undefined, undefined, true, `findings:${r.url}`)) {
+                throw new Error('The review chat did not take the message');
+            }
+            const res = await api('/api/reviews/sent', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: r.url, sha: r.sha }) });
+            if (!res.ok) {
+                throw new Error(await res.text());
+            }
+        } catch (e) {
+            sentNow.delete(r.url);
+            showError((e as Error).message);
+        }
+    }
+
+    return { reviews, byUrl, starting, review, reviewing, findings, sendFindings, open: (r: ReviewRequest) => window.open(r.url, '_blank', 'noopener') };
 }

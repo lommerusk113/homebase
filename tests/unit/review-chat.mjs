@@ -78,3 +78,25 @@ console.log('ok review rows');
     reviewers.clear();
 }
 console.log('ok review chat start');
+
+// review-requested rows (server/reviews.mjs): idle chat with a reply -> Send findings / Approve, sent per head
+{
+    const { reviewFindings, reviewsWithFindings, loadReviewsSent, markReviewSent, FINDINGS_PROMPT } = await import('../../server/reviews.mjs');
+    const dir = mkdtempSync(join(tmpdir(), 'hb-revsent-'));
+    const row = { url: 'https://gitlab.example/a/alpha/-/merge_requests/9', iid: 9, project: 'a/alpha', sha: 'aaa1111' };
+    const chat = (reply, extra = {}) => ({ id: 'c', tmux: 'cc-new-alpha-review-9', status: 'idle', lastReply: reply, lastReplyAt: now, ...extra });
+    assert.equal(reviewFindings(row, undefined, undefined), null, 'no chat');
+    assert.equal(reviewFindings(row, chat('x', { status: 'working' }), undefined), null, 'working');
+    assert.equal(reviewFindings(row, chat('x', { asking: true }), undefined), null, 'asking');
+    const send = reviewFindings(row, chat('| 1 | nit |\n**Verdict: fix first**'), undefined);
+    assert.deepEqual([send.kind, send.sessionId, send.message], ['send', 'c', FINDINGS_PROMPT(row)]);
+    assert.equal(reviewFindings(row, chat('**Verdict: ready**'), undefined).kind, 'approve');
+    assert.equal(reviewFindings(row, chat('no verdict here'), undefined).kind, 'send');
+    await markReviewSent(dir, row.url, 'aaa1111222', now);
+    assert.equal(reviewFindings(row, chat('x'), { sha: 'aaa1111222', at: now }).kind, 'sent', 'same head');
+    assert.equal(reviewFindings({ ...row, sha: 'bbb2222' }, chat('x', { lastReplyAt: now - 5 }), { sha: 'aaa1111', at: now }), null, 'new head, old reply: Review again');
+    assert.equal(reviewFindings({ ...row, sha: 'bbb2222' }, chat('x', { lastReplyAt: now + 5 }), { sha: 'aaa1111', at: now }).kind, 'send', 'new head, new reply');
+    loadReviewsSent(dir);
+    assert.equal(reviewsWithFindings([chat('x')], [row])[0].findings.kind, 'sent', 'survives a restart');
+    console.log('ok review findings');
+}

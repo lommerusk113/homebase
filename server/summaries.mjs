@@ -83,6 +83,8 @@ export function splitTldr(text) {
 // A bold ready alone ("MR is **ready** for review") said while the gate runs is no verdict.
 const VERDICT = /verdict\b[^\n.]{0,30}?\b(ready|fix[- ]first)\b|review[- ]gate\b[^\n.]{0,15}?\*\*(ready|fix[- ]first)\*\*/i;
 const GATE = /review[- ]gate/i;
+/** The verdict a review reply names ("ready" or "fix-first"), or null. */
+export const verdictOf = text => { const m = VERDICT.exec(text); return (m?.[1] ?? m?.[2])?.toLowerCase().replace(/\s/, '-') ?? null; };
 // The MRs a text names, as !N (GitLab refs and merge_requests URLs). ponytail: GitHub #N is skipped, it reads the same as an issue.
 const mrRefs = text => new Set([...text.matchAll(/(?<![\w/&])!(\d+)\b|\/merge_requests\/(\d+)\b/g)].map(m => m[1] ?? m[2]));
 const COMMIT = /\b(?:commit|head|sha)\b[\s:`@]*([0-9a-f]{7,40})\b/i;

@@ -11,7 +11,7 @@ import { mergeQueue, queueStops } from './server/queue.mjs';
 import { polledSessions, startingChats } from './server/sessions.mjs';
 import { refreshAll, refreshInfo, isGitLab, rebaseMr, prs, swr } from './server/forge.mjs';
 import { milestones, warmMilestones } from './server/milestones.mjs';
-import { reviewRequests } from './server/reviews.mjs';
+import { reviewRequest, reviewsWithFindings, loadReviewsSent, markReviewSent } from './server/reviews.mjs';
 import { limits } from './server/limits.mjs';
 import { log } from './server/log.mjs';
 import { MAX_SEND, withLock, liveTmux, helpers } from './server/tmux.mjs';
@@ -138,6 +138,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     loadRetries(DATA_DIR);
     setAutoSender((id, text) => send(id, text)); // a canned send: an open question is refused, never declined
     loadReviewers(DATA_DIR);
+    loadReviewsSent(DATA_DIR);
     loadHelpers(DATA_DIR);
     writeToken(DATA_DIR, TOKEN); // for bin/homebase.mjs, owner-only
     warmMilestones();
@@ -646,8 +647,22 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 }
                 return json(refreshInfo());
             }
+            // The findings of a review-requested row went into its review chat (sha: the head the row showed)
+            if (isPost('/api/reviews/sent')) {
+                let input;
+                try {
+                    input = JSON.parse(await readBody(req, 1024));
+                } catch {
+                    return deny(400, 'expected a JSON body');
+                }
+                if (!await reviewRequest(input?.url)) {
+                    return deny(404, 'not a merge request that asks you for a review');
+                }
+                await markReviewSent(DATA_DIR, input.url, input.sha);
+                return res.end('ok');
+            }
             if (url.pathname === '/api/reviews') {
-                return json(reviewRequests());
+                return json(reviewsWithFindings(await polledSessions()));
             }
             if (url.pathname === '/api/milestones') {
                 return json(await milestones(url.searchParams.get('project'), url.searchParams.get('milestone')));

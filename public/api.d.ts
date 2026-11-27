@@ -161,7 +161,9 @@ interface RowAction {
 
 interface Activity { id: string; description: string; status: string; tldr: string | null }
 
-interface ReviewRequest { url: string; iid: number; title: string; project: string; author: string; draft: boolean; updatedAt: number; pipeline: Pipeline | null }
+/** findings: what the row offers once its review chat is done (server/reviews.mjs reviewFindings); `sent` for the current head. */
+interface ReviewFindings { kind: 'send' | 'approve' | 'sent'; message?: string; sessionId?: string }
+interface ReviewRequest { url: string; iid: number; title: string; project: string; author: string; draft: boolean; updatedAt: number; sha: string | null; pipeline: Pipeline | null; findings?: ReviewFindings | null }
 
 interface WorkItem {
     key: string;

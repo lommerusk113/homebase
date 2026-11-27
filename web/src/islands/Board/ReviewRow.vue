@@ -6,7 +6,7 @@ import { ReviewsKey, useInjected } from '@/keys';
 import CiPill from '@/components/CiPill.vue';
 
 const props = defineProps<{ url: string }>();
-const { byUrl, open, review, reviewing, starting } = useInjected(ReviewsKey);
+const { byUrl, open, review, reviewing, starting, findings, sendFindings } = useInjected(ReviewsKey);
 const r = toRef(() => byUrl.value.get(props.url)!);
 </script>
 
@@ -17,7 +17,12 @@ const r = toRef(() => byUrl.value.get(props.url)!);
             <small class="next"><span class="chip mono">!{{ r.iid }}</span>{{ ` ${r.project} · ${r.author}${r.draft ? ' · draft' : ''} · ${ago(r.updatedAt)}` }}<template v-if="r.pipeline?.status">{{ ' ' }}<CiPill :pipeline="r.pipeline" /></template></small>
         </td>
         <td class="act">
-            <button v-if="reviewing(r)" type="button" class="sent-pill review-busy" title="Open the review chat" @click.stop="review(r)"><span class="pulse" />Reviewing…</button>
+            <small v-if="findings(r)?.kind === 'sent'" class="sent-pill" title="The findings went to the review chat to post on the MR">Findings sent</small>
+            <template v-else-if="!reviewing(r) && findings(r)">
+                <wa-button class="review-btn findings-btn" size="s" variant="brand" title="Types the review's findings-posting prompt into the review chat" @click.stop="sendFindings(r)">{{ findings(r)!.kind === 'approve' ? 'Approve' : 'Send findings' }}</wa-button>
+                <wa-button class="review-btn" size="s" appearance="plain" title="Open the review chat to review again" @click.stop="review(r)">Re-review</wa-button>
+            </template>
+            <button v-else-if="reviewing(r)" type="button" class="sent-pill review-busy" title="Open the review chat" @click.stop="review(r)"><span class="pulse" />Reviewing…</button>
             <wa-button v-else class="review-btn" size="s" appearance="outlined" :disabled="starting.has(url) || undefined" title="Start a chat that reviews this MR, read-only" @click.stop="review(r)">{{ starting.has(url) ? 'Starting…' : 'Review' }}</wa-button>
         </td>
     </tr>

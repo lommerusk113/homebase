@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Land a helper branch: fast-forward main to <branch>, run ship.sh, then remove the branch's worktree and branch (or stop the helper).
-# `npm run land <branch> [--no-browser] [--dry-run]`; the options go to ship.sh. Lands queue on the lock ship.sh shares.
+# `npm run land <branch> [--no-tests|--no-browser] [--dry-run]`; the options go to ship.sh. Lands queue on the lock ship.sh shares.
 set -uo pipefail
 die() { echo "land: $*" >&2; exit 1; }
-branch=${1:-}; [ -n "$branch" ] && [ "${branch#-}" = "$branch" ] || die "usage: npm run land <branch> [--no-browser] [--dry-run]"
+branch=${1:-}; [ -n "$branch" ] && [ "${branch#-}" = "$branch" ] || die "usage: npm run land <branch> [--no-tests|--no-browser] [--dry-run]"
 shift
 main=$(git worktree list --porcelain | sed -n '1s/^worktree //p')
 cd "$main" || die "no main checkout"

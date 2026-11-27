@@ -1,19 +1,23 @@
 #!/usr/bin/env bash
-# Land the current main on origin: checks, push, reload the running Homebase. `--no-browser` skips the browser suite, `--dry-run` skips the push and the reload.
+# Land the current main on origin: checks, push, reload the running Homebase. `--no-tests` skips all checks, `--no-browser` only the browser suite, `--dry-run` skips the push and the reload.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 die() { echo "ship: $*" >&2; exit 1; }
 . scripts/lock.sh
 take_lock
-no_browser=; dry=
-for a in "$@"; do case $a in --no-browser) no_browser=1;; --dry-run) dry=1;; *) die "unknown option $a";; esac; done
+no_browser=; no_tests=; dry=
+for a in "$@"; do case $a in --no-browser) no_browser=1;; --no-tests) no_tests=1; no_browser=1;; --dry-run) dry=1;; *) die "unknown option $a";; esac; done
 
 [ "$(git branch --show-current)" = main ] || die "not on main"
 [ -z "$(git status --porcelain)" ] || die "working tree not clean"
 
-node test.mjs >/dev/null 2>&1 || die "unit tests failed (run: node test.mjs)"
-./check-types.sh >/dev/null 2>&1 || die "type check failed (run: ./check-types.sh)"
-echo "unit tests + types: exit 0"
+if [ -z "$no_tests" ]; then
+    node test.mjs >/dev/null 2>&1 || die "unit tests failed (run: node test.mjs)"
+    ./check-types.sh >/dev/null 2>&1 || die "type check failed (run: ./check-types.sh)"
+    echo "unit tests + types: exit 0"
+else
+    echo "checks skipped (--no-tests)"
+fi
 
 if [ -z "$no_browser" ]; then
     log=$(node tests/browser/run.mjs 2>&1); code=$?

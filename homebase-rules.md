@@ -59,6 +59,10 @@ Write so a reply still works when only its TLDR and its Waiting on you card are 
 - Never list choices only in the body: Homebase folds it away. Use AskUserQuestion, the Waiting on you block, or the TLDR.
 - A message that starts with "Yes" and ends with "(Answering your earlier question from …)" answers that earlier question.
 
+## Tests
+- Run no test suite (full, browser or unit) unless the user asks for one; this overrides any CLAUDE.md rule to run the full suite. Several chats run at once and full runs block each other.
+- Helpers run only the filtered tests for the code they touched, plus the type check.
+
 ## Plans
 - Plan before multi-step work. Show the plan and wait when it is risky.
 - Every plan or issue you or a subagent writes ends with `## Key Decisions`: the decisions taken, and what was "Considered but skipped".

@@ -30,6 +30,10 @@ function optimistic(x: WorkItem, now = Date.now()): WorkItem {
         return { ...x, column: 'doing', next: 'Rebasing on GitLab…', action: null };
     }
 
+    if (queueing.get(x.key) === true) {
+        return { ...x, column: 'doing', next: 'Queued to merge…', action: { label: 'Unqueue', kind: 'unqueue', message: 'Take this MR out of the merge queue.' } };
+    }
+
     const at = sent.get(x.key);
     if (at == null) {
         return x;
@@ -90,15 +94,15 @@ async function startReview(x: WorkItem) {
     }
 }
 
-const queueing = new Set<string>(); // rows whose queue POST is in flight
+const queueing = reactive(new Map<string, boolean>()); // rows whose queue POST is in flight -> true for Merge: the row shows queued at once, and goes back if the POST fails
 
-/** Merge / Unqueue: puts the MR in Homebase's merge queue (on) or takes it out (POST /api/queue); the row shows its queue step from the next poll. */
+/** Merge / Unqueue: puts the MR in Homebase's merge queue (on) or takes it out (POST /api/queue); Merge shows the row queued before the POST answers, the poll's row takes over after it. */
 async function queue(x: WorkItem, on: boolean) {
 
     if (queueing.has(x.key)) {
         return;
     }
-    queueing.add(x.key);
+    queueing.set(x.key, on);
     try {
         // the head the row showed when Merge was clicked: the server refuses if the MR moved since
         const r = await api(`/api/queue?key=${encodeURIComponent(x.key)}&on=${on ? 1 : 0}&sha=${encodeURIComponent(x.prState?.sha ?? '')}`, { method: 'POST' }).catch(() => null);
@@ -160,8 +164,7 @@ export function useSentMarks() {
 
     // On a touch screen the tooltip with the message never shows and a thumb can miss the row, so a tap asks first
     // (the dialog of the a key); its Send clicks the button from script, which is not a tap.
-    // Merge can't be undone, so it always asks first, click or tap; Unqueue just does it
-    const press = (x: WorkItem, tapped: boolean) => (x.action?.kind === 'merge' ? confirmAction(x as WorkItem & { action: RowAction }, () => queue(x, true))
+    const press = (x: WorkItem, tapped: boolean) => (x.action?.kind === 'merge' ? queue(x, true)
         : tapped && touch() ? confirmAction(x as WorkItem & { action: RowAction }) : send(x));
 
     return { optimistic, press, noReply };

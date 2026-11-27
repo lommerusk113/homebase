@@ -124,20 +124,19 @@ function help() {
 }
 // The action types into the user's Claude session, so it asks first, showing the message; the dialog itself has focus,
 // so a stray Enter or a second a does nothing, and only a click (or Tab to Send) sends.
-// Merge (onGo) does the action itself rather than send it, so its dialog only states it.
-/** @param {{ key: string, action: { label: string, message: string, kind?: string } }} x @param {() => void} [onGo] */
-export function confirmAction(x, onGo) {
+/** @param {{ key: string, action: { label: string, message: string, kind?: string } }} x */
+export function confirmAction(x) {
     const btn = /** @type {HTMLElement | null} */ (rowOf(x.key)?.querySelector('.act-btn'));
-    if (['merge', 'rebase', 'unqueue'].includes(x.action.kind ?? '') && !onGo) {
+    if (['merge', 'rebase', 'unqueue'].includes(x.action.kind ?? '')) {
         return btn?.click(); // the button asks itself
     }
-    const cancel = waButton('Cancel'), go = waButton(onGo ? x.action.label : `Send "${x.action.label}"`, null, { variant: onGo ? 'danger' : 'brand', appearance: 'accent' });
+    const cancel = waButton('Cancel'), go = waButton(`Send "${x.action.label}"`, null, { variant: 'brand', appearance: 'accent' });
     cancel.slot = go.slot = 'footer';
     const body = el('div');
-    body.append(onGo ? '' : 'Sends this to the item\'s Claude session:', el('pre', 'keys-msg', x.action.message));
+    body.append('Sends this to the item\'s Claude session:', el('pre', 'keys-msg', x.action.message));
     const d = dialog(`${x.action.label}?`, body, [cancel, go]);
     cancel.onclick = () => { d.open = false; };
-    go.onclick = () => { d.open = false; onGo ? onGo() : btn?.click(); }; // the button's own path: sent mark, chat binding
+    go.onclick = () => { d.open = false; btn?.click(); }; // the button's own path: sent mark, chat binding
 }
 
 /** @param {number} dir */

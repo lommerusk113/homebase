@@ -194,7 +194,7 @@ const silentText = c => {
     const m = c.agent.updated ? Math.max(1, Math.round((c.now - c.agent.updated) / 60_000)) : null;
     return m ? `No output for ${m}m — may still be working · Continue nudges it` : 'No recent output — may still be working · Continue nudges it';
 };
-// GitLab: Merge puts it in Homebase's merge queue (POST /api/queue, after a confirm), which rebases it if it is behind and merges it
+// GitLab: Merge puts it in Homebase's merge queue (POST /api/queue), which rebases it if it is behind and merges it
 // in its turn; a GitHub PR still asks its chat.
 const mergeAction = c => (/\/-\/merge_requests\//.test(c.pr)
     ? { label: 'Merge', kind: 'merge', message: `Merge ${mrRef(c.pr)} on GitLab: rebase it if it is behind, wait for the pipeline, then merge it in its turn, without asking again. This can't be undone.` }

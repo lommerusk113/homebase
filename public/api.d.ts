@@ -153,7 +153,7 @@ interface RowAction {
     label: string;
     message: string;
     /** a review chat's button: Review starts the reviewer, Reviewing… waits, Send findings types its last message into the row's chat (the others send `message` as is) */
-    kind?: 'review' | 'reviewing' | 'findings' | 'merge' | 'rebase' | 'unqueue'; // rebase: Homebase asks GitLab to rebase an MR that is only behind (POST /api/rebase), the chat message is its fallback; merge: puts the GitLab MR in Homebase's merge queue (POST /api/queue), after a confirm, which rebases it if behind and merges it; unqueue takes it out (POST /api/queue?on=0)
+    kind?: 'review' | 'reviewing' | 'findings' | 'merge' | 'rebase' | 'unqueue'; // rebase: Homebase asks GitLab to rebase an MR that is only behind (POST /api/rebase), the chat message is its fallback; merge: puts the GitLab MR in Homebase's merge queue (POST /api/queue), with no confirm (the page shows it queued before the POST answers), which rebases it if behind and merges it; unqueue takes it out (POST /api/queue?on=0)
     hint?: string; // the tooltip, when the message is too long for one
     reviewerId?: string;
 }

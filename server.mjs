@@ -405,19 +405,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return res.end('ok');
             }
             // Merge (on=1) puts a GitLab MR in the merge queue, Unqueue (on=0) takes it out; server/queue.mjs works the queue off.
-            // Only a row the board shows with that button, at the head the user confirmed
+            // Only a row the board shows with that button, at the head the user saw
             if (isPost('/api/queue')) {
                 const key = url.searchParams.get('key'), on = url.searchParams.get('on') !== '0';
-                // the board's answer may be a minute old: ask the forge again (an MR row's key is its URL), so a new comment or a
-                // withdrawn approval is seen before an irreversible merge. Expired, not dropped: the last answer stays the one
-                // GitLab's "still checking" keeps, as on every poll; a lookup that fails now refuses it
-                const fresh = on ? [prs.get(key), swr.get(`comments:${key}`)].filter(Boolean) : [];
-                fresh.forEach(hit => { hit.at = 0; });
-                polledSessions.stale();
+                // answers from the board's cached rows: the user waits on this, and the queue itself (server/queue.mjs) only merges on
+                // the forge's settled answer at the head. A new comment or a withdrawn approval is looked up again from the next poll on
                 const row = (await polledSessions()).flatMap(s => s.items ?? []).find(i => i.key === key);
-                if (fresh.some(hit => hit.error)) {
-                    return deny(409, `Couldn't check the MR with GitLab just now: try again`);
-                }
                 const refused = on ? mergeRefusal(row, url.searchParams.get('sha')) : row?.action?.kind !== 'unqueue' && 'This MR is not in the merge queue any more: reload the board';
                 if (refused) {
                     return deny(409, refused);
@@ -425,6 +418,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 if (on) {
                     mergeQueue.set(row.pr, { at: Date.now(), project: row.project, target: row.prState.target, step: null });
                     queueStops.delete(row.pr);
+                    [prs.get(key), swr.get(`comments:${key}`)].forEach(hit => { if (hit) { hit.at = 0; } }); // expired, not dropped: the next poll asks again
                 } else {
                     mergeQueue.delete(row.pr);
                 }

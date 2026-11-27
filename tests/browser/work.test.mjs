@@ -334,16 +334,17 @@ export default {
         await page.waitFor(`document.getElementById('c-back').hidden && !document.getElementById('feed').textContent.includes('Find out why the auth test is flaky') && location.hash === ''`, { what: 'the chat back' });
     },
 
-    'Merge on an approved MR asks first and queues nothing on Cancel': async ({ page, open }) => {
+    'Merge on an approved MR shows it queued at once, with no dialog, and puts it back with the error when the POST fails': async ({ page, open }) => {
         await open();
         const btn = `#masters tr[data-key="${MR(102)}"] .act-btn`, merges = () => page.posts.filter(p => p.url.includes('/api/queue'));
-        const cancel = `[...document.querySelectorAll('wa-dialog[open] wa-button[slot="footer"]')].at(0)`;
         await page.waitFor(`document.querySelector('${btn}')`, { what: 'the Merge button' });
+        page.route = q => (q.url.includes('/api/queue') ? { status: 409, delay: 1500, body: 'The MR changed since you clicked Merge', headers: { 'content-type': 'text/plain' } } : null);
         await page.click(btn);
-        assert.match(await page.waitFor(`document.querySelector('wa-dialog[open] pre')?.textContent`, { what: 'the merge confirm' }), /^Merge !102 on GitLab: rebase it if it is behind/);
-        await page.waitFor(`(() => { const r = JSON.stringify(${cancel}?.getBoundingClientRect()), still = r && r === window.__at; window.__at = r; return still; })()`, { what: 'Cancel at rest' });
-        await page.clickOn(cancel, 'Cancel');
-        await page.waitFor(`!document.querySelector('wa-dialog[open]')`, { what: 'the dialog to close' });
-        assert.equal(merges().length, 0, 'nothing queued');
+        await page.waitFor(`document.querySelector('${btn}')?.textContent === 'Unqueue'`, { what: 'the row queued before the POST answers' });
+        assert.ok(await page.ev(`!document.querySelector('wa-dialog[open]')`), 'no confirm dialog');
+        assert.equal(merges().length, 1);
+        await page.waitFor(`document.querySelector('${btn}')?.textContent === 'Merge'`, { what: 'the row back after the error' });
+        await page.waitFor(`document.getElementById('c-err').textContent.includes('changed since')`, { what: 'the error line' });
+        page.route = null;
     }
 };

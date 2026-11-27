@@ -19,6 +19,15 @@ export default {
         assert.deepEqual(await page.ev('window.__opened'), [MR(201), MR(201)]);
     },
 
+    'Review on an MR whose chat the server cannot match to a session says so': async ({ page, open }) => {
+        await open();
+        const k = `review:${MR(201)}`;
+        await page.waitFor(row(k));
+        await page.ev(`(() => { const f = window.fetch; window.fetch = (u, o) => String(u).includes('/api/reviews/start') ? Promise.resolve(new Response(JSON.stringify({ ok: true, dir: '/x', tmux: 'cc-new-alpha-review-201', sessionId: null, reused: true }))) : f(u, o); })()`);
+        await page.ev(`${row(k)}.querySelector('.review-btn').click()`);
+        await page.waitFor(`document.querySelector('#c-err')?.textContent.includes('cc-new-alpha-review-201')`, { what: 'the error line' });
+    },
+
     'phone: the expanded detail has the MR chip and CI pill': async ({ page, open }) => {
         await phone(page, true);
         try {

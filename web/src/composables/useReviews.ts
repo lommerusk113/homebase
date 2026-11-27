@@ -39,11 +39,14 @@ export function useReviews() {
                 throw new Error(await res.text());
             }
             const { sessionId, tmux, dir } = await res.json();
-            if (sessionId) {
-                bindChat(sessionId);
+            // the server may not match an older chat to its session (reused tmux, cleared or aged transcript): the board's poll may know it
+            const id = sessionId ?? oldState.value.sessions.find(s => s.tmux === tmux)?.id;
+            if (id) {
+                bindChat(id);
             } else {
                 state.startingTmux = tmux;
-                state.starting = dir;
+                state.starting = dir; // poll() binds it if a session shows up
+                showError(`The review chat (tmux ${tmux}) is running, but Homebase cannot match it to a session yet. Click Review again in a moment.`);
             }
         } catch (e) {
             showError((e as Error).message);

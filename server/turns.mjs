@@ -4,7 +4,7 @@ import { stat, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { tmux, tmuxFor, aliases } from './tmux.mjs';
-import { capture, promptBack } from './startup.mjs';
+import { capture, promptBack, paneIdle } from './startup.mjs';
 import { textOf, isHumanPrompt, unwrapPasted, INTERRUPTED } from './entries.mjs';
 
 export const WORKING_MS = 10_000;
@@ -56,6 +56,16 @@ export async function askMarker(id, { live = null, tm = tmux } = {}) {
     const fresh = marker?.permission && Date.now() - Date.parse(marker.at) < MARKER_MAX_MS; // a stale one is ignored anyway (markerAsk)
 
     return fresh && promptBack(await capture(tmuxFor(id, aliases, live), tm)) ? null : marker;
+}
+
+// A process the registry calls busy whose pane shows an idle prompt (paneIdle): its id goes into live.idle, which turnState reads.
+// Only past WORKING_MS of silence, and only for busy ones, so a healthy turn costs no capture.
+export async function markIdle(entries, ageMs, live, { tm = tmux } = {}) {
+
+    const sid = entries.findLast(e => e.sessionId)?.sessionId;
+    if (live?.busy?.has(sid) && ageMs >= WORKING_MS && live.idle && paneIdle(await capture(tmuxFor(sid, aliases, live), tm))) {
+        live.idle.add(sid);
+    }
 }
 
 // When the user last answered a permission prompt in the chat (hooks/asking.mjs writes <session>.answered), else null.
@@ -212,7 +222,11 @@ export function turnState(entries, ageMs, marker = null, live = null) {
 
     // ponytail: a tail with no turn markers at all (older Claude Code, or one turn longer than the tail) falls back to the mtime
     // a long tool call writes nothing, so a live process the registry calls busy is working however old the transcript
-    const busy = !!live?.busy?.has(entries.findLast(e => e.sessionId)?.sessionId);
+    const sid = entries.findLast(e => e.sessionId)?.sessionId;
+    if (known && open && ageMs >= WORKING_MS && live?.idle?.has(sid)) {
+        return { state: 'idle', since: null }; // the registry says busy (a background agent was waited on), the pane shows Claude's prompt
+    }
+    const busy = !!live?.busy?.has(sid);
     if (known && open && ageMs >= TURN_STALE_MS && !busy) {
         return { state: 'stuck', since: null, died: true }; // idle for everything but the chat status, which says Claude may be stuck
     }

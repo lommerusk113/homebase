@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'n
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { status, summarize, pendingQuestion, turnState, askMarker, markerAsk, helperAsk, openToolUse, askingHelper, findClearedSuccessor, tmuxFor, lastActivity, linkClears } from '../../server.mjs';
+import { status, summarize, pendingQuestion, turnState, askMarker, markIdle, paneIdle, markerAsk, helperAsk, openToolUse, askingHelper, findClearedSuccessor, tmuxFor, lastActivity, linkClears } from '../../server.mjs';
 
 // Turn state, from real entry shapes (Claude Code 2.1.3xx).
 {
@@ -56,6 +56,17 @@ import { status, summarize, pendingQuestion, turnState, askMarker, markerAsk, he
     // an open turn with no write for 30 min is stuck, not working; a closed turn is just idle
     assert.deepEqual(turnState(turn, 31 * 60_000), { state: 'stuck', since: null, died: true });
     assert.equal(state([...turn, td('55:43')], 31 * 60_000), 'idle');
+    // the registry says busy (it waited on a background agent) but the pane shows Claude's idle prompt: idle, not working for hours
+    const sid = turn.map(e => ({ ...e, sessionId: 's1' }));
+    const busy = Object.assign(new Map(), { busy: new Set(['s1']), idle: new Set() });
+    assert.equal(turnState(sid, 3 * hour, null, busy).state, 'working', 'busy alone keeps a silent turn working');
+    const pane = n => readFileSync(new URL(`../fixtures/${n}`, import.meta.url), 'utf8');
+    assert.equal(paneIdle(pane('pane-waiting-agent-finished.txt')), true, 'a finished-agent line after "Waiting for 1 background agent" is idle');
+    assert.equal(paneIdle(pane('pane-waiting-agent-finished.txt').replace(/⏺ Agent.*\n/, '')), false, 'still waiting: no finished line');
+    assert.equal(paneIdle(pane('pane-waiting-agent-finished.txt').replace('✻ Waiting', '✻ Thinking (esc to interrupt) Waiting')), false);
+    assert.equal(paneIdle(pane('question-header-boxed.txt')), false, 'an open question is not idle');
+    await markIdle(sid, 3 * hour, busy, { tm: async () => ({ stdout: pane('pane-waiting-agent-finished.txt') }) });
+    assert.equal(turnState(sid, 3 * hour, null, busy).state, 'idle');
     // the session list uses it too
     assert.equal(status(turn.at(-1), 5 * 60_000, turnState(turn, 5 * 60_000)), 'working');
     assert.equal(status(turn.at(-1), 5 * 60_000, { state: 'asking' }), 'waiting');

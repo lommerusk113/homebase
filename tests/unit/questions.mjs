@@ -311,3 +311,11 @@ Enter to select · ↑/↓ to navigate · Esc to cancel
     assert.equal(opts.timeout, 5000);
     console.log('ok projectOf no cache on failure');
 }
+
+{
+    // a long boxed question under a ☐ header, options with descriptions (real pane of a helper): question and options are read
+    const q = parseQuestion(readFileSync(new URL('../fixtures/question-header-boxed.txt', import.meta.url), 'utf8'));
+    assert.match(q.question, /^MR !1859 .*keep the settlement ticked by default\?$/);
+    assert.deepEqual(q.options, ['Untick it by default (Recommended)', 'Keep it ticked', 'Type something.', 'Chat about this']);
+    console.log('ok question with header and box');
+}

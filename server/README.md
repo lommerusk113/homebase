@@ -9,7 +9,7 @@
 | `summaries.mjs` | A reply or tail at a glance: ▸ topic, TLDR, queued prompts, review-gate runs, tool-call summaries, `RISKY` commands |
 | `feed.mjs` | The chat feed: entries turned into bubbles, answers paired with questions, handled replies, `feedTail` for "Show earlier" |
 | `asks.mjs` | What a reply asks of you: Waiting on you, option lists and chip labels, quick replies, `topicAndTldr` |
-| `turns.mjs` | Turn state (with the `hooks/asking.mjs` marker), pending AskUserQuestion and permission waits, closed sessions, turn and spawn prompts |
+| `turns.mjs` | Turn state (with the `hooks/asking.mjs` marker; a registry-busy chat whose pane `startup.mjs` `paneIdle` calls idle goes into `live.idle` through `markIdle` and counts as idle), pending AskUserQuestion and permission waits, closed sessions, turn and spawn prompts |
 | `usage.mjs` | Token usage read by byte offset, duration and token formatting |
 | `sessions.mjs` | Repo names, subagent summaries and status, session summaries, `sessions()`, and `polledSessions()` (one shared build, reused for a second) for `/api/sessions` |
 | `items.mjs` | Work-item rules (pure): columns, lifecycle, next step, row action, gate badge, milestone of an MR |

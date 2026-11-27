@@ -334,6 +334,23 @@ export function promptBack(pane) {
     return open >= 0 && /^(│ ?)?[❯>]/.test(lines[open + 1]) && below.length <= 4 && !below.some(l => l.includes('❯')) && !questionOpen(pane);
 }
 
+// Claude is idle at its prompt, though the registry may still say busy: no "esc to interrupt" spinner, and the input box is back.
+// A "Waiting for N background agent(s)" line counts as working only until a finished-agent line ("⏺ Agent … finished") follows it.
+// tests/fixtures/pane-waiting-agent-finished.txt (real)
+export function paneIdle(pane) {
+
+    const lines = String(pane ?? '').split('\n');
+    if (lines.some(l => /esc to interrupt/i.test(l))) {
+        return false;
+    }
+    const wait = lines.findLastIndex(l => /^\s*\S?\s*Waiting for \d+ background (agent|task)s?\b/i.test(l));
+    if (wait >= 0 && !lines.slice(wait + 1).some(l => /^\s*⏺ .*\bfinished\b/.test(l))) {
+        return false;
+    }
+
+    return inputLine(lines) >= 0 && !questionOpen(pane);
+}
+
 // A typed message instead of a click: Esc cancels the open question first, so the text arrives as a new message (Claude sees
 // the question declined, then the message) instead of being typed into the options. -> true if one was cancelled
 export async function cancelQuestion(name, { tm = tmux, nap = sleep } = {}) {

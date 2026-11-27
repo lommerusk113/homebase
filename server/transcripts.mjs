@@ -4,7 +4,7 @@ import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ROOT, liveSessions, tailOf } from './entries.mjs';
 import { FEED_ITEMS, feedTail, chatFeed } from './feed.mjs';
-import { askMarker, turnState, pendingQuestion, pendingAsk, helperAsk } from './turns.mjs';
+import { askMarker, markIdle, turnState, pendingQuestion, pendingAsk, helperAsk } from './turns.mjs';
 
 export * from './entries.mjs';
 export * from './summaries.mjs';
@@ -28,6 +28,7 @@ export async function transcript(dir, id, max) {
 
     const live = await liveSessions();
     const marker = await askMarker(id, { live });
+    await markIdle(entries, Date.now() - st.mtimeMs, live);
     const turn = turnState(entries, Date.now() - st.mtimeMs, marker, live);
 
     return { items, more, capped, asking: pendingQuestion(entries, marker), questions: pendingAsk(entries, marker), helperAsking: helperAsk(marker, entries), working: turn.state === 'working', stuck: turn.state === 'stuck', since: turn.since };

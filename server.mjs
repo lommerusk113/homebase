@@ -51,7 +51,7 @@ export { readTail, filesTouched, unwrapPasted } from './server/entries.mjs';
 export { splitTopic, splitTldr, gateRuns, toolSummary, RISKY, latestTopic, queuedPrompts } from './server/summaries.mjs';
 export { chatItems, chatFeed } from './server/feed.mjs';
 export { quickReplies, askList, optionLabels, waitingOn, waitingAsk, waitingQuestion, namedChoices } from './server/asks.mjs';
-export { pendingAsk, pendingQuestion, askMarker, markerAsk, helperAsk, openToolUse, askingHelper, turnState, turnPrompts, spawnPrompts } from './server/turns.mjs';
+export { pendingAsk, pendingQuestion, askMarker, markIdle, markerAsk, helperAsk, openToolUse, askingHelper, turnState, turnPrompts, spawnPrompts } from './server/turns.mjs';
 export { addUsage, readUsage, formatDuration, formatTokens } from './server/usage.mjs';
 export { repoName, repoPath, agentStage, agentStatus, summarizeAgent, stepOf, status, lastActivity, summarize, sentSummaries } from './server/sessions.mjs';
 export { pipelineOf, ciOf, issueOf, mentionsMr, limiter, dedupe, refetch, refreshDue, excerpt, withThreads, isBot, humanComments, fetchComments, signedIn, me, repoOfUrl, swrEntry, swr, cached, refreshAll, refreshInfo } from './server/forge.mjs';
@@ -63,7 +63,7 @@ export { keepMilestone, worksOn, groupIssues, activeMilestones, noMilestones, mi
 export { limitsOf, peakLimits, contextOf } from './server/limits.mjs';
 export { parseLog, branchOf, markPushed, chatMilestones, nestCommits, groupByDay } from './server/log.mjs';
 export { tmuxArgs, tmuxFor, withLock, findClearedSuccessor, linkClears, NEW_TMUX, mapNewProjects, startingProjects, sendSteps, refuseIfLiveElsewhere } from './server/tmux.mjs';
-export { parseDialog, parseQuestion, answerQuestion, cancelQuestion, questionOpen, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
+export { paneIdle, parseDialog, parseQuestion, answerQuestion, cancelQuestion, questionOpen, selectSteps, answerStartup, trustFolder, trustNewProject } from './server/startup.mjs';
 export { refuseIfBusy, restartChat, promptUp, send, runningTwice, interrupt } from './server/control.mjs';
 export { localHosts, allowedHost, allowedOrigin, tokenOk } from './server/security.mjs';
 export { remoteFrom, setupPairing, newCode, pair, deviceOf, cookieOf, deviceCookie, pairedDevices, revoke, isRemote, loginOk, isPairedRequest, pairPage, CODE_TTL_MS, MAX_FAILS, FAIL_WINDOW_MS } from './server/pairing.mjs';

@@ -29,7 +29,7 @@ export async function liveSessions(dir = join(homedir(), '.claude', 'sessions'))
     }
 
     // busy: registry status "busy"; started: sessionId -> process start (ms); twice: sessionId -> the older cc-* tmux names
-    const live = Object.assign(new Map(), { busy: new Set(), started: new Map(), twice: new Map() });
+    const live = Object.assign(new Map(), { busy: new Set(), idle: new Set(), started: new Map(), twice: new Map() });
     const procs = new Map(); // sessionId -> [{ t, startedAt }]
     for (const name of names) {
         try {

@@ -6,7 +6,7 @@ import { join, basename, dirname } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ROOT, projectDirs, cache, liveSessions, readTail, tailOf, textOf, isHumanPrompt, EDIT_TOOLS, PR_URL, filesTouched, INTERRUPTED } from './entries.mjs';
-import { WORKING_MS, closedSession, turnState, hasTurnMarkers, turnPrompts, helperAsk, askingHelper, openToolUse, pendingQuestion, askMarker, permissionAnsweredAt, spawnPrompts } from './turns.mjs';
+import { WORKING_MS, closedSession, turnState, hasTurnMarkers, turnPrompts, helperAsk, askingHelper, openToolUse, pendingQuestion, askMarker, markIdle, permissionAnsweredAt, spawnPrompts } from './turns.mjs';
 import { splitTldr, gateRuns, latestTopic, queuedPrompts } from './summaries.mjs';
 import { readUsage, usageCache } from './usage.mjs';
 import { chatItems, handled } from './feed.mjs';
@@ -700,6 +700,7 @@ async function readSession({ dir, file, path, st }, now, live) {
     }
 
     const marker = await askMarker(file.replace('.jsonl', ''), { live });
+    await markIdle(entries, now - st.mtimeMs, live);
     const s = summarize(entries, now - st.mtimeMs, marker, live);
     const id = s.id ?? file.replace('.jsonl', '');
     s.permissionAnsweredAt = await permissionAnsweredAt(id); // ends a needs-you report (attachReports)

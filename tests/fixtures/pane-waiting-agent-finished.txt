@@ -1,0 +1,24 @@
+  - Supplier-card defaults with two projects: LOW, only a direct API call can
+    set up such a card.
+  - Name-only saved assignments refused after a rename: LOW, deliberate and
+    covered by a scenario.
+  - The size-budget note for two files: no MR exists yet. When you open it, note
+    that BenchmarkSeedService.kt (625 lines) and TransactionCreator.service.ts
+    (406) are over the 400-line soft budget.
+
+  Heads-up: another session rebased this branch onto main and added commits up
+  to 2d301df5c while the gate ran. That tip has not been gated.
+
+  TLDR: The gate says fix first for ac7e60f12, but both blockers are already
+  fixed on the newer tip 2d301df5c. Re-run the gate on that tip once the other
+  session finishes.
+
+✻ Waiting for 1 background agent to finish
+
+⏺ Agent "Validate SupplierDefaults finding" finished · 41s
+                                          new task? /clear to save 127k tokens
+────────────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────────────
+  7d 15% · ctx 12%
+  ⏵⏵ auto mode on (shift+tab to cycle)

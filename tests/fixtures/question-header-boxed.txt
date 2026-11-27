@@ -1,0 +1,24 @@
+ ☐ Settlement
+
+│ MR !1859 (#2286) is now rebased onto supplier-automation, which gained #2284:
+│ a stopped invoice under a «Bokfør betaling» rule gets its settlement ticked by
+│ default. The settlement books the 2400 line's full amount as paid from the
+│ rule's account, for example a 2910 card. With #2286 that line holds the full
+│ invoice. For a fully card-prepaid web-shop EHF (prepaid = everything), that is
+│ exactly right. For a partly prepaid EHF (2 500, of which 500 is prepaid), it
+│ settles 2 500 when only 2 000 is open. Should a prepaid or rounded EHF keep
+│ the settlement ticked by default?
+
+❯ 1. Untick it by default (Recommended)
+     Same as «Betal»: add prepaidOrRounding to the reasons that keep the
+     settlement off. The account is still offered; the accountant ticks it after
+     checking the amount. One line plus one test.
+  2. Keep it ticked
+     Leave #2284's default. Correct for a fully card-prepaid invoice, but
+     over-settles a partly prepaid one on one click.
+  3. Type something.
+────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
+────────────────────────────────────────────────── Address 1859 review threads ─

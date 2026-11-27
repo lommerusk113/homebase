@@ -173,6 +173,11 @@ interface WorkItem {
     forgeError?: string | null; // why the last MR/PR lookup (or its comments, "comments: …") failed, in plain words; the last good data is kept
     prState: PrState | null;
     column: Column;
+    /** the row's computed state as the user saw it; a pin (POST /api/pins) holds only while it is unchanged */
+    fp?: string;
+    /** the user moved the row to `column` by hand; `autoColumn` is where it would be otherwise */
+    pinned?: boolean;
+    autoColumn?: Column;
     /** index into LIFECYCLE */
     stage: number;
     stageLabel: string;

@@ -29,6 +29,7 @@ import { saveSaver, syncSaver } from './server/saver.mjs';
 import { readChecks, saveChecks } from './server/checks.mjs';
 import { loadHandled, markHandled } from './server/handled.mjs';
 import { loadDismissed, dismiss } from './server/dismissed.mjs';
+import { loadPins, pin } from './server/pins.mjs';
 import { loadReports, report } from './server/reports.mjs';
 import { loadSends, logHousekeeping } from './server/sendlog.mjs';
 import { loadReviewers, startReviewer, markFindingsSent } from './server/reviewer.mjs';
@@ -125,6 +126,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     ownerOnly(DATA_DIR);
     loadHandled(DATA_DIR);
     loadDismissed(DATA_DIR);
+    loadPins(DATA_DIR);
     loadReports(DATA_DIR);
     loadSends(DATA_DIR);
     loadSent(DATA_DIR);
@@ -212,7 +214,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
                 return;
             }
             // The demo types nothing anywhere; a 409's text is what the chat shows under the unsent message or answer.
-            if (DEMO && req.method === 'POST' && /^\/api\/(send|startup|question|handled|dismissed|clear|compact|restart|interrupt|projects\/|helpers\/|server\/reload)/.test(url.pathname)) {
+            if (DEMO && req.method === 'POST' && /^\/api\/(send|startup|question|handled|dismissed|pins|clear|compact|restart|interrupt|projects\/|helpers\/|server\/reload)/.test(url.pathname)) {
                 throw Object.assign(new Error('This is the demo: nothing is sent to Claude'), { status: 409 });
             }
             // Pairing is managed on the Mac only, never by a remote device.
@@ -337,6 +339,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             // A row without an MR (a stopped or finished helper) the user is done with: hidden until that helper moves again
             if (isPost('/api/dismissed')) {
                 await dismiss(DATA_DIR, url.searchParams.get('key'));
+                polledSessions.stale();
+                return res.end('ok');
+            }
+            // A row moved to another group by hand (column=auto drops the pin), held until the row's fp changes
+            if (isPost('/api/pins')) {
+                await pin(DATA_DIR, url.searchParams.get('key'), url.searchParams.get('column'), url.searchParams.get('fp'));
                 polledSessions.stale();
                 return res.end('ok');
             }

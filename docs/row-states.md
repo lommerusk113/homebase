@@ -19,6 +19,7 @@ Free text (how a reply is worded) may fill a row's text, never its group, except
 | Chat waits on you about the MR | `homebase status needs-you --mr`, else its open question names the MR first (*text*); a report counts only from a live chat no `/clear` replaced, until you answer it (a doing report: your next prompt; a needs-you report: also your answer to its question) | yes |
 | Button clicked | the server's record of the send | yes (`sent.json`), for 30 minutes |
 | Dismissed | `dismissed.json` | yes |
+| Pinned to a group by hand | `pins.json`, with a fingerprint of the row's state; shown in the pinned group (marked *pinned*) until the fingerprint changes | yes |
 | A died chat opened | `handled.json` (its last entry) | yes, on every device |
 | Approved by | GitLab's approvals, asked for every open, non-draft MR GitLab doesn't already call unapproved | as the MR state |
 

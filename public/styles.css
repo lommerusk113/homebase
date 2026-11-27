@@ -926,3 +926,6 @@ wa-details[open] .g-note { display:none; }
 
 .needs-you-mark::after { content:'Needs you'; font-weight:600; color:var(--accent); }
 .step-in { margin-left:8px; }
+.pin { display:inline-flex; align-items:center; gap:6px; margin-top:2px; }
+.pin-sel { font:inherit; font-size:var(--fs-s); color:var(--muted); background:transparent; border:0; padding:0; max-width:9em; cursor:pointer; opacity:.55; }
+.rows tr:hover .pin-sel, .pin-sel:focus { opacity:1; }

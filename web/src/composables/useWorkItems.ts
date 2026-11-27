@@ -35,8 +35,21 @@ export function useWorkItems(marks = useSentMarks()) {
         renderBoard();
     }
 
+    /** Moves the row to another group on every device (POST /api/pins), held until its state changes; 'auto' drops the pin. */
+    async function pin(x: WorkItem, column: Column | 'auto') {
+
+        const r = await api(`/api/pins?key=${encodeURIComponent(x.key)}&column=${column}&fp=${encodeURIComponent(x.fp ?? '')}`, { method: 'POST' }).catch(() => null);
+        if (!r?.ok) {
+            useNotice().showError(r ? await r.text() : 'Couldn’t reach Homebase to move this row');
+
+            return;
+        }
+
+        hooks.refresh();
+    }
+
     // with a milestone picked every row is in it, so its tag would only repeat the header pill
     const tagsMilestone = () => !hooks.milestoneId();
 
-    return { items, byKey, inColumn, canDismiss, dismiss, tagsMilestone };
+    return { items, byKey, inColumn, canDismiss, dismiss, pin, tagsMilestone };
 }

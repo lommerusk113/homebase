@@ -413,3 +413,43 @@ console.log('ok same repo');
     assert.equal(row(chat('!1856?', { asking: false, status: 'working' })).askedBy, null);
     console.log('ok asked rows');
 }
+
+// a pinned row shows in the picked group until its computed state changes, then the pin is gone; auto drops it; pins.json keeps it
+{
+    const { loadPins, pin } = await import('../../server/pins.mjs');
+    const dir = join(mkdtempSync(join(tmpdir(), 'hb-pins-')), 'homebase');
+    const rows = a => workItems([{ id: 's', project: 'p', prs: [], agents: [a] }], () => open(), 2000, new Map());
+    const stopped = agent('helper-1', 1000, { status: 'stopped' });
+    const [row] = rows(stopped);
+    assert.equal(row.column, 'needs-you');
+    assert.ok(row.fp && !row.pinned);
+
+    for (const [key, column, fp] of [['', 'doing', 'x'], ['helper-1', 'nowhere', 'x'], ['helper-1', 'doing', ''], [null, 'auto', null]]) {
+        await assert.rejects(pin(dir, key, column, fp), e => e.status === 400, `${key} ${column}`);
+    }
+    await pin(dir, row.key, 'review', row.fp);
+    const [held] = rows(stopped);
+    assert.deepEqual([held.column, held.pinned, held.autoColumn], ['review', true, 'needs-you']);
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'pins.json'), 'utf8')), [['helper-1', { column: 'review', fp: row.fp }]]);
+    loadPins(join(dir, 'none'));
+    assert.equal(rows(stopped)[0].column, 'needs-you', 'nothing saved there');
+    loadPins(dir);
+    assert.equal(rows(stopped)[0].column, 'review', 'another server start reads it back');
+
+    assert.equal(rows({ ...stopped, updated: 1500 })[0].column, 'needs-you', 'the helper moved: the pin clears itself');
+    assert.equal(rows(stopped)[0].column, 'needs-you', 'and stays cleared');
+
+    await pin(dir, row.key, 'ready', row.fp);
+    await pin(dir, row.key, 'auto', null);
+    assert.equal(rows(stopped)[0].column, 'needs-you', 'auto removes the pin');
+    assert.deepEqual(JSON.parse(readFileSync(join(dir, 'pins.json'), 'utf8')), []);
+
+    // a running helper's own activity doesn't clear the pin; the end of its run does
+    const running = agent('helper-2', 1000, { status: 'running' });
+    const [r1] = rows(running);
+    await pin(dir, r1.key, 'review', r1.fp);
+    assert.equal(rows({ ...running, updated: 1900 })[0].column, 'review');
+    assert.equal(rows({ ...running, status: 'done', updated: 1900 })[0].column, 'finished');
+    loadPins(join(dir, 'none'));
+    console.log('ok pinned rows');
+}

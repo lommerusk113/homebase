@@ -4,6 +4,7 @@ Notable changes to Homebase, newest first.
 
 ## Unreleased
 
+* A row has a group picker that moves it to another group by hand, marked "pinned" (Auto drops it); the pin is kept in pins.json for every device and clears itself when the row's state changes.
 * `homebase status --mr` is resolved once to the MR's URL by the chat's own forge (`!N` on GitLab, `'#N'` on GitHub, or a URL) and anything else is refused; a doing report ends at the next prompt that starts a turn, a needs-you report at any input from you (a prompt, a note typed while it works, an answered question or permission prompt), and "Load new rules" is recognised from Homebase's own send log, not its text.
 * GitLab's and GitHub's last answers are kept with each MR in items.json, so a restart shows the board as it was at once and asks again in the background; while a forge is still checking, mergeability comes only from its last settled answer for the same commit (a new commit is unknown, never Merge), and the extra re-asks are gone.
 * A forge that is still checking on a second lookup keeps a clicked row's hold too, and `homebase status --mr` with an MR URL plus `/diffs`, `#note_…` or `?tab=` matches its row (a URL naming no MR is refused).

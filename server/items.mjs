@@ -442,6 +442,21 @@ function isDismissed(x) {
     return true;
 }
 
+// Rows the user moved to another group (server/pins.mjs keeps them on disk): item key -> { column, fp }.
+export const pins = new Map();
+// What a row's computed state is, as the user saw it: a running helper's own activity doesn't count, or its pin would drop at once.
+const fingerprint = x => [x.state.kind, x.column, x.prState?.sha, x.agentStatus, x.agentStatus === 'running' ? '' : x.updated].join('|');
+// A pinned row shows in its pinned group until the fingerprint moves; then the pin is gone for good (pins.json goes stale, a reload drops it again).
+function withPin(x) {
+
+    const fp = fingerprint(x), p = pins.get(x.key);
+    if (p && p.fp !== fp) {
+        pins.delete(x.key);
+    }
+
+    return p?.fp === fp ? { ...x, fp, column: p.column, pinned: true, autoColumn: x.column } : { ...x, fp };
+}
+
 // One row per work item, newest agent first, with its column, stage, next step, action, gate badge and usage.
 // Without the rows the user dismissed.
 export function workItems(sessions, prOf = () => null, now = Date.now(), heads = gateHeads, seeds = [], reviews = reviewers, errorOf = () => null, sent = sentRows) {
@@ -541,7 +556,7 @@ export function workItems(sessions, prOf = () => null, now = Date.now(), heads =
             gate,
             ...agentUsage(agents, now)
         };
-    }).filter(x => !isDismissed(x));
+    }).filter(x => !isDismissed(x)).map(withPin);
 }
 
 export const slug = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
